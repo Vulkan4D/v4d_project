@@ -1,0 +1,21 @@
+{
+	"configurations": [
+		{
+			"name": "Linux",
+			"includePath": [
+				"${workspaceFolder}/src/glm",
+				"${workspaceFolder}/src/glfw/include",
+				"${workspaceFolder}/src/vulkan_x86_64/include",
+				"${workspaceFolder}/src/v4d/core"
+			],
+			"defines": [
+				"_LINUX",
+				"_RELEASE"
+			],
+			"compilerPath": "/bin/g++",
+			"cppStandard": "c++17",
+			"intelliSenseMode": "gcc-x64"
+		}
+	],
+	"version": 4
+}
