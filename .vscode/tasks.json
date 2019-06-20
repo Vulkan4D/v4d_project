@@ -6,7 +6,8 @@
         {
             "label": "build_debug",
             "type": "shell",
-            "command": "clear; tools/build.sh LINUX DEBUG", // -D_LOG_VERBOSE
+            // "command": "clear; tools/build.sh LINUX DEBUG",
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX DEBUG",
             "problemMatcher": "$gcc"
         },
         {
@@ -22,7 +23,7 @@
         {
             "label": "build_v4d_debug",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG", // -D_LOG_VERBOSE
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG",
             "problemMatcher": "$gcc"
         },
         {

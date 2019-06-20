@@ -71,8 +71,6 @@
         "**/.hg": true,
         "**/CVS": true,
         "**/.DS_Store": true,
-        "build/release": true,
-        "build/debug": true,
         "build/shaders/*.spv": true,
     },
     "editor.insertSpaces": false,
@@ -111,7 +109,6 @@
     "c-cpp-flylint.clang.enable": true,
     "c-cpp-flylint.clang.standard": ["c++17"],
     "c-cpp-flylint.standard":[
-        "c11",
         "c++17"
     ],
     "glsllint.glslangValidatorPath": "/usr/bin/glslangValidator",
