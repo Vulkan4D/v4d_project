@@ -4,14 +4,14 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "build_debug",
+            "label": "build debug linux",
             "type": "shell",
-            // "command": "clear; tools/build.sh LINUX DEBUG",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX DEBUG",
-            "problemMatcher": "$gcc"
+            "command": "clear; tools/build.sh LINUX DEBUG",
+            "problemMatcher": "$gcc",
+            "group": "build"
         },
         {
-            "label": "build_release",
+            "label": "build release all",
             "type": "shell",
             "command": "clear; tools/build.sh ALL RELEASE",
             "problemMatcher": "$gcc",
@@ -21,17 +21,46 @@
             },
         },
         {
-            "label": "build_v4d_debug",
+            "label": "build v4d debug linux",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG",
-            "problemMatcher": "$gcc"
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX DEBUG",
+            "problemMatcher": "$gcc",
+            "group": "build"
         },
         {
-            "label": "build_v4d_release",
+            "label": "build v4d debug all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL RELEASE",
+            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
+            "label": "build v4d release all",
+            "type": "shell",
+            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE",
             "problemMatcher": "$gcc",
             "group": "build",
+        },
+        {
+            "label": "clean",
+            "type": "shell",
+            "command": "clear; tools/clean.sh",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
+            "label": "unit tests linux",
+            "type": "shell",
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS && cd build/debug && ./tests.linux",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
+            "label": "unit tests windows",
+            "type": "shell",
+            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && cd build/debug",
+            "problemMatcher": "$gcc",
+            "group": "build"
         }
     ]
 }
