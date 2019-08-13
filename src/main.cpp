@@ -1,10 +1,5 @@
 #include "v4d.h"
 
-#include <functional>
-#include <future>
-#include <thread>
-
-
 #ifdef _DEBUG
 	#include "v4d/core/tests.cxx"
 #endif
