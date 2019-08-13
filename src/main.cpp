@@ -6,6 +6,6 @@
 
 int main(int argc, char **args) {
     #ifdef _DEBUG
-        v4d::tests::RunAllTests();
+        return v4d::tests::RunAllTests();
     #endif
 }

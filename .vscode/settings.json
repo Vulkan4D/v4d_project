@@ -63,7 +63,11 @@
         "cassert": "cpp",
         "string": "cpp",
         "queue": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "bit": "cpp",
+        "memory_resource": "cpp",
+        "regex": "cpp",
+        "shared_mutex": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
