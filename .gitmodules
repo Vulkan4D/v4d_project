@@ -16,3 +16,6 @@
 [submodule "src/glfw"]
 	path = src/glfw
 	url = https://github.com/glfw/glfw.git
+[submodule "src/v4d/systems/sample"]
+	path = src/v4d/systems/sample
+	url = git@github.com:Vulkan4D/v4d_system_sample.git
