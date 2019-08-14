@@ -11,6 +11,13 @@
             "group": "build"
         },
         {
+            "label": "build debug all",
+            "type": "shell",
+            "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
             "label": "build release all",
             "type": "shell",
             "command": "clear; tools/build.sh ALL RELEASE",
@@ -30,7 +37,7 @@
         {
             "label": "build v4d debug all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG",
+            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
@@ -42,9 +49,23 @@
             "group": "build",
         },
         {
-            "label": "clean",
+            "label": "build systems debug",
             "type": "shell",
-            "command": "clear; tools/clean.sh",
+            "command": "clear; find src/v4d/systems/ -type f -name 'build.sh' -exec sh '{}' DEBUG \\;; scp -rq build/debug/systems/* WINDOWS_PC:/v4d_build/debug/systems/",
+            "problemMatcher": "$gcc",
+            "group": "build",
+        },
+        {
+            "label": "build systems release",
+            "type": "shell",
+            "command": "clear; find src/v4d/systems/ -type f -name 'build.sh' -exec sh '{}' RELEASE \\;; scp -rq build/release/systems/* WINDOWS_PC:/v4d_build/release/systems/",
+            "problemMatcher": "$gcc",
+            "group": "build",
+        },
+        {
+            "label": "clean build all",
+            "type": "shell",
+            "command": "tools/cleanbuild.sh;",
             "problemMatcher": "$gcc",
             "group": "build"
         },
@@ -58,7 +79,7 @@
         {
             "label": "unit tests windows",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && cd build/debug",
+            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
             "problemMatcher": "$gcc",
             "group": "build"
         }

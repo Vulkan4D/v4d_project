@@ -1,2 +1,3 @@
 .vscode/ipch
-common.hh.gch
+common_linux.hh.gch
+common_windows.hh.gch
