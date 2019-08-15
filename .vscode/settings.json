@@ -98,7 +98,6 @@
     "workbench.statusBar.feedback.visible": false,
     "files.insertFinalNewline": true,
     "files.trimTrailingWhitespace": false,
-    "files.useExperimentalFileWatcher": false,
     "explorer.openEditors.visible": 0,
     "debug.allowBreakpointsEverywhere": true,
     "debug.enableAllHovers": true,
