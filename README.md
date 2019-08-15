@@ -6,7 +6,9 @@ Clone this repository to create a new game project using the Vulkan4D Engine
 # Vulkan4D
 Vulkan4D is a revolutionary game engine built from the ground up for Space Games/Simulations and with Vulkan as the sole rendering API, so that we can take full advantage of the new technology. 
 
-## Features (will include but not limited to) : 
+## Features
+include but not limited to: 
+- procedural, full-size planet terrains, planetary systems, a full galaxy to explore.
 - triple-precision physics with relative positioning system
 - vulkan multithreaded renderer built from the ground up for full RTX support (ray-tracing)
 - cross-platform (windows+linux) build tools
