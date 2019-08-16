@@ -1,3 +1,6 @@
+#include "config.hh"
+#include "v4d.h"
+
 #include "v4d/core/tests.cxx"
 #include "v4d/systems/sample/tests.cxx"
 
