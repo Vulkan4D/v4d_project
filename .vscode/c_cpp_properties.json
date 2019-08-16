@@ -10,7 +10,8 @@
 			],
 			"defines": [
 				"_LINUX",
-				"_RELEASE"
+				"_RELEASE",
+				"_IN_EDITOR"
 			],
 			"compilerPath": "/bin/g++",
 			"cppStandard": "c++17",
