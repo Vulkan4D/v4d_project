@@ -3,8 +3,12 @@
 
 int main(int argc, char** args) {
 
-	v4d::event::V4D_CORE_INIT << [](int){
+	v4d::event::V4D_CORE_INIT << [](v4d::CoreInitEvent& e){
 		LOG("Initialized V4D")
+	};
+
+	v4d::event::V4D_CORE_DESTROY << [](v4d::CoreDestroyEvent& e){
+		LOG("Destroyed V4D")
 	};
 
 	v4d::Init();
@@ -12,4 +16,6 @@ int main(int argc, char** args) {
 	std::cout << "Hello V4D !" << std::endl;
 
 	std::cin.get();
+
+	v4d::Destroy();
 }
