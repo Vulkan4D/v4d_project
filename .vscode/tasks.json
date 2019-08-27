@@ -51,14 +51,14 @@
         {
             "label": "build systems debug",
             "type": "shell",
-            "command": "clear; find src/v4d/systems/ -type f -name 'build.sh' -exec sh '{}' DEBUG \\;; scp -rq build/debug/systems/* WINDOWS_PC:/v4d_build/debug/systems/",
+            "command": "clear; tools/build_systems.sh DEBUG; scp -rq build/debug/systems/* WINDOWS_PC:/v4d_build/debug/systems/",
             "problemMatcher": "$gcc",
             "group": "build",
         },
         {
             "label": "build systems release",
             "type": "shell",
-            "command": "clear; find src/v4d/systems/ -type f -name 'build.sh' -exec sh '{}' RELEASE \\;; scp -rq build/release/systems/* WINDOWS_PC:/v4d_build/release/systems/",
+            "command": "clear; tools/build_systems.sh RELEASE; scp -rq build/release/systems/* WINDOWS_PC:/v4d_build/release/systems/",
             "problemMatcher": "$gcc",
             "group": "build",
         },
