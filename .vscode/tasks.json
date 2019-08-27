@@ -70,18 +70,25 @@
             "group": "build"
         },
         {
+            "label": "build unit tests linux",
+            "type": "shell",
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
             "label": "unit tests linux",
             "type": "shell",
             "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS && cd build/debug && ./tests.linux",
             "problemMatcher": "$gcc",
-            "group": "build"
+            "group": "test"
         },
         {
             "label": "unit tests windows",
             "type": "shell",
             "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
             "problemMatcher": "$gcc",
-            "group": "build"
+            "group": "test"
         }
     ]
 }
