@@ -6,7 +6,7 @@
 
 namespace v4d::tests {
 	int CHECK_V4D_VERSION() { // check whether the version of v4d.dll matches v4d.h
-		return GET_V4D_CORE_BUILD_VERSION() == V4D_VERSION ? 0:1;
+		return GetCoreBuildVersion() == V4D_VERSION ? 0:1;
 	}
 }
 

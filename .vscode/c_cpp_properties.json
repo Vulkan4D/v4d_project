@@ -11,7 +11,8 @@
 			"defines": [
 				"_LINUX",
 				"_RELEASE",
-				"_IN_EDITOR"
+				"_IN_EDITOR",
+				"_V4D_PROJECT"
 			],
 			"compilerPath": "/bin/g++",
 			"cppStandard": "c++17",
