@@ -17,6 +17,7 @@ int main(int argc, char** args) {
 		V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN( v4dCore )
 
 		// Load Project-required Modules and Systems here
+		v4d::SystemsLoader systemsLoader(&v4dCore);
 		//...
 
 		// Do Project-specific init here
