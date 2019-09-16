@@ -5,7 +5,7 @@
 #include "v4d/systems/sample/tests.cxx"
 
 namespace MyProject {
-	int MyUnitTest1(v4d::CoreInstance* v4dCore) {
+	int MyUnitTest1(v4d::Core* v4dCore) {
 		// return 0 for succes, anything else for failure
 		return 0;
 	}

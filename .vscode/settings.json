@@ -136,4 +136,5 @@
         "c++17"
     ],
     "glsllint.glslangValidatorPath": "/usr/bin/glslangValidator",
+    "terminal.integrated.scrollback": 20000,
 }

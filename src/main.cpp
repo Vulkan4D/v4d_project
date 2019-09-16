@@ -1,9 +1,13 @@
 #include "config.hh"
 #include "v4d.h"
 
+// Logger
+#define LOGGER_INSTANCE v4d::io::Logger::ConsoleInstance()
+
+// Application start
 int main(int argc, char** args) {
 
-	// Events
+	// Core Event Bindings
 	v4d::event::V4D_CORE_INIT << [](v4d::CoreInitEvent& e){
 		LOG("Initialized V4D")
 	};
@@ -11,20 +15,15 @@ int main(int argc, char** args) {
 		LOG("Destroyed V4D")
 	};
 
-	// V4D Project
-	{
-		// Instantiate a v4d::CoreInstance as v4dCore
-		V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN( v4dCore )
 
-		// Load Project-required Modules and Systems here
-		v4d::SystemsLoader systemsLoader(&v4dCore);
-		//...
+	// Instantiate a v4d::Core as v4dCore
+	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN( v4dCore, LOGGER_INSTANCE )
 
-		// Do Project-specific init here
-		std::cout << "Hello V4D !" << std::endl;
-		//...
 
-	} // v4dCore is supposed to get destroyed here
+	// Do Project-specific init here
+	std::cout << "Hello V4D !" << std::endl;
+	//...
+
 
 	std::cin.get(); // pause execution until key press, then exit program
 }
