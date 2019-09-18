@@ -1,9 +1,6 @@
 #include "config.hh"
 #include "v4d.h"
 
-// Logger
-#define LOGGER_INSTANCE v4d::io::Logger::ConsoleInstance()
-
 // Application start
 int main(int argc, char** args) {
 
@@ -21,7 +18,7 @@ int main(int argc, char** args) {
 
 
 	// Do Project-specific init here
-	std::cout << "Hello V4D !" << std::endl;
+	LOG("Hello V4D !")
 	//...
 
 
