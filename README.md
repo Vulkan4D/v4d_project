@@ -35,12 +35,14 @@ As a developer for this project or for a resulting game, you will respect our 5 
 5. **Thou shall be within thy self** 
 	*Focused on fully immersive, first person view.*
 
-## Project Structure
-- `Core Modules and Helpers` Compiled into `v4d.dll` and linked into the Launcher
-- `Systems` Game functionalities (and mods) compiled into individual .dll files that are loaded at runtime
+### Project Structure
+- `Core & Modules` Compiled into `v4d.dll` and linked into the Project
+- `Helpers` Simple-but-useful header-only source files, compiled into anything that is part of V4D
+- `Systems` Game functionalities (and plugins/mods) compiled into individual .dll files that are loaded at runtime
 - `Libraries` Other libraries used in the project
 - `Resources` Icons, Textures, Music, ...
-- `Launcher` App that puts it all together to run the game
+- `Project` App that puts it all together to run the game
+- `Tools` Useful tools to help programmers (build scripts, shader compiler, ...)
 
 ## License
 V4D is going to be Open-source, with limited commercial use. 

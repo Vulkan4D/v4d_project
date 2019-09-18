@@ -14,7 +14,7 @@ int main(int argc, char** args) {
 
 
 	// Instantiate a v4d::Core as v4dCore
-	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN( v4dCore, LOGGER_INSTANCE )
+	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN ( v4dCore )
 
 
 	// Do Project-specific init here
