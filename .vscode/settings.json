@@ -111,7 +111,7 @@
     "editor.renderControlCharacters": true,
     "editor.renderLineHighlight": "all",
     "editor.showFoldingControls": "mouseover",
-    "editor.smoothScrolling": true,
+    "editor.smoothScrolling": false,
     "editor.stablePeek": false,
     "editor.tabCompletion": "off",
     "editor.wordBasedSuggestions": false,
@@ -137,4 +137,5 @@
     ],
     "glsllint.glslangValidatorPath": "/usr/bin/glslangValidator",
     "terminal.integrated.scrollback": 20000,
+    "terminal.integrated.rendererType": "dom",
 }
