@@ -86,7 +86,7 @@
         {
             "label": "unit tests windows",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
+            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
             "problemMatcher": "$gcc",
             "group": "test"
         }
