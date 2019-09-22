@@ -36,7 +36,7 @@ As a developer for this project or for a resulting game, you will respect our 5 
 	*Focused on fully immersive, first person view.*
 
 ### Project Structure
-- `Core & Modules` Compiled into `v4d.dll` and linked into the Project
+- `Core` Compiled into `v4d.dll` and linked into the Project
 - `Helpers` Simple-but-useful header-only source files, compiled into anything that is part of V4D
 - `Systems` Game functionalities (and plugins/mods) compiled into individual .dll files that are loaded at runtime
 - `Libraries` Other libraries used in the project
