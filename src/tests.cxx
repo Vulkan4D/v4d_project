@@ -5,7 +5,7 @@
 #include "v4d/modules/sample/tests.cxx"
 
 namespace MyProject {
-	int MyUnitTest1(v4d_core v4dCore) {
+	int MyUnitTest1(v4d_core) {
 		// return 0 for succes, anything else for failure
 		return 0;
 	}

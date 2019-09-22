@@ -2,13 +2,13 @@
 #include "v4d.h"
 
 // Application start
-int main(int argc, char** args) {
+int main() {
 
 	// Core Event Bindings
-	v4d::event::V4D_CORE_INIT << [](v4d::CoreInitEvent& e){
+	v4d::event::V4D_CORE_INIT << [](v4d::CoreInitEvent&){
 		LOG("Initialized V4D")
 	};
-	v4d::event::V4D_CORE_DESTROY << [](v4d::CoreDestroyEvent& e){
+	v4d::event::V4D_CORE_DESTROY << [](v4d::CoreDestroyEvent&){
 		LOG("Destroyed V4D")
 	};
 
