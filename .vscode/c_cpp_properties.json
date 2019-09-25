@@ -5,6 +5,7 @@
 			"includePath": [
 				"${workspaceFolder}/src/glm",
 				"${workspaceFolder}/src/glfw/include",
+				"${workspaceFolder}/src/openssl/include",
 				"${workspaceFolder}/src/vulkan_x86_64/include",
 				"${workspaceFolder}/src/v4d/core"
 			],
