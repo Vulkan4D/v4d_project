@@ -87,7 +87,9 @@
         "__tuple": "cpp",
         "ios": "cpp",
         "locale": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "__functional_03": "cpp",
+        "cerrno": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

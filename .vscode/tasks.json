@@ -20,7 +20,7 @@
         {
             "label": "build release all",
             "type": "shell",
-            "command": "clear; tools/build.sh ALL RELEASE",
+            "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": {
                 "kind": "build",
@@ -44,7 +44,7 @@
         {
             "label": "build v4d release all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE",
+            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": "build",
         },
