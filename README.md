@@ -26,14 +26,14 @@ As a developer for this project or for a resulting game, you will respect our 5 
 
 1. **Thou shall obey physics** 
 	*We will not sacrifice nor compromise realism for arcade-style gameplays.*
-2. **Thou shall not hit invisible walls** 
-	*If it looks accessible, then it is !*
-3. **Thou shall not see a skybox** 
-	*Actual clouds, stars, etc. are rendered*
-4. **Thou shall not see "Loading"** 
+2. **Thou shall not see "Loading"** 
 	*Immersive, seamless transitions, no loading screens, EVER.*
-5. **Thou shall be within thy self** 
+3. **Thou shall not see a skybox** 
+	*Actual clouds, stars, planets, etc. are rendered.*
+4. **Thou shall be within thy self** 
 	*Focused on fully immersive, first person view.*
+5. **Thou shall not hit invisible walls** 
+	*What you can see, you can touch !*
 
 ### Project Structure
 - `Core` Compiled into `v4d.dll` and linked into the Project
