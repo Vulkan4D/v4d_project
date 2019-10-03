@@ -13,6 +13,8 @@ namespace MyProject {
 
 START_UNIT_TESTS
 
+	LOGGER_INSTANCE->SetVerbose(true);
+
 	RUN_UNIT_TESTS( V4D_CORE )
 	RUN_UNIT_TESTS( MODULES_SAMPLE_1 , v4dCore )
 	RUN_UNIT_TESTS( MyProject::MyUnitTest1 , v4dCore )
