@@ -38,7 +38,7 @@ As a developer for this project or for a resulting game, you will respect our 5 
 ### Project Structure
 - `Core` Compiled into `v4d.dll` and linked into the Project
 - `Helpers` Simple-but-useful header-only source files, compiled into anything that is part of V4D
-- `Systems` Game functionalities (and plugins/mods) compiled into individual .dll files that are loaded at runtime
+- `Modules` Game functionalities (and plugins/mods) compiled into individual .dll files that are loaded at runtime
 - `Libraries` Other libraries used in the project
 - `Resources` Icons, Textures, Music, ...
 - `Project` App that puts it all together to run the game
