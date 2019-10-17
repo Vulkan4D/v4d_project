@@ -89,7 +89,9 @@
         "locale": "cpp",
         "stack": "cpp",
         "__functional_03": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "codecvt": "cpp",
+        "filesystem": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
