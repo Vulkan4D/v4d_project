@@ -13,19 +13,19 @@
         {
             "label": "build debug all",
             "type": "shell",
-            "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; tools/build.sh LINUX DEBUG && tools/build.sh WINDOWS DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build release all",
             "type": "shell",
-            "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
+            "command": "clear; tools/build.sh LINUX RELEASE && tools/build.sh WINDOWS RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": {
                 "kind": "build",
                 "isDefault": true
-            },
+            }
         },
         {
             "label": "build v4d debug linux",
@@ -37,30 +37,30 @@
         {
             "label": "build v4d debug all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh LINUX DEBUG && tools/build.sh WINDOWS DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build v4d release all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
+            "command": "clear; tools/build_v4d.sh LINUX RELEASE && tools/build_v4d.sh WINDOWS RELEASE && tools/build.sh LINUX RELEASE && tools/build.sh WINDOWS RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
-            "group": "build",
+            "group": "build"
         },
         {
             "label": "build modules debug",
             "type": "shell",
             "command": "clear; tools/build_modules.sh DEBUG; scp -rq build/debug/modules/* WINDOWS_PC:/v4d_build/debug/modules/",
             "problemMatcher": "$gcc",
-            "group": "build",
+            "group": "build"
         },
         {
             "label": "build modules release",
             "type": "shell",
             "command": "clear; tools/build_modules.sh RELEASE; scp -rq build/release/modules/* WINDOWS_PC:/v4d_build/release/modules/",
             "problemMatcher": "$gcc",
-            "group": "build",
+            "group": "build"
         },
         {
             "label": "clean build all",
@@ -68,6 +68,13 @@
             "command": "tools/cleanbuild.sh;",
             "problemMatcher": "$gcc",
             "group": "build"
+        },
+        {
+            "label": "clean precompiled headers",
+            "type": "shell",
+            "command": "tools/cleanGCH.sh;",
+            "group": "build",
+            "problemMatcher": []
         },
         {
             "label": "build unit tests linux",

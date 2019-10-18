@@ -100,7 +100,6 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/*.spv": true,
-        "**/*.gch": true,
     },
     "editor.insertSpaces": false,
     "editor.renderWhitespace": "boundary",

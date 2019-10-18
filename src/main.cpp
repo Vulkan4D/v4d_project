@@ -1,5 +1,11 @@
+// Pre-compiled common header
+#include <common/pch.hh>
+
+// Project Config
 #include "config.hh"
-#include "v4d.h"
+
+// V4D Core Header
+#include <v4d.h>
 
 // Application start
 int main() {

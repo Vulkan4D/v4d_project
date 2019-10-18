@@ -13,7 +13,9 @@
 				"_LINUX",
 				"_RELEASE",
 				"_IN_EDITOR",
-				"_V4D_PROJECT"
+				"_V4D_CORE",
+				"_V4D_PROJECT",
+				"_V4D_MODULE"
 			],
 			"compilerPath": "/bin/g++",
 			"cppStandard": "c++17",

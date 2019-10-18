@@ -1,6 +1,13 @@
-#include "config.hh"
-#include "v4d.h"
+// Pre-compiled common header
+#include <common/pch.hh>
 
+// Project Config
+#include "config.hh"
+
+// V4D Core Header
+#include <v4d.h>
+
+// Other tests
 #include "v4d/core/tests.cxx"
 #include "v4d/modules/sample/tests.cxx"
 
