@@ -13,14 +13,14 @@
         {
             "label": "build debug all",
             "type": "shell",
-            "command": "clear; tools/build.sh LINUX DEBUG && tools/build.sh WINDOWS DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build release all",
             "type": "shell",
-            "command": "clear; tools/build.sh LINUX RELEASE && tools/build.sh WINDOWS RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
+            "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": {
                 "kind": "build",
@@ -37,14 +37,14 @@
         {
             "label": "build v4d debug all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh LINUX DEBUG && tools/build.sh WINDOWS DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build v4d release all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX RELEASE && tools/build_v4d.sh WINDOWS RELEASE && tools/build.sh LINUX RELEASE && tools/build.sh WINDOWS RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
+            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
@@ -80,6 +80,13 @@
             "label": "build unit tests linux",
             "type": "shell",
             "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS",
+            "problemMatcher": "$gcc",
+            "group": "build"
+        },
+        {
+            "label": "build incubator linux",
+            "type": "shell",
+            "command": "clear; tools/build.sh LINUX INCUBATOR",
             "problemMatcher": "$gcc",
             "group": "build"
         },
