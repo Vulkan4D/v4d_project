@@ -1,1 +1,0 @@
-/home/olivier/projects/cpp/vulkan/source/shaderc/src/build/../libshaderc/include/shaderc/shaderc.hpp

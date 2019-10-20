@@ -10,15 +10,12 @@
 [submodule "tools"]
 	path = tools
 	url = git@github.com:Vulkan4D/v4d_tools.git
-[submodule "src/glm"]
-	path = src/glm
-	url = https://github.com/g-truc/glm.git
-[submodule "src/glfw"]
-	path = src/glfw
-	url = https://github.com/glfw/glfw.git
 [submodule "src/v4d/modules/sample"]
 	path = src/v4d/modules/sample
 	url = git@github.com:Vulkan4D/v4d_module_sample.git
 [submodule "src/openssl"]
 	path = src/openssl
 	url = git@github.com:openssl/openssl.git
+[submodule "src/Vulkan-Hpp"]
+	path = src/Vulkan-Hpp
+	url = https://github.com/KhronosGroup/Vulkan-Hpp.git
