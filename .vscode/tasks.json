@@ -30,21 +30,21 @@
         {
             "label": "build v4d debug linux",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX DEBUG",
+            "command": "clear; tools/build_v4d.sh LINUX DEBUG",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build v4d debug all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL DEBUG && tools/build.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; tools/build_v4d.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "build v4d release all",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL RELEASE && tools/build.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
+            "command": "clear; tools/build_v4d.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
             "problemMatcher": "$gcc",
             "group": "build"
         },

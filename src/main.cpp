@@ -7,8 +7,15 @@
 // V4D Core Header
 #include <v4d.h>
 
+// Settings file
+#include "settings.hh"
+auto settings = ProjectSettings::Instance("settings.ini", 1000);
+
 // Application start
 int main() {
+	
+	// Load settings
+	settings->Load();
 
 	// Core Event Bindings
 	v4d::event::V4D_CORE_INIT << [](v4d::CoreInitEvent&){
