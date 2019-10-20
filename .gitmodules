@@ -16,6 +16,7 @@
 [submodule "src/openssl"]
 	path = src/openssl
 	url = git@github.com:openssl/openssl.git
+	branch = OpenSSL_1_1_0-stable
 [submodule "src/Vulkan-Hpp"]
 	path = src/Vulkan-Hpp
 	url = https://github.com/KhronosGroup/Vulkan-Hpp.git
