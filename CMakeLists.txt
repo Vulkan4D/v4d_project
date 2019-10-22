@@ -1,9 +1,13 @@
-# https://cmake.org/cmake/help/v3.16/guide/tutorial/index.html
-
 cmake_minimum_required(VERSION 3.10)
+###########################################################################################
 
 project(v4d_demo_project)
 set(APP_NAME demo)
+option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" OFF)
+option(COMPILE_VULKAN_HEADERS "Compile Vulkan Headers from source instead of linking with installed library" ON)
+option(USE_CCACHE "Use ccache" ON)
+
+###########################################################################################
 
 # Global specs
 enable_language(CXX)
@@ -16,6 +20,26 @@ if(WIN32)
 	add_definitions(-D_WINDOWS -D_WIN32_WINNT=0x06030000)
 else()
 	add_definitions(-D_LINUX)
+	# Warnings
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
+		-Wall \
+		-Wextra \
+		-Wnon-virtual-dtor \
+		-Wcast-align \
+		-Woverloaded-virtual \
+		-Wconversion \
+		-Wsign-conversion \
+		-Wnull-dereference \
+		-Wdouble-promotion \
+		-Wformat=2 \
+		-Wunused \
+		-Wpessimizing-move \
+		-Wredundant-move \
+		\
+		-Wduplicated-cond \
+		-Wduplicated-branches \
+		-Wlogical-op \
+	")
 endif()
 
 # Config-specific
@@ -25,26 +49,13 @@ else()
 	add_definitions(-D_RELEASE)
 endif()
 
-# Warnings
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
-	-Wall \
-	-Wextra \
-	-Wnon-virtual-dtor \
-	-Wcast-align \
-	-Woverloaded-virtual \
-	-Wconversion \
-	-Wsign-conversion \
-	-Wnull-dereference \
-	-Wdouble-promotion \
-	-Wformat=2 \
-	-Wunused \
-	-Wpessimizing-move \
-	-Wredundant-move \
-	\
-	-Wduplicated-cond \
-	-Wduplicated-branches \
-	-Wlogical-op \
-")
+# CCACHE
+if(USE_CCACHE)
+    find_program(CCACHE_FOUND ccache)
+    if(CCACHE_FOUND)
+        set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    endif(CCACHE_FOUND)
+endif()
 
 # Output Directories
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/debug")
@@ -53,11 +64,32 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/release")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/release")
 set(CMAKE_SHARED_LIBRARY_PREFIX_CXX "")
 
+
+# glfw
+if(COMPILE_GLFW)
+	set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+	set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+	add_subdirectory("${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glfw")
+else()
+	find_package(glfw3 3.3 REQUIRED)
+endif()
+
+
+# Vulkan
+if(COMPILE_VULKAN_HEADERS)
+	add_subdirectory("${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers")
+else()
+	find_package(Vulkan 1.1 REQUIRED)
+endif()
+
+
 # V4D Core
 add_subdirectory(src/v4d/core)
 
-# Modules
-add_subdirectory(src/v4d/modules/sample)
+# V4D Modules
+add_subdirectory(src/v4d/modules)
+
 
 # Project
 add_executable(${APP_NAME}
@@ -73,6 +105,7 @@ target_include_directories(${APP_NAME}
 target_compile_definitions(${APP_NAME}
 	PRIVATE -D_V4D_PROJECT
 )
+
 
 # Tests
 add_executable(tests
@@ -90,29 +123,35 @@ target_compile_definitions(tests
 )
 
 
-# # Incubator
-# add_executable(incubator
-# 	"${CMAKE_CURRENT_SOURCE_DIR}/src/incubator.cpp"
-# )
-# target_link_libraries(incubator
-# 	v4d
-# 	glfw
-# 	vulkan
-# 	glslang
-# 	SPIRV
-# )
-# target_include_directories(incubator
-# 	PRIVATE
-# 		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-# 		"${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan-Hpp"
-# 		"${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan-Hpp/glm"
-# 		"${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan-Hpp/glslang"
-# 		"${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan-Hpp/glfw/include"
-# 		"${CMAKE_CURRENT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers/include"
-# )
-# target_compile_definitions(incubator
-# 	PRIVATE -D_V4D_PROJECT
-# )
-# find_package(glfw3 3.3 REQUIRED)
-# find_package(Vulkan 1.1 REQUIRED)
+# Incubator
+add_executable(incubator
+	"${PROJECT_SOURCE_DIR}/src/incubator.cpp"
+)
+target_link_libraries(incubator
+	v4d
+	glfw
+	# glslang
+	# SPIRV
+)
+target_include_directories(incubator
+	PRIVATE
+		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp"
+		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glm"
+		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glslang"
+		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glfw/include"
+		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers/include"
+)
+target_compile_definitions(incubator
+	PRIVATE -D_V4D_PROJECT
+)
+if(COMPILE_VULKAN_HEADERS)
+	target_link_libraries(incubator
+		Vulkan-Headers
+	)
+else()
+	target_link_libraries(incubator
+		vulkan
+	)
+endif()
 

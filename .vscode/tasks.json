@@ -3,51 +3,6 @@
     // for the documentation about the tasks.json format
     "version": "2.0.0",
     "tasks": [
-        // {
-        //     "label": "build debug linux",
-        //     "type": "shell",
-        //     "command": "clear; cd build && cmake --build . --parallel 8",
-        //     "problemMatcher": "$gcc",
-        //     "group": "build"
-        // },
-        // {
-        //     "label": "build debug all",
-        //     "type": "shell",
-        //     "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
-        //     "problemMatcher": "$gcc",
-        //     "group": "build"
-        // },
-        // {
-        //     "label": "build release all",
-        //     "type": "shell",
-        //     "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
-        //     "problemMatcher": "$gcc",
-        //     "group": {
-        //         "kind": "build",
-        //         "isDefault": true
-        //     }
-        // },
-        // {
-        //     "label": "build v4d debug linux",
-        //     "type": "shell",
-        //     "command": "clear; tools/build_v4d.sh LINUX DEBUG",
-        //     "problemMatcher": "$gcc",
-        //     "group": "build"
-        // },
-        // {
-        //     "label": "build v4d debug all",
-        //     "type": "shell",
-        //     "command": "clear; tools/build_v4d.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
-        //     "problemMatcher": "$gcc",
-        //     "group": "build"
-        // },
-        // {
-        //     "label": "build v4d release all",
-        //     "type": "shell",
-        //     "command": "clear; tools/build_v4d.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
-        //     "problemMatcher": "$gcc",
-        //     "group": "build"
-        // },
         {
             "label": "quick build",
             "type": "shell",
@@ -56,9 +11,9 @@
             "group": "build"
         },
         {
-            "label": "clean build all",
+            "label": "clean build all platforms",
             "type": "shell",
-            "command": "clear; tools/cleanbuild.sh;",
+            "command": "clear; tools/cleanbuild.sh windows",
             "problemMatcher": "$gcc",
             "group": "build"
         },
@@ -76,12 +31,5 @@
             "problemMatcher": "$gcc",
             "group": "test"
         },
-        // {
-        //     "label": "unit tests windows (dont recompile core)",
-        //     "type": "shell",
-        //     "command": "clear; tools/build.sh WINDOWS TESTS && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq build/debug/tests.exe WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
-        //     "problemMatcher": "$gcc",
-        //     "group": "test"
-        // }
     ]
 }
