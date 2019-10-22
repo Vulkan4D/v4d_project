@@ -1,12 +1,6 @@
 [submodule "src/v4d/core"]
 	path = src/v4d/core
 	url = git@github.com:Vulkan4D/v4d_core.git
-[submodule "build/release"]
-	path = build/release
-	url = git@github.com:Vulkan4D/v4d_build_release.git
-[submodule "build/debug"]
-	path = build/debug
-	url = git@github.com:Vulkan4D/v4d_build_debug.git
 [submodule "tools"]
 	path = tools
 	url = git@github.com:Vulkan4D/v4d_tools.git

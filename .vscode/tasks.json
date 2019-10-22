@@ -3,113 +3,85 @@
     // for the documentation about the tasks.json format
     "version": "2.0.0",
     "tasks": [
+        // {
+        //     "label": "build debug linux",
+        //     "type": "shell",
+        //     "command": "clear; cd build && cmake --build . --parallel 8",
+        //     "problemMatcher": "$gcc",
+        //     "group": "build"
+        // },
+        // {
+        //     "label": "build debug all",
+        //     "type": "shell",
+        //     "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
+        //     "problemMatcher": "$gcc",
+        //     "group": "build"
+        // },
+        // {
+        //     "label": "build release all",
+        //     "type": "shell",
+        //     "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
+        //     "problemMatcher": "$gcc",
+        //     "group": {
+        //         "kind": "build",
+        //         "isDefault": true
+        //     }
+        // },
+        // {
+        //     "label": "build v4d debug linux",
+        //     "type": "shell",
+        //     "command": "clear; tools/build_v4d.sh LINUX DEBUG",
+        //     "problemMatcher": "$gcc",
+        //     "group": "build"
+        // },
+        // {
+        //     "label": "build v4d debug all",
+        //     "type": "shell",
+        //     "command": "clear; tools/build_v4d.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
+        //     "problemMatcher": "$gcc",
+        //     "group": "build"
+        // },
+        // {
+        //     "label": "build v4d release all",
+        //     "type": "shell",
+        //     "command": "clear; tools/build_v4d.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
+        //     "problemMatcher": "$gcc",
+        //     "group": "build"
+        // },
         {
-            "label": "build debug linux",
+            "label": "quick build",
             "type": "shell",
-            "command": "clear; tools/build.sh LINUX DEBUG",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build debug all",
-            "type": "shell",
-            "command": "clear; tools/build.sh ALL DEBUG && scp -rq build/debug/demo.exe WINDOWS_PC:/v4d_build/debug/",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build release all",
-            "type": "shell",
-            "command": "clear; tools/build.sh ALL RELEASE && scp -rq build/release/demo.exe WINDOWS_PC:/v4d_build/release/",
-            "problemMatcher": "$gcc",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "build v4d debug linux",
-            "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build v4d debug all",
-            "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL DEBUG && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build v4d release all",
-            "type": "shell",
-            "command": "clear; tools/build_v4d.sh ALL RELEASE && scp -rq build/release/* WINDOWS_PC:/v4d_build/release/",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build modules debug",
-            "type": "shell",
-            "command": "clear; tools/build_modules.sh DEBUG; scp -rq build/debug/modules/* WINDOWS_PC:/v4d_build/debug/modules/",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build modules release",
-            "type": "shell",
-            "command": "clear; tools/build_modules.sh RELEASE; scp -rq build/release/modules/* WINDOWS_PC:/v4d_build/release/modules/",
+            "command": "clear; cd build && cmake --build . --parallel 8",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "clean build all",
             "type": "shell",
-            "command": "tools/cleanbuild.sh;",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "clean precompiled headers",
-            "type": "shell",
-            "command": "tools/cleanGCH.sh;",
-            "group": "build",
-            "problemMatcher": []
-        },
-        {
-            "label": "build unit tests linux",
-            "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS",
-            "problemMatcher": "$gcc",
-            "group": "build"
-        },
-        {
-            "label": "build incubator linux",
-            "type": "shell",
-            "command": "clear; tools/build.sh LINUX INCUBATOR",
+            "command": "clear; tools/cleanbuild.sh;",
             "problemMatcher": "$gcc",
             "group": "build"
         },
         {
             "label": "unit tests linux",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh LINUX DEBUG && tools/build.sh LINUX TESTS && cd build/debug && ./tests.linux",
+            "command": "clear; cd build && rm CMakeCache.txt && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel 8 && cd debug && ./tests",
             "problemMatcher": "$gcc",
             "group": "test"
         },
         {
             "label": "unit tests windows",
             "type": "shell",
-            "command": "clear; tools/build_v4d.sh WINDOWS DEBUG && tools/build.sh WINDOWS TESTS && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq build/debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
+            "command": "clear; cd build && rm CMakeCache.txt && x86_64-w64-mingw32-cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8 && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
             "problemMatcher": "$gcc",
             "group": "test"
         },
-        {
-            "label": "unit tests windows (dont recompile core)",
-            "type": "shell",
-            "command": "clear; tools/build.sh WINDOWS TESTS && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq build/debug/tests.exe WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
-            "problemMatcher": "$gcc",
-            "group": "test"
-        }
+        // {
+        //     "label": "unit tests windows (dont recompile core)",
+        //     "type": "shell",
+        //     "command": "clear; tools/build.sh WINDOWS TESTS && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq build/debug/tests.exe WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
+        //     "problemMatcher": "$gcc",
+        //     "group": "test"
+        // }
     ]
 }

@@ -8,14 +8,12 @@
             "name": "Debug Demo",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/debug/demo.linux",
+            "program": "${workspaceFolder}/build/debug/demo",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/vulkan_x86_64"},
-                {"name": "VK_LAYER_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/etc/explicit_layer.d"},
-                {"name": "VK_LAYER_SETTINGS_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/vk_layer_settings.txt"}
+                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -26,20 +24,18 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "build debug linux"
+            "preLaunchTask": "quick build"
         },
         {
             "name": "Debug Tests",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/debug/tests.linux",
+            "program": "${workspaceFolder}/build/debug/tests",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/vulkan_x86_64"},
-                {"name": "VK_LAYER_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/etc/explicit_layer.d"},
-                {"name": "VK_LAYER_SETTINGS_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/vk_layer_settings.txt"}
+                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -50,20 +46,18 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "build unit tests linux"
+            "preLaunchTask": "quick build"
         },
         {
             "name": "Incubator",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/debug/incubator.linux",
+            "program": "${workspaceFolder}/build/debug/incubator",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/vulkan_x86_64"},
-                {"name": "VK_LAYER_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/etc/explicit_layer.d"},
-                {"name": "VK_LAYER_SETTINGS_PATH", "value": "${workspaceFolder}/src/vulkan_x86_64/vk_layer_settings.txt"}
+                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -74,7 +68,7 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "build incubator linux"
+            "preLaunchTask": "quick build"
         },
     ]
 }
