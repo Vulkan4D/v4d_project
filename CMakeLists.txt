@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(v4d_demo_project)
 set(APP_NAME demo)
-option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" OFF)
+option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
 option(COMPILE_VULKAN_HEADERS "Compile Vulkan Headers from source instead of linking with installed library" ON)
 option(USE_CCACHE "Use ccache" ON)
 
