@@ -126,7 +126,7 @@ add_executable(incubator
 )
 target_link_libraries(incubator
 	v4d
-	# glfw
+	glfw
 	# glslang
 	# SPIRV
 )

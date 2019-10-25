@@ -26,6 +26,7 @@
 	LOAD_VULKAN_INSTANCE_FUNCTION(instance, vkEnumerateDeviceExtensionProperties )\
 	LOAD_VULKAN_INSTANCE_FUNCTION(instance, vkGetPhysicalDeviceMemoryProperties )\
 	LOAD_VULKAN_INSTANCE_FUNCTION(instance, vkDestroyInstance )\
+	LOAD_VULKAN_INSTANCE_FUNCTION(instance, vkDestroySurfaceKHR )\
 
 #define LOAD_VULKAN_DEVICE_FUNCTIONS(device) \
 	LOAD_VULKAN_DEVICE_FUNCTION(device, vkGetDeviceQueue )\
@@ -92,7 +93,7 @@
 	
 
 // GLFW
-// #include <GLFW/glfw3.h>
+#include <GLFW/glfw3.h>
 
 #define VULKAN_API_VERSION VK_API_VERSION_1_1
 #define ENGINE_NAME "Vulkan4D"
@@ -117,6 +118,7 @@ VkInstance vulkanInstance;
 VkDevice vulkanDevice;
 uint32_t vulkanQueueFamilyIndex;
 VkQueue vulkanGraphicsQueue;
+VkSurfaceKHR vulkanSurface;
 
 #ifdef _WINDOWS
 	#define LOAD_LIBRARY_FUNC_PROC_ADDRESS GetProcAddress
@@ -125,15 +127,27 @@ VkQueue vulkanGraphicsQueue;
 #endif
 
 int main() {
-	// if (!glfwInit()) {
-	// 	LOG_ERROR("glfw init failed")
-	// 	return 1;
-	// }
+	
+	// init GLFW
+	if (!glfwInit()) {
+		LOG_ERROR("glfw init failed")
+		return 1;
+	}
 
-	// if (!glfwVulkanSupported()) {
-	// 	LOG_ERROR("Vulkan not supported")
-	// 	return 1;
-	// }
+	// Check for vulkan support
+	if (!glfwVulkanSupported()) {
+		LOG_ERROR("Vulkan not supported")
+		return 1;
+	}
+	
+	// Required vulkan extensions for GLFW
+	uint glfwExtensionCount = 0;
+	const char** glfwExtensions;
+	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+	vulkanRequiredExtensions.reserve(glfwExtensionCount);
+	for (uint i = 0; i < glfwExtensionCount; i++) {
+		vulkanRequiredExtensions.push_back(glfwExtensions[i]);
+	}
 
 	// Prepare structs for the Vulkan Instance
 	VkApplicationInfo appInfo = {};
@@ -216,6 +230,11 @@ int main() {
 		selectedQueueFamilyIndex = 0;
 		for (auto queueFamilyProperty : queueFamilyProperties) {
 			if (queueFamilyProperty.queueCount > 0 && queueFamilyProperty.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				// Check for presentation support
+				if (!glfwGetPhysicalDevicePresentationSupport(vulkanInstance, physicalDevice, selectedQueueFamilyIndex)) {
+					continue;
+				}
+				// All is good, use that device !
 				selectedPhysicalDevice = physicalDevice;
 				break;
 			}
@@ -260,8 +279,39 @@ int main() {
 	
 	// Get graphics queue
 	vkGetDeviceQueue(vulkanDevice, vulkanQueueFamilyIndex, 0/*queue index for this queue family*/, &vulkanGraphicsQueue);
+	
+	// Create Window/Surface
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	GLFWwindow* window = glfwCreateWindow(800, 600, "TEST", nullptr, nullptr);
+	if (glfwCreateWindowSurface(vulkanInstance, window, nullptr, &vulkanSurface) != VK_SUCCESS) {
+		LOG_ERROR("Failed to create vulkan surface through GLFW")
+		return 1;
+	}
+	
+	///////////////////////////////////////////////////
+	
+	// Input Events
+	glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/){
+		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+			glfwSetWindowShouldClose(window, 1);
+		}
+	});
+	
+	// Running...
+	while (!glfwWindowShouldClose(window)) {
+		glfwPollEvents();
+		
+		// Rendering here !!
+		
+	}
+	
+	///////////////////////////////////////////////////
 
 	// Cleanup
+	
+	vkDestroySurfaceKHR(vulkanInstance, vulkanSurface, nullptr);
+	glfwDestroyWindow(window);
+	glfwTerminate();
 	if (vulkanDevice != VK_NULL_HANDLE) {
 		vkDeviceWaitIdle(vulkanDevice);
 		vkDestroyDevice(vulkanDevice, nullptr);
