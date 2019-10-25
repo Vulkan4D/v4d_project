@@ -7,28 +7,35 @@
             "label": "quick build",
             "type": "shell",
             "command": "clear; cd build && cmake --build . --parallel 8",
-            "problemMatcher": "$gcc",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "build"
+        },
+        {
+            "label": "clean build current platform",
+            "type": "shell",
+            "command": "clear; tools/cleanbuild.sh",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
         {
             "label": "clean build all platforms",
             "type": "shell",
             "command": "clear; tools/cleanbuild.sh windows",
-            "problemMatcher": "$gcc",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
         {
             "label": "unit tests linux",
             "type": "shell",
             "command": "clear; cd build && rm CMakeCache.txt && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel 8 && cd debug && ./tests",
-            "problemMatcher": "$gcc",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "unit tests windows",
             "type": "shell",
             "command": "clear; cd build && rm CMakeCache.txt && x86_64-w64-mingw32-cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8 && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
-            "problemMatcher": "$gcc",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
     ]

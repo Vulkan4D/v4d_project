@@ -13,11 +13,13 @@
 			],
 			"defines": [
 				"_LINUX",
+				"_DEBUG",
 				"_RELEASE",
 				"_IN_EDITOR",
 				"_V4D_CORE",
 				"_V4D_PROJECT",
-				"_V4D_MODULE"
+				"_V4D_MODULE",
+				"_VULKAN_LOAD_AT_RUNTIME"
 			],
 			"compilerPath": "/bin/g++",
 			"cppStandard": "c++17",
