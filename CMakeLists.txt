@@ -3,8 +3,6 @@ cmake_minimum_required(VERSION 3.10)
 
 project(v4d_demo_project)
 set(APP_NAME demo)
-option(LINK_VULKAN_HEADERS "Link with Vulkan library instead of dynamically loading the vulkan loader library at runtime" OFF)
-option(COMPILE_VULKAN_HEADERS "Compile Vulkan library from source instead of linking with installed library" OFF)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" OFF)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
@@ -16,13 +14,6 @@ option(USE_CCACHE "Use ccache" ON)
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-
-# Definitions based on options
-if(LINK_VULKAN_HEADERS)
-	add_definitions(-D_VULKAN_LINKED)
-else()
-	add_definitions(-D_VULKAN_LOAD_AT_RUNTIME)
-endif()
 
 # Platforms
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
@@ -84,14 +75,6 @@ else()
 endif()
 
 
-# # Vulkan
-# if(COMPILE_VULKAN_HEADERS)
-# 	add_subdirectory("${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers")
-# else()
-# 	find_package(Vulkan 1.1 REQUIRED)
-# endif()
-
-
 # V4D Core
 if(COMPILE_V4D_CORE)
 	add_subdirectory(src/v4d/core)
@@ -143,14 +126,13 @@ add_executable(incubator
 )
 target_link_libraries(incubator
 	v4d
-	glfw
+	# glfw
 	# glslang
 	# SPIRV
 )
 target_include_directories(incubator
 	PRIVATE
 		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-		# "${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp"
 		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glm"
 		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glfw/include"
 		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers/include"
@@ -159,16 +141,3 @@ target_include_directories(incubator
 target_compile_definitions(incubator
 	PRIVATE -D_V4D_PROJECT
 )
-if(LINK_VULKAN_HEADERS)
-	if(COMPILE_VULKAN_HEADERS)
-		target_link_libraries(incubator
-			vulkan
-			Vulkan-Headers
-		)
-	else()
-		target_link_libraries(incubator
-			vulkan
-		)
-	endif()
-endif()
-

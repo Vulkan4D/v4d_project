@@ -113,7 +113,7 @@
         "comments": false,
         "strings": false
     },
-    "editor.quickSuggestionsDelay": 10,
+    "editor.quickSuggestionsDelay": 500,
     "editor.renderControlCharacters": true,
     "editor.renderLineHighlight": "all",
     "editor.showFoldingControls": "mouseover",
@@ -144,4 +144,10 @@
     "glsllint.glslangValidatorPath": "/usr/bin/glslangValidator",
     "terminal.integrated.scrollback": 20000,
     "terminal.integrated.rendererType": "dom",
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.acceptSuggestionOnCommitCharacter": false,
+    "editor.acceptSuggestionOnEnter": "on",
+    "editor.autoClosingBrackets": "always",
+    "editor.autoClosingQuotes": "always",
+    "editor.trimAutoWhitespace": false,
 }
