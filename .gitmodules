@@ -14,3 +14,6 @@
 [submodule "src/Vulkan-Hpp"]
 	path = src/Vulkan-Hpp
 	url = https://github.com/KhronosGroup/Vulkan-Hpp.git
+[submodule "src/v4d/xvk"]
+	path = src/v4d/xvk
+	url = git@github.com:Vulkan4D/xvk.git

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(v4d_demo_project)
 set(APP_NAME demo)
-option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" OFF)
+option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(USE_CCACHE "Use ccache" ON)
@@ -69,7 +69,7 @@ if(COMPILE_GLFW)
 	set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-	add_subdirectory("${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glfw")
+	add_subdirectory("${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw")
 else()
 	find_package(glfw3 3.3 REQUIRED)
 endif()
@@ -133,10 +133,11 @@ target_link_libraries(incubator
 target_include_directories(incubator
 	PRIVATE
 		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glm"
-		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glfw/include"
-		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/Vulkan-Headers/include"
-		"${PROJECT_SOURCE_DIR}/src/Vulkan-Hpp/glslang"
+		"${PROJECT_SOURCE_DIR}/src/v4d/xvk"
+		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw/include"
+		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/Vulkan-Headers/include"
+		# "${PROJECT_SOURCE_DIR}/src/v4d/xvk/glm"
+		# "${PROJECT_SOURCE_DIR}/src/v4d/xvk/glslang"
 )
 target_compile_definitions(incubator
 	PRIVATE -D_V4D_PROJECT

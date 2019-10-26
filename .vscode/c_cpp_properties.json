@@ -4,6 +4,8 @@
 			"name": "Linux",
 			"includePath": [
 				"${workspaceFolder}/src/v4d/core",
+				"${workspaceFolder}/src/v4d/xvk",
+				"${workspaceFolder}/src/v4d/xvk/glfw/include",
 				"${workspaceFolder}/src/Vulkan-Hpp",
 				"${workspaceFolder}/src/Vulkan-Hpp/glm",
 				"${workspaceFolder}/src/Vulkan-Hpp/glslang",

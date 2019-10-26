@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <iostream>
 
-#include "xvk/xvk.hpp"
+#include "xvk.hpp"
 #include "GLFW/glfw3.h"
 
 #define VULKAN_API_VERSION VK_API_VERSION_1_1
