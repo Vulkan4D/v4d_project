@@ -147,7 +147,5 @@
     "editor.suggestOnTriggerCharacters": false,
     "editor.acceptSuggestionOnCommitCharacter": false,
     "editor.acceptSuggestionOnEnter": "on",
-    "editor.autoClosingBrackets": "always",
-    "editor.autoClosingQuotes": "always",
     "editor.trimAutoWhitespace": false,
 }

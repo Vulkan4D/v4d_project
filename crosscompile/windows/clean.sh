@@ -1,5 +1,6 @@
 cd "`dirname $0`/../.."
 PROJECT_DIR=`pwd`
+set -e
 
 # Kill potentially running process on remote windows pc
 ssh WINDOWS_PC "START /wait taskkill /f /im tests.exe"
