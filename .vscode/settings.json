@@ -94,7 +94,8 @@
         "filesystem": "cpp",
         "any": "cpp",
         "hash_set": "cpp",
-        "forward_list": "cpp"
+        "forward_list": "cpp",
+        "*.include": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
