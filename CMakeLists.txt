@@ -123,8 +123,8 @@ target_compile_definitions(tests
 
 # Incubator
 add_executable(incubator
-	"${PROJECT_SOURCE_DIR}/src/incubator_MyVulkan.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/incubator_xvk.cpp"
+	# "${PROJECT_SOURCE_DIR}/src/incubator_MyVulkan.cpp"
+	"${PROJECT_SOURCE_DIR}/src/incubator_xvk.cpp"
 )
 target_link_libraries(incubator
 	v4d
