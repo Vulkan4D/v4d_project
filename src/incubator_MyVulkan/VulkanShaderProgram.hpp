@@ -4,81 +4,79 @@
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
 
-using namespace std;
-
 class VulkanShaderProgram {
 private:
-	VulkanDevice *device;
-	vector<VulkanShader*> shaders;
-	vector<VkPipelineShaderStageCreateInfo> stages;
-	vector<VkVertexInputBindingDescription> bindings;
-	vector<VkVertexInputAttributeDescription> attributes;
-	vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	VulkanDevice* device;
+	std::vector<VulkanShader*> shaders;
+	std::vector<VkPipelineShaderStageCreateInfo> stages;
+	std::vector<VkVertexInputBindingDescription> bindings;
+	std::vector<VkVertexInputAttributeDescription> attributes;
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 
 public:
 	VulkanShaderProgram() {
 
 	}
-	VulkanShaderProgram(VulkanDevice *device, const vector<VulkanShaderInfo> &infos) : device(device) {
+	VulkanShaderProgram(VulkanDevice* device, const std::vector<VulkanShaderInfo>& infos) : device(device) {
 		for (auto &info : infos)
 			shaders.push_back(new VulkanShader(device, info.filepath, info.entryPoint, info.specializationInfo));
 		for (auto shader : shaders)
 			AddStage(shader);
 	}
-	VulkanShaderProgram(VulkanDevice *device, vector<VulkanShader*> shaders) : device(device) {
+	VulkanShaderProgram(VulkanDevice* device, std::vector<VulkanShader*> shaders) : device(device) {
 		for (auto *shader : shaders)
 			AddStage(shader);
 	}
 
 	~VulkanShaderProgram() {
 		for (auto dsl : descriptorSetLayouts)
-			vkDestroyDescriptorSetLayout(device->GetHandle(), dsl, nullptr);
+			device->DestroyDescriptorSetLayout(dsl, nullptr);
 		for (auto *shader : shaders)
 			delete shader;
 	}
 
 
-	inline void AddStage(VulkanShader *shader) {
+	inline void AddStage(VulkanShader* shader) {
 		stages.push_back(shader->stageInfo);
 	}
 
-	void AddVertexInputBinding(uint32_t binding, uint32_t stride, VkVertexInputRate inputRate, vector<VulkankVertexInputAttributeDescription> attrs) {
+	void AddVertexInputBinding(uint32_t binding, uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
 		bindings.emplace_back(VkVertexInputBindingDescription{binding, stride, inputRate});
 		for (auto attr : attrs) {
 			attributes.emplace_back(VkVertexInputAttributeDescription{attr.location, binding, attr.format, attr.offset});
 		}
 	}
 
-	inline void AddVertexInputBinding(uint32_t stride, VkVertexInputRate inputRate, vector<VulkankVertexInputAttributeDescription> attrs) {
+	inline void AddVertexInputBinding(uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
 		AddVertexInputBinding(bindings.size(), stride, inputRate, attrs);
 	}
 
-	inline VkDescriptorSetLayout AddLayoutBindings(const vector<VkDescriptorSetLayoutBinding> &lbs) {
+	inline VkDescriptorSetLayout AddLayoutBindings(const std::vector<VkDescriptorSetLayoutBinding> &lbs) {
 		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		layoutInfo.bindingCount = lbs.size();
 		layoutInfo.pBindings = lbs.data();
 		size_t nextIndex = descriptorSetLayouts.size();
 		descriptorSetLayouts.resize(nextIndex + 1);
-		if (vkCreateDescriptorSetLayout(device->GetHandle(), &layoutInfo, nullptr, &descriptorSetLayouts[nextIndex]) != VK_SUCCESS) {
-			throw runtime_error("Failed to create descriptor set layout");
+		if (device->CreateDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayouts[nextIndex]) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create descriptor set layout");
 		}
-		return ref(descriptorSetLayouts[nextIndex]);
+		return std::ref(descriptorSetLayouts[nextIndex]);
 	}
 
-	inline vector<VkPipelineShaderStageCreateInfo>& GetStages() {
+	inline std::vector<VkPipelineShaderStageCreateInfo>& GetStages() {
 		return stages;
 	}
 
-	inline vector<VkVertexInputBindingDescription>& GetBindings() {
+	inline std::vector<VkVertexInputBindingDescription>& GetBindings() {
 		return bindings;
 	}
 
-	inline vector<VkVertexInputAttributeDescription>& GetAttributes() {
+	inline std::vector<VkVertexInputAttributeDescription>& GetAttributes() {
 		return attributes;
 	}
 	
-	inline vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() {
+	inline std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() {
 		return descriptorSetLayouts;
 	}
 

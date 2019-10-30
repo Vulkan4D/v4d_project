@@ -12,6 +12,10 @@ void KeyInputCallback(GLFWwindow* window, int key, int scancode, int action, int
 	}
 }
 
+void Cleanup(xvk::Instance* instance, xvk::Device* device) {
+	
+}
+
 void Draw(xvk::Instance* instance, xvk::Device* device, VkCommandBuffer cmdBuffer, VkImage image, VkImageSubresourceRange imageSubresourceRange) {
 
 	// Clear
@@ -24,8 +28,6 @@ void Draw(xvk::Instance* instance, xvk::Device* device, VkCommandBuffer cmdBuffe
 		1, // rangeCount
 		&imageSubresourceRange
 	);
-	
-	//...
 	
 	
 }

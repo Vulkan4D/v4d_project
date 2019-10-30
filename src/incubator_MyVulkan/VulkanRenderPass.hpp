@@ -6,22 +6,21 @@
 
 class VulkanRenderPass {
 private:
-	VulkanDevice *device;
+	VulkanDevice* device;
 
 public:
-	VkRenderPassCreateInfo renderPassInfo = {};
-	vector<VkSubpassDescription> subpasses;
-	vector<VkAttachmentDescription> attachments; // This struct defines the output data from the fragment shader (o_color)
+	VkRenderPassCreateInfo renderPassInfo {};
+	std::vector<VkSubpassDescription> subpasses;
+	std::vector<VkAttachmentDescription> attachments; // This struct defines the output data from the fragment shader (o_color)
 	VkRenderPass handle;
-	vector<VulkanGraphicsPipeline*> graphicsPipelines;
+	std::vector<VulkanGraphicsPipeline*> graphicsPipelines;
 
-	VulkanRenderPass(VulkanDevice *device) : device(device) {
+	VulkanRenderPass(VulkanDevice* device) : device(device) {
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-
 	}
 
 	~VulkanRenderPass() {
-		vkDestroyRenderPass(device->GetHandle(), handle, nullptr);
+		device->DestroyRenderPass(handle, nullptr);
 	}
 
 	void Create() {
@@ -31,8 +30,8 @@ public:
 		renderPassInfo.subpassCount = subpasses.size();
 		renderPassInfo.pSubpasses = subpasses.data();
 
-		if (vkCreateRenderPass(device->GetHandle(), &renderPassInfo, nullptr, &handle) != VK_SUCCESS) {
-			throw runtime_error("Failed to create render pass!");
+		if (device->CreateRenderPass(&renderPassInfo, nullptr, &handle) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create render pass!");
 		}
 	}
 
@@ -44,32 +43,32 @@ public:
 		attachments.push_back(attachment);
 	}
 
-	void AddGraphicsPipeline(VulkanGraphicsPipeline *graphicsPipeline, uint32_t subpass = 0) {
+	void AddGraphicsPipeline(VulkanGraphicsPipeline* graphicsPipeline, uint32_t subpass = 0) {
 		// Render passes 
 		// The reference to the render pass and the index of the sub pass where this graphics pipeline will be used. 
 		// It is also possible to use other render passes with this pipeline instead of this specific instance, but they have to be Compatible with renderPass.
 		graphicsPipeline->pipelineCreateInfo.renderPass = handle;
 		graphicsPipeline->pipelineCreateInfo.subpass = subpass;
 
-		graphicsPipelines.push_back(move(graphicsPipeline));
+		graphicsPipelines.push_back(std::move(graphicsPipeline));
 	}
 
 	void CreateGraphicsPipelines() {
-		vector<VkGraphicsPipelineCreateInfo> pipelineCreates(graphicsPipelines.size());
+		std::vector<VkGraphicsPipelineCreateInfo> pipelineCreates(graphicsPipelines.size());
 		for (size_t i = 0; i < graphicsPipelines.size(); i++) {
-			pipelineCreates[i] = ref(graphicsPipelines[i]->pipelineCreateInfo);
+			pipelineCreates[i] = std::ref(graphicsPipelines[i]->pipelineCreateInfo);
 		}
 
-		auto* pipelineHandles = new vector<VkPipeline>(graphicsPipelines.size());
+		auto* pipelineHandles = new std::vector<VkPipeline>(graphicsPipelines.size());
 		
 		// Now create the graphics pipeline object
 		// This function is designed to take multiple VkGraphicsPipelineCreateInfo objects and create multiple VkPipeline objects in a single call.
-		if (vkCreateGraphicsPipelines(device->GetHandle(), VK_NULL_HANDLE/*pipelineCache*/, pipelineCreates.size(), pipelineCreates.data(), nullptr, pipelineHandles->data()) != VK_SUCCESS) {
-			throw runtime_error("Failed to create Graphics Pipeline");
+		if (device->CreateGraphicsPipelines(VK_NULL_HANDLE/*pipelineCache*/, pipelineCreates.size(), pipelineCreates.data(), nullptr, pipelineHandles->data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create Graphics Pipeline");
 		}
 
 		for (size_t i = 0; i < graphicsPipelines.size(); i++) {
-			graphicsPipelines[i]->handle = ref((*pipelineHandles)[i]);
+			graphicsPipelines[i]->handle = std::ref((*pipelineHandles)[i]);
 		}
 
 		delete pipelineHandles;

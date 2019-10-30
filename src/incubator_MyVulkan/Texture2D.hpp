@@ -1,14 +1,11 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-
 #include "VulkanDevice.hpp"
 
 // https://github.com/nothings/stb
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-
-using namespace std;
 
 /* Image Layouts: 
 	VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : Optimal for presentation
@@ -20,12 +17,12 @@ using namespace std;
 
 class Texture2D {
 private:
-	string filepath;
+	std::string filepath;
 	int req_components;
 	int width, height, components;
 
 public:
-	Texture2D(const string& filepath, int req_components = STBI_default)
+	Texture2D(const std::string& filepath, int req_components = STBI_default)
 	: filepath(filepath), req_components(req_components) {
 		LoadImagePixelsFromFile();
 	}
@@ -74,7 +71,7 @@ public:
 	unsigned char* GetImagePixels() const {
 		return pixels;
 	}
-	void GetImagePixels(void *buffer) const {
+	void GetImagePixels(void* buffer) const {
 		memcpy(buffer, pixels, bufferSize);
 	}
 
@@ -92,7 +89,7 @@ public:
 
 	uint32_t SetMipLevels(uint32_t mipLevels = 0) {
 		if (mipLevels == 0) {
-			mipLevels = (uint32_t)floor(log2(max(width, height))) + 1;
+			mipLevels = (uint32_t)floor(log2(std::max(width, height))) + 1;
 		}
 		return this->mipLevels = mipLevels;
 	}
@@ -136,32 +133,32 @@ public:
 		pixels = stbi_load(filepath.c_str(), &width, &height, &components, req_components);
 		bufferSize = width * height * req_components;
 		if (!pixels){
-			throw runtime_error("Failed to load texture '" + filepath + "' : " + stbi_failure_reason());
+			throw std::runtime_error("Failed to load texture '" + filepath + "' : " + stbi_failure_reason());
 		}
 		pixelBufferStandalone = true;
 	}
 
-	void AllocateVulkanStagingMemory(VulkanDevice *device) {
+	void AllocateVulkanStagingMemory(VulkanDevice* device) {
 		if (!pixels) {
 			if (filepath == "") {
-				throw runtime_error("Pixels are empty and no filepath defined");
+				throw std::runtime_error("Pixels are empty and no filepath defined");
 			}
 			LoadImagePixelsFromFile();
 		}
 		VkDeviceSize size = bufferSize;
 		device->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-		void *data;
-		vkMapMemory(device->GetHandle(), stagingBufferMemory, 0, size, 0, &data);
+		void* data;
+		device->MapMemory(stagingBufferMemory, 0, size, 0, &data);
 			memcpy(data, pixels, bufferSize);
-		vkUnmapMemory(device->GetHandle(), stagingBufferMemory);
+		device->UnmapMemory(stagingBufferMemory);
 	}
 
-	void FreeVulkanStagingMemory(VulkanDevice *device) {
-		vkDestroyBuffer(device->GetHandle(), stagingBuffer, nullptr);
-		vkFreeMemory(device->GetHandle(), stagingBufferMemory, nullptr);
+	void FreeVulkanStagingMemory(VulkanDevice* device) {
+		device->DestroyBuffer(stagingBuffer, nullptr);
+		device->FreeMemory(stagingBufferMemory, nullptr);
 	}
 
-	void CreateVulkanImage(VulkanDevice *device, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags) {
+	void CreateVulkanImage(VulkanDevice* device, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags) {
 		VkImageCreateInfo imageInfo = {};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -192,31 +189,31 @@ public:
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		imageInfo.flags = 0; // optional
 
-		if (vkCreateImage(device->GetHandle(), &imageInfo, nullptr, &image) != VK_SUCCESS) {
-			throw runtime_error("Failed to create image");
+		if (device->CreateImage(&imageInfo, nullptr, &image) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create image");
 		}
 		
 		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(device->GetHandle(), image, &memRequirements);
+		device->GetImageMemoryRequirements(image, &memRequirements);
 
 		VkMemoryAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = device->GetGPU()->FindMemoryType(memRequirements.memoryTypeBits, memoryPropertyFlags);
 		
-		if (vkAllocateMemory(device->GetHandle(), &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-			throw runtime_error("Failed to allocate image memory");
+		if (device->AllocateMemory(&allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate image memory");
 		}
 
-		vkBindImageMemory(device->GetHandle(), image, imageMemory, 0);
+		device->BindImageMemory(image, imageMemory, 0);
 	}
 
-	void DestroyVulkanImage(VulkanDevice *device) {
-		vkDestroyImage(device->GetHandle(), image, nullptr);
-		vkFreeMemory(device->GetHandle(), imageMemory, nullptr);
+	void DestroyVulkanImage(VulkanDevice* device) {
+		device->DestroyImage(image, nullptr);
+		device->FreeMemory(imageMemory, nullptr);
 	}
 
-	void CreateVulkanImageView(VulkanDevice *device) {
+	void CreateVulkanImageView(VulkanDevice* device) {
 		VkImageViewCreateInfo viewInfo = {};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = image;
@@ -228,13 +225,13 @@ public:
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
 
-		if (vkCreateImageView(device->GetHandle(), &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-			throw runtime_error("Failed to create texture image view");
+		if (device->CreateImageView(&viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture image view");
 		}
 	}
 
-	void DestroyVulkanImageView(VulkanDevice *device) {
-		vkDestroyImageView(device->GetHandle(), imageView, nullptr);
+	void DestroyVulkanImageView(VulkanDevice* device) {
+		device->DestroyImageView(imageView, nullptr);
 	}
 
 	void SetSamplerAddressMode(VkSamplerAddressMode mode, VkBorderColor borderColor = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK) {
@@ -269,7 +266,7 @@ public:
 		samplerAnisotropy = anisotropy;
 	}
 
-	void CreateVulkanSampler(VulkanDevice *device, float mipLodBias = 0) {
+	void CreateVulkanSampler(VulkanDevice* device, float mipLodBias = 0) {
 		VkSamplerCreateInfo samplerInfo = {};
 		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		// VK_FILTER_LINEAR or VK_FILTER_NEAREST
@@ -293,13 +290,13 @@ public:
 		samplerInfo.minLod = 0;
 		samplerInfo.maxLod = mipLevels;
 		//
-		if (vkCreateSampler(device->GetHandle(), &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-			throw runtime_error("Failed to create texture sampler");
+		if (device->CreateSampler(&samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture sampler");
 		}
 	}
 
-	void DestroyVulkanSampler(VulkanDevice *device) {
-		vkDestroySampler(device->GetHandle(), sampler, nullptr);
+	void DestroyVulkanSampler(VulkanDevice* device) {
+		device->DestroySampler(sampler, nullptr);
 	}
 
 private:
@@ -325,6 +322,5 @@ private:
 	VkSamplerAddressMode samplerAddressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	VkBorderColor samplerBorderColor = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
 	float samplerAnisotropy = 1;
-
 
 };

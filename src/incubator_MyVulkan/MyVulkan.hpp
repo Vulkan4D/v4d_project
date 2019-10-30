@@ -6,8 +6,6 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
-using namespace std;
-
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
@@ -30,14 +28,14 @@ namespace std {
 
 class MyVulkan : public Vulkan {
 private: // class members
-	Window *window;
+	Window* window;
 
 	// Main Render Surface
-	VulkanSurface *surface;
+	VulkanSurface* surface;
 
 	// Main Graphics Card
-	VulkanGPU *mainGPU = nullptr; // automatically deleted in base class
-	VulkanDevice *device;
+	VulkanGPU* mainGPU = nullptr; // automatically deleted in base class
+	VulkanDevice* device;
 
 	// Queues
 	VulkanQueue graphicsQueue;
@@ -48,22 +46,22 @@ private: // class members
 	VkDescriptorPool descriptorPool;
 
 	// Sync objects
-	vector<VkSemaphore> imageAvailableSemaphores;
-	vector<VkSemaphore> renderFinishedSemaphores;
-	vector<VkFence> inFlightFences;
+	std::vector<VkSemaphore> imageAvailableSemaphores;
+	std::vector<VkSemaphore> renderFinishedSemaphores;
+	std::vector<VkFence> inFlightFences;
 	size_t currentFrameInFlight = 0;
 
 	// Swap Chains
-	VulkanSwapChain *swapChain = nullptr; // make sure this one is initialized to nullptr
+	VulkanSwapChain* swapChain = nullptr; // make sure this one is initialized to nullptr
 
 	// Render pass (and graphics pipelines)
-	VulkanRenderPass *renderPass;
+	VulkanRenderPass* renderPass;
 
 	// Framebuffers
-	vector<VkFramebuffer> swapChainFrameBuffers;
+	std::vector<VkFramebuffer> swapChainFrameBuffers;
 
 	// Command buffers
-	vector<VkCommandBuffer> commandBuffers;
+	std::vector<VkCommandBuffer> commandBuffers;
 
 	// Render Target (Color Attachment)
 	VkImage colorImage;
@@ -83,11 +81,11 @@ private: // class members
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 
 private: // Test Object members
-	VulkanShaderProgram *testShader;
+	VulkanShaderProgram* testShader;
 	// Vertex Buffers for test object
-	vector<Vertex> testObjectVertices;
-	vector<uint32_t> testObjectIndices;
-	unordered_map<Vertex, uint32_t> testObjectUniqueVertices;
+	std::vector<Vertex> testObjectVertices;
+	std::vector<uint32_t> testObjectIndices;
+	std::unordered_map<Vertex, uint32_t> testObjectUniqueVertices;
 	VkBuffer vertexBuffer, indexBuffer;
 	VkDeviceMemory vertexBufferMemory, indexBufferMemory;
 	struct UBO {
@@ -95,18 +93,18 @@ private: // Test Object members
 		glm::mat4 view;
 		glm::mat4 proj;
 	};
-	vector<VkBuffer> uniformBuffers;
-	vector<VkDeviceMemory> uniformBuffersMemory;
-	vector<VkDescriptorSet> descriptorSets;
+	std::vector<VkBuffer> uniformBuffers;
+	std::vector<VkDeviceMemory> uniformBuffersMemory;
+	std::vector<VkDescriptorSet> descriptorSets;
 	// Textures
-	Texture2D *texture;
+	Texture2D* texture;
 
 
 protected: // Virtual INIT Methods
 
 	virtual void CreateGraphicsDevices() {
 		// Select The Best Main GPU using a score system
-		mainGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU *gpu){
+		mainGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU* gpu){
 			// Build up a score here and the GPU with the highest score will be selected.
 			// Add to the score optional specs, then multiply with mandatory specs.
 
@@ -158,11 +156,11 @@ protected: // Virtual INIT Methods
 		presentationQueue = graphicsQueue; // Use same as graphics (as configured above), otherwise uncomment block below to use a separate queue for presentation (apparently, using the same queue is supposed to be faster...)
 		// presentationQueue = device->GetPresentationQueue(surface);
 		// if (presentationQueue == nullptr) {
-		// 	throw runtime_error("Failed to get Presentation Queue for surface");
+		// 	throw std::runtime_error("Failed to get Presentation Queue for surface");
 		// }
 
 		// MultiSampling
-		msaaSamples = min(VK_SAMPLE_COUNT_8_BIT, mainGPU->GetMaxUsableSampleCount());
+		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, mainGPU->GetMaxUsableSampleCount());
 	}
 
 	virtual void DestroyGraphicsDevices() {
@@ -202,23 +200,23 @@ protected: // Virtual INIT Methods
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Initialize in the signaled state so that we dont get stuck on the first frame
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			if (vkCreateSemaphore(device->GetHandle(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS) {
-				throw runtime_error("Failed to create semaphore for ImageAvailable");
+			if (device->CreateSemaphore(&semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create semaphore for ImageAvailable");
 			}
-			if (vkCreateSemaphore(device->GetHandle(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
-				throw runtime_error("Failed to create semaphore for RenderFinished");
+			if (device->CreateSemaphore(&semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create semaphore for RenderFinished");
 			}
-			if (vkCreateFence(device->GetHandle(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-				throw runtime_error("Failed to create InFlightFence");
+			if (device->CreateFence(&fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create InFlightFence");
 			}
 		}
 	}
 
 	virtual void DestroySyncObjects() {
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkDestroySemaphore(device->GetHandle(), renderFinishedSemaphores[i], nullptr);
-			vkDestroySemaphore(device->GetHandle(), imageAvailableSemaphores[i], nullptr);
-			vkDestroyFence(device->GetHandle(), inFlightFences[i], nullptr);
+			device->DestroySemaphore(renderFinishedSemaphores[i], nullptr);
+			device->DestroySemaphore(imageAvailableSemaphores[i], nullptr);
+			device->DestroyFence(inFlightFences[i], nullptr);
 		}
 	}
 
@@ -229,7 +227,7 @@ protected: // Virtual INIT Methods
 		}
 
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
-		VulkanSwapChain *oldSwapChain = swapChain;
+		VulkanSwapChain* oldSwapChain = swapChain;
 
 		// Create the new swapchain object
 		swapChain = new VulkanSwapChain(
@@ -487,7 +485,7 @@ protected: // Virtual INIT Methods
 	virtual void CreateFrameBuffers() {
 		swapChainFrameBuffers.resize(swapChain->imageViews.size());
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			array<VkImageView, 3> attachments = {
+			std::array<VkImageView, 3> attachments = {
 				colorImageView,
 				depthImageView,
 				swapChain->imageViews[i],
@@ -501,15 +499,15 @@ protected: // Virtual INIT Methods
 			framebufferCreateInfo.width = swapChain->extent.width;
 			framebufferCreateInfo.height = swapChain->extent.height;
 			framebufferCreateInfo.layers = 1; // refers to the number of layers in image arrays
-			if (vkCreateFramebuffer(device->GetHandle(), &framebufferCreateInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
-				throw runtime_error("Failed to create framebuffer");
+			if (device->CreateFramebuffer(&framebufferCreateInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create framebuffer");
 			}
 		}
 	}
 
 	virtual void DestroyFrameBuffers() {
 		for (auto framebuffer : swapChainFrameBuffers) {
-			vkDestroyFramebuffer(device->GetHandle(), framebuffer, nullptr);
+			device->DestroyFramebuffer(framebuffer, nullptr);
 		}
 	}
 
@@ -525,8 +523,8 @@ protected: // Virtual INIT Methods
 							VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
 						*/
 		allocInfo.commandBufferCount = (uint) commandBuffers.size();
-		if (vkAllocateCommandBuffers(device->GetHandle(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
-			throw runtime_error("Failed to allocate command buffers");
+		if (device->AllocateCommandBuffers(&allocInfo, commandBuffers.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate command buffers");
 		}
 
 		// Starting command buffer recording...
@@ -541,8 +539,8 @@ protected: // Virtual INIT Methods
 			beginInfo.pInheritanceInfo = nullptr; // only relevant for secondary command buffers. It specifies which state to inherit from the calling primary command buffers.
 			// If a command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it.
 			// It's not possible to append commands to a buffer at a later time.
-			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-				throw runtime_error("Faild to begin recording command buffer");
+			if (device->BeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+				throw std::runtime_error("Faild to begin recording command buffer");
 			}
 
 			// Begin Render Pass
@@ -554,35 +552,35 @@ protected: // Virtual INIT Methods
 			renderPassInfo.renderArea.offset = {0, 0};
 			renderPassInfo.renderArea.extent = swapChain->extent;
 			// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-			array<VkClearValue, 2> clearValues = {};
+			std::array<VkClearValue, 2> clearValues = {};
 			clearValues[0].color = {0,0,0,1}; // Clear Color
 			clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
 			renderPassInfo.clearValueCount = clearValues.size();
 			renderPassInfo.pClearValues = clearValues.data();
 			//
-			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
+			device->CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 																/*	the last parameter controls how the drawing commands within the render pass will be provided.
 																	VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
 																	VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
 																*/
 			// We can now bind the graphics pipeline
-			vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
+			device->CmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
 			
 			// Bind Descriptor Sets (Uniforms)
-			vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, 1/*count*/, &descriptorSets[i], 0, nullptr);
+			device->CmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, 1/*count*/, &descriptorSets[i], 0, nullptr);
 
 			// Test Object
 			VkBuffer vertexBuffers[] = {vertexBuffer};
 			VkDeviceSize offsets[] = {0};
-			vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-			// vkCmdDraw(commandBuffers[i],
+			device->CmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
+			// device->CmdDraw(commandBuffers[i],
 			// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
 			// 	1, // instanceCount
 			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
 			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
 			// );
-			vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexed(commandBuffers[i],
+			device->CmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+			device->CmdDrawIndexed(commandBuffers[i],
 				static_cast<uint32_t>(testObjectIndices.size()), // indexCount
 				1, // instanceCount
 				0, // firstVertex (defines the lowest value of gl_VertexIndex)
@@ -592,7 +590,7 @@ protected: // Virtual INIT Methods
 
 
 			// // Draw One Single F***ing Triangle !
-			// vkCmdDraw(commandBuffers[i],
+			// device->CmdDraw(commandBuffers[i],
 			// 	3, // vertexCount
 			// 	1, // instanceCount
 			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
@@ -601,15 +599,15 @@ protected: // Virtual INIT Methods
 
 
 			// End the render pass
-			vkCmdEndRenderPass(commandBuffers[i]);
-			if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
-				throw runtime_error("Failed to record command buffer");
+			device->CmdEndRenderPass(commandBuffers[i]);
+			if (device->EndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to record command buffer");
 			}
 		}
 	}
 
 	virtual void DestroyCommandBuffers() {
-		vkFreeCommandBuffers(device->GetHandle(), graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		device->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 	}
 
 	virtual void CreateColorResources() {
@@ -636,15 +634,15 @@ protected: // Virtual INIT Methods
 			viewInfo.subresourceRange.levelCount = 1;
 			viewInfo.subresourceRange.baseArrayLayer = 0;
 			viewInfo.subresourceRange.layerCount = 1;
-		if (vkCreateImageView(device->GetHandle(), &viewInfo, nullptr, &colorImageView) != VK_SUCCESS) {
-			throw runtime_error("Failed to create texture image view");
+		if (device->CreateImageView(&viewInfo, nullptr, &colorImageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture image view");
 		}
 	}
 
 	virtual void DestroyColorResources() {
-		vkDestroyImageView(device->GetHandle(), colorImageView, nullptr);
-		vkDestroyImage(device->GetHandle(), colorImage, nullptr);
-		vkFreeMemory(device->GetHandle(), colorImageMemory, nullptr);
+		device->DestroyImageView(colorImageView, nullptr);
+		device->DestroyImage(colorImage, nullptr);
+		device->FreeMemory(colorImageMemory, nullptr);
 	}
 
 	virtual void CreateDepthResources() {
@@ -675,8 +673,8 @@ protected: // Virtual INIT Methods
 		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
-		if (vkCreateImageView(device->GetHandle(), &viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
-			throw runtime_error("Failed to create texture image view");
+		if (device->CreateImageView(&viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture image view");
 		}
 
 		// Transition Layout
@@ -684,9 +682,9 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyDepthResources() {
-		vkDestroyImageView(device->GetHandle(), depthImageView, nullptr);
-		vkDestroyImage(device->GetHandle(), depthImage, nullptr);
-		vkFreeMemory(device->GetHandle(), depthImageMemory, nullptr);
+		device->DestroyImageView(depthImageView, nullptr);
+		device->DestroyImage(depthImage, nullptr);
+		device->FreeMemory(depthImageMemory, nullptr);
 	}
 
 private: // Helper methods
@@ -699,29 +697,29 @@ private: // Helper methods
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(device->GetHandle(), &allocInfo, &commandBuffer);
+		device->AllocateCommandBuffers(&allocInfo, &commandBuffer);
 
 		VkCommandBufferBeginInfo beginInfo = {};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+		device->BeginCommandBuffer(commandBuffer, &beginInfo);
 
 		return commandBuffer;
 	}
 
 	void EndSingleTimeCommands(VkCommandPool commandPool, VkCommandBuffer commandBuffer) {
-		vkEndCommandBuffer(commandBuffer);
+		device->EndCommandBuffer(commandBuffer);
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		vkQueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(graphicsQueue.handle); // TODO: Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
+		device->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
+		device->QueueWaitIdle(graphicsQueue.handle); // TODO: Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
 
-		vkFreeCommandBuffers(device->GetHandle(), commandPool, 1, &commandBuffer);
+		device->FreeCommandBuffers(commandPool, 1, &commandBuffer);
 	}
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
@@ -769,7 +767,7 @@ private: // Helper methods
 			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		} else {
-			throw invalid_argument("Unsupported layout transition");
+			throw std::invalid_argument("Unsupported layout transition");
 		}
 		/*
 		Transfer writes must occur in the pipeline transfer stage. 
@@ -788,7 +786,7 @@ private: // Helper methods
 		It is required for some special cases, like using an image as both input and output, or for reading an image after it has left the preinitialized layout.
 		*/
 		//
-		vkCmdPipelineBarrier(
+		device->CmdPipelineBarrier(
 			commandBuffer,
 			srcStage, dstStage,
 			0,
@@ -807,7 +805,7 @@ private: // Helper methods
 		copyRegion.srcOffset = 0;
 		copyRegion.dstOffset = 0;
 		copyRegion.size = size;
-		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+		device->CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
@@ -828,7 +826,7 @@ private: // Helper methods
 		region.imageOffset = {0, 0, 0};
 		region.imageExtent = {width, height, 1};
 
-		vkCmdCopyBufferToImage(
+		device->CmdCopyBufferToImage(
 			commandBuffer,
 			buffer,
 			image,
@@ -840,15 +838,15 @@ private: // Helper methods
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
 
-	void GenerateMipmaps(Texture2D *texture) {
+	void GenerateMipmaps(Texture2D* texture) {
 		GenerateMipmaps(texture->GetImage(), texture->GetFormat(), texture->GetWidth(), texture->GetHeight(), texture->GetMipLevels());
 	}
 
 	void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t width, int32_t height, uint32_t mipLevels) {
 		VkFormatProperties formatProperties;
-		vkGetPhysicalDeviceFormatProperties(mainGPU->GetHandle(), imageFormat, &formatProperties);
+		mainGPU->GetPhysicalDeviceFormatProperties(imageFormat, &formatProperties);
 		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
-			throw runtime_error("Texture image format does not support linear blitting");
+			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
 
 		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
@@ -873,7 +871,7 @@ private: // Helper methods
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-			vkCmdPipelineBarrier(
+			device->CmdPipelineBarrier(
 				commandBuffer, 
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 				0, nullptr,
@@ -895,7 +893,7 @@ private: // Helper methods
 				blit.dstSubresource.baseArrayLayer = 0;
 				blit.dstSubresource.layerCount = 1;
 
-			vkCmdBlitImage(
+			device->CmdBlitImage(
 				commandBuffer,
 				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -908,7 +906,7 @@ private: // Helper methods
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-			vkCmdPipelineBarrier(
+			device->CmdPipelineBarrier(
 				commandBuffer,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
 				0, nullptr,
@@ -926,7 +924,7 @@ private: // Helper methods
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-		vkCmdPipelineBarrier(
+		device->CmdPipelineBarrier(
 			commandBuffer,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
 			0, nullptr,
@@ -942,11 +940,11 @@ private: // Test Object methods
 	void LoadTestObject() {
 		// 3D Model
 		tinyobj::attrib_t attrib;
-		vector<tinyobj::shape_t> shapes;
-		vector<tinyobj::material_t> materials;
-		string err, warn;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string err, warn;
 		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "../../src/incubator_MyVulkan/models/chalet.obj")) {
-			throw runtime_error(err);
+			throw std::runtime_error(err);
 		}
 		if (warn != "") LOG_WARN(warn);
 		for (const auto &shape : shapes) {
@@ -1047,13 +1045,13 @@ private: // Test Object methods
 		VkDeviceMemory stagingBufferMemory;
 		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 		void *data;
-		vkMapMemory(device->GetHandle(), stagingBufferMemory, 0, bufferSize, 0, &data);
+		device->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
 			memcpy(data, testObjectVertices.data(), bufferSize);
-		vkUnmapMemory(device->GetHandle(), stagingBufferMemory);
+		device->UnmapMemory(stagingBufferMemory);
 		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 		CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-		vkDestroyBuffer(device->GetHandle(), stagingBuffer, nullptr);
-		vkFreeMemory(device->GetHandle(), stagingBufferMemory, nullptr);
+		device->DestroyBuffer(stagingBuffer, nullptr);
+		device->FreeMemory(stagingBufferMemory, nullptr);
 
 		// Indices
 		/*VkDeviceSize*/ bufferSize = sizeof(testObjectIndices[0]) * testObjectIndices.size();
@@ -1061,13 +1059,13 @@ private: // Test Object methods
 		// VkDeviceMemory stagingBufferMemory;
 		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 		// void *data;
-		vkMapMemory(device->GetHandle(), stagingBufferMemory, 0, bufferSize, 0, &data);
+		device->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
 			memcpy(data, testObjectIndices.data(), bufferSize);
-		vkUnmapMemory(device->GetHandle(), stagingBufferMemory);
+		device->UnmapMemory(stagingBufferMemory);
 		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 		CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-		vkDestroyBuffer(device->GetHandle(), stagingBuffer, nullptr);
-		vkFreeMemory(device->GetHandle(), stagingBufferMemory, nullptr);
+		device->DestroyBuffer(stagingBuffer, nullptr);
+		device->FreeMemory(stagingBufferMemory, nullptr);
 
 		// Uniform buffers
 		/*VkDeviceSize*/ bufferSize = sizeof(UBO);
@@ -1078,7 +1076,7 @@ private: // Test Object methods
 		}
 
 		// Descriptor sets (for Uniform Buffers)
-		vector<VkDescriptorSetLayout> layouts;
+		std::vector<VkDescriptorSetLayout> layouts;
 		layouts.reserve(swapChain->imageViews.size() * testShader->GetDescriptorSetLayouts().size());
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
 			for (auto layout : testShader->GetDescriptorSetLayouts()) {
@@ -1091,11 +1089,11 @@ private: // Test Object methods
 		allocInfo.descriptorSetCount = layouts.size();
 		allocInfo.pSetLayouts = layouts.data();
 		descriptorSets.resize(swapChain->imageViews.size());
-		if (vkAllocateDescriptorSets(device->GetHandle(), &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-			throw runtime_error("Failed to allocate descriptor sets");
+		if (device->AllocateDescriptorSets(&allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
 
 			// ubo
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1118,33 +1116,33 @@ private: // Test Object methods
 			descriptorWrites[1].pImageInfo = &imageInfo;
 			
 			// Update Descriptor Sets
-			vkUpdateDescriptorSets(device->GetHandle(), descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+			device->UpdateDescriptorSets(descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 		}
 	}
 
 	void RemoveTestObject() {
 		// Uniform buffers
 		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			vkDestroyBuffer(device->GetHandle(), uniformBuffers[i], nullptr);
-			vkFreeMemory(device->GetHandle(), uniformBuffersMemory[i], nullptr);
+			device->DestroyBuffer(uniformBuffers[i], nullptr);
+			device->FreeMemory(uniformBuffersMemory[i], nullptr);
 		}
 
 		// Descriptor Sets
-		vkFreeDescriptorSets(device->GetHandle(), descriptorPool, descriptorSets.size(), descriptorSets.data());
+		device->FreeDescriptorSets(descriptorPool, descriptorSets.size(), descriptorSets.data());
 
 		// Vertices
-		vkDestroyBuffer(device->GetHandle(), vertexBuffer, nullptr);
-		vkFreeMemory(device->GetHandle(), vertexBufferMemory, nullptr);
+		device->DestroyBuffer(vertexBuffer, nullptr);
+		device->FreeMemory(vertexBufferMemory, nullptr);
 
 		// Indices
-		vkDestroyBuffer(device->GetHandle(), indexBuffer, nullptr);
-		vkFreeMemory(device->GetHandle(), indexBufferMemory, nullptr);
+		device->DestroyBuffer(indexBuffer, nullptr);
+		device->FreeMemory(indexBufferMemory, nullptr);
 	}
 
 	void UpdateUniformBuffer(uint i) {
-		static auto startTime = chrono::high_resolution_clock::now();
-		auto currentTime = chrono::high_resolution_clock::now();
-		float time = chrono::duration<float, chrono::seconds::period>(currentTime - startTime).count();
+		static auto startTime = std::chrono::high_resolution_clock::now();
+		auto currentTime = std::chrono::high_resolution_clock::now();
+		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 		UBO ubo = {};
 		ubo.model = glm::rotate(glm::mat4(1), time * glm::radians(10.0f), glm::vec3(0,0,1));
 		ubo.view = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));
@@ -1152,14 +1150,14 @@ private: // Test Object methods
 		ubo.proj[1][1] *= -1;
 		// Update memory
 		void *data;
-		vkMapMemory(device->GetHandle(), uniformBuffersMemory[i], 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
+		device->MapMemory(uniformBuffersMemory[i], 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
 			memcpy(data, &ubo, sizeof(ubo));
-		vkUnmapMemory(device->GetHandle(), uniformBuffersMemory[i]);
+		device->UnmapMemory(uniformBuffersMemory[i]);
 	}
 
 protected: // Reset Methods
 	virtual void RecreateSwapChains() {
-		device->WaitIdle();
+		device->DeviceWaitIdle();
 
 		// Destroy graphics pipeline
 		DestroyCommandBuffers();
@@ -1187,10 +1185,10 @@ protected: // Reset Methods
 		CreateCommandBuffers(); // objects are rendered here
 	}
 public: // Constructor & Destructor
-	MyVulkan(Window *window) : window(window) {
+	MyVulkan(xvk::Loader* loader, const char* applicationName, uint applicationVersion, Window* window) : Vulkan(loader, applicationName, applicationVersion), window(window) {
 
 		// Surfaces
-		surface = new VulkanSurface(instance, window);
+		surface = new VulkanSurface(this, window);
 
 		// Create Objects
 		CreateGraphicsDevices();
@@ -1218,7 +1216,7 @@ public: // Constructor & Destructor
 
 	virtual ~MyVulkan() override {
 		// Wait for device to be idle before destroying everything
-		device->WaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
+		device->DeviceWaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
 		
 		// Destroy graphics pipeline
 		DestroyCommandBuffers();
@@ -1245,14 +1243,13 @@ public: // Constructor & Destructor
 public: // Public Methods
 	virtual void RenderFrame() {
 		// Wait for previous frame to be finished
-		vkWaitForFences(device->GetHandle(), 1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, numeric_limits<uint64_t>::max()/*timeout*/);
+		device->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
 		// Get an image from the swapchain
 		uint imageIndex;
-		VkResult result = vkAcquireNextImageKHR(
-			device->GetHandle(), // device
+		VkResult result = device->AcquireNextImageKHR(
 			swapChain->GetHandle(), // swapChain
-			numeric_limits<uint64_t>::max(), // timeout in nanoseconds (using max disables the timeout)
+			std::numeric_limits<uint64_t>::max(), // timeout in nanoseconds (using max disables the timeout)
 			imageAvailableSemaphores[currentFrameInFlight], // semaphore
 			VK_NULL_HANDLE, // fence
 			&imageIndex // output the index of the swapchain image in there
@@ -1264,7 +1261,7 @@ public: // Public Methods
 			RecreateSwapChains();
 			return;
 		} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-			throw runtime_error("Failed to acquire swap chain images");
+			throw std::runtime_error("Failed to acquire swap chain images");
 		}
 
 		// Update Uniforms
@@ -1291,9 +1288,9 @@ public: // Public Methods
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		
 		// Reset the fence and Submit the queue
-		vkResetFences(device->GetHandle(), 1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
-		if (vkQueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/) != VK_SUCCESS) {
-			throw runtime_error("Failed to submit draw command buffer");
+		device->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
+		if (device->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to submit draw command buffer");
 		}
 
 		// Presentation
@@ -1313,7 +1310,7 @@ public: // Public Methods
 
 		// Send the present info to the presentation queue !
 		// This submits the request to present an image to the swap chain.
-		result = vkQueuePresentKHR(presentationQueue.handle, &presentInfo);
+		result = device->QueuePresentKHR(presentationQueue.handle, &presentInfo);
 
 		// Check for errors
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window->WasResized()) {
@@ -1321,7 +1318,7 @@ public: // Public Methods
 			window->ResetResize();
 			RecreateSwapChains();
 		} else if (result != VK_SUCCESS) {
-			throw runtime_error("Failed to present swap chain image");
+			throw std::runtime_error("Failed to present swap chain image");
 		}
 
 		// Increment currentFrameInFlight

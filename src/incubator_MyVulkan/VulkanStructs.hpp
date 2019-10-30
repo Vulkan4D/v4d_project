@@ -1,7 +1,5 @@
 #pragma once
 
-using namespace std;
-
 struct VulkankVertexInputAttributeDescription {
 	uint32_t    location;
 	uint32_t    offset;
@@ -9,7 +7,7 @@ struct VulkankVertexInputAttributeDescription {
 };
 
 struct VulkanShaderInfo {
-	string filepath;
+	std::string filepath;
 	const char* entryPoint = "main";
 	VkSpecializationInfo *specializationInfo = nullptr;
 };

@@ -3,21 +3,19 @@
 #include "VulkanStructs.hpp"
 #include "Window.hpp"
 
-using namespace std;
-
 class VulkanSurface {
 private:
-	VkInstance instance;
+	xvk::Interface::InstanceInterface* vulkanInstance;
 	Window *window;
 	VkSurfaceKHR handle;
 
 public:
-	VulkanSurface(VkInstance instance, Window *window) : instance(instance), window(window), handle(window->CreateSurface(instance)) {
+	VulkanSurface(xvk::Interface::InstanceInterface* vulkanInstance, Window* window) : vulkanInstance(vulkanInstance), window(window), handle(window->CreateSurface(vulkanInstance->handle)) {
 
 	}
 
 	~VulkanSurface() {
-		vkDestroySurfaceKHR(instance, handle, nullptr);
+		vulkanInstance->DestroySurfaceKHR(handle, nullptr);
 	}
 
 	inline VkSurfaceKHR GetHandle() const {

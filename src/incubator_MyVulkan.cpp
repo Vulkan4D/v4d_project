@@ -3,7 +3,8 @@
 #include <v4d.h>
 
 // GLFW
-#define GLFW_INCLUDE_VULKAN
+// #define GLFW_INCLUDE_VULKAN
+#include <xvk.hpp>
 #include <GLFW/glfw3.h>
 
 // GLM
@@ -16,10 +17,10 @@
 /////////////////////////////////////////////
 
 #define VULKAN_API_VERSION VK_API_VERSION_1_1
-#define ENGINE_NAME "Vulkan4D"
-#define ENGINE_VERSION VK_MAKE_VERSION(1, 0, 0)
-#define APPLICATION_NAME "V4D Vulkan Incubator"
-#define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
+#define V4D_ENGINE_NAME "Vulkan4D"
+#define V4D_ENGINE_VERSION VK_MAKE_VERSION(1, 0, 0)
+// #define APPLICATION_NAME "V4D Vulkan Incubator"
+// #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
 
 std::vector<const char*> vulkanRequiredExtensions = {
 	// extensions from glfw for creating a window are automatically added to this list
@@ -43,9 +44,13 @@ std::vector<const char*> vulkanRequiredLayers = {
 std::unordered_map<int, Window*> Window::windows{};
 
 
-//
+// Vulkan Dynamic Loader
+xvk::Loader vulkanLoader;
 
 int main() {
+	
+	if (!vulkanLoader()) 
+		throw std::runtime_error("Failed to load Vulkan library");
 
 	try {
 
@@ -53,7 +58,15 @@ int main() {
 		Window *window;
 		MyVulkan *vulkan;
 		window = new Window("TEST", 1440, 900);
-		vulkan = new MyVulkan(window);
+		vulkan = new MyVulkan(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+		
+		// Input Events
+		glfwSetKeyCallback(window->GetHandle(), [](GLFWwindow* window, int key, int scancode, int action, int mods){
+			// Quit application upon pressing the Escape key
+			if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE) {
+				glfwSetWindowShouldClose(window, 1);
+			}
+		});
 
 		// FPS
 		std::queue<double> frameTimeQueue;

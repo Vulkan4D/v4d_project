@@ -3,9 +3,7 @@
 #include "VulkanStructs.hpp"
 #include "VulkanDevice.hpp"
 
-using namespace std;
-
-static unordered_map<string, VkShaderStageFlagBits> SHADER_TYPES {
+static std::unordered_map<std::string, VkShaderStageFlagBits> SHADER_TYPES {
 	{"vert", VK_SHADER_STAGE_VERTEX_BIT},
 	{"tesc", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
 	{"tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
@@ -17,55 +15,55 @@ static unordered_map<string, VkShaderStageFlagBits> SHADER_TYPES {
 class VulkanShader {
 private:
 
-	VulkanDevice *device;
-	string filepath;
+	VulkanDevice* device;
+	std::string filepath;
 
-	string name;
-	string type;
+	std::string name;
+	std::string type;
 	
 	VkShaderModule module;
 
 public:
 	VkPipelineShaderStageCreateInfo stageInfo;
 
-	VulkanShader(VulkanDevice *device, string filepath, const char* entryPoint = "main", VkSpecializationInfo *specializationInfo = nullptr) : device(device), filepath(filepath) {
+	VulkanShader(VulkanDevice* device, std::string filepath, const char* entryPoint = "main", VkSpecializationInfo* specializationInfo = nullptr) : device(device), filepath(filepath) {
 		// Automatically add .spv if not present at the end of the filepath
-		if (!regex_match(filepath, regex(R"(\.spv$)"))) {
+		if (!std::regex_match(filepath, std::regex(R"(\.spv$)"))) {
 			filepath += ".spv";
 		}
 
 		// Validate filepath
-		auto filepathRegex = regex(R"(^(.*/|)([^/]+)\.([^\.]+)(\.spv)$)");
-		if (!regex_match(filepath, filepathRegex)) {
-			throw runtime_error("Invalid shader file path '" + filepath + "'");
+		auto filepathRegex = std::regex(R"(^(.*/|)([^/]+)\.([^\.]+)(\.spv)$)");
+		if (!std::regex_match(filepath, filepathRegex)) {
+			throw std::runtime_error("Invalid shader file path '" + filepath + "'");
 		}
 
 		// Read the file
-		ifstream file(filepath, ios::ate | ios::binary);
+		std::ifstream file(filepath, std::fstream::ate | std::fstream::binary);
 		if (!file.is_open()) {
-			throw runtime_error("Failed to load shader file '" + filepath + "'");
+			throw std::runtime_error("Failed to load shader file '" + filepath + "'");
 		}
 
 		// Parse the file
-		name = regex_replace(filepath, filepathRegex, "$2");
-		type = regex_replace(filepath, filepathRegex, "$3");
+		name = std::regex_replace(filepath, filepathRegex, "$2");
+		type = std::regex_replace(filepath, filepathRegex, "$3");
 		auto stageFlagBits = SHADER_TYPES[type];
 		if (!stageFlagBits) {
-			throw runtime_error("Invalid Shader Type " + type);
+			throw std::runtime_error("Invalid Shader Type " + type);
 		}
 		size_t fileSize = (size_t) file.tellg();
-		vector<char> bytecode(fileSize);
+		std::vector<char> bytecode(fileSize);
 		file.seekg(0);
 		file.read(bytecode.data(), fileSize);
 		file.close();
 
 		// Create the shaderModule
-		VkShaderModuleCreateInfo createInfo = {};
+		VkShaderModuleCreateInfo createInfo {};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		createInfo.codeSize = bytecode.size();
 		createInfo.pCode = reinterpret_cast<const uint32_t*>(bytecode.data());
-		if (vkCreateShaderModule(device->GetHandle(), &createInfo, nullptr, &module) != VK_SUCCESS) {
-			throw runtime_error("Failed to create Shader Module for shader " + name);
+		if (device->CreateShaderModule(&createInfo, nullptr, &module) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create Shader Module for shader " + name);
 		}
 
 		// Create Stage Info
@@ -79,7 +77,7 @@ public:
 	}
 
 	~VulkanShader() {
-		vkDestroyShaderModule(device->GetHandle(), module, nullptr);
+		device->DestroyShaderModule(module, nullptr);
 	}
 
 };
