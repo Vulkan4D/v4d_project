@@ -123,15 +123,12 @@ target_compile_definitions(tests
 
 # Incubator
 add_executable(incubator
-	# "${PROJECT_SOURCE_DIR}/src/incubator_MyVulkan.cpp"
-	"${PROJECT_SOURCE_DIR}/src/incubator_xvk.cpp"
+	"${PROJECT_SOURCE_DIR}/src/incubator_MyVulkan.cpp"
+	# "${PROJECT_SOURCE_DIR}/src/incubator.cpp"
 )
 target_link_libraries(incubator
 	v4d
 	glfw
-	# vulkan
-	# glslang
-	# SPIRV
 )
 target_include_directories(incubator
 	PRIVATE
@@ -139,8 +136,7 @@ target_include_directories(incubator
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk"
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw/include"
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/Vulkan-Headers/include"
-		# "${PROJECT_SOURCE_DIR}/src/v4d/xvk/glm"
-		# "${PROJECT_SOURCE_DIR}/src/v4d/xvk/glslang"
+		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glm"
 )
 target_compile_definitions(incubator
 	PRIVATE -D_V4D_PROJECT

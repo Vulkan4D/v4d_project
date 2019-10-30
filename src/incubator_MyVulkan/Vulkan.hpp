@@ -5,7 +5,6 @@
 #include "VulkanGPU.hpp"
 #include "VulkanDevice.hpp"
 #include "VulkanSwapChain.hpp"
-#include "VulkanSurface.hpp"
 #include "VulkanShader.hpp"
 #include "VulkanShaderProgram.hpp"
 #include "VulkanGraphicsPipeline.hpp"
@@ -128,7 +127,7 @@ private:
 		availableGPUs.reserve(physicalDeviceCount);
 		for (const auto& physicalDevice : physicalDevices) {
 			VkPhysicalDeviceProperties properties = {};
-			vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+			GetPhysicalDeviceProperties(physicalDevice, &properties);
 			if (properties.apiVersion >= VULKAN_API_VERSION)
 				availableGPUs.push_back(new VulkanGPU(this, physicalDevice));
 		}

@@ -7,9 +7,10 @@
 		int width, height;
 
 		GLFWwindow *handle;
-		bool resized = false;
-
+		
 		static std::unordered_map<int, Window*> windows;
+		
+		std::map<std::string, std::function<void(int,int)>> resizeCallbacks {};
 
 		static int GetNextIndex() {
 			static std::atomic<int> nextIndex = 0;
@@ -44,8 +45,10 @@
 
 		static void ResizeCallback(GLFWwindow *handle, int /*newWidth*/, int /*newHeight*/) {
 			auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(handle));
-			window->resized = true;
 			window->RefreshSize();
+			for (auto[name, callback] : window->resizeCallbacks) {
+				callback(window->width, window->height);
+			}
 		}
 
 	public:
@@ -63,22 +66,21 @@
 			if (windows.size() == 0) DeactivateWindowSystem();
 		}
 
-		// vk::SurfaceKHR CreateSurface(vk::Instance& instance) {
-		// 	vk::SurfaceKHR surface;
-		// 	if (VkResult err = glfwCreateWindowSurface(instance, handle, nullptr, reinterpret_cast<VkSurfaceKHR*>(&surface)); err != VK_SUCCESS) {
-		// 		LOG_ERROR(err)
-		// 		throw std::runtime_error("Failed to create Vulkan Surface");
-		// 	}
-		// 	return surface;
-		// }
-
-		VkSurfaceKHR CreateSurface(VkInstance instance) {
+		VkSurfaceKHR CreateVulkanSurface(VkInstance instance) {
 			VkSurfaceKHR surface;
 			if (VkResult err = glfwCreateWindowSurface(instance, handle, nullptr, &surface); err != VK_SUCCESS) {
 				LOG_ERROR(err)
 				throw std::runtime_error("Failed to create Vulkan Surface");
 			}
 			return surface;
+		}
+		
+		void AddResizeCallback(std::string name, std::function<void(int,int)>&& callback) {
+			resizeCallbacks[name] = std::forward<std::function<void(int,int)>>(callback);
+		}
+		
+		void RemoveResizeCallback(std::string name) {
+			resizeCallbacks.erase(name);
 		}
 
 		bool IsActive() {
@@ -88,21 +90,13 @@
 		GLFWwindow* GetHandle() const {
 			return handle;
 		}
-
+		
 		int GetWidth() const {
 			return width;
 		}
 
 		int GetHeight() const {
 			return height;
-		}
-
-		bool WasResized() const {
-			return resized;
-		}
-
-		void ResetResize() {
-			resized = false;
 		}
 
 		void RefreshSize() {

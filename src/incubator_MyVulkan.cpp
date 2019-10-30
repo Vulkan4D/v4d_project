@@ -2,9 +2,11 @@
 #include "config.hh"
 #include <v4d.h>
 
-// GLFW
-// #define GLFW_INCLUDE_VULKAN
+// Vulkan
+#define XVK_INTERFACE_RAW_FUNCTIONS_ACCESSIBILITY private
 #include <xvk.hpp>
+
+// GLFW
 #include <GLFW/glfw3.h>
 
 // GLM
@@ -19,8 +21,6 @@
 #define VULKAN_API_VERSION VK_API_VERSION_1_1
 #define V4D_ENGINE_NAME "Vulkan4D"
 #define V4D_ENGINE_VERSION VK_MAKE_VERSION(1, 0, 0)
-// #define APPLICATION_NAME "V4D Vulkan Incubator"
-// #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
 
 std::vector<const char*> vulkanRequiredExtensions = {
 	// extensions from glfw for creating a window are automatically added to this list
@@ -34,10 +34,8 @@ std::vector<const char*> vulkanRequiredLayers = {
 	#endif
 };
 
-
+// MyVulkan
 #include "incubator_MyVulkan/MyVulkan.hpp"
-#include "incubator_MyVulkan/Window.hpp"
-
 
 // Window.cpp
 // using namespace v4d::graphics;

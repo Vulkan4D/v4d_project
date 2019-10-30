@@ -2,12 +2,11 @@
 
 #include "VulkanStructs.hpp"
 #include "VulkanDevice.hpp"
-#include "VulkanSurface.hpp"
 
 struct VulkanSwapChain {
 private:
 	VulkanDevice* device;
-	VulkanSurface* surface;
+	VkSurfaceKHR surface;
 
 	VkSwapchainKHR handle;
 	std::vector<VkImage> images {};
@@ -27,7 +26,7 @@ public:
 
 	// Constructor
 	VulkanSwapChain(){}
-	VulkanSwapChain(VulkanDevice* device, VulkanSurface* surface) : device(device), surface(surface) {
+	VulkanSwapChain(VulkanDevice* device, VkSurfaceKHR surface) : device(device), surface(surface) {
 		ResolveCapabilities(device->GetPhysicalDeviceHandle());
 		ResolveFormats(device->GetPhysicalDeviceHandle());
 		ResolvePresentModes(device->GetPhysicalDeviceHandle());
@@ -39,11 +38,11 @@ public:
 			throw std::runtime_error("GPU Swap Chain does not support any presentation mode");
 
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		createInfo.surface = surface->GetHandle();
+		createInfo.surface = surface;
 	}
 	VulkanSwapChain(
 		VulkanDevice* device, 
-		VulkanSurface* surface, 
+		VkSurfaceKHR surface, 
 		VkExtent2D preferredExtent, 
 		const std::vector<VkSurfaceFormatKHR> preferredFormats, 
 		const std::vector<VkPresentModeKHR> preferredPresentModes
@@ -162,24 +161,24 @@ public:
 	}
 
 	inline void ResolveCapabilities(VkPhysicalDevice physicalDevice) {
-		device->GetGPU()->GetPhysicalDeviceSurfaceCapabilitiesKHR(surface->GetHandle(), &capabilities);
+		device->GetGPU()->GetPhysicalDeviceSurfaceCapabilitiesKHR(surface, &capabilities);
 	}
 
 	inline void ResolveFormats(VkPhysicalDevice physicalDevice) {
 		uint formatCount;
-		device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface->GetHandle(), &formatCount, nullptr);
+		device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, nullptr);
 		if (formatCount > 0) {
 			formats.resize(formatCount);
-			device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface->GetHandle(), &formatCount, formats.data());
+			device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, formats.data());
 		}
 	}
 
 	inline void ResolvePresentModes(VkPhysicalDevice physicalDevice) {
 		uint presentModeCount;
-		device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface->GetHandle(), &presentModeCount, nullptr);
+		device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, nullptr);
 		if (presentModeCount > 0) {
 			presentModes.resize(presentModeCount);
-			device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface->GetHandle(), &presentModeCount, presentModes.data());
+			device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, presentModes.data());
 		}
 	}
 

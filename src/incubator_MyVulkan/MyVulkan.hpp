@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Window.hpp"
 #include "Vulkan.hpp"
 #include "Texture2D.hpp"
 
@@ -31,7 +32,7 @@ private: // class members
 	Window* window;
 
 	// Main Render Surface
-	VulkanSurface* surface;
+	VkSurfaceKHR surface;
 
 	// Main Graphics Card
 	VulkanGPU* mainGPU = nullptr; // automatically deleted in base class
@@ -79,6 +80,11 @@ private: // class members
 
 	// Constants
 	const int MAX_FRAMES_IN_FLIGHT = 2;
+	
+	// States
+	std::mutex renderingMutex;
+	bool windowResized = false;
+	uint windowWidth, windowHeight;
 
 private: // Test Object members
 	VulkanShaderProgram* testShader;
@@ -102,6 +108,25 @@ private: // Test Object members
 
 protected: // Virtual INIT Methods
 
+	virtual void CreateSurface() {
+		surface = window->CreateVulkanSurface(handle);
+		window->AddResizeCallback("vulkanSurface", [this](int width, int height){
+			renderingMutex.lock();
+			if (width != 0 && height != 0) {
+				windowResized = true;
+				windowWidth = (uint)width;
+				windowHeight = (uint)height;
+				renderingMutex.unlock();
+			}
+			// Rendering is paused while window is minimized
+		});
+	}
+	
+	virtual void DestroySurface() {
+		window->RemoveResizeCallback("vulkanSurface");
+		DestroySurfaceKHR(surface, nullptr);
+	}
+
 	virtual void CreateGraphicsDevices() {
 		// Select The Best Main GPU using a score system
 		mainGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU* gpu){
@@ -114,7 +139,7 @@ protected: // Virtual INIT Methods
 			score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
 
 			// Mandatory specs  -->  score *= CONDITION
-			score *= gpu->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface->GetHandle()); // Supports Graphics Queues
+			score *= gpu->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface); // Supports Graphics Queues
 			score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
 			score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
 			score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
@@ -144,7 +169,7 @@ protected: // Virtual INIT Methods
 					VK_QUEUE_GRAPHICS_BIT, // Flags
 					1, // Count
 					{1.0f}, // Priorities (one per queue count)
-					surface->GetHandle() // Putting a surface here forces the need for a presentation feature on that specific queue, null if no need, or get presentation queue separately with device->GetPresentationQueue(surface)
+					surface // Putting a surface here forces the need for a presentation feature on that specific queue, null if no need, or get presentation queue separately with device->GetPresentationQueue(surface)
 				},
 			}
 		);
@@ -180,13 +205,13 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void CreateSyncObjects() {
-		// each of the events in the RenderFrame method are set in motion using a single function call, but they are executed asynchronously. 
-		// The function calls will return before the operations are actually finished and the order of execution is also undefined.
+		// each of the events in the RenderFrame method re set in motion using a single function call, but they are executed asynchronously. 
+		// The function calls will return before the opeations are actually finished and the order of execution is also undefined.
 		// Hence, we need to synchronize them.
-		// There are two ways of synchronizing swap chain events : Fences and Semaphores.
-		// The state of fences can be accessed from our program using calls like vkWaitForFences, but not for semaphores.
-		// Semaphores are used to synchronize operations within or across command queues.
-		// We have one semaphore to signal that an image has been aquired and is ready for rendering, and another one to signal that rendering has finished and presentation can happen.
+		// There are two ways of synchronizing swap chai events : Fences and Semaphores.
+		// The state of fences can be accessed from our rogram using calls like vkWaitForFences, but not for semaphores.
+		// Semaphores are used to synchronize operationswithin or across command queues.
+		// We have one semaphore to signal that an imagehas been aquired and is ready for rendering, and another one to signal that rendering has finished and presentation can happen.
 
 		imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 		renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -221,11 +246,9 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void CreateSwapChain() {
-		// Pause if screen is minimized
-		while (window->GetWidth() == 0 || window->GetHeight() == 0) {
-			window->WaitEvents();
-		}
-
+		std::lock_guard lock(renderingMutex);
+		windowResized = false;
+		
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
 		VulkanSwapChain* oldSwapChain = swapChain;
 
@@ -234,8 +257,8 @@ protected: // Virtual INIT Methods
 			device,
 			surface,
 			{ // Preferred Extent (Screen Resolution)
-				(uint32_t)window->GetWidth(),
-				(uint32_t)window->GetHeight()
+				windowWidth,
+				windowHeight
 			},
 			{ // Preferred Formats
 				{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
@@ -1188,7 +1211,7 @@ public: // Constructor & Destructor
 	MyVulkan(xvk::Loader* loader, const char* applicationName, uint applicationVersion, Window* window) : Vulkan(loader, applicationName, applicationVersion), window(window) {
 
 		// Surfaces
-		surface = new VulkanSurface(this, window);
+		CreateSurface();
 
 		// Create Objects
 		CreateGraphicsDevices();
@@ -1237,7 +1260,7 @@ public: // Constructor & Destructor
 		DestroySwapChain();
 		DestroySyncObjects();
 		DestroyGraphicsDevices();
-		delete surface;
+		DestroySurface();
 	}
 
 public: // Public Methods
@@ -1313,9 +1336,8 @@ public: // Public Methods
 		result = device->QueuePresentKHR(presentationQueue.handle, &presentInfo);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window->WasResized()) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || windowResized) {
 			// SwapChain is out of date or not optimal, for instance if the window was resized, ReCreate the swapchain.
-			window->ResetResize();
 			RecreateSwapChains();
 		} else if (result != VK_SUCCESS) {
 			throw std::runtime_error("Failed to present swap chain image");
