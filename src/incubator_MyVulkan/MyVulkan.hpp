@@ -966,7 +966,7 @@ private: // Test Object methods
 		std::vector<tinyobj::shape_t> shapes;
 		std::vector<tinyobj::material_t> materials;
 		std::string err, warn;
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "../../src/incubator_MyVulkan/models/chalet.obj")) {
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "incubator_MyVulkan/assets/models/chalet.obj")) {
 			throw std::runtime_error(err);
 		}
 		if (warn != "") LOG_WARN(warn);
@@ -1007,7 +1007,7 @@ private: // Test Object methods
 		// };
 
 		// Texture
-		texture = new Texture2D("../../src/incubator_MyVulkan/models/chalet.jpg", STBI_rgb_alpha);
+		texture = new Texture2D("incubator_MyVulkan/assets/models/chalet.jpg", STBI_rgb_alpha);
 		texture->SetMipLevels();
 		texture->SetSamplerAnisotropy(16);
 		texture->AllocateVulkanStagingMemory(device);
@@ -1022,8 +1022,8 @@ private: // Test Object methods
 
 		// Shader program
 		testShader = new VulkanShaderProgram(device, {
-			{"../../src/incubator_MyVulkan/shaders/test.vert"},
-			{"../../src/incubator_MyVulkan/shaders/test.frag"},
+			{"incubator_MyVulkan/assets/shaders/test.vert"},
+			{"incubator_MyVulkan/assets/shaders/test.frag"},
 		});
 
 		// Vertex Input structure

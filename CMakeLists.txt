@@ -6,6 +6,7 @@ set(APP_NAME demo)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
+option(COMPILE_ASSETS "Compile all assets" ON)
 option(USE_CCACHE "Use ccache" ON)
 
 ###########################################################################################
@@ -43,13 +44,6 @@ else()
 	# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wshadow")
 endif()
 
-# Config-specific
-if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-	add_definitions(-D_DEBUG)
-else()
-	add_definitions(-D_RELEASE)
-endif()
-
 # CCACHE
 if(USE_CCACHE)
     find_program(CCACHE_FOUND ccache)
@@ -64,6 +58,17 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/debug")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/release")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/release")
 set(CMAKE_SHARED_LIBRARY_PREFIX_CXX "")
+
+# Config-specific
+if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+	set(DEBUG 1)
+	set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG})
+	add_definitions(-D_DEBUG)
+else()
+	set(RELEASE 1)
+	set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE})
+	add_definitions(-D_RELEASE)
+endif()
 
 
 # glfw
@@ -83,6 +88,12 @@ if(COMPILE_V4D_CORE)
 endif()
 
 
+# Assets
+if(COMPILE_ASSETS)
+	add_subdirectory(tools/assetcompiler)
+endif()
+
+
 # V4D Modules
 if(COMPILE_V4D_MODULES)
 	add_subdirectory(src/v4d/modules)
@@ -91,7 +102,7 @@ endif()
 
 # Project
 add_executable(${APP_NAME}
-	"${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+	"${PROJECT_SOURCE_DIR}/src/main.cpp"
 )
 target_link_libraries(${APP_NAME}
 	v4d
@@ -107,7 +118,7 @@ target_compile_definitions(${APP_NAME}
 
 # Tests
 add_executable(tests
-	"${CMAKE_CURRENT_SOURCE_DIR}/src/tests.cxx"
+	"${PROJECT_SOURCE_DIR}/src/tests.cxx"
 )
 target_link_libraries(tests
 	v4d
