@@ -1025,6 +1025,7 @@ private: // Test Object methods
 			{"incubator_MyVulkan/assets/shaders/test.vert"},
 			{"incubator_MyVulkan/assets/shaders/test.frag"},
 		});
+		// testShader = new VulkanShaderProgram(device, "incubator_MyVulkan/assets/shaders/test");
 
 		// Vertex Input structure
 		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
