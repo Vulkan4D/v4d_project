@@ -40,27 +40,21 @@ std::vector<const char*> vulkanRequiredLayers = {
 std::unordered_map<int, Window*> Window::windows{};
 
 #include "Vulkan.hpp"
-#include "Texture2D.hpp"
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
 
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
 	glm::vec4 color;
-	glm::vec2 uv;
 	
 	bool operator==(const Vertex& other) const {
-		return pos == other.pos && color == other.color && uv == other.uv;
+		return pos == other.pos && color == other.color;
 	}
 };
 namespace std {
 	template<> struct hash<Vertex> {
 		size_t operator()(Vertex const &vertex) const {
-			return ((hash<glm::vec3>()(vertex.pos) ^
-					(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
-					(hash<glm::vec2>()(vertex.uv) << 1);
+			return (hash<glm::vec3>()(vertex.pos) ^
+					(hash<glm::vec3>()(vertex.color) << 1));
 		}
 	};
 }
@@ -140,8 +134,6 @@ private: // Test Object members
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
 	std::vector<VkDescriptorSet> descriptorSets;
-	// Textures
-	Texture2D* texture;
 
 
 protected: // Virtual INIT Methods
@@ -630,6 +622,7 @@ protected: // Virtual INIT Methods
 			// Bind Descriptor Sets (Uniforms)
 			device->CmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, 1/*count*/, &descriptorSets[i], 0, nullptr);
 
+
 			// Test Object
 			VkBuffer vertexBuffers[] = {vertexBuffer};
 			VkDeviceSize offsets[] = {0};
@@ -648,8 +641,7 @@ protected: // Virtual INIT Methods
 				0, // vertexOffset
 				0  // firstInstance (defines the lowest value of gl_InstanceIndex)
 			);
-
-
+			
 			// // Draw One Single F***ing Triangle !
 			// device->CmdDraw(commandBuffers[i],
 			// 	3, // vertexCount
@@ -899,9 +891,9 @@ private: // Helper methods
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
 
-	void GenerateMipmaps(Texture2D* texture) {
-		GenerateMipmaps(texture->GetImage(), texture->GetFormat(), texture->GetWidth(), texture->GetHeight(), texture->GetMipLevels());
-	}
+	// void GenerateMipmaps(Texture2D* texture) {
+	// 	GenerateMipmaps(texture->GetImage(), texture->GetFormat(), texture->GetWidth(), texture->GetHeight(), texture->GetMipLevels());
+	// }
 
 	void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t width, int32_t height, uint32_t mipLevels) {
 		VkFormatProperties formatProperties;
@@ -999,77 +991,34 @@ private: // Helper methods
 private: // Test Object methods
 
 	void LoadTestObject() {
-		// 3D Model
-		tinyobj::attrib_t attrib;
-		std::vector<tinyobj::shape_t> shapes;
-		std::vector<tinyobj::material_t> materials;
-		std::string err, warn;
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "incubator_MyVulkan/assets/models/chalet.obj")) {
-			throw std::runtime_error(err);
-		}
-		if (warn != "") LOG_WARN(warn);
-		for (const auto &shape : shapes) {
-			for (const auto &index : shape.mesh.indices) {
-				Vertex vertex = {};
-				vertex.pos = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2],
-				};
-				vertex.uv = {
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					1.0f - attrib.texcoords[2 * index.texcoord_index + 1], // flipped vertical component
-				};
-				vertex.color = {1, 1, 1, 1};
-				if (testObjectUniqueVertices.count(vertex) == 0) {
-					testObjectUniqueVertices[vertex] = testObjectVertices.size();
-					testObjectVertices.push_back(vertex);
-				}
-				testObjectIndices.push_back(testObjectUniqueVertices[vertex]);
-			}
-		}
-		// testObjectVertices = {
-		// 	{{-0.5f,-0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1}, {1.0f, 0.0f}},
-		// 	{{ 0.5f,-0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1}, {0.0f, 0.0f}},
-		// 	{{ 0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 1}, {0.0f, 1.0f}},
-		// 	{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f, 1}, {1.0f, 1.0f}},
-		// 	//
-		// 	{{-0.5f,-0.5f,-0.5f}, {1.0f, 0.0f, 0.0f, 1}, {1.0f, 0.0f}},
-		// 	{{ 0.5f,-0.5f,-0.5f}, {0.0f, 1.0f, 0.0f, 1}, {0.0f, 0.0f}},
-		// 	{{ 0.5f, 0.5f,-0.5f}, {0.0f, 0.0f, 1.0f, 1}, {0.0f, 1.0f}},
-		// 	{{-0.5f, 0.5f,-0.5f}, {0.0f, 1.0f, 1.0f, 1}, {1.0f, 1.0f}},
-		// };
-		// testObjectIndices = {
-		// 	0, 1, 2, 2, 3, 0,
-		// 	4, 5, 6, 6, 7, 4,
-		// };
-
-		// Texture
-		texture = new Texture2D("incubator_MyVulkan/assets/models/chalet.jpg", STBI_rgb_alpha);
-		texture->SetMipLevels();
-		texture->SetSamplerAnisotropy(16);
-		texture->AllocateVulkanStagingMemory(device);
-		texture->CreateVulkanImage(device, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		texture->CreateVulkanImageView(device);
-		texture->CreateVulkanSampler(device);
-		TransitionImageLayout(texture->GetImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->GetMipLevels());
-		CopyBufferToImage(texture->GetStagingBuffer(), texture->GetImage(), texture->GetWidth(), texture->GetHeight());
-		// TransitionImageLayout(texture->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture->GetMipLevels());
-		GenerateMipmaps(texture); // This automatically does the transition to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		texture->FreeVulkanStagingMemory(device);
+		
+		testObjectVertices = {
+			{{-0.5f,-0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1}},
+			{{ 0.5f,-0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1}},
+			{{ 0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 1}},
+			{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f, 1}},
+			//
+			{{-0.5f,-0.5f,-0.5f}, {1.0f, 0.0f, 0.0f, 1}},
+			{{ 0.5f,-0.5f,-0.5f}, {0.0f, 1.0f, 0.0f, 1}},
+			{{ 0.5f, 0.5f,-0.5f}, {0.0f, 0.0f, 1.0f, 1}},
+			{{-0.5f, 0.5f,-0.5f}, {0.0f, 1.0f, 1.0f, 1}},
+		};
+		testObjectIndices = {
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+		};
 
 		// Shader program
 		testShader = new VulkanShaderProgram(device, {
-			{"incubator_MyVulkan/assets/shaders/test.vert"},
-			{"incubator_MyVulkan/assets/shaders/test.frag"},
+			{"incubator_MyVulkan/assets/shaders/triangle.vert"},
+			{"incubator_MyVulkan/assets/shaders/triangle.frag"},
 		});
-		// testShader = new VulkanShaderProgram(device, "incubator_MyVulkan/assets/shaders/test");
+		// testShader = new VulkanShaderProgram(device, "incubator_MyVulkan/assets/shaders/triangle");
 
 		// Vertex Input structure
 		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
 			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
-			{2, offsetof(Vertex, Vertex::uv), VK_FORMAT_R32G32_SFLOAT},
 		});
 
 		// Uniforms
@@ -1081,22 +1030,11 @@ private: // Test Object methods
 				VK_SHADER_STAGE_VERTEX_BIT, // VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_ALL_GRAPHICS, ...
 				nullptr, // pImmutableSamplers
 			},
-			{// tex
-				1, // binding
-				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_FRAGMENT_BIT, // VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_ALL_GRAPHICS, ...
-				nullptr, // pImmutableSamplers
-			},
 		});
 		
 	}
 
 	void UnloadTestObject() {
-		texture->DestroyVulkanSampler(device);
-		texture->DestroyVulkanImageView(device);
-		texture->DestroyVulkanImage(device);
-		delete texture;
 		delete testShader;
 	}
 
@@ -1155,7 +1093,7 @@ private: // Test Object methods
 			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+			std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
 
 			// ubo
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1167,16 +1105,6 @@ private: // Test Object methods
 			VkDescriptorBufferInfo bufferInfo = {uniformBuffers[i], 0, sizeof(UBO)};
 			descriptorWrites[0].pBufferInfo = &bufferInfo;
 
-			// tex
-			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[1].dstSet = descriptorSets[i];
-			descriptorWrites[1].dstBinding = 1; // layout(binding = 0) uniform...
-			descriptorWrites[1].dstArrayElement = 0; // array
-			descriptorWrites[1].descriptorCount = 1; // array
-			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			VkDescriptorImageInfo imageInfo = {texture->GetSampler(), texture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-			descriptorWrites[1].pImageInfo = &imageInfo;
-			
 			// Update Descriptor Sets
 			device->UpdateDescriptorSets(descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 		}

@@ -1,45 +1,7 @@
-#include <common/pch.hh>
 #include "config.hh"
-#include <v4d.h>
-
-// Vulkan
-#define XVK_INTERFACE_RAW_FUNCTIONS_ACCESSIBILITY private
-#include <xvk.hpp>
-
-// GLFW
-#include <GLFW/glfw3.h>
-
-// GLM
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
-
-/////////////////////////////////////////////
-
-#define VULKAN_API_VERSION VK_API_VERSION_1_1
-#define V4D_ENGINE_NAME "Vulkan4D"
-#define V4D_ENGINE_VERSION VK_MAKE_VERSION(1, 0, 0)
-
-std::vector<const char*> vulkanRequiredExtensions = {
-	// extensions from glfw for creating a window are automatically added to this list
-	#ifdef _DEBUG
-	VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-	#endif
-};
-std::vector<const char*> vulkanRequiredLayers = {
-	#ifdef _DEBUG
-	"VK_LAYER_LUNARG_standard_validation",
-	#endif
-};
 
 // MyVulkan
-#include "incubator_MyVulkan/MyVulkan.hpp"
-
-// Window.cpp
-// using namespace v4d::graphics;
-std::unordered_map<int, Window*> Window::windows{};
+#include "incubator_MyVulkan/MyVulkanSquares.hpp"
 
 
 // Vulkan Dynamic Loader
@@ -53,8 +15,8 @@ int main() {
 	try {
 
 		// Create Window and Init Vulkan
-		Window *window;
-		MyVulkan *vulkan;
+		Window* window;
+		MyVulkan* vulkan;
 		window = new Window("TEST", 1440, 900);
 		vulkan = new MyVulkan(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 		
