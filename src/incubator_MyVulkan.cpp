@@ -22,13 +22,16 @@
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
-#include "incubator_MyVulkan/MyVulkan_colorsquares.hpp"
+#include "incubator_MyVulkan/MyVulkan_rtx.hpp"
 VulkanLoader vulkanLoader;
 
 int main() {
 	
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
+		
+	// Needed for RayTracing
+	vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 	try {
 

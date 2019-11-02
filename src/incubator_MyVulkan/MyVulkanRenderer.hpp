@@ -117,7 +117,8 @@ protected: // Virtual INIT Methods
 			score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
 			score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
 			score *= gpu->SupportsExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME/*"VK_KHR_swapchain"*/); // Supports SwapChains
-			// score *= gpu->SupportsExtension(VK_NV_RAY_TRACING_EXTENSION_NAME/*"VK_NV_ray_tracing"*/); // Supports RayTracing
+			score *= gpu->SupportsExtension(VK_NV_RAY_TRACING_EXTENSION_NAME/*"VK_NV_ray_tracing"*/); // Supports RayTracing
+			score *= gpu->SupportsExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing
 		});
 
 		LOG("Selected Rendering GPU: " << renderingGPU->GetDescription());
@@ -133,7 +134,8 @@ protected: // Virtual INIT Methods
 			deviceFeatures,
 			{ // Device-specific Extensions string[] (NOT VULKAN INSTANCE EXTs)
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME, // "VK_KHR_swapchain"
-				// VK_NV_RAY_TRACING_EXTENSION_NAME, // "VK_NV_ray_tracing"
+				VK_NV_RAY_TRACING_EXTENSION_NAME, // "VK_NV_ray_tracing"
+				VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, 
 			},
 			vulkanLoader->requiredInstanceLayers,
 			{// Queues
