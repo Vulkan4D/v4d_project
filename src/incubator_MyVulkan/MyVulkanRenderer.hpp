@@ -2,79 +2,20 @@
 #include <common/pch.hh>
 #include <v4d.h>
 
-// Vulkan
-#define XVK_INTERFACE_RAW_FUNCTIONS_ACCESSIBILITY private
-#include <xvk.hpp>
-
-// GLFW
-#include <GLFW/glfw3.h>
-
-// GLM
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
+#include "Vulkan.hpp"
 
 /////////////////////////////////////////////
 
-#define VULKAN_API_VERSION VK_API_VERSION_1_1
-#define V4D_ENGINE_NAME "Vulkan4D"
-#define V4D_ENGINE_VERSION VK_MAKE_VERSION(1, 0, 0)
-
-std::vector<const char*> vulkanRequiredExtensions = {
-	// extensions from glfw for creating a window are automatically added to this list
-	#ifdef _DEBUG
-	VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-	#endif
-};
-std::vector<const char*> vulkanRequiredLayers = {
-	#ifdef _DEBUG
-	"VK_LAYER_LUNARG_standard_validation",
-	#endif
-};
-
-#include "Window.hpp"
-// Window.cpp
-// using namespace v4d::graphics;
-std::unordered_map<int, Window*> Window::windows{};
-
-#include "Vulkan.hpp"
-#include "Texture2D.hpp"
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include "tiny_obj_loader.h"
-
-// Test Object Vertex Data Structure
-struct Vertex {
-	glm::vec3 pos;
-	glm::vec4 color;
-	glm::vec2 uv;
-	
-	bool operator==(const Vertex& other) const {
-		return pos == other.pos && color == other.color && uv == other.uv;
-	}
-};
-namespace std {
-	template<> struct hash<Vertex> {
-		size_t operator()(Vertex const &vertex) const {
-			return ((hash<glm::vec3>()(vertex.pos) ^
-					(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
-					(hash<glm::vec2>()(vertex.uv) << 1);
-		}
-	};
-}
-
-class MyVulkan : public Vulkan {
-private: // class members
+class MyVulkanRenderer : public Vulkan {
+protected: // class members
 	Window* window;
 
 	// Main Render Surface
 	VkSurfaceKHR surface;
 
 	// Main Graphics Card
-	VulkanGPU* mainGPU = nullptr; // automatically deleted in base class
-	VulkanDevice* device;
+	VulkanGPU* renderingGPU = nullptr; // automatically deleted in base class
+	VulkanDevice* renderingDevice;
 
 	// Queues
 	VulkanQueue graphicsQueue;
@@ -123,30 +64,24 @@ private: // class members
 	std::mutex renderingMutex;
 	bool windowResized = false;
 	uint windowWidth, windowHeight;
+	
+	VkClearColorValue clearColor {0,0,0,1};
 
-private: // Test Object members
-	VulkanShaderProgram* testShader;
-	// Vertex Buffers for test object
-	std::vector<Vertex> testObjectVertices;
-	std::vector<uint32_t> testObjectIndices;
-	std::unordered_map<Vertex, uint32_t> testObjectUniqueVertices;
-	VkBuffer vertexBuffer, indexBuffer;
-	VkDeviceMemory vertexBufferMemory, indexBufferMemory;
-	struct UBO {
-		glm::mat4 model;
-		glm::mat4 view;
-		glm::mat4 proj;
-	};
-	std::vector<VkBuffer> uniformBuffers;
-	std::vector<VkDeviceMemory> uniformBuffersMemory;
-	std::vector<VkDescriptorSet> descriptorSets;
-	// Textures
-	Texture2D* texture;
-
+protected: // Abstract methods
+	virtual void Init() = 0;
+	virtual void FrameUpdate(uint imageIndex) = 0;
+	// Scene
+	virtual void LoadScene() = 0;
+	virtual void UnloadScene() = 0;
+	virtual void SendSceneToDevice() = 0;
+	virtual void DeleteSceneFromDevice() = 0;
+	// Rendering
+	virtual void ConfigureGraphicsPipelines() = 0;
+	virtual void ConfigureCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) = 0;
 
 protected: // Virtual INIT Methods
 
-	virtual void CreateSurface() {
+	void CreateSurface() {
 		surface = window->CreateVulkanSurface(handle);
 		window->AddResizeCallback("vulkanSurface", [this](int width, int height){
 			renderingMutex.lock();
@@ -160,14 +95,14 @@ protected: // Virtual INIT Methods
 		});
 	}
 	
-	virtual void DestroySurface() {
+	void DestroySurface() {
 		window->RemoveResizeCallback("vulkanSurface");
 		DestroySurfaceKHR(surface, nullptr);
 	}
 
-	virtual void CreateGraphicsDevices() {
+	void CreateDevices() {
 		// Select The Best Main GPU using a score system
-		mainGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU* gpu){
+		renderingGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU* gpu){
 			// Build up a score here and the GPU with the highest score will be selected.
 			// Add to the score optional specs, then multiply with mandatory specs.
 
@@ -182,10 +117,10 @@ protected: // Virtual INIT Methods
 			score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
 			score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
 			score *= gpu->SupportsExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME/*"VK_KHR_swapchain"*/); // Supports SwapChains
-			score *= gpu->SupportsExtension(VK_NV_RAY_TRACING_EXTENSION_NAME/*"VK_NV_ray_tracing"*/); // Supports RayTracing
+			// score *= gpu->SupportsExtension(VK_NV_RAY_TRACING_EXTENSION_NAME/*"VK_NV_ray_tracing"*/); // Supports RayTracing
 		});
 
-		LOG("Selected Main GPU: " << mainGPU->GetDescription());
+		LOG("Selected Rendering GPU: " << renderingGPU->GetDescription());
 
 		// Prepare Device Features
 		VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -193,56 +128,56 @@ protected: // Virtual INIT Methods
 		deviceFeatures.samplerAnisotropy = VK_TRUE;
 		deviceFeatures.sampleRateShading = VK_TRUE;
 		// Create Logical Device
-		device = new VulkanDevice(
-			mainGPU,
+		renderingDevice = new VulkanDevice(
+			renderingGPU,
 			deviceFeatures,
 			{ // Device-specific Extensions string[] (NOT VULKAN INSTANCE EXTs)
 				VK_KHR_SWAPCHAIN_EXTENSION_NAME, // "VK_KHR_swapchain"
-				VK_NV_RAY_TRACING_EXTENSION_NAME, // "VK_NV_ray_tracing"
+				// VK_NV_RAY_TRACING_EXTENSION_NAME, // "VK_NV_ray_tracing"
 			},
-			vulkanRequiredLayers,
+			vulkanLoader->requiredInstanceLayers,
 			{// Queues
 				{
 					"graphics",
 					VK_QUEUE_GRAPHICS_BIT, // Flags
 					1, // Count
 					{1.0f}, // Priorities (one per queue count)
-					surface // Putting a surface here forces the need for a presentation feature on that specific queue, null if no need, or get presentation queue separately with device->GetPresentationQueue(surface)
+					surface // Putting a surface here forces the need for a presentation feature on that specific queue, null if no need, or get presentation queue separately with renderingDevice->GetPresentationQueue(surface)
 				},
 			}
 		);
 
 		// Get Graphics Queue
-		graphicsQueue = device->GetQueue("graphics");
+		graphicsQueue = renderingDevice->GetQueue("graphics");
 
 		// Get Presentation Queue
 		presentationQueue = graphicsQueue; // Use same as graphics (as configured above), otherwise uncomment block below to use a separate queue for presentation (apparently, using the same queue is supposed to be faster...)
-		// presentationQueue = device->GetPresentationQueue(surface);
-		// if (presentationQueue == nullptr) {
+		// presentationQueue = renderingDevice->GetPresentationQueue(surface);
+		// if (presentationQueue.handle == nullptr) {
 		// 	throw std::runtime_error("Failed to get Presentation Queue for surface");
 		// }
 
 		// MultiSampling
-		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, mainGPU->GetMaxUsableSampleCount());
+		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
 	}
 
-	virtual void DestroyGraphicsDevices() {
-		delete device;
+	void DestroyDevices() {
+		delete renderingDevice;
 	}
 
-	virtual void CreatePools() {
-		device->CreateCommandPool(graphicsQueue.index, 0, &graphicsCommandPool);
-		device->CreateCommandPool(graphicsQueue.index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transferCommandPool);
-		device->CreateDescriptorPool({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER}, swapChain->imageViews.size(), descriptorPool, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
+	void CreatePools() {
+		renderingDevice->CreateCommandPool(graphicsQueue.index, 0, &graphicsCommandPool);
+		renderingDevice->CreateCommandPool(graphicsQueue.index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transferCommandPool);
+		renderingDevice->CreateDescriptorPool({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER}, swapChain->imageViews.size(), descriptorPool, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
 	}
 
-	virtual void DestroyPools() {
-		device->DestroyCommandPool(graphicsCommandPool);
-		device->DestroyCommandPool(transferCommandPool);
-		device->DestroyDescriptorPool(descriptorPool);
+	void DestroyPools() {
+		renderingDevice->DestroyCommandPool(graphicsCommandPool);
+		renderingDevice->DestroyCommandPool(transferCommandPool);
+		renderingDevice->DestroyDescriptorPool(descriptorPool);
 	}
 
-	virtual void CreateSyncObjects() {
+	void CreateSyncObjects() {
 		// each of the events in the RenderFrame method re set in motion using a single function call, but they are executed asynchronously. 
 		// The function calls will return before the opeations are actually finished and the order of execution is also undefined.
 		// Hence, we need to synchronize them.
@@ -263,27 +198,27 @@ protected: // Virtual INIT Methods
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Initialize in the signaled state so that we dont get stuck on the first frame
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			if (device->CreateSemaphore(&semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS) {
+			if (renderingDevice->CreateSemaphore(&semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to create semaphore for ImageAvailable");
 			}
-			if (device->CreateSemaphore(&semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+			if (renderingDevice->CreateSemaphore(&semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to create semaphore for RenderFinished");
 			}
-			if (device->CreateFence(&fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+			if (renderingDevice->CreateFence(&fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to create InFlightFence");
 			}
 		}
 	}
 
-	virtual void DestroySyncObjects() {
+	void DestroySyncObjects() {
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			device->DestroySemaphore(renderFinishedSemaphores[i], nullptr);
-			device->DestroySemaphore(imageAvailableSemaphores[i], nullptr);
-			device->DestroyFence(inFlightFences[i], nullptr);
+			renderingDevice->DestroySemaphore(renderFinishedSemaphores[i], nullptr);
+			renderingDevice->DestroySemaphore(imageAvailableSemaphores[i], nullptr);
+			renderingDevice->DestroyFence(inFlightFences[i], nullptr);
 		}
 	}
 
-	virtual void CreateSwapChain() {
+	void CreateSwapChain() {
 		std::lock_guard lock(renderingMutex);
 		windowResized = false;
 		
@@ -292,7 +227,7 @@ protected: // Virtual INIT Methods
 
 		// Create the new swapchain object
 		swapChain = new VulkanSwapChain(
-			device,
+			renderingDevice,
 			surface,
 			{ // Preferred Extent (Screen Resolution)
 				windowWidth,
@@ -320,14 +255,14 @@ protected: // Virtual INIT Methods
 		if (oldSwapChain != nullptr) delete oldSwapChain;
 	}
 
-	virtual void DestroySwapChain() {
+	void DestroySwapChain() {
 		delete swapChain;
 	}
 
 	// Graphics Pipeline
 
 	virtual void CreateRenderPass() {
-		renderPass = new VulkanRenderPass(device);
+		renderPass = new VulkanRenderPass(renderingDevice);
 
 		// Color Attachment (Fragment shader Standard Output)
 		VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
@@ -452,89 +387,7 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void CreateGraphicsPipelines() { 
-		auto graphicsPipeline1 = new VulkanGraphicsPipeline(device); // if we use renderPass->AddGraphicsPipeline(), it will be deleted with renderPass->DestroyGraphicsPipelines()
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Shader stages (programmable stages of the graphics pipeline)
-		
-		graphicsPipeline1->SetShaderProgram(testShader);
-
-		// Input Assembly
-		graphicsPipeline1->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		graphicsPipeline1->inputAssembly.primitiveRestartEnable = VK_FALSE; // If set to VK_TRUE, then it's possible to break up lines and triangles in the _STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF.
-
-		// Color Blending
-		graphicsPipeline1->AddAlphaBlendingAttachment(); // Fragment Shader output 0
-
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Fixed-function state
-		// Global graphics settings when starting the game
-
-		// Rasterizer
-		graphicsPipeline1->rasterizer.depthClampEnable = VK_FALSE; // if set to VK_TRUE, then fragments that are beyond the near and far planes are clamped to them as opposed to discarding them. This is useful in some special cases like shadow maps. Using this requires enabling a GPU feature.
-		graphicsPipeline1->rasterizer.rasterizerDiscardEnable = VK_FALSE; // if set to VK_TRUE, then geometry never passes through the rasterizer stage. This basically disables any output to the framebuffer.
-		graphicsPipeline1->rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // Using any mode other than fill requires enabling a GPU feature.
-		graphicsPipeline1->rasterizer.lineWidth = 1; // The maximum line width that is supported depends on the hardware and any line thicker than 1.0f requires you to enable the wideLines GPU feature.
-		graphicsPipeline1->rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; // Face culling
-		graphicsPipeline1->rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // Vertex faces draw order
-		graphicsPipeline1->rasterizer.depthBiasEnable = VK_FALSE;
-		graphicsPipeline1->rasterizer.depthBiasConstantFactor = 0;
-		graphicsPipeline1->rasterizer.depthBiasClamp = 0;
-		graphicsPipeline1->rasterizer.depthBiasSlopeFactor = 0;
-
-		// Multisampling (AntiAliasing)
-		graphicsPipeline1->multisampling.sampleShadingEnable = VK_TRUE;
-		graphicsPipeline1->multisampling.minSampleShading = 0.2f; // Min fraction for sample shading (0-1). Closer to one is smoother.
-		graphicsPipeline1->multisampling.rasterizationSamples = msaaSamples;
-		graphicsPipeline1->multisampling.pSampleMask = nullptr;
-		graphicsPipeline1->multisampling.alphaToCoverageEnable = VK_FALSE;
-		graphicsPipeline1->multisampling.alphaToOneEnable = VK_FALSE;
-
-		// Depth and Stencil testing
-		VkPipelineDepthStencilStateCreateInfo depthStencil = {};
-			depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-			depthStencil.depthTestEnable = VK_TRUE;
-			depthStencil.depthWriteEnable = VK_TRUE;
-			depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-			// Used for the optional depth bound test. This allows to only keep fragments that fall within the specified depth range.
-			depthStencil.depthBoundsTestEnable = VK_FALSE;
-				// depthStencil.minDepthBounds = 0.0f;
-				// depthStencil.maxDepthBounds = 1.0f;
-			// Stencil Buffer operations
-			depthStencil.stencilTestEnable = VK_FALSE;
-			depthStencil.front = {};
-			depthStencil.back = {};
-
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Dynamic settings that CAN be changed at runtime but NOT every frame
-
-		// // Dynamic State
-		// VkDynamicState dynamicStates[] = {
-		// 	VK_DYNAMIC_STATE_VIEWPORT,
-		// 	VK_DYNAMIC_STATE_SCISSOR,
-		// };
-		// VkPipelineDynamicStateCreateInfo dynamicState = {};
-		// dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		// dynamicState.dynamicStateCount = 2;
-		// dynamicState.pDynamicStates = dynamicStates;
-
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Create DAS GRAFIKS PIPELINE !!!
-		// Fixed-function stage
-		graphicsPipeline1->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
-		graphicsPipeline1->pipelineCreateInfo.pDepthStencilState = &depthStencil;
-		graphicsPipeline1->pipelineCreateInfo.pDynamicState = nullptr; // or &dynamicState
-		
-		// Optional.
-		// Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline. 
-		// The idea of pipeline derivatives is that it is less expensive to set up pipelines when they have much functionality in common with an existing pipeline and switching between pipelines from the same parent can also be done quicker.
-		// You can either specify the handle of an existing pipeline with basePipelineHandle or reference another pipeline that is about to be created by index with basePipelineIndex. 
-		// These are only used if VK_PIPELINE_CREATE_DERIVATIVE_BIT flag is also specified in the flags field of VkGraphicsPipelineCreateInfo.
-		graphicsPipeline1->pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-		graphicsPipeline1->pipelineCreateInfo.basePipelineIndex = -1;
-
-		graphicsPipeline1->Prepare();
-		renderPass->AddGraphicsPipeline(graphicsPipeline1, 0);
-
+		ConfigureGraphicsPipelines();
 		// Create the Graphics Pipeline !
 		renderPass->CreateGraphicsPipelines();
 	}
@@ -560,7 +413,7 @@ protected: // Virtual INIT Methods
 			framebufferCreateInfo.width = swapChain->extent.width;
 			framebufferCreateInfo.height = swapChain->extent.height;
 			framebufferCreateInfo.layers = 1; // refers to the number of layers in image arrays
-			if (device->CreateFramebuffer(&framebufferCreateInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
+			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &swapChainFrameBuffers[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to create framebuffer");
 			}
 		}
@@ -568,10 +421,10 @@ protected: // Virtual INIT Methods
 
 	virtual void DestroyFrameBuffers() {
 		for (auto framebuffer : swapChainFrameBuffers) {
-			device->DestroyFramebuffer(framebuffer, nullptr);
+			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
 		}
 	}
-
+	
 	virtual void CreateCommandBuffers() {
 		// Because one of the drawing commands involves binding the right VkFramebuffer, we'll actually have to record a command buffer for every image in the swap chain once again.
 		// Command buffers will be automatically freed when their command pool is destroyed, so we don't need an explicit cleanup
@@ -584,7 +437,7 @@ protected: // Virtual INIT Methods
 							VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
 						*/
 		allocInfo.commandBufferCount = (uint) commandBuffers.size();
-		if (device->AllocateCommandBuffers(&allocInfo, commandBuffers.data()) != VK_SUCCESS) {
+		if (renderingDevice->AllocateCommandBuffers(&allocInfo, commandBuffers.data()) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate command buffers");
 		}
 
@@ -600,7 +453,7 @@ protected: // Virtual INIT Methods
 			beginInfo.pInheritanceInfo = nullptr; // only relevant for secondary command buffers. It specifies which state to inherit from the calling primary command buffers.
 			// If a command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it.
 			// It's not possible to append commands to a buffer at a later time.
-			if (device->BeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+			if (renderingDevice->BeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
 				throw std::runtime_error("Faild to begin recording command buffer");
 			}
 
@@ -614,66 +467,34 @@ protected: // Virtual INIT Methods
 			renderPassInfo.renderArea.extent = swapChain->extent;
 			// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
 			std::array<VkClearValue, 2> clearValues = {};
-			clearValues[0].color = {0,0,0,1}; // Clear Color
+			clearValues[0].color = clearColor;
 			clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
 			renderPassInfo.clearValueCount = clearValues.size();
 			renderPassInfo.pClearValues = clearValues.data();
 			//
-			device->CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
+			renderingDevice->CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 																/*	the last parameter controls how the drawing commands within the render pass will be provided.
 																	VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
 																	VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
 																*/
-			// We can now bind the graphics pipeline
-			device->CmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
 			
-			// Bind Descriptor Sets (Uniforms)
-			device->CmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, 1/*count*/, &descriptorSets[i], 0, nullptr);
-
-			// Test Object
-			VkBuffer vertexBuffers[] = {vertexBuffer};
-			VkDeviceSize offsets[] = {0};
-			device->CmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
-			// device->CmdDraw(commandBuffers[i],
-			// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
-			// 	1, // instanceCount
-			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			// );
-			device->CmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-			device->CmdDrawIndexed(commandBuffers[i],
-				static_cast<uint32_t>(testObjectIndices.size()), // indexCount
-				1, // instanceCount
-				0, // firstVertex (defines the lowest value of gl_VertexIndex)
-				0, // vertexOffset
-				0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			);
-
-
-			// // Draw One Single F***ing Triangle !
-			// device->CmdDraw(commandBuffers[i],
-			// 	3, // vertexCount
-			// 	1, // instanceCount
-			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			// );
-
+			ConfigureCommandBuffer(commandBuffers[i], i);
 
 			// End the render pass
-			device->CmdEndRenderPass(commandBuffers[i]);
-			if (device->EndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+			renderingDevice->CmdEndRenderPass(commandBuffers[i]);
+			if (renderingDevice->EndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to record command buffer");
 			}
 		}
 	}
 
 	virtual void DestroyCommandBuffers() {
-		device->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		renderingDevice->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 	}
 
 	virtual void CreateColorResources() {
 		VkFormat colorFormat = swapChain->format.format;
-		device->CreateImage(
+		renderingDevice->CreateImage(
 			swapChain->extent.width, 
 			swapChain->extent.height, 
 			1, msaaSamples,
@@ -695,23 +516,23 @@ protected: // Virtual INIT Methods
 			viewInfo.subresourceRange.levelCount = 1;
 			viewInfo.subresourceRange.baseArrayLayer = 0;
 			viewInfo.subresourceRange.layerCount = 1;
-		if (device->CreateImageView(&viewInfo, nullptr, &colorImageView) != VK_SUCCESS) {
+		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &colorImageView) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create texture image view");
 		}
 	}
 
 	virtual void DestroyColorResources() {
-		device->DestroyImageView(colorImageView, nullptr);
-		device->DestroyImage(colorImage, nullptr);
-		device->FreeMemory(colorImageMemory, nullptr);
+		renderingDevice->DestroyImageView(colorImageView, nullptr);
+		renderingDevice->DestroyImage(colorImage, nullptr);
+		renderingDevice->FreeMemory(colorImageMemory, nullptr);
 	}
 
 	virtual void CreateDepthResources() {
 		// Format
-		depthImageFormat = mainGPU->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+		depthImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
 		// Image
-		device->CreateImage(
+		renderingDevice->CreateImage(
 			swapChain->extent.width, 
 			swapChain->extent.height, 
 			1, msaaSamples,
@@ -734,7 +555,7 @@ protected: // Virtual INIT Methods
 		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
-		if (device->CreateImageView(&viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
+		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create texture image view");
 		}
 
@@ -743,12 +564,12 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyDepthResources() {
-		device->DestroyImageView(depthImageView, nullptr);
-		device->DestroyImage(depthImage, nullptr);
-		device->FreeMemory(depthImageMemory, nullptr);
+		renderingDevice->DestroyImageView(depthImageView, nullptr);
+		renderingDevice->DestroyImage(depthImage, nullptr);
+		renderingDevice->FreeMemory(depthImageMemory, nullptr);
 	}
 
-private: // Helper methods
+protected: // Helper methods
 
 	VkCommandBuffer BeginSingleTimeCommands(VkCommandPool commandPool) {
 		VkCommandBufferAllocateInfo allocInfo = {};
@@ -758,29 +579,29 @@ private: // Helper methods
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
-		device->AllocateCommandBuffers(&allocInfo, &commandBuffer);
+		renderingDevice->AllocateCommandBuffers(&allocInfo, &commandBuffer);
 
 		VkCommandBufferBeginInfo beginInfo = {};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		device->BeginCommandBuffer(commandBuffer, &beginInfo);
+		renderingDevice->BeginCommandBuffer(commandBuffer, &beginInfo);
 
 		return commandBuffer;
 	}
 
 	void EndSingleTimeCommands(VkCommandPool commandPool, VkCommandBuffer commandBuffer) {
-		device->EndCommandBuffer(commandBuffer);
+		renderingDevice->EndCommandBuffer(commandBuffer);
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		device->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
-		device->QueueWaitIdle(graphicsQueue.handle); // TODO: Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
+		renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
+		renderingDevice->QueueWaitIdle(graphicsQueue.handle); // TODO: Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
 
-		device->FreeCommandBuffers(commandPool, 1, &commandBuffer);
+		renderingDevice->FreeCommandBuffers(commandPool, 1, &commandBuffer);
 	}
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
@@ -847,7 +668,7 @@ private: // Helper methods
 		It is required for some special cases, like using an image as both input and output, or for reading an image after it has left the preinitialized layout.
 		*/
 		//
-		device->CmdPipelineBarrier(
+		renderingDevice->CmdPipelineBarrier(
 			commandBuffer,
 			srcStage, dstStage,
 			0,
@@ -866,7 +687,7 @@ private: // Helper methods
 		copyRegion.srcOffset = 0;
 		copyRegion.dstOffset = 0;
 		copyRegion.size = size;
-		device->CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+		renderingDevice->CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
@@ -887,7 +708,7 @@ private: // Helper methods
 		region.imageOffset = {0, 0, 0};
 		region.imageExtent = {width, height, 1};
 
-		device->CmdCopyBufferToImage(
+		renderingDevice->CmdCopyBufferToImage(
 			commandBuffer,
 			buffer,
 			image,
@@ -899,13 +720,13 @@ private: // Helper methods
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
 
-	void GenerateMipmaps(Texture2D* texture) {
-		GenerateMipmaps(texture->GetImage(), texture->GetFormat(), texture->GetWidth(), texture->GetHeight(), texture->GetMipLevels());
-	}
+	// void GenerateMipmaps(Texture2D* texture) {
+	// 	GenerateMipmaps(texture->GetImage(), texture->GetFormat(), texture->GetWidth(), texture->GetHeight(), texture->GetMipLevels());
+	// }
 
 	void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t width, int32_t height, uint32_t mipLevels) {
 		VkFormatProperties formatProperties;
-		mainGPU->GetPhysicalDeviceFormatProperties(imageFormat, &formatProperties);
+		renderingGPU->GetPhysicalDeviceFormatProperties(imageFormat, &formatProperties);
 		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
@@ -932,7 +753,7 @@ private: // Helper methods
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
-			device->CmdPipelineBarrier(
+			renderingDevice->CmdPipelineBarrier(
 				commandBuffer, 
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 				0, nullptr,
@@ -954,7 +775,7 @@ private: // Helper methods
 				blit.dstSubresource.baseArrayLayer = 0;
 				blit.dstSubresource.layerCount = 1;
 
-			device->CmdBlitImage(
+			renderingDevice->CmdBlitImage(
 				commandBuffer,
 				image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -967,7 +788,7 @@ private: // Helper methods
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-			device->CmdPipelineBarrier(
+			renderingDevice->CmdPipelineBarrier(
 				commandBuffer,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
 				0, nullptr,
@@ -985,7 +806,7 @@ private: // Helper methods
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-		device->CmdPipelineBarrier(
+		renderingDevice->CmdPipelineBarrier(
 			commandBuffer,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
 			0, nullptr,
@@ -996,230 +817,9 @@ private: // Helper methods
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
 
-private: // Test Object methods
-
-	void LoadTestObject() {
-		// 3D Model
-		tinyobj::attrib_t attrib;
-		std::vector<tinyobj::shape_t> shapes;
-		std::vector<tinyobj::material_t> materials;
-		std::string err, warn;
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, "incubator_MyVulkan/assets/models/chalet.obj")) {
-			throw std::runtime_error(err);
-		}
-		if (warn != "") LOG_WARN(warn);
-		for (const auto &shape : shapes) {
-			for (const auto &index : shape.mesh.indices) {
-				Vertex vertex = {};
-				vertex.pos = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2],
-				};
-				vertex.uv = {
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					1.0f - attrib.texcoords[2 * index.texcoord_index + 1], // flipped vertical component
-				};
-				vertex.color = {1, 1, 1, 1};
-				if (testObjectUniqueVertices.count(vertex) == 0) {
-					testObjectUniqueVertices[vertex] = testObjectVertices.size();
-					testObjectVertices.push_back(vertex);
-				}
-				testObjectIndices.push_back(testObjectUniqueVertices[vertex]);
-			}
-		}
-		// testObjectVertices = {
-		// 	{{-0.5f,-0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1}, {1.0f, 0.0f}},
-		// 	{{ 0.5f,-0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1}, {0.0f, 0.0f}},
-		// 	{{ 0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 1}, {0.0f, 1.0f}},
-		// 	{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f, 1}, {1.0f, 1.0f}},
-		// 	//
-		// 	{{-0.5f,-0.5f,-0.5f}, {1.0f, 0.0f, 0.0f, 1}, {1.0f, 0.0f}},
-		// 	{{ 0.5f,-0.5f,-0.5f}, {0.0f, 1.0f, 0.0f, 1}, {0.0f, 0.0f}},
-		// 	{{ 0.5f, 0.5f,-0.5f}, {0.0f, 0.0f, 1.0f, 1}, {0.0f, 1.0f}},
-		// 	{{-0.5f, 0.5f,-0.5f}, {0.0f, 1.0f, 1.0f, 1}, {1.0f, 1.0f}},
-		// };
-		// testObjectIndices = {
-		// 	0, 1, 2, 2, 3, 0,
-		// 	4, 5, 6, 6, 7, 4,
-		// };
-
-		// Texture
-		texture = new Texture2D("incubator_MyVulkan/assets/models/chalet.jpg", STBI_rgb_alpha);
-		texture->SetMipLevels();
-		texture->SetSamplerAnisotropy(16);
-		texture->AllocateVulkanStagingMemory(device);
-		texture->CreateVulkanImage(device, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		texture->CreateVulkanImageView(device);
-		texture->CreateVulkanSampler(device);
-		TransitionImageLayout(texture->GetImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, texture->GetMipLevels());
-		CopyBufferToImage(texture->GetStagingBuffer(), texture->GetImage(), texture->GetWidth(), texture->GetHeight());
-		// TransitionImageLayout(texture->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, texture->GetMipLevels());
-		GenerateMipmaps(texture); // This automatically does the transition to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		texture->FreeVulkanStagingMemory(device);
-
-		// Shader program
-		testShader = new VulkanShaderProgram(device, {
-			{"incubator_MyVulkan/assets/shaders/test.vert"},
-			{"incubator_MyVulkan/assets/shaders/test.frag"},
-		});
-		// testShader = new VulkanShaderProgram(device, "incubator_MyVulkan/assets/shaders/test");
-
-		// Vertex Input structure
-		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
-			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
-			{2, offsetof(Vertex, Vertex::uv), VK_FORMAT_R32G32_SFLOAT},
-		});
-
-		// Uniforms
-		testShader->AddLayoutBindings({
-			{// ubo
-				0, // binding
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_VERTEX_BIT, // VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_ALL_GRAPHICS, ...
-				nullptr, // pImmutableSamplers
-			},
-			{// tex
-				1, // binding
-				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_FRAGMENT_BIT, // VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_ALL_GRAPHICS, ...
-				nullptr, // pImmutableSamplers
-			},
-		});
-		
-	}
-
-	void UnloadTestObject() {
-		texture->DestroyVulkanSampler(device);
-		texture->DestroyVulkanImageView(device);
-		texture->DestroyVulkanImage(device);
-		delete texture;
-		delete testShader;
-	}
-
-	void AddTestObject() {
-		// Vertices
-		VkDeviceSize bufferSize = sizeof(testObjectVertices[0]) * testObjectVertices.size();
-		VkBuffer stagingBuffer;
-		VkDeviceMemory stagingBufferMemory;
-		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-		void *data;
-		device->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, testObjectVertices.data(), bufferSize);
-		device->UnmapMemory(stagingBufferMemory);
-		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
-		CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-		device->DestroyBuffer(stagingBuffer, nullptr);
-		device->FreeMemory(stagingBufferMemory, nullptr);
-
-		// Indices
-		/*VkDeviceSize*/ bufferSize = sizeof(testObjectIndices[0]) * testObjectIndices.size();
-		// VkBuffer stagingBuffer;
-		// VkDeviceMemory stagingBufferMemory;
-		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-		// void *data;
-		device->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, testObjectIndices.data(), bufferSize);
-		device->UnmapMemory(stagingBufferMemory);
-		device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
-		CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-		device->DestroyBuffer(stagingBuffer, nullptr);
-		device->FreeMemory(stagingBufferMemory, nullptr);
-
-		// Uniform buffers
-		/*VkDeviceSize*/ bufferSize = sizeof(UBO);
-		uniformBuffers.resize(swapChain->imageViews.size());
-		uniformBuffersMemory.resize(uniformBuffers.size());
-		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			device->CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
-		}
-
-		// Descriptor sets (for Uniform Buffers)
-		std::vector<VkDescriptorSetLayout> layouts;
-		layouts.reserve(swapChain->imageViews.size() * testShader->GetDescriptorSetLayouts().size());
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			for (auto layout : testShader->GetDescriptorSetLayouts()) {
-				layouts.push_back(layout);
-			}
-		}
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = layouts.size();
-		allocInfo.pSetLayouts = layouts.data();
-		descriptorSets.resize(swapChain->imageViews.size());
-		if (device->AllocateDescriptorSets(&allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets");
-		}
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
-
-			// ubo
-			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[0].dstSet = descriptorSets[i];
-			descriptorWrites[0].dstBinding = 0; // layout(binding = 0) uniform...
-			descriptorWrites[0].dstArrayElement = 0; // array
-			descriptorWrites[0].descriptorCount = 1; // array
-			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			VkDescriptorBufferInfo bufferInfo = {uniformBuffers[i], 0, sizeof(UBO)};
-			descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-			// tex
-			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[1].dstSet = descriptorSets[i];
-			descriptorWrites[1].dstBinding = 1; // layout(binding = 0) uniform...
-			descriptorWrites[1].dstArrayElement = 0; // array
-			descriptorWrites[1].descriptorCount = 1; // array
-			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			VkDescriptorImageInfo imageInfo = {texture->GetSampler(), texture->GetImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-			descriptorWrites[1].pImageInfo = &imageInfo;
-			
-			// Update Descriptor Sets
-			device->UpdateDescriptorSets(descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-		}
-	}
-
-	void RemoveTestObject() {
-		// Uniform buffers
-		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			device->DestroyBuffer(uniformBuffers[i], nullptr);
-			device->FreeMemory(uniformBuffersMemory[i], nullptr);
-		}
-
-		// Descriptor Sets
-		device->FreeDescriptorSets(descriptorPool, descriptorSets.size(), descriptorSets.data());
-
-		// Vertices
-		device->DestroyBuffer(vertexBuffer, nullptr);
-		device->FreeMemory(vertexBufferMemory, nullptr);
-
-		// Indices
-		device->DestroyBuffer(indexBuffer, nullptr);
-		device->FreeMemory(indexBufferMemory, nullptr);
-	}
-
-	void UpdateUniformBuffer(uint i) {
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-		UBO ubo = {};
-		ubo.model = glm::rotate(glm::mat4(1), time * glm::radians(10.0f), glm::vec3(0,0,1));
-		ubo.view = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));
-		ubo.proj = glm::perspective(glm::radians(45.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 10.0f);
-		ubo.proj[1][1] *= -1;
-		// Update memory
-		void *data;
-		device->MapMemory(uniformBuffersMemory[i], 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
-			memcpy(data, &ubo, sizeof(ubo));
-		device->UnmapMemory(uniformBuffersMemory[i]);
-	}
-
-protected: // Reset Methods
+public: // Init/Reset Methods
 	virtual void RecreateSwapChains() {
-		device->DeviceWaitIdle();
+		renderingDevice->DeviceWaitIdle();
 
 		// Destroy graphics pipeline
 		DestroyCommandBuffers();
@@ -1228,16 +828,14 @@ protected: // Reset Methods
 		DestroyRenderPass();
 		DestroyDepthResources();
 		DestroyColorResources();
+		// Remove Scene data
+		DeleteSceneFromDevice();
 
-		// Test Object
-		RemoveTestObject();
-
-		// SwapChain
+		// Re-Create the SwapChain
 		CreateSwapChain();
 
-		// Test Object
-		AddTestObject();
-
+		// Add Scene data
+		SendSceneToDevice();
 		// Graphics pipeline
 		CreateColorResources();
 		CreateDepthResources();
@@ -1246,23 +844,13 @@ protected: // Reset Methods
 		CreateFrameBuffers();
 		CreateCommandBuffers(); // objects are rendered here
 	}
-public: // Constructor & Destructor
-	MyVulkan(xvk::Loader* loader, const char* applicationName, uint applicationVersion, Window* window) : Vulkan(loader, applicationName, applicationVersion), window(window) {
-
-		// Surfaces
-		CreateSurface();
-
-		// Create Objects
-		CreateGraphicsDevices();
-		CreateSyncObjects();
-		CreateSwapChain();
-		CreatePools();
-
-		// Test Shader
-		LoadTestObject();
-
-		// Test Object
-		AddTestObject();
+	
+	virtual void LoadRenderer() {
+		Init();
+		
+		// Load scene assets
+		LoadScene();
+		SendSceneToDevice();
 
 		// Graphics pipeline
 		CreateColorResources();
@@ -1275,41 +863,47 @@ public: // Constructor & Destructor
 		// Ready to render!
 		LOG_SUCCESS("VULKAN IS READY TO RENDER!");
 	}
+	
+	virtual void UnloadRenderer() {
+		// Wait for renderingDevice to be idle before destroying everything
+		renderingDevice->DeviceWaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
 
-	virtual ~MyVulkan() override {
-		// Wait for device to be idle before destroying everything
-		device->DeviceWaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
-		
-		// Destroy graphics pipeline
 		DestroyCommandBuffers();
 		DestroyFrameBuffers();
 		DestroyGraphicsPipelines();
 		DestroyRenderPass();
 		DestroyDepthResources();
 		DestroyColorResources();
+		
+		DeleteSceneFromDevice();
+		UnloadScene();
+	}
+	
+public: // Constructor & Destructor
+	MyVulkanRenderer(VulkanLoader* loader, const char* applicationName, uint applicationVersion, Window* window) : Vulkan(loader, applicationName, applicationVersion), window(window) {
+		CreateSurface();
+		CreateDevices();
+		CreateSyncObjects();
+		CreateSwapChain();
+		CreatePools();
+	}
 
-		// Test Object
-		RemoveTestObject();
-
-		// Test Shader
-		UnloadTestObject();
-
-		// Destroy remaining stuff
+	virtual ~MyVulkanRenderer() override {
 		DestroyPools();
 		DestroySwapChain();
 		DestroySyncObjects();
-		DestroyGraphicsDevices();
+		DestroyDevices();
 		DestroySurface();
 	}
 
 public: // Public Methods
 	virtual void RenderFrame() {
 		// Wait for previous frame to be finished
-		device->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
+		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
 		// Get an image from the swapchain
 		uint imageIndex;
-		VkResult result = device->AcquireNextImageKHR(
+		VkResult result = renderingDevice->AcquireNextImageKHR(
 			swapChain->GetHandle(), // swapChain
 			std::numeric_limits<uint64_t>::max(), // timeout in nanoseconds (using max disables the timeout)
 			imageAvailableSemaphores[currentFrameInFlight], // semaphore
@@ -1322,12 +916,14 @@ public: // Public Methods
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
 			return;
-		} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		} else if (result == VK_SUBOPTIMAL_KHR) {
+			// LOG_VERBOSE("Swapchain is suboptimal...")
+		} else if (result != VK_SUCCESS) {
 			throw std::runtime_error("Failed to acquire swap chain images");
 		}
 
-		// Update Uniforms
-		UpdateUniformBuffer(imageIndex);
+		// Update data every frame
+		FrameUpdate(imageIndex);
 
 		// Submit the command buffer
 		VkSubmitInfo submitInfo = {};
@@ -1350,8 +946,8 @@ public: // Public Methods
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		
 		// Reset the fence and Submit the queue
-		device->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
-		if (device->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/) != VK_SUCCESS) {
+		renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
+		if (renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to submit draw command buffer");
 		}
 
@@ -1372,14 +968,16 @@ public: // Public Methods
 
 		// Send the present info to the presentation queue !
 		// This submits the request to present an image to the swap chain.
-		result = device->QueuePresentKHR(presentationQueue.handle, &presentInfo);
+		result = renderingDevice->QueuePresentKHR(presentationQueue.handle, &presentInfo);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || windowResized) {
-			// SwapChain is out of date or not optimal, for instance if the window was resized, ReCreate the swapchain.
+		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
+		} else if (result == VK_SUBOPTIMAL_KHR) {
+			// LOG_VERBOSE("Swapchain is suboptimal...")
 		} else if (result != VK_SUCCESS) {
-			throw std::runtime_error("Failed to present swap chain image");
+			throw std::runtime_error("Failed to present swap chain images");
 		}
 
 		// Increment currentFrameInFlight

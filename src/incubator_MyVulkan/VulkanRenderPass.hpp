@@ -43,35 +43,36 @@ public:
 		attachments.push_back(attachment);
 	}
 
-	void AddGraphicsPipeline(VulkanGraphicsPipeline* graphicsPipeline, uint32_t subpass = 0) {
+	VulkanGraphicsPipeline* NewGraphicsPipeline(VulkanDevice* device, uint32_t subpass = 0) {
+		auto* graphicsPipeline = new VulkanGraphicsPipeline(device);
+		graphicsPipelines.push_back(graphicsPipeline);
 		// Render passes 
 		// The reference to the render pass and the index of the sub pass where this graphics pipeline will be used. 
 		// It is also possible to use other render passes with this pipeline instead of this specific instance, but they have to be Compatible with renderPass.
 		graphicsPipeline->pipelineCreateInfo.renderPass = handle;
 		graphicsPipeline->pipelineCreateInfo.subpass = subpass;
 
-		graphicsPipelines.push_back(std::move(graphicsPipeline));
+		return graphicsPipeline;
 	}
 
 	void CreateGraphicsPipelines() {
 		std::vector<VkGraphicsPipelineCreateInfo> pipelineCreates(graphicsPipelines.size());
 		for (size_t i = 0; i < graphicsPipelines.size(); i++) {
+			graphicsPipelines[i]->Prepare();
 			pipelineCreates[i] = std::ref(graphicsPipelines[i]->pipelineCreateInfo);
 		}
 
-		auto* pipelineHandles = new std::vector<VkPipeline>(graphicsPipelines.size());
+		std::vector<VkPipeline> pipelineHandles(graphicsPipelines.size());
 		
 		// Now create the graphics pipeline object
 		// This function is designed to take multiple VkGraphicsPipelineCreateInfo objects and create multiple VkPipeline objects in a single call.
-		if (device->CreateGraphicsPipelines(VK_NULL_HANDLE/*pipelineCache*/, pipelineCreates.size(), pipelineCreates.data(), nullptr, pipelineHandles->data()) != VK_SUCCESS) {
+		if (device->CreateGraphicsPipelines(VK_NULL_HANDLE/*pipelineCache*/, pipelineCreates.size(), pipelineCreates.data(), nullptr, pipelineHandles.data()) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create Graphics Pipeline");
 		}
 
 		for (size_t i = 0; i < graphicsPipelines.size(); i++) {
-			graphicsPipelines[i]->handle = std::ref((*pipelineHandles)[i]);
+			graphicsPipelines[i]->handle = pipelineHandles[i];
 		}
-
-		delete pipelineHandles;
 	}
 
 	void DestroyGraphicsPipelines() {

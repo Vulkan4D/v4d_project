@@ -28,15 +28,6 @@
 			// Check for Vulkan support
 			if (!glfwVulkanSupported())
 				throw std::runtime_error("Vulkan is not supported");
-
-			// Get required vulkan instance extensions from glfw
-			uint glfwExtensionCount = 0;
-			const char** glfwExtensions;
-			glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-			vulkanRequiredExtensions.reserve(glfwExtensionCount);
-			for (uint i = 0; i < glfwExtensionCount; i++) {
-				vulkanRequiredExtensions.push_back(glfwExtensions[i]);
-			}
 		}
 
 		static void DeactivateWindowSystem() {
@@ -73,6 +64,16 @@
 				throw std::runtime_error("Failed to create Vulkan Surface");
 			}
 			return surface;
+		}
+		
+		void GetRequiredVulkanInstanceExtensions(std::vector<const char*>& requiredInstanceExtensions) const {
+			uint glfwExtensionCount = 0;
+			const char** glfwExtensions;
+			glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+			requiredInstanceExtensions.reserve(glfwExtensionCount);
+			for (uint i = 0; i < glfwExtensionCount; i++) {
+				requiredInstanceExtensions.push_back(glfwExtensions[i]);
+			}
 		}
 		
 		void AddResizeCallback(std::string name, std::function<void(int,int)>&& callback) {

@@ -14,17 +14,20 @@ private:
 	std::vector<VkVertexInputAttributeDescription> attributes;
 
 public:
-	VkPipeline handle;
-	VkPipelineLayout pipelineLayout;
+	VkPipeline handle = VK_NULL_HANDLE;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
+	VkGraphicsPipelineCreateInfo pipelineCreateInfo {};
+	
 	VkPipelineRasterizationStateCreateInfo rasterizer {};
 	VkPipelineMultisampleStateCreateInfo multisampling {};
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly {};
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo {};
 	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
 	VkPipelineColorBlendStateCreateInfo colorBlending {};
-
-	VkGraphicsPipelineCreateInfo pipelineCreateInfo {};
+	VkPipelineDepthStencilStateCreateInfo depthStencilState;
+	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {};
+	std::vector<VkDynamicState> dynamicStates;
 
 	VulkanGraphicsPipeline(VulkanDevice* device) : device(device) {
 		rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -33,6 +36,7 @@ public:
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 
 		colorBlending.logicOpEnable = VK_FALSE; // If enabled, will effectively replace and disable blendingAttachmentState.blendEnable
 		colorBlending.logicOp = VK_LOGIC_OP_COPY; // optional, if enabled above
@@ -40,6 +44,11 @@ public:
 		colorBlending.blendConstants[1] = 0; // optional
 		colorBlending.blendConstants[2] = 0; // optional
 		colorBlending.blendConstants[3] = 0; // optional
+		
+		pipelineCreateInfo.pDepthStencilState = &depthStencilState;
+		depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencilState.pNext = nullptr;
+		depthStencilState.flags = 0;
 	}
 
 	void Prepare() {
@@ -58,6 +67,15 @@ public:
 			pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
 		}
 
+		// Dynamic states
+		if (dynamicStates.size() > 0) {
+			dynamicStateCreateInfo.dynamicStateCount = (uint)dynamicStates.size();
+			dynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
+			pipelineCreateInfo.pDynamicState = &dynamicStateCreateInfo;
+		} else {
+			pipelineCreateInfo.pDynamicState = nullptr;
+		}
+		
 		//TODO
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;

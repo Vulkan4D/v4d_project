@@ -1,6 +1,7 @@
 #pragma once
 
-// #include "vkfcn.hpp"
+// Vulkan
+#include "VulkanLoader.hpp"
 #include "VulkanStructs.hpp"
 #include "VulkanGPU.hpp"
 #include "VulkanDevice.hpp"
@@ -54,65 +55,6 @@ class Vulkan : public xvk::Interface::InstanceInterface {
 private:
 	std::vector<VulkanGPU*> availableGPUs;
 
-	void CheckExtensions() {
-		LOG("Initializing Vulkan Extensions...");
-		
-		// Get supported extensions
-		uint supportedExtensionCount = 0;
-		vulkanLoader->vkEnumerateInstanceExtensionProperties(nullptr, &supportedExtensionCount, nullptr);
-		std::vector<VkExtensionProperties> supportedExtensions(supportedExtensionCount);
-		vulkanLoader->vkEnumerateInstanceExtensionProperties(nullptr, &supportedExtensionCount, supportedExtensions.data());
-		std::for_each(supportedExtensions.begin(), supportedExtensions.end(), [](const auto& extension){
-			LOG_VERBOSE("Supported Extension: " << extension.extensionName);
-		});
-		
-		// Check support for required extensions
-		for (const char* extensionName : vulkanRequiredExtensions) {
-			if (std::find_if(supportedExtensions.begin(), supportedExtensions.end(), [&extensionName](VkExtensionProperties extension){
-				return strcmp(extension.extensionName, extensionName) == 0;
-			}) != supportedExtensions.end()) {
-				LOG("Enabling Vulkan Extension: " << extensionName);
-			} else {
-				throw std::runtime_error(std::string("Required Extension Not Supported: ") + extensionName);
-			}
-		}
-	}
-
-	void CheckLayers() {
-		LOG("Initializing Vulkan Layers...");
-		
-		// Get Supported Layers
-		uint supportedLayerCount;
-		vulkanLoader->vkEnumerateInstanceLayerProperties(&supportedLayerCount, nullptr);
-		std::vector<VkLayerProperties> supportedLayers(supportedLayerCount);
-		vulkanLoader->vkEnumerateInstanceLayerProperties(&supportedLayerCount, supportedLayers.data());
-		std::for_each(supportedLayers.begin(), supportedLayers.end(), [](const auto& layer){
-			LOG_VERBOSE("Supported Layer: " << layer.layerName);
-		});
-		
-		// Check support for required layers
-		for (const char* layerName : vulkanRequiredLayers) {
-			if (std::find_if(supportedLayers.begin(), supportedLayers.end(), [&layerName](VkLayerProperties layer){
-				return strcmp(layer.layerName, layerName) == 0;
-			}) != supportedLayers.end()) {
-				LOG("Enabling Vulkan Layer: " << layerName);
-			} else {
-				throw std::runtime_error(std::string("Layer Not Supported: ") + layerName);
-			}
-		}
-	}
-
-	void CheckVulkanVersion() {
-		uint32_t apiVersion = 0;
-		vulkanLoader->vkEnumerateInstanceVersion(&apiVersion);
-		if (apiVersion < VULKAN_API_VERSION) {
-			uint vMajor = (VULKAN_API_VERSION & (511 << 22)) >> 22;
-			uint vMinor = (VULKAN_API_VERSION & (1023 << 12)) >> 12;
-			uint vPatch = VULKAN_API_VERSION & 4095;
-			throw std::runtime_error("Vulkan Version " + std::to_string(vMajor) + "." + std::to_string(vMinor) + "." + std::to_string(vPatch) + " is Not supported");
-		}
-	}
-
 	void LoadAvailableGPUs() {
 		LOG("Initializing Physical Devices...");
 		
@@ -139,15 +81,15 @@ private:
 	}
 
 protected:
-	xvk::Loader* vulkanLoader;
+	VulkanLoader* vulkanLoader;
 
 public:
-	Vulkan(xvk::Loader* loader, const char* applicationName, uint applicationVersion) : vulkanLoader(loader) {
+	Vulkan(VulkanLoader* loader, const char* applicationName, uint applicationVersion) : vulkanLoader(loader) {
 		this->loader = loader;
 		
-		CheckExtensions();
-		CheckLayers();
-		CheckVulkanVersion();
+		loader->CheckLayers();
+		loader->CheckExtensions();
+		loader->CheckVulkanVersion();
 
 		// Prepare appInfo for the Vulkan Instance
 		VkApplicationInfo appInfo {
@@ -166,10 +108,10 @@ public:
 			nullptr, // pNext
 			0, // flags
 			&appInfo,
-			(uint32_t)vulkanRequiredLayers.size(),
-			vulkanRequiredLayers.data(),
-			(uint32_t)vulkanRequiredExtensions.size(),
-			vulkanRequiredExtensions.data()
+			(uint32_t)loader->requiredInstanceLayers.size(),
+			loader->requiredInstanceLayers.data(),
+			(uint32_t)loader->requiredInstanceExtensions.size(),
+			loader->requiredInstanceExtensions.data()
 		};
 
 		// Create the Vulkan instance
