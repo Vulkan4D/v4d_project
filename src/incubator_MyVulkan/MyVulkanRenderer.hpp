@@ -61,11 +61,26 @@ protected: // class members
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 	
 	// States
-	std::mutex renderingMutex;
+	std::recursive_mutex renderingMutex;
 	bool windowResized = false;
 	uint windowWidth, windowHeight;
+	bool renderTypeDirty = false;
 	
 	VkClearColorValue clearColor {0,0,0,1};
+	
+	// Ray Tracing
+	bool useRayTracing = true;
+	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
+	VkAccelerationStructureNV rayTracingBottomLevelAccelerationStructure;
+	VkDeviceMemory rayTracingBottomLevelAccelerationStructureMemory;
+	uint64_t rayTracingBottomLevelAccelerationStructureHandle;
+	VkAccelerationStructureNV rayTracingTopLevelAccelerationStructure;
+	VkDeviceMemory rayTracingTopLevelAccelerationStructureMemory;
+	uint64_t rayTracingTopLevelAccelerationStructureHandle;
+	VkPipelineLayout rayTracingPipelineLayout;
+	VkPipeline rayTracingPipeline;
+	VkBuffer rayTracingShaderBindingTableBuffer;
+	VkDeviceMemory rayTracingShaderBindingTableBufferMemory;
 
 protected: // Abstract methods
 	virtual void Init() = 0;
@@ -77,7 +92,9 @@ protected: // Abstract methods
 	virtual void DeleteSceneFromDevice() = 0;
 	// Rendering
 	virtual void ConfigureGraphicsPipelines() = 0;
+	virtual void ConfigureRayTracingPipelines() = 0;
 	virtual void ConfigureCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) = 0;
+	virtual void ConfigureRayTracingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) = 0;
 
 protected: // Virtual INIT Methods
 
@@ -170,7 +187,28 @@ protected: // Virtual INIT Methods
 	void CreatePools() {
 		renderingDevice->CreateCommandPool(graphicsQueue.index, 0, &graphicsCommandPool);
 		renderingDevice->CreateCommandPool(graphicsQueue.index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transferCommandPool);
-		renderingDevice->CreateDescriptorPool({VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER}, swapChain->imageViews.size(), descriptorPool, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
+		if (useRayTracing) {
+			renderingDevice->CreateDescriptorPool(
+				{
+				VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 
+				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+				}, 
+				swapChain->imageViews.size(), 
+				descriptorPool, 
+				0
+			);
+		} else {
+			renderingDevice->CreateDescriptorPool(
+				{
+					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+					VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+				}, 
+				swapChain->imageViews.size(), 
+				descriptorPool, 
+				VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+			);
+		}
 	}
 
 	void DestroyPools() {
@@ -264,6 +302,8 @@ protected: // Virtual INIT Methods
 	// Graphics Pipeline
 
 	virtual void CreateRenderPass() {
+		if (useRayTracing) return;
+		
 		renderPass = new VulkanRenderPass(renderingDevice);
 
 		// Color Attachment (Fragment shader Standard Output)
@@ -385,20 +425,30 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyRenderPass() {
-		delete renderPass;
+		if (renderPass)
+			delete renderPass;
+		renderPass = nullptr;
 	}
 
-	virtual void CreateGraphicsPipelines() { 
-		ConfigureGraphicsPipelines();
-		// Create the Graphics Pipeline !
-		renderPass->CreateGraphicsPipelines();
+	virtual void CreateGraphicsPipelines() {
+		if (useRayTracing) {
+			ConfigureRayTracingPipelines();
+		} else {
+			ConfigureGraphicsPipelines();
+			// Create the Graphics Pipeline !
+			renderPass->CreateGraphicsPipelines();
+		}
 	}
 
 	virtual void DestroyGraphicsPipelines() {
-		renderPass->DestroyGraphicsPipelines();
+		if (renderPass) {
+			renderPass->DestroyGraphicsPipelines();
+		}
 	}
 
 	virtual void CreateFrameBuffers() {
+		std::lock_guard lock(renderingMutex);
+		
 		swapChainFrameBuffers.resize(swapChain->imageViews.size());
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
 			std::array<VkImageView, 3> attachments = {
@@ -409,7 +459,7 @@ protected: // Virtual INIT Methods
 			// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
 			VkFramebufferCreateInfo framebufferCreateInfo = {};
 			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = renderPass->handle;
+			framebufferCreateInfo.renderPass = useRayTracing? VK_NULL_HANDLE : renderPass->handle;
 			framebufferCreateInfo.attachmentCount = attachments.size();
 			framebufferCreateInfo.pAttachments = attachments.data(); // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
 			framebufferCreateInfo.width = swapChain->extent.width;
@@ -428,6 +478,8 @@ protected: // Virtual INIT Methods
 	}
 	
 	virtual void CreateCommandBuffers() {
+		std::lock_guard lock(renderingMutex);
+		
 		// Because one of the drawing commands involves binding the right VkFramebuffer, we'll actually have to record a command buffer for every image in the swap chain once again.
 		// Command buffers will be automatically freed when their command pool is destroyed, so we don't need an explicit cleanup
 		commandBuffers.resize(swapChainFrameBuffers.size());
@@ -459,31 +511,39 @@ protected: // Virtual INIT Methods
 				throw std::runtime_error("Faild to begin recording command buffer");
 			}
 
-			// Begin Render Pass
-			VkRenderPassBeginInfo renderPassInfo = {};
-			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			renderPassInfo.renderPass = renderPass->handle;
-			renderPassInfo.framebuffer = swapChainFrameBuffers[i]; // We create a framebuffer for each swap chain image that specifies it as color attachment
-			// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
-			renderPassInfo.renderArea.offset = {0, 0};
-			renderPassInfo.renderArea.extent = swapChain->extent;
-			// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-			std::array<VkClearValue, 2> clearValues = {};
-			clearValues[0].color = clearColor;
-			clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
-			renderPassInfo.clearValueCount = clearValues.size();
-			renderPassInfo.pClearValues = clearValues.data();
-			//
-			renderingDevice->CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
-																/*	the last parameter controls how the drawing commands within the render pass will be provided.
-																	VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
-																	VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
-																*/
+			if (useRayTracing) {
+				
+				// Commands to submit on each draw
+				ConfigureRayTracingCommandBuffer(commandBuffers[i], i);
+				
+			} else {
+				// Begin Render Pass
+				VkRenderPassBeginInfo renderPassInfo = {};
+				renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+				renderPassInfo.renderPass = renderPass->handle;
+				renderPassInfo.framebuffer = swapChainFrameBuffers[i]; // We create a framebuffer for each swap chain image that specifies it as color attachment
+				// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
+				renderPassInfo.renderArea.offset = {0, 0};
+				renderPassInfo.renderArea.extent = swapChain->extent;
+				// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
+				std::array<VkClearValue, 2> clearValues = {};
+				clearValues[0].color = clearColor;
+				clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
+				renderPassInfo.clearValueCount = clearValues.size();
+				renderPassInfo.pClearValues = clearValues.data();
+				//
+				renderingDevice->CmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
+																	/*	the last parameter controls how the drawing commands within the render pass will be provided.
+																		VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
+																		VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
+																	*/
+				
+				// Commands to submit on each draw
+				ConfigureCommandBuffer(commandBuffers[i], i);
+				
+				renderingDevice->CmdEndRenderPass(commandBuffers[i]);
+			}
 			
-			ConfigureCommandBuffer(commandBuffers[i], i);
-
-			// End the render pass
-			renderingDevice->CmdEndRenderPass(commandBuffers[i]);
 			if (renderingDevice->EndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to record command buffer");
 			}
@@ -600,15 +660,34 @@ protected: // Helper methods
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
-		renderingDevice->QueueWaitIdle(graphicsQueue.handle); // TODO: Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
+		// renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
+		// renderingDevice->QueueWaitIdle(graphicsQueue.handle); // Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
 
+		VkFenceCreateInfo fenceInfo {};
+		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceInfo.flags = 0;
+		VkFence fence;
+		if (renderingDevice->CreateFence(&fenceInfo, nullptr, &fence) != VK_SUCCESS)
+			throw std::runtime_error("Failed to create fence");
+
+		if (renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, fence) != VK_SUCCESS)
+			throw std::runtime_error("Failed to submit queue");
+
+		if (renderingDevice->WaitForFences(1, &fence, VK_TRUE, 1000000000l*3600 /* nanoseconds */))
+			throw std::runtime_error("Failed to wait for fence to signal");
+
+		renderingDevice->DestroyFence(fence, nullptr);
+		
 		renderingDevice->FreeCommandBuffers(commandPool, 1, &commandBuffer);
 	}
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
 		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
-
+		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels);
+		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+	}
+	
+	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
 		VkImageMemoryBarrier barrier = {};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier.oldLayout = oldLayout; // VK_IMAGE_LAYOUT_UNDEFINED if we dont care about existing contents of the image
@@ -678,8 +757,6 @@ protected: // Helper methods
 			0, nullptr,
 			1, &barrier
 		);
-
-		EndSingleTimeCommands(transferCommandPool, commandBuffer);
 	}
 
 	void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -720,6 +797,13 @@ protected: // Helper methods
 		);
 
 		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+	}
+
+	VkDeviceSize CopyShaderIdentifier(uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex) {
+		const uint32_t shaderGroupHandleSize = rayTracingProperties.shaderGroupHandleSize;
+		memcpy(data, shaderHandleStorage + groupIndex * shaderGroupHandleSize, shaderGroupHandleSize);
+		data += shaderGroupHandleSize;
+		return shaderGroupHandleSize;
 	}
 
 	// void GenerateMipmaps(Texture2D* texture) {
@@ -821,6 +905,9 @@ protected: // Helper methods
 
 public: // Init/Reset Methods
 	virtual void RecreateSwapChains() {
+		std::lock_guard lock(renderingMutex);
+		
+		renderTypeDirty = false;
 		renderingDevice->DeviceWaitIdle();
 
 		// Destroy graphics pipeline
@@ -834,7 +921,9 @@ public: // Init/Reset Methods
 		DeleteSceneFromDevice();
 
 		// Re-Create the SwapChain
+		DestroyPools();
 		CreateSwapChain();
+		CreatePools();
 
 		// Add Scene data
 		SendSceneToDevice();
@@ -848,12 +937,16 @@ public: // Init/Reset Methods
 	}
 	
 	virtual void LoadRenderer() {
+		std::lock_guard lock(renderingMutex);
+		
 		Init();
+		
+		CreatePools();
 		
 		// Load scene assets
 		LoadScene();
 		SendSceneToDevice();
-
+		
 		// Graphics pipeline
 		CreateColorResources();
 		CreateDepthResources();
@@ -867,6 +960,8 @@ public: // Init/Reset Methods
 	}
 	
 	virtual void UnloadRenderer() {
+		std::lock_guard lock(renderingMutex);
+		
 		// Wait for renderingDevice to be idle before destroying everything
 		renderingDevice->DeviceWaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
 
@@ -879,6 +974,8 @@ public: // Init/Reset Methods
 		
 		DeleteSceneFromDevice();
 		UnloadScene();
+		
+		DestroyPools();
 	}
 	
 public: // Constructor & Destructor
@@ -887,19 +984,28 @@ public: // Constructor & Destructor
 		CreateDevices();
 		CreateSyncObjects();
 		CreateSwapChain();
-		CreatePools();
+		
+		// Query the ray tracing properties of the current implementation
+		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+		VkPhysicalDeviceProperties2 deviceProps2{};
+		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		deviceProps2.pNext = &rayTracingProperties;
+		GetPhysicalDeviceProperties2(renderingDevice->GetGPU()->GetHandle(), &deviceProps2);
 	}
 
 	virtual ~MyVulkanRenderer() override {
-		DestroyPools();
 		DestroySwapChain();
 		DestroySyncObjects();
 		DestroyDevices();
 		DestroySurface();
 	}
 
+
 public: // Public Methods
+
 	virtual void RenderFrame() {
+		std::lock_guard lock(renderingMutex);
+		
 		// Wait for previous frame to be finished
 		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
@@ -914,7 +1020,7 @@ public: // Public Methods
 		);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || renderTypeDirty) {
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
 			return;
@@ -973,7 +1079,7 @@ public: // Public Methods
 		result = renderingDevice->QueuePresentKHR(presentationQueue.handle, &presentInfo);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || renderTypeDirty) {
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
 		} else if (result == VK_SUBOPTIMAL_KHR) {
@@ -984,6 +1090,12 @@ public: // Public Methods
 
 		// Increment currentFrameInFlight
 		currentFrameInFlight = (currentFrameInFlight + 1) % MAX_FRAMES_IN_FLIGHT;
+	}
+	
+	void UseRayTracing(bool rayTracingEnabled = true) {
+		std::lock_guard lock(renderingMutex);
+		useRayTracing = rayTracingEnabled;
+		renderTypeDirty = true;
 	}
 
 };

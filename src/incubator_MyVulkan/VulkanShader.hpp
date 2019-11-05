@@ -13,11 +13,11 @@ static std::unordered_map<std::string, VkShaderStageFlagBits> SHADER_TYPES {
 	{"mesh", VK_SHADER_STAGE_MESH_BIT_NV},
 	{"task", VK_SHADER_STAGE_TASK_BIT_NV},
 	{"rgen", VK_SHADER_STAGE_RAYGEN_BIT_NV},
-	// {"rint", VK_SHADER_STAGE_INTERSECTION_BIT_NV},
-	// {"rahit", VK_SHADER_STAGE_},
-	// {"rchit", VK_SHADER_STAGE_},
-	// {"rmiss", VK_SHADER_STAGE_},
-	// {"rcall", VK_SHADER_STAGE_},
+	{"rint", VK_SHADER_STAGE_INTERSECTION_BIT_NV},
+	{"rahit", VK_SHADER_STAGE_ANY_HIT_BIT_NV},
+	{"rchit", VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV},
+	{"rmiss", VK_SHADER_STAGE_MISS_BIT_NV},
+	{"rcall", VK_SHADER_STAGE_CALLABLE_BIT_NV},
 };
 
 class VulkanShader {
@@ -26,12 +26,12 @@ private:
 	VulkanDevice* device;
 	std::string filepath;
 
-	std::string name;
-	std::string type;
-	
 	VkShaderModule module;
 	
 public:
+	std::string name;
+	std::string type;
+	
 	VkPipelineShaderStageCreateInfo stageInfo;
 
 	VulkanShader(VulkanDevice* device, std::string filepath, const char* entryPoint = "main", VkSpecializationInfo* specializationInfo = nullptr) : device(device), filepath(filepath) {

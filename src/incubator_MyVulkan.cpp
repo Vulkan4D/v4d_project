@@ -33,7 +33,7 @@ int main() {
 	// Needed for RayTracing
 	vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
-	try {
+	// try {
 
 		// Create Window and Init Vulkan
 		Window* window = new Window("TEST", 1440, 900);
@@ -73,12 +73,10 @@ int main() {
 		delete window;
 
 		LOG("\n\nApplication terminated\n\n");
-	// } catch (vk::SystemError &e) {
-	// 	LOG_ERROR("vk::SystemError: " << e.what())
-	} catch (std::exception &e) {
-		LOG_ERROR(e.what())
-	} catch (...) {
-		LOG_ERROR("Unknown error")
-	}
+	// } catch (std::exception &e) {
+	// 	LOG_ERROR(e.what())
+	// } catch (...) {
+	// 	LOG_ERROR("Unknown error")
+	// }
 	
 }

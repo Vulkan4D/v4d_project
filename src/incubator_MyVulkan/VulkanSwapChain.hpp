@@ -9,9 +9,10 @@ private:
 	VkSurfaceKHR surface;
 
 	VkSwapchainKHR handle;
-	std::vector<VkImage> images {};
 
 public:
+	std::vector<VkImage> images {};
+	
 	// Selected configuration
 	VkSurfaceFormatKHR format;
 	VkPresentModeKHR presentMode;

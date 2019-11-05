@@ -182,6 +182,9 @@ class MyVulkanTest : public MyVulkanRenderer {
 		renderingDevice->FreeMemory(indexBufferMemory, nullptr);
 	}
 	
+	void ConfigureRayTracingPipelines() override {
+		
+	}
 	
 	void ConfigureGraphicsPipelines() override {
 		auto* graphicsPipeline1 = renderPass->NewGraphicsPipeline(renderingDevice, 0);
@@ -253,6 +256,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 		// These are only used if VK_PIPELINE_CREATE_DERIVATIVE_BIT flag is also specified in the flags field of VkGraphicsPipelineCreateInfo.
 		graphicsPipeline1->pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 		graphicsPipeline1->pipelineCreateInfo.basePipelineIndex = -1;
+	}
+
+	void ConfigureRayTracingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+		
 	}
 
 	void ConfigureCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {

@@ -148,7 +148,7 @@ public:
 	}
 
 	using xvk::Interface::DeviceInterface::CreateBuffer;
-	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, void* data = nullptr) {
 		VkBufferCreateInfo bufferInfo = {};
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = size;
@@ -168,13 +168,28 @@ public:
 		allocInfo.memoryTypeIndex = gpu->FindMemoryType(memRequirements.memoryTypeBits, properties);
 
 		// TODO !!!
-		// It should be noted that in a real world application, you're not supposed to actually call vkAllocateMemory for every individual buffer. 
+		// It should be noted that in a real world application, we're not supposed to actually call vkAllocateMemory for every individual buffer. 
 		// The maximum number of simultaneous memory allocations is limited by the maxMemoryAllocationCount physical device limit, which may be as low as 4096 even with high end hardware like a GTX 1080.
 		// The right way to allocate memory for a large number of objects at the same time is to create a custom allocator that splits up a single allocation among many different objects by using the offset parameters that we've seen in many functions.
 		// We can either implement such an allocator ourselves, or use the VulkanMemoryAllocator library provided by the GPUOpen initiative.
 		
 		if (AllocateMemory(&allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate buffer memory");
+		}
+		
+		if (data) {
+			void* mappedData = nullptr;
+			MapMemory(bufferMemory, 0, VK_WHOLE_SIZE, 0, &mappedData);
+			memcpy(mappedData, data, size);
+			if ((properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+				VkMappedMemoryRange mappedRange {};
+				mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+				mappedRange.memory = bufferMemory;
+				mappedRange.offset = 0;
+				mappedRange.size = size;
+				FlushMappedMemoryRanges(1, &mappedRange);
+			}
+			UnmapMemory(bufferMemory);
 		}
 
 		BindBufferMemory(buffer, bufferMemory, 0);
