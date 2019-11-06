@@ -1,5 +1,6 @@
 #version 460
 #extension GL_NV_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
 
 #############################################################
 
@@ -39,15 +40,45 @@ void main()
 
 #shader rchit
 
-#extension GL_EXT_nonuniform_qualifier : enable
+struct Vertex {
+	vec3 pos;
+	float refl;
+	vec4 color;
+};
+uint vertexSize = 2;
 
 layout(location = 0) rayPayloadInNV vec3 hitValue;
 hitAttributeNV vec3 attribs;
+layout(binding = 3, set = 0) buffer Vertices { vec4 v[]; } vertexBuffer;
+layout(binding = 4, set = 0) buffer Indices { uint i[]; } indexBuffer;
+
+Vertex unpackVertex(uint index) {
+	Vertex v;
+	v.pos = vertexBuffer.v[vertexSize * index + 0].xyz;
+	v.refl = vertexBuffer.v[vertexSize * index + 0].w;
+	v.color = vertexBuffer.v[vertexSize * index + 1];
+	return v;
+}
 
 void main()
 {
-  const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  hitValue = barycentricCoords;
+	const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+	ivec3 index = ivec3(indexBuffer.i[3 * gl_PrimitiveID], indexBuffer.i[3 * gl_PrimitiveID + 1], indexBuffer.i[3 * gl_PrimitiveID + 2]);
+	Vertex v0 = unpackVertex(index.x);
+	Vertex v1 = unpackVertex(index.y);
+	Vertex v2 = unpackVertex(index.z);
+	
+	// // Interpolate normal
+	// vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
+
+	// // Basic lighting
+	// vec3 lightVector = normalize(cam.lightPos.xyz);
+	// float dot_product = max(dot(lightVector, normal), 0.2);
+	// hitValue = v0.color * vec3(dot_product);
+	
+	vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
+
+	hitValue = color.xyz;
 }
 
 
@@ -59,6 +90,6 @@ layout(location = 0) rayPayloadInNV vec3 hitValue;
 
 void main()
 {
-    hitValue = vec3(0.0, 0.0, 0.0);
+	hitValue = vec3(0.0, 0.0, 0.0);
 }
 

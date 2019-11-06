@@ -21,7 +21,8 @@ layout(binding = 0) uniform UBO {
 
 // INPUT
 layout(location = 0) in vec3 in_position;
-layout(location = 1) in vec4 in_color;
+layout(location = 1) in float in_refl;
+layout(location = 2) in vec4 in_color;
 
 // OUTPUT
 layout(location = 0) out V2F v;

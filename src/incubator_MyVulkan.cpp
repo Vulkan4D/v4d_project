@@ -56,16 +56,16 @@ int main() {
 
 		// GameLoop
 		while (window->IsActive()) {
-			timer.Start();
-
 			glfwPollEvents();
 			
+			timer.Start();
+
 			vulkan->RenderFrame();
 
 			// FPS counter (Not working on Windows... ???)
 			glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/timer.GetElapsedMilliseconds()))+" FPS").c_str());
 			
-			SLEEP(40ms)
+			SLEEP(20ms)
 		}
 		
 		vulkan->UnloadRenderer();

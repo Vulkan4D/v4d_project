@@ -5,6 +5,7 @@
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
+	float refl;
 	glm::vec4 color;
 	
 	bool operator==(const Vertex& other) const {
@@ -62,15 +63,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 	void LoadScene() override {
 
 		testObjectVertices = {
-			{{-0.5f,-0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1}},
-			{{ 0.5f,-0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1}},
-			{{ 0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 1}},
-			{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 1.0f, 1}},
+			{{-0.5f,-0.5f, 0.0f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
+			{{ 0.5f,-0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
+			{{ 0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}},
+			{{-0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}},
 			//
-			{{-0.5f,-0.5f,-0.5f}, {1.0f, 0.0f, 0.0f, 1}},
-			{{ 0.5f,-0.5f,-0.5f}, {0.0f, 1.0f, 0.0f, 1}},
-			{{ 0.5f, 0.5f,-0.5f}, {0.0f, 0.0f, 1.0f, 1}},
-			{{-0.5f, 0.5f,-0.5f}, {0.0f, 1.0f, 1.0f, 1}},
+			{{-0.5f,-0.5f,-0.5f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
+			{{ 0.5f,-0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
+			{{ 0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}},
+			{{-0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
@@ -95,7 +96,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			renderingDevice->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
 				memcpy(data, testObjectVertices.data(), bufferSize);
 			renderingDevice->UnmapMemory(stagingBufferMemory);
-			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
+			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
 			CopyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 			renderingDevice->DestroyBuffer(stagingBuffer, nullptr);
 			renderingDevice->FreeMemory(stagingBufferMemory, nullptr);
@@ -111,7 +112,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			renderingDevice->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
 				memcpy(data, testObjectIndices.data(), bufferSize);
 			renderingDevice->UnmapMemory(stagingBufferMemory);
-			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
 			CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
 			renderingDevice->DestroyBuffer(stagingBuffer, nullptr);
 			renderingDevice->FreeMemory(stagingBufferMemory, nullptr);
@@ -211,22 +212,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			});
 			
 			// Ray Tracing Geometry Instances
-			{
-				// void* data;
-				// VkBuffer stagingBuffer;
-				// VkDeviceMemory stagingBufferMemory;
-				// VkDeviceSize bufferSize = sizeof(GeometryInstance) * testObjectGeometryInstances.size();
-				// renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-				// renderingDevice->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
-				// 	memcpy(data, testObjectGeometryInstances.data(), bufferSize);
-				// renderingDevice->UnmapMemory(stagingBufferMemory);
-				// renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, instanceBuffer, instanceBufferMemory);
-				// CopyBuffer(stagingBuffer, indexBuffer, bufferSize);
-				// renderingDevice->DestroyBuffer(stagingBuffer, nullptr);
-				// renderingDevice->FreeMemory(stagingBufferMemory, nullptr);
-				
-				renderingDevice->CreateBuffer(sizeof(GeometryInstance) * testObjectGeometryInstances.size(), VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffer, instanceBufferMemory, testObjectGeometryInstances.data());
-			}
+			renderingDevice->CreateBuffer(sizeof(GeometryInstance) * testObjectGeometryInstances.size(), VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffer, instanceBufferMemory, testObjectGeometryInstances.data());
 			
 			{
 				// Top Level acceleration structure
@@ -398,7 +384,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 					0, // binding
 					VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
 					1,
-					VK_SHADER_STAGE_RAYGEN_BIT_NV, // stage flags
+					VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
 					nullptr // pImmutableSamplers
 				},
 				{// resultImage
@@ -412,7 +398,21 @@ class MyVulkanTest : public MyVulkanRenderer {
 					2, // binding
 					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
 					1, // count (for array)
-					VK_SHADER_STAGE_RAYGEN_BIT_NV, // stage flags
+					VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV, // stage flags
+					nullptr // pImmutableSamplers
+				},
+				{// vertex buffer
+					3, // binding
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+					1, // count (for array)
+					VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
+					nullptr // pImmutableSamplers
+				},
+				{// index buffer
+					4, // binding
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+					1, // count (for array)
+					VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
 					nullptr // pImmutableSamplers
 				},
 			});
@@ -422,11 +422,12 @@ class MyVulkanTest : public MyVulkanRenderer {
 				{"incubator_MyVulkan/assets/shaders/triangle.vert"},
 				{"incubator_MyVulkan/assets/shaders/triangle.frag"},
 			});
-				
+			
 			// Vertex Input structure
 			testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 				{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-				{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{1, offsetof(Vertex, Vertex::refl), VK_FORMAT_R32_SFLOAT},
+				{2, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 			});
 
 			// Uniforms
@@ -452,6 +453,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 			pipelineLayoutCreateInfo.setLayoutCount = (uint)testShader->GetDescriptorSetLayouts().size();
 			pipelineLayoutCreateInfo.pSetLayouts = testShader->GetDescriptorSetLayouts().data();
+			//TODO add pipelineLayoutCreateInfo.pPushConstantRanges
 			
 			if (renderingDevice->CreatePipelineLayout(&pipelineLayoutCreateInfo, nullptr, &rayTracingPipelineLayout) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create ray tracing pipeline layout");
@@ -498,11 +500,11 @@ class MyVulkanTest : public MyVulkanRenderer {
 		if (useRayTracing) {
 			renderingDevice->CreateDescriptorPool(
 				{
-				VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 
-				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+					{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 1},
+					{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+					{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+					{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
 				}, 
-				1, 
 				descriptorPool, 
 				VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 			);
@@ -547,36 +549,68 @@ class MyVulkanTest : public MyVulkanRenderer {
 			VkDescriptorImageInfo storageImageDescriptor{};
 			storageImageDescriptor.imageView = rayTracingStorageImage.view;
 			storageImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			
+			VkDescriptorBufferInfo uniformBufferInfo = {uniformBuffer, 0, sizeof(UBO)};
+			VkDescriptorBufferInfo vertexBufferInfo = {vertexBuffer, 0, sizeof(Vertex) * testObjectVertices.size()};
+			VkDescriptorBufferInfo indexBufferInfo = {indexBuffer, 0, sizeof(uint32_t) * testObjectIndices.size()};
 
-			std::array<VkWriteDescriptorSet, 3> descriptorWrites = {};
-
-			// acceleration structure
-			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[0].pNext = &descriptorAccelerationStructureInfo;
-			descriptorWrites[0].dstSet = descriptorSet;
-			descriptorWrites[0].dstBinding = 0; // layout(binding = 0) uniform...
-			descriptorWrites[0].dstArrayElement = 0; // array
-			descriptorWrites[0].descriptorCount = 1; // array
-			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV;
-
-			// result image
-			descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[1].dstSet = descriptorSet;
-			descriptorWrites[1].dstBinding = 1; // layout(binding = 1) uniform...
-			descriptorWrites[1].dstArrayElement = 0; // array
-			descriptorWrites[1].descriptorCount = 1; // array
-			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-			descriptorWrites[1].pImageInfo = &storageImageDescriptor;
-
-			// ubo
-			descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[2].dstSet = descriptorSet;
-			descriptorWrites[2].dstBinding = 2; // layout(binding = 2) uniform...
-			descriptorWrites[2].dstArrayElement = 0; // array
-			descriptorWrites[2].descriptorCount = 1; // array
-			descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			VkDescriptorBufferInfo bufferInfo = {uniformBuffer, 0, sizeof(UBO)};
-			descriptorWrites[2].pBufferInfo = &bufferInfo;
+			std::vector<VkWriteDescriptorSet> descriptorWrites {
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // acceleration structure
+					&descriptorAccelerationStructureInfo,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					0,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV,// VkDescriptorType descriptorType
+					nullptr,// VkDescriptorImageInfo* pImageInfo
+					nullptr,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // result image
+					nullptr,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					1,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,// VkDescriptorType descriptorType
+					&storageImageDescriptor,// VkDescriptorImageInfo* pImageInfo
+					nullptr,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // ubo
+					nullptr,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					2,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,// VkDescriptorType descriptorType
+					nullptr,// VkDescriptorImageInfo* pImageInfo
+					&uniformBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // vertex buffer
+					nullptr,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					3,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
+					nullptr,// VkDescriptorImageInfo* pImageInfo
+					&vertexBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // index buffer
+					nullptr,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					4,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
+					nullptr,// VkDescriptorImageInfo* pImageInfo
+					&indexBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+			};
 
 			// Update Descriptor Sets
 			renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
@@ -616,29 +650,31 @@ class MyVulkanTest : public MyVulkanRenderer {
 		// Descriptor pools
 		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
 		
-		// Shader binding table
-		renderingDevice->DestroyBuffer(rayTracingShaderBindingTableBuffer, nullptr);
-		renderingDevice->FreeMemory(rayTracingShaderBindingTableBufferMemory, nullptr);
-		
-		// Ray tracing pipeline
-		renderingDevice->DestroyPipeline(rayTracingPipeline, nullptr);
-		renderingDevice->DestroyPipelineLayout(rayTracingPipelineLayout, nullptr);
-		
-		// Shaders
-		delete testShader;
-		
 		// Uniform buffers
 		renderingDevice->DestroyBuffer(uniformBuffer, nullptr);
 		renderingDevice->FreeMemory(uniformBufferMemory, nullptr);
 		
-		// Acceleration Structure
-		renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructureMemory, nullptr);
-		renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
-		testObjectGeometryInstances.clear();
-		renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemory, nullptr);
-		renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructure, nullptr);
-		testObjectGeometries.clear();
+		if (rayTracingTopLevelAccelerationStructure != VK_NULL_HANDLE) {
+			// Shader binding table
+			renderingDevice->DestroyBuffer(rayTracingShaderBindingTableBuffer, nullptr);
+			renderingDevice->FreeMemory(rayTracingShaderBindingTableBufferMemory, nullptr);
+			
+			// Ray tracing pipeline
+			renderingDevice->DestroyPipeline(rayTracingPipeline, nullptr);
+			renderingDevice->DestroyPipelineLayout(rayTracingPipelineLayout, nullptr);
+			
+			// Acceleration Structure
+			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructureMemory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
+			testObjectGeometryInstances.clear();
+			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructure, nullptr);
+			testObjectGeometries.clear();
+		}
 
+		// Shaders
+		delete testShader;
+		
 		// Vertices
 		renderingDevice->DestroyBuffer(vertexBuffer, nullptr);
 		renderingDevice->FreeMemory(vertexBufferMemory, nullptr);
@@ -809,7 +845,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			ubo.viewInverse = glm::inverse(glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1)));
 			// Projection
 			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 10.0f));
-			// ubo.projInverse[1][1] *= -1;
+			ubo.projInverse[1][1] *= -1;
 		} else {
 			// Current camera position
 			ubo.viewInverse = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));

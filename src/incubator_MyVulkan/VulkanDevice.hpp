@@ -141,6 +141,23 @@ public:
 			throw std::runtime_error("Failed to create descriptor pool");
 		}
 	}
+	void CreateDescriptorPool(std::map<VkDescriptorType, uint> types, VkDescriptorPool& descriptorPool, VkDescriptorPoolCreateFlags flags = 0) {
+		std::vector<VkDescriptorPoolSize> poolSizes;
+		poolSizes.reserve(types.size());
+		VkDescriptorPoolCreateInfo poolInfo = {};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = flags;
+		poolInfo.maxSets = 0;
+		for (auto [type, count] : types) {
+			poolSizes.emplace_back(VkDescriptorPoolSize{type, count});
+			poolInfo.maxSets += count;
+		}
+		poolInfo.poolSizeCount = poolSizes.size();
+		poolInfo.pPoolSizes = poolSizes.data();
+		if (CreateDescriptorPool(&poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create descriptor pool");
+		}
+	}
 
 	using xvk::Interface::DeviceInterface::DestroyDescriptorPool;
 	void DestroyDescriptorPool(VkDescriptorPool &descriptorPool) {
