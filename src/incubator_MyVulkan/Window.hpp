@@ -11,6 +11,7 @@
 		static std::unordered_map<int, Window*> windows;
 		
 		std::map<std::string, std::function<void(int,int)>> resizeCallbacks {};
+		std::map<std::string, std::function<void(int,int,int,int)>> keyCallbacks {};
 
 		static int GetNextIndex() {
 			static std::atomic<int> nextIndex = 0;
@@ -34,11 +35,18 @@
 			glfwTerminate();
 		}
 
-		static void ResizeCallback(GLFWwindow *handle, int /*newWidth*/, int /*newHeight*/) {
+		static void ResizeCallback(GLFWwindow* handle, int newWidth, int newHeight) {
 			auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(handle));
 			window->RefreshSize();
 			for (auto[name, callback] : window->resizeCallbacks) {
-				callback(window->width, window->height);
+				callback(newWidth, newHeight);
+			}
+		}
+		
+		static void KeyCallback(GLFWwindow* handle, int key, int scancode, int action, int mods) {
+			auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(handle));
+			for (auto[name, callback] : window->keyCallbacks) {
+				callback(key, scancode, action, mods);
 			}
 		}
 
@@ -49,6 +57,7 @@
 			handle = glfwCreateWindow(width, height, title.c_str(), monitor, share);
 			glfwSetWindowUserPointer(handle, this);
 			glfwSetFramebufferSizeCallback(handle, ResizeCallback);
+			glfwSetKeyCallback(handle, KeyCallback);
 		}
 
 		~Window() {
@@ -82,6 +91,14 @@
 		
 		void RemoveResizeCallback(std::string name) {
 			resizeCallbacks.erase(name);
+		}
+
+		void AddKeyCallback(std::string name, std::function<void(int,int,int,int)>&& callback) {
+			keyCallbacks[name] = std::forward<std::function<void(int,int,int,int)>>(callback);
+		}
+		
+		void RemoveKeyCallback(std::string name) {
+			keyCallbacks.erase(name);
 		}
 
 		bool IsActive() {

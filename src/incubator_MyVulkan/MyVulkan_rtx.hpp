@@ -35,6 +35,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 	struct UBO {
 		glm::mat4 viewInverse;
 		glm::mat4 projInverse;
+		glm::vec4 light;
 	};
 	
 	VkBuffer uniformBuffer;
@@ -57,7 +58,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 	
 	void Init() override {
 		clearColor = {0,0,0,1};
-		useRayTracing = true;
+		useRayTracing = false;
 	}
 
 	void LoadScene() override {
@@ -72,10 +73,16 @@ class MyVulkanTest : public MyVulkanRenderer {
 			{{ 0.5f,-0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
 			{{ 0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}},
 			{{-0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}},
+			//
+			{{-8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
+			{{ 8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
+			{{ 8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
+			{{-8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
 		};
 
 	}
@@ -666,6 +673,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Acceleration Structure
 			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructureMemory, nullptr);
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
+			rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
 			testObjectGeometryInstances.clear();
 			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemory, nullptr);
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructure, nullptr);
@@ -844,13 +852,13 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Current camera position
 			ubo.viewInverse = glm::inverse(glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1)));
 			// Projection
-			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 10.0f));
+			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f));
 			ubo.projInverse[1][1] *= -1;
 		} else {
 			// Current camera position
 			ubo.viewInverse = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));
 			// Projection
-			ubo.projInverse = glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 10.0f);
+			ubo.projInverse = glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
 			ubo.projInverse[1][1] *= -1;
 		}
 		// Update memory
