@@ -59,17 +59,11 @@ class MyVulkanTest : public MyVulkanRenderer {
 	std::vector<GeometryInstance> testObjectGeometryInstances;
 	
 	std::vector<VkRayTracingShaderGroupCreateInfoNV> rayTracingShaderGroups;
-	
 	const static int RAYTRACING_GROUP_INDEX_RGEN = 0;
 	const static int RAYTRACING_GROUP_INDEX_RMISS = 1;
-	const static int RAYTRACING_GROUP_INDEX_RCHIT = 2;
-	
-	// const static int RAYTRACING_GROUP_INDEX_RGEN = 0;
-	// const static int RAYTRACING_GROUP_INDEX_RMISS = 1;
-	// const static int RAYTRACING_GROUP_INDEX_RMISS_SHADOW = 2;
-	// const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
-	// const static int RAYTRACING_GROUP_INDEX_RCHIT_SHADOW = 4;
-		
+	const static int RAYTRACING_GROUP_INDEX_RMISS_SHADOW = 2;
+	const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
+	const static int RAYTRACING_GROUP_INDEX_RCHIT_SHADOW = 4;
 	
 	
 	void Init() override {
@@ -408,10 +402,11 @@ class MyVulkanTest : public MyVulkanRenderer {
 			testShader = new VulkanShaderProgram(renderingDevice, {
 				{"incubator_MyVulkan/assets/shaders/rtx.rgen"},
 				{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
+				{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
 				{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
 			});
 			
-			rayTracingShaderGroups.resize(3);
+			rayTracingShaderGroups.resize(5);
 			
 			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RGEN] = {
 				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
@@ -431,7 +426,25 @@ class MyVulkanTest : public MyVulkanRenderer {
 				VK_SHADER_UNUSED_NV, // anyHitShader;
 				VK_SHADER_UNUSED_NV // intersectionShader;
 			};
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RMISS_SHADOW] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
+				2, // generalShader
+				VK_SHADER_UNUSED_NV, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				VK_SHADER_UNUSED_NV // intersectionShader;
+			};
 			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
+				VK_SHADER_UNUSED_NV, // generalShader
+				3, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				VK_SHADER_UNUSED_NV // intersectionShader;
+			};
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT_SHADOW] = {
 				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
 				nullptr,
 				VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
@@ -440,8 +453,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 				VK_SHADER_UNUSED_NV, // anyHitShader;
 				VK_SHADER_UNUSED_NV // intersectionShader;
 			};
-			// rayTracingShaderGroups.emplace_back[] = {};
-			// rayTracingShaderGroups.emplace_back[] = {};
 			
 			// Uniforms
 			testShader->AddLayoutBindings({
@@ -532,7 +543,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			rayTracingPipelineInfo.pStages = testShader->GetStages().data();
 			rayTracingPipelineInfo.groupCount = (uint)rayTracingShaderGroups.size();
 			rayTracingPipelineInfo.pGroups = rayTracingShaderGroups.data();
-			rayTracingPipelineInfo.maxRecursionDepth = 1;
+			rayTracingPipelineInfo.maxRecursionDepth = 2;
 			rayTracingPipelineInfo.layout = rayTracingPipelineLayout;
 			
 			if (renderingDevice->CreateRayTracingPipelinesNV(VK_NULL_HANDLE, 1, &rayTracingPipelineInfo, nullptr, &rayTracingPipeline) != VK_SUCCESS) //TODO support multiple ray tracing pipelines
@@ -552,9 +563,9 @@ class MyVulkanTest : public MyVulkanRenderer {
 				throw std::runtime_error("Failed to get ray tracing shader group handles");
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RGEN);
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS);
-			// data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS_SHADOW);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS_SHADOW);
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT);
-			// data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SHADOW);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SHADOW);
 			renderingDevice->UnmapMemory(rayTracingShaderBindingTableBufferMemory);
 			delete[] shaderHandleStorage;
 		}
