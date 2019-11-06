@@ -12,15 +12,10 @@ private:
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
-	
-	std::vector<VkRayTracingShaderGroupCreateInfoNV> rayTracingGroups;
 
 public:
 
-	const int RAYTRACING_GROUP_INDEX_RGEN = 0;
-	const int RAYTRACING_GROUP_INDEX_RMISS = 1;
-	const int RAYTRACING_GROUP_INDEX_RCHIT = 2;
-	const int RAYTRACING_GROUP_INDEX_RAHIT = 3;
+
 	
 	// enum : int {
 	// 	vert, // vertex
@@ -114,55 +109,6 @@ public:
 			delete shader;
 	}
 
-	void GenerateRayTracingGroups() {
-		rayTracingGroups.resize(3); //TODO make this dynamic
-		for (uint i = 0; i < shaders.size(); ++i) {
-			std::string_view type = shaders[i]->type;
-			if (type == "rgen") {
-				rayTracingGroups[RAYTRACING_GROUP_INDEX_RGEN] = {
-					VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-					nullptr,
-					VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
-					i, // generalShader
-					VK_SHADER_UNUSED_NV, // closestHitShader;
-					VK_SHADER_UNUSED_NV, // anyHitShader;
-					VK_SHADER_UNUSED_NV // intersectionShader;
-				};
-			} else if (type == "rmiss") {
-				rayTracingGroups[RAYTRACING_GROUP_INDEX_RMISS] = {
-					VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-					nullptr,
-					VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
-					i, // generalShader
-					VK_SHADER_UNUSED_NV, // closestHitShader;
-					VK_SHADER_UNUSED_NV, // anyHitShader;
-					VK_SHADER_UNUSED_NV // intersectionShader;
-				};
-			} else if (type == "rchit") {
-				rayTracingGroups[RAYTRACING_GROUP_INDEX_RCHIT] = {
-					VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-					nullptr,
-					VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
-					VK_SHADER_UNUSED_NV, // generalShader
-					i, // closestHitShader;
-					VK_SHADER_UNUSED_NV, // anyHitShader;
-					VK_SHADER_UNUSED_NV // intersectionShader;
-				};
-			// } else if (type == "rahit") {
-			// 	rayTracingGroups[RAYTRACING_GROUP_INDEX_RAHIT] = {
-			// 		VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			// 		nullptr,
-			// 		VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
-			// 		VK_SHADER_UNUSED_NV, // generalShader
-			// 		VK_SHADER_UNUSED_NV, // closestHitShader;
-			// 		i, // anyHitShader;
-			// 		VK_SHADER_UNUSED_NV // intersectionShader;
-			// 	};
-			}
-			//TODO add support for rint & rcall
-		}
-	}
-	
 	inline void AddStage(VulkanShader* shader) {
 		stages.push_back(shader->stageInfo);
 	}
@@ -193,10 +139,6 @@ public:
 
 	inline std::vector<VkPipelineShaderStageCreateInfo>& GetStages() {
 		return stages;
-	}
-
-	inline std::vector<VkRayTracingShaderGroupCreateInfoNV>& GetRayTracingGroups() {
-		return rayTracingGroups;
 	}
 
 	inline std::vector<VkVertexInputBindingDescription>& GetBindings() {

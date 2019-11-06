@@ -36,6 +36,7 @@ void main()
 	imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(hitValue, 0.0));
 }
 
+
 #############################################################
 
 #shader rchit

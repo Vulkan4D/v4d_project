@@ -58,6 +58,20 @@ class MyVulkanTest : public MyVulkanRenderer {
 	std::vector<VkGeometryNV> testObjectGeometries;
 	std::vector<GeometryInstance> testObjectGeometryInstances;
 	
+	std::vector<VkRayTracingShaderGroupCreateInfoNV> rayTracingShaderGroups;
+	
+	const static int RAYTRACING_GROUP_INDEX_RGEN = 0;
+	const static int RAYTRACING_GROUP_INDEX_RMISS = 1;
+	const static int RAYTRACING_GROUP_INDEX_RCHIT = 2;
+	
+	// const static int RAYTRACING_GROUP_INDEX_RGEN = 0;
+	// const static int RAYTRACING_GROUP_INDEX_RMISS = 1;
+	// const static int RAYTRACING_GROUP_INDEX_RMISS_SHADOW = 2;
+	// const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
+	// const static int RAYTRACING_GROUP_INDEX_RCHIT_SHADOW = 4;
+		
+	
+	
 	void Init() override {
 		clearColor = {0,0,0,1};
 		useRayTracing = true;
@@ -211,6 +225,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 				0.0f, 1.0f, 0.0f, 0.0f,
 				0.0f, 0.0f, 1.0f, 0.0f
 			};
+			// Object instance
 			testObjectGeometryInstances.push_back({
 				transform,
 				0, // instanceId
@@ -219,6 +234,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 				VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
 				rayTracingBottomLevelAccelerationStructureHandle // accelerationStructureHandle
 			});
+			// // Shadow instance
+			// testObjectGeometryInstances.push_back({
+			// 	transform,
+			// 	1, // instanceId
+			// 	0xff, // mask
+			// 	2, // instanceOffset
+			// 	VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
+			// 	rayTracingBottomLevelAccelerationStructureHandle // accelerationStructureHandle
+			// });
 			
 			// Ray Tracing Geometry Instances
 			renderingDevice->CreateBuffer(sizeof(GeometryInstance) * testObjectGeometryInstances.size(), VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffer, instanceBufferMemory, testObjectGeometryInstances.data());
@@ -387,6 +411,38 @@ class MyVulkanTest : public MyVulkanRenderer {
 				{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
 			});
 			
+			rayTracingShaderGroups.resize(3);
+			
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RGEN] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
+				0, // generalShader
+				VK_SHADER_UNUSED_NV, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				VK_SHADER_UNUSED_NV // intersectionShader;
+			};
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RMISS] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
+				1, // generalShader
+				VK_SHADER_UNUSED_NV, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				VK_SHADER_UNUSED_NV // intersectionShader;
+			};
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
+				VK_SHADER_UNUSED_NV, // generalShader
+				2, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				VK_SHADER_UNUSED_NV // intersectionShader;
+			};
+			// rayTracingShaderGroups.emplace_back[] = {};
+			// rayTracingShaderGroups.emplace_back[] = {};
+			
 			// Uniforms
 			testShader->AddLayoutBindings({
 				{// accelerationStructure
@@ -455,8 +511,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 		
 		
 		
-		
-		
 		// Ray Tracing Pipeline
 		
 		if (useRayTracing) {
@@ -469,14 +523,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 			if (renderingDevice->CreatePipelineLayout(&pipelineLayoutCreateInfo, nullptr, &rayTracingPipelineLayout) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create ray tracing pipeline layout");
 				
-			testShader->GenerateRayTracingGroups();
+			
+			
 		
 			VkRayTracingPipelineCreateInfoNV rayTracingPipelineInfo {};
 			rayTracingPipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
 			rayTracingPipelineInfo.stageCount = (uint)testShader->GetStages().size();
 			rayTracingPipelineInfo.pStages = testShader->GetStages().data();
-			rayTracingPipelineInfo.groupCount = (uint)testShader->GetRayTracingGroups().size();
-			rayTracingPipelineInfo.pGroups = testShader->GetRayTracingGroups().data();
+			rayTracingPipelineInfo.groupCount = (uint)rayTracingShaderGroups.size();
+			rayTracingPipelineInfo.pGroups = rayTracingShaderGroups.data();
 			rayTracingPipelineInfo.maxRecursionDepth = 1;
 			rayTracingPipelineInfo.layout = rayTracingPipelineLayout;
 			
@@ -488,16 +543,18 @@ class MyVulkanTest : public MyVulkanRenderer {
 			
 			
 			// Shader Binding Table
-			const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * testShader->GetRayTracingGroups().size();
+			const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * rayTracingShaderGroups.size();
 			renderingDevice->CreateBuffer(sbtSize, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, rayTracingShaderBindingTableBuffer, rayTracingShaderBindingTableBufferMemory);
 			uint8_t* data;
 			renderingDevice->MapMemory(rayTracingShaderBindingTableBufferMemory, 0, sbtSize, 0, (void**)&data);
 			auto shaderHandleStorage = new uint8_t[sbtSize];
-			if (renderingDevice->GetRayTracingShaderGroupHandlesNV(rayTracingPipeline, 0, (uint)testShader->GetRayTracingGroups().size(), sbtSize, shaderHandleStorage) != VK_SUCCESS)
+			if (renderingDevice->GetRayTracingShaderGroupHandlesNV(rayTracingPipeline, 0, (uint)rayTracingShaderGroups.size(), sbtSize, shaderHandleStorage) != VK_SUCCESS)
 				throw std::runtime_error("Failed to get ray tracing shader group handles");
-			data += CopyShaderIdentifier(data, shaderHandleStorage, testShader->RAYTRACING_GROUP_INDEX_RGEN);
-			data += CopyShaderIdentifier(data, shaderHandleStorage, testShader->RAYTRACING_GROUP_INDEX_RMISS);
-			data += CopyShaderIdentifier(data, shaderHandleStorage, testShader->RAYTRACING_GROUP_INDEX_RCHIT);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RGEN);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS);
+			// data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS_SHADOW);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT);
+			// data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SHADOW);
 			renderingDevice->UnmapMemory(rayTracingShaderBindingTableBufferMemory);
 			delete[] shaderHandleStorage;
 		}
@@ -779,9 +836,9 @@ class MyVulkanTest : public MyVulkanRenderer {
 		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, rayTracingPipelineLayout, 0, 1, &descriptorSet, 0, 0);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetRayGenShader = bindingStride * testShader->RAYTRACING_GROUP_INDEX_RGEN;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * testShader->RAYTRACING_GROUP_INDEX_RMISS;
-		VkDeviceSize bindingOffsetHitShader = bindingStride * testShader->RAYTRACING_GROUP_INDEX_RCHIT;
+		VkDeviceSize bindingOffsetRayGenShader = bindingStride * RAYTRACING_GROUP_INDEX_RGEN;
+		VkDeviceSize bindingOffsetMissShader = bindingStride * RAYTRACING_GROUP_INDEX_RMISS;
+		VkDeviceSize bindingOffsetHitShader = bindingStride * RAYTRACING_GROUP_INDEX_RCHIT;
 		
 		renderingDevice->CmdTraceRaysNV(
 			commandBuffer, 
