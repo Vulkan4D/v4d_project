@@ -49,11 +49,41 @@ int main() {
 			// Quit application upon pressing the Escape key
 			if (action == GLFW_PRESS) {
 				switch (key) {
+					
+					// Quit
 					case GLFW_KEY_ESCAPE:
 						glfwSetWindowShouldClose(window->GetHandle(), 1);
 						break;
+						
+					// Toggle between Rasterization/RayTracing
 					case GLFW_KEY_R:
 						vulkan->ToggleRayTracing();
+						break;
+						
+					// Moving the light's position/intensity
+					case GLFW_KEY_LEFT:
+						vulkan->light.x -= 0.5f;
+						break;
+					case GLFW_KEY_RIGHT:
+						vulkan->light.x += 0.5f;
+						break;
+					case GLFW_KEY_DOWN:
+						vulkan->light.y -= 0.5f;
+						break;
+					case GLFW_KEY_UP:
+						vulkan->light.y += 0.5f;
+						break;
+					case GLFW_KEY_PAGE_DOWN:
+						vulkan->light.z -= 0.5f;
+						break;
+					case GLFW_KEY_PAGE_UP:
+						vulkan->light.z += 0.5f;
+						break;
+					case GLFW_KEY_END:
+						vulkan->light.w -= 0.1f;
+						break;
+					case GLFW_KEY_HOME:
+						vulkan->light.w += 0.1f;
 						break;
 				}
 			}

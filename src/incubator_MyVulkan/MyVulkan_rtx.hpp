@@ -5,8 +5,10 @@
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
-	float refl;
+	float reflectiveness;
 	glm::vec4 color;
+	glm::vec3 normal;
+	float roughness;
 	
 	bool operator==(const Vertex& other) const {
 		return pos == other.pos && color == other.color;
@@ -58,26 +60,26 @@ class MyVulkanTest : public MyVulkanRenderer {
 	
 	void Init() override {
 		clearColor = {0,0,0,1};
-		useRayTracing = false;
+		useRayTracing = true;
 	}
 
 	void LoadScene() override {
 
 		testObjectVertices = {
-			{{-0.5f,-0.5f, 0.0f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
-			{{ 0.5f,-0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
-			{{ 0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}},
-			{{-0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}},
+			{{-0.5f,-0.5f, 0.0f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f,-0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 			//
-			{{-0.5f,-0.5f,-0.5f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
-			{{ 0.5f,-0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
-			{{ 0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}},
-			{{-0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}},
+			{{-0.5f,-0.5f,-0.5f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f,-0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 			//
-			{{-8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
-			{{ 8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
-			{{ 8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
-			{{-8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}},
+			{{-8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
@@ -433,8 +435,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Vertex Input structure
 			testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 				{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-				{1, offsetof(Vertex, Vertex::refl), VK_FORMAT_R32_SFLOAT},
+				{1, offsetof(Vertex, Vertex::reflectiveness), VK_FORMAT_R32_SFLOAT},
 				{2, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{3, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32_SFLOAT},
+				{4, offsetof(Vertex, Vertex::roughness), VK_FORMAT_R32_SFLOAT},
 			});
 
 			// Uniforms
@@ -840,7 +844,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 		// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
 		// );
 	}
-
+	
 	void FrameUpdate(uint imageIndex) override {
 		// static auto startTime = std::chrono::high_resolution_clock::now();
 		// auto currentTime = std::chrono::high_resolution_clock::now();
@@ -861,6 +865,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			ubo.projInverse = glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
 			ubo.projInverse[1][1] *= -1;
 		}
+		ubo.light = light;
 		// Update memory
 		void* data;
 		renderingDevice->MapMemory(uniformBufferMemory, 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
@@ -868,5 +873,8 @@ class MyVulkanTest : public MyVulkanRenderer {
 		renderingDevice->UnmapMemory(uniformBufferMemory);
 	}
 
+public:
+	glm::vec4 light {1.0,1.0,3.0, 1.0};
+	
 	
 };

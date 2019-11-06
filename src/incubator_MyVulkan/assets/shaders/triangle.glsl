@@ -10,9 +10,9 @@ struct V2F {
 
 // UNIFORMS
 layout(binding = 0) uniform UBO {
-    // mat4 model;
     mat4 view;
     mat4 proj;
+    vec4 light;
 } ubo;
 
 ##################################################################
@@ -21,23 +21,13 @@ layout(binding = 0) uniform UBO {
 
 // INPUT
 layout(location = 0) in vec3 in_position;
-layout(location = 1) in float in_refl;
+layout(location = 1) in float in_reflectiveness;
 layout(location = 2) in vec4 in_color;
+layout(location = 3) in vec3 in_normal;
+layout(location = 4) in float in_roughness;
 
 // OUTPUT
 layout(location = 0) out V2F v;
-
-// vec2 positions[3] = vec2[](
-//     vec2(0.0, -0.5),
-//     vec2(0.5, 0.5),
-//     vec2(-0.5, 0.5)
-// );
-
-// vec3 colors[3] = vec3[](
-//     vec3(1.0, 0.0, 0.0),
-//     vec3(0.0, 1.0, 0.0),
-//     vec3(0.0, 0.0, 1.0)
-// );
 
 // ENTRY POINT
 void main() {

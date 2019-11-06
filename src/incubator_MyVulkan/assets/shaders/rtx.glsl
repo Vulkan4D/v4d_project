@@ -42,21 +42,35 @@ void main()
 
 struct Vertex {
 	vec3 pos;
-	float refl;
+	float reflectiveness;
 	vec4 color;
+	vec3 normal;
+	float roughness;
 };
-uint vertexSize = 2;
+uint vertexSize = 3;
 
+// Ray Tracing
 layout(location = 0) rayPayloadInNV vec3 hitValue;
 hitAttributeNV vec3 attribs;
+
+// Uniform Buffers
+layout(binding = 2) uniform UBO {
+    mat4 view;
+    mat4 proj;
+    vec4 light;
+} ubo;
+
+// Storage Buffers
 layout(binding = 3, set = 0) buffer Vertices { vec4 v[]; } vertexBuffer;
 layout(binding = 4, set = 0) buffer Indices { uint i[]; } indexBuffer;
 
 Vertex unpackVertex(uint index) {
 	Vertex v;
 	v.pos = vertexBuffer.v[vertexSize * index + 0].xyz;
-	v.refl = vertexBuffer.v[vertexSize * index + 0].w;
+	v.reflectiveness = vertexBuffer.v[vertexSize * index + 0].w;
 	v.color = vertexBuffer.v[vertexSize * index + 1];
+	v.normal = vertexBuffer.v[vertexSize * index + 2].xyz;
+	v.roughness = vertexBuffer.v[vertexSize * index + 2].w;
 	return v;
 }
 
@@ -68,17 +82,16 @@ void main()
 	Vertex v1 = unpackVertex(index.y);
 	Vertex v2 = unpackVertex(index.z);
 	
-	// // Interpolate normal
-	// vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
+	// Interpolate normal
+	vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
 
-	// // Basic lighting
-	// vec3 lightVector = normalize(cam.lightPos.xyz);
-	// float dot_product = max(dot(lightVector, normal), 0.2);
-	// hitValue = v0.color * vec3(dot_product);
-	
+	// Interpolate color
 	vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 
-	hitValue = color.xyz;
+	// Basic lighting
+	vec3 lightVector = normalize(ubo.light.xyz);
+	float dot_product = max(dot(lightVector, normal), 0.5);
+	hitValue = color.rgb * vec3(dot_product) * ubo.light.w;
 }
 
 
