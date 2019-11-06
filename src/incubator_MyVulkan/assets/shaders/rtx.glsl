@@ -73,12 +73,14 @@ Vertex unpackVertex(uint index) {
 }
 
 void main() {
+	// Hit Triangle vertices
 	const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 	ivec3 index = ivec3(indexBuffer.i[3 * gl_PrimitiveID], indexBuffer.i[3 * gl_PrimitiveID + 1], indexBuffer.i[3 * gl_PrimitiveID + 2]);
 	Vertex v0 = unpackVertex(index.x);
 	Vertex v1 = unpackVertex(index.y);
 	Vertex v2 = unpackVertex(index.z);
 	
+	// Hit World Position
 	vec3 origin = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	
 	// Interpolate normal
