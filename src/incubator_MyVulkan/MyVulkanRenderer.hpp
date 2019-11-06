@@ -22,7 +22,7 @@ protected: // class members
 	VulkanQueue presentationQueue;
 
 	// Pools
-	VkCommandPool graphicsCommandPool, transferCommandPool;
+	VkCommandPool commandPool;
 	VkDescriptorPool descriptorPool;
 
 	// Sync objects
@@ -35,7 +35,7 @@ protected: // class members
 	VulkanSwapChain* swapChain = nullptr; // make sure this one is initialized to nullptr
 
 	// Render pass (and graphics pipelines)
-	VulkanRenderPass* renderPass;
+	VulkanRenderPass* renderPass = nullptr;
 
 	// Framebuffers
 	std::vector<VkFramebuffer> swapChainFrameBuffers;
@@ -44,17 +44,17 @@ protected: // class members
 	std::vector<VkCommandBuffer> commandBuffers;
 
 	// Render Target (Color Attachment)
-	VkImage colorImage;
-	VkDeviceMemory colorImageMemory;
-	VkImageView colorImageView;
+	VkImage colorImage = VK_NULL_HANDLE;
+	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
+	VkImageView colorImageView = VK_NULL_HANDLE;
 
 	// MultiSampling
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 
 	// Depth Buffer
-	VkImage depthImage;
-	VkDeviceMemory depthImageMemory;
-	VkImageView depthImageView;
+	VkImage depthImage = VK_NULL_HANDLE;
+	VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
+	VkImageView depthImageView = VK_NULL_HANDLE;
 	VkFormat depthImageFormat;
 
 	// Constants
@@ -67,6 +67,7 @@ protected: // class members
 	bool renderTypeDirty = false;
 	
 	VkClearColorValue clearColor {0,0,0,1};
+	
 	
 	// Ray Tracing
 	bool useRayTracing = true;
@@ -81,6 +82,13 @@ protected: // class members
 	VkPipeline rayTracingPipeline;
 	VkBuffer rayTracingShaderBindingTableBuffer;
 	VkDeviceMemory rayTracingShaderBindingTableBufferMemory;
+	struct RayTracingStorageImage {
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		VkImage image = VK_NULL_HANDLE;
+		VkImageView view = VK_NULL_HANDLE;
+		VkFormat format;
+	} rayTracingStorageImage;
+
 
 protected: // Abstract methods
 	virtual void Init() = 0;
@@ -184,39 +192,6 @@ protected: // Virtual INIT Methods
 		delete renderingDevice;
 	}
 
-	void CreatePools() {
-		renderingDevice->CreateCommandPool(graphicsQueue.index, 0, &graphicsCommandPool);
-		renderingDevice->CreateCommandPool(graphicsQueue.index, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT, &transferCommandPool);
-		if (useRayTracing) {
-			renderingDevice->CreateDescriptorPool(
-				{
-				VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 
-				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-				}, 
-				swapChain->imageViews.size(), 
-				descriptorPool, 
-				0
-			);
-		} else {
-			renderingDevice->CreateDescriptorPool(
-				{
-					VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
-					VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
-				}, 
-				swapChain->imageViews.size(), 
-				descriptorPool, 
-				VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-			);
-		}
-	}
-
-	void DestroyPools() {
-		renderingDevice->DestroyCommandPool(graphicsCommandPool);
-		renderingDevice->DestroyCommandPool(transferCommandPool);
-		renderingDevice->DestroyDescriptorPool(descriptorPool);
-	}
-
 	void CreateSyncObjects() {
 		// each of the events in the RenderFrame method re set in motion using a single function call, but they are executed asynchronously. 
 		// The function calls will return before the opeations are actually finished and the order of execution is also undefined.
@@ -256,6 +231,14 @@ protected: // Virtual INIT Methods
 			renderingDevice->DestroySemaphore(imageAvailableSemaphores[i], nullptr);
 			renderingDevice->DestroyFence(inFlightFences[i], nullptr);
 		}
+	}
+
+	void CreatePools() {
+		renderingDevice->CreateCommandPool(graphicsQueue.index, 0, &commandPool);
+	}
+
+	void DestroyPools() {
+		renderingDevice->DestroyCommandPool(commandPool);
 	}
 
 	void CreateSwapChain() {
@@ -449,6 +432,14 @@ protected: // Virtual INIT Methods
 	virtual void CreateFrameBuffers() {
 		std::lock_guard lock(renderingMutex);
 		
+		if (useRayTracing) {
+			if (swapChainFrameBuffers.size() > 0) {
+				DestroyFrameBuffers();
+				swapChainFrameBuffers.resize(0);
+			}
+			return;
+		}
+		
 		swapChainFrameBuffers.resize(swapChain->imageViews.size());
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
 			std::array<VkImageView, 3> attachments = {
@@ -459,7 +450,7 @@ protected: // Virtual INIT Methods
 			// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
 			VkFramebufferCreateInfo framebufferCreateInfo = {};
 			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = useRayTracing? VK_NULL_HANDLE : renderPass->handle;
+			framebufferCreateInfo.renderPass = renderPass->handle;
 			framebufferCreateInfo.attachmentCount = attachments.size();
 			framebufferCreateInfo.pAttachments = attachments.data(); // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
 			framebufferCreateInfo.width = swapChain->extent.width;
@@ -482,10 +473,10 @@ protected: // Virtual INIT Methods
 		
 		// Because one of the drawing commands involves binding the right VkFramebuffer, we'll actually have to record a command buffer for every image in the swap chain once again.
 		// Command buffers will be automatically freed when their command pool is destroyed, so we don't need an explicit cleanup
-		commandBuffers.resize(swapChainFrameBuffers.size());
+		commandBuffers.resize(swapChain->imageViews.size());
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = graphicsCommandPool;
+		allocInfo.commandPool = commandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 						/*	VK_COMMAND_BUFFER_LEVEL_PRIMARY = Can be submitted to a queue for execution, but cannot be called from other command buffers
 							VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
@@ -551,10 +542,12 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyCommandBuffers() {
-		renderingDevice->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		renderingDevice->FreeCommandBuffers(commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 	}
 
 	virtual void CreateColorResources() {
+		if (useRayTracing) return;
+		
 		VkFormat colorFormat = swapChain->format.format;
 		renderingDevice->CreateImage(
 			swapChain->extent.width, 
@@ -584,12 +577,17 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyColorResources() {
-		renderingDevice->DestroyImageView(colorImageView, nullptr);
-		renderingDevice->DestroyImage(colorImage, nullptr);
-		renderingDevice->FreeMemory(colorImageMemory, nullptr);
+		if (colorImage != VK_NULL_HANDLE) {
+			renderingDevice->DestroyImageView(colorImageView, nullptr);
+			renderingDevice->DestroyImage(colorImage, nullptr);
+			renderingDevice->FreeMemory(colorImageMemory, nullptr);
+			colorImage = VK_NULL_HANDLE;
+		}
 	}
 
 	virtual void CreateDepthResources() {
+		if (useRayTracing) return;
+		
 		// Format
 		depthImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
@@ -626,9 +624,54 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyDepthResources() {
-		renderingDevice->DestroyImageView(depthImageView, nullptr);
-		renderingDevice->DestroyImage(depthImage, nullptr);
-		renderingDevice->FreeMemory(depthImageMemory, nullptr);
+		if (depthImage != VK_NULL_HANDLE) {
+			renderingDevice->DestroyImageView(depthImageView, nullptr);
+			renderingDevice->DestroyImage(depthImage, nullptr);
+			renderingDevice->FreeMemory(depthImageMemory, nullptr);
+			depthImage = VK_NULL_HANDLE;
+		}
+	}
+
+	virtual void CreateRayTracingStorageImage() {
+		if (!useRayTracing) return;
+		
+		VkFormat colorFormat = swapChain->format.format;
+		renderingDevice->CreateImage(
+			swapChain->extent.width, 
+			swapChain->extent.height, 
+			1, VK_SAMPLE_COUNT_1_BIT,
+			colorFormat,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			rayTracingStorageImage.image,
+			rayTracingStorageImage.memory
+		);
+
+		VkImageViewCreateInfo viewInfo = {};
+			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			viewInfo.image = rayTracingStorageImage.image;
+			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewInfo.format = colorFormat;
+			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			viewInfo.subresourceRange.baseMipLevel = 0;
+			viewInfo.subresourceRange.levelCount = 1;
+			viewInfo.subresourceRange.baseArrayLayer = 0;
+			viewInfo.subresourceRange.layerCount = 1;
+		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &rayTracingStorageImage.view) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture image view");
+		}
+		
+		TransitionImageLayout(rayTracingStorageImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1);
+	}
+
+	virtual void DestroyRayTracingStorageImage() {
+		if (rayTracingStorageImage.image != VK_NULL_HANDLE) {
+			renderingDevice->DestroyImageView(rayTracingStorageImage.view, nullptr);
+			renderingDevice->DestroyImage(rayTracingStorageImage.image, nullptr);
+			renderingDevice->FreeMemory(rayTracingStorageImage.memory, nullptr);
+			rayTracingStorageImage.image = VK_NULL_HANDLE;
+		}
 	}
 
 protected: // Helper methods
@@ -660,9 +703,6 @@ protected: // Helper methods
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		// renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, VK_NULL_HANDLE);
-		// renderingDevice->QueueWaitIdle(graphicsQueue.handle); // Using a fence instead would allow to schedule multiple transfers simultaneously and wait for all of them to complete, instead of executing one at a time.
-
 		VkFenceCreateInfo fenceInfo {};
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fenceInfo.flags = 0;
@@ -673,7 +713,7 @@ protected: // Helper methods
 		if (renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to submit queue");
 
-		if (renderingDevice->WaitForFences(1, &fence, VK_TRUE, 1000000000l*3600 /* nanoseconds */))
+		if (renderingDevice->WaitForFences(1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max() /* nanoseconds */))
 			throw std::runtime_error("Failed to wait for fence to signal");
 
 		renderingDevice->DestroyFence(fence, nullptr);
@@ -682,9 +722,9 @@ protected: // Helper methods
 	}
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
-		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(commandPool);
 		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels);
-		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 	
 	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
@@ -701,6 +741,8 @@ protected: // Helper methods
 		barrier.subresourceRange.levelCount = mipLevels;
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = 1;
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = 0;
 		//
 		if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -708,30 +750,130 @@ protected: // Helper methods
 			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		}
 		//
-		VkPipelineStageFlags srcStage, dstStage;
-		// Texture Transfer
-		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-			barrier.srcAccessMask = 0;
-			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-			dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		} else 
-		// Texture Fragment Shader
-		if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-			dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		} else 
-		// Depth Buffer
-		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-			barrier.srcAccessMask = 0;
-			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-			dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		} else {
-			throw std::invalid_argument("Unsupported layout transition");
+		VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		
+		
+		// // Texture Transfer
+		// if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		// 	barrier.srcAccessMask = 0;
+		// 	barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		// 	srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		// 	dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		// } else 
+		// // Texture Fragment Shader
+		// if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		// 	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		// 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		// 	srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		// 	dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		// } else 
+		// // Depth Buffer
+		// if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		// 	barrier.srcAccessMask = 0;
+		// 	barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		// 	srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		// 	dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		// } else {
+		// 	throw std::invalid_argument("Unsupported layout transition");
+		// }
+		
+	
+		// Source layouts (old)
+		// Source access mask controls actions that have to be finished on the old layout
+		// before it will be transitioned to the new layout
+		switch (oldLayout) {
+			case VK_IMAGE_LAYOUT_UNDEFINED:
+				// Image layout is undefined (or does not matter)
+				// Only valid as initial layout
+				// No flags required, listed only for completeness
+				barrier.srcAccessMask = 0;
+				break;
+
+			case VK_IMAGE_LAYOUT_PREINITIALIZED:
+				// Image is preinitialized
+				// Only valid as initial layout for linear images, preserves memory contents
+				// Make sure host writes have been finished
+				barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+				// Image is a color attachment
+				// Make sure any writes to the color buffer have been finished
+				barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+				// Image is a depth/stencil attachment
+				// Make sure any writes to the depth/stencil buffer have been finished
+				barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+				// Image is a transfer source 
+				// Make sure any reads from the image have been finished
+				barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+				// Image is a transfer destination
+				// Make sure any writes to the image have been finished
+				barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+				// Image is read by a shader
+				// Make sure any shader reads from the image have been finished
+				barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				break;
+			default:
+				// Other source layouts aren't handled (yet)
+				break;
 		}
+
+		// Target layouts (new)
+		// Destination access mask controls the dependency for the new image layout
+		switch (newLayout) {
+			case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+				// Image will be used as a transfer destination
+				// Make sure any writes to the image have been finished
+				barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+				// Image will be used as a transfer source
+				// Make sure any reads from the image have been finished
+				barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+				// Image will be used as a color attachment
+				// Make sure any writes to the color buffer have been finished
+				barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+				// Image layout will be used as a depth/stencil attachment
+				// Make sure any writes to depth/stencil buffer have been finished
+				barrier.dstAccessMask = barrier.dstAccessMask | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				break;
+
+			case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+				// Image will be read in a shader (sampler, input attachment)
+				// Make sure any writes to the image have been finished
+				if (barrier.srcAccessMask == 0)
+				{
+					barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+				}
+				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				break;
+			default:
+				// Other source layouts aren't handled (yet)
+				break;
+		}
+
+		
+		
+		
 		/*
 		Transfer writes must occur in the pipeline transfer stage. 
 		Since the writes dont have to wait on anything, we mayy specify an empty access mask and the earliest possible pipeline stage VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT for the pre-barrier operations.
@@ -760,7 +902,7 @@ protected: // Helper methods
 	}
 
 	void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(commandPool);
 
 		VkBufferCopy copyRegion = {};
 		copyRegion.srcOffset = 0;
@@ -768,11 +910,11 @@ protected: // Helper methods
 		copyRegion.size = size;
 		renderingDevice->CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 
 	void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(commandPool);
 
 		VkBufferImageCopy region = {};
 		region.bufferOffset = 0;
@@ -796,7 +938,7 @@ protected: // Helper methods
 			&region
 		);
 
-		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 
 	VkDeviceSize CopyShaderIdentifier(uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex) {
@@ -817,7 +959,7 @@ protected: // Helper methods
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
 
-		auto commandBuffer = BeginSingleTimeCommands(transferCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(commandPool);
 
 		VkImageMemoryBarrier barrier = {};
 			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -900,7 +1042,7 @@ protected: // Helper methods
 			1, &barrier
 		);
 
-		EndSingleTimeCommands(transferCommandPool, commandBuffer);
+		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 
 public: // Init/Reset Methods
@@ -915,21 +1057,27 @@ public: // Init/Reset Methods
 		DestroyFrameBuffers();
 		DestroyGraphicsPipelines();
 		DestroyRenderPass();
-		DestroyDepthResources();
-		DestroyColorResources();
 		// Remove Scene data
 		DeleteSceneFromDevice();
 
-		// Re-Create the SwapChain
+		// Destroy some resources
+		DestroyRayTracingStorageImage();
+		DestroyDepthResources();
+		DestroyColorResources();
 		DestroyPools();
+		
+		// Re-Create the SwapChain
 		CreateSwapChain();
+		
+		// Create some resources
 		CreatePools();
+		CreateColorResources();
+		CreateDepthResources();
+		CreateRayTracingStorageImage();
 
 		// Add Scene data
 		SendSceneToDevice();
 		// Graphics pipeline
-		CreateColorResources();
-		CreateDepthResources();
 		CreateRenderPass(); // shader attachments are assigned here
 		CreateGraphicsPipelines(); // shaders are assigned here
 		CreateFrameBuffers();
@@ -941,15 +1089,17 @@ public: // Init/Reset Methods
 		
 		Init();
 		
+		// Create some resources
 		CreatePools();
+		CreateColorResources();
+		CreateDepthResources();
+		CreateRayTracingStorageImage();
 		
 		// Load scene assets
 		LoadScene();
 		SendSceneToDevice();
 		
 		// Graphics pipeline
-		CreateColorResources();
-		CreateDepthResources();
 		CreateRenderPass(); // shader attachments are assigned here
 		CreateGraphicsPipelines(); // shaders are assigned here
 		CreateFrameBuffers();
@@ -969,12 +1119,14 @@ public: // Init/Reset Methods
 		DestroyFrameBuffers();
 		DestroyGraphicsPipelines();
 		DestroyRenderPass();
-		DestroyDepthResources();
-		DestroyColorResources();
 		
 		DeleteSceneFromDevice();
 		UnloadScene();
 		
+		// Destroy some resources
+		DestroyRayTracingStorageImage();
+		DestroyDepthResources();
+		DestroyColorResources();
 		DestroyPools();
 	}
 	
@@ -1007,7 +1159,7 @@ public: // Public Methods
 		std::lock_guard lock(renderingMutex);
 		
 		// Wait for previous frame to be finished
-		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
+		// renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
 		// Get an image from the swapchain
 		uint imageIndex;
@@ -1054,8 +1206,9 @@ public: // Public Methods
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		
 		// Reset the fence and Submit the queue
-		renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
-		if (renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/) != VK_SUCCESS) {
+		// renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
+		if ((result = renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*inFlightFences[currentFrameInFlight]*//*optional fence to be signaled*/)) != VK_SUCCESS) {
+			LOG_ERROR((int)result)
 			throw std::runtime_error("Failed to submit draw command buffer");
 		}
 

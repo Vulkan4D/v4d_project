@@ -79,7 +79,7 @@ public:
 		createInfo.imageColorSpace = format.colorSpace;
 		createInfo.presentMode = presentMode;
 		createInfo.imageArrayLayers = 1; // 1 for normal rendering, 2 for VR
-		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // VK_IMAGE_USAGE_TRANSFER_DST_BIT to render to a texture before doing post-processing
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT; // VK_IMAGE_USAGE_TRANSFER_DST_BIT to render to a texture before doing post-processing
 		createInfo.preTransform = capabilities.currentTransform; // We can specify that a certain transform should be applied to images in the swap chain if it is supported (supportedTransforms in capabilities), like a 90 degree clockwise rotation or horizontal flip. To specify that you do not want any transformation, simply specify the current transformation.
 		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; // specifies if the alpha channel should be used for blending with other windows in the window system. You'll almost always want to simply ignore the alpha channel
 		createInfo.clipped = VK_TRUE; // If the clipped member is set to VK_TRUE then that means that we don't care about the color of pixels that are obscured, for example because another window is in front of them. Unless you really need to be able to read these pixels back and get predictable results, you'll get the best performance by enabling clipping.
@@ -106,11 +106,11 @@ public:
 
 	void AssignQueues(std::vector<uint32_t> queues) {
 		if (queues.size() < 2) throw std::runtime_error("AssignQueues needs at least two queues");
-		if (queues[0] != queues[1]) {
+		if (queues.size() > 2 || queues[0] != queues[1]) {
 			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			createInfo.queueFamilyIndexCount = queues.size();
-			createInfo.pQueueFamilyIndices = queues.data();
 		}
+		createInfo.queueFamilyIndexCount = queues.size();
+		createInfo.pQueueFamilyIndices = queues.data();
 	}
 
 	void Create(VulkanSwapChain* oldSwapChain = nullptr) {

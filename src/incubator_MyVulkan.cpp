@@ -59,11 +59,13 @@ int main() {
 			timer.Start();
 
 			glfwPollEvents();
-
+			
 			vulkan->RenderFrame();
 
 			// FPS counter (Not working on Windows... ???)
 			glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/timer.GetElapsedMilliseconds()))+" FPS").c_str());
+			
+			SLEEP(40ms)
 		}
 		
 		vulkan->UnloadRenderer();

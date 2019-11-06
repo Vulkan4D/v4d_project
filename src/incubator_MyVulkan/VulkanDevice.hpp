@@ -179,7 +179,7 @@ public:
 		
 		if (data) {
 			void* mappedData = nullptr;
-			MapMemory(bufferMemory, 0, VK_WHOLE_SIZE, 0, &mappedData);
+			MapMemory(bufferMemory, 0, size, 0, &mappedData);
 			memcpy(mappedData, data, size);
 			if ((properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
 				VkMappedMemoryRange mappedRange {};

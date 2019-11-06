@@ -1,6 +1,10 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 
+#############################################################
+
+#shader rgen
+
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 2, set = 0) uniform CameraProperties 
@@ -30,3 +34,31 @@ void main()
 
 	imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(hitValue, 0.0));
 }
+
+#############################################################
+
+#shader rchit
+
+#extension GL_EXT_nonuniform_qualifier : enable
+
+layout(location = 0) rayPayloadInNV vec3 hitValue;
+hitAttributeNV vec3 attribs;
+
+void main()
+{
+  const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
+  hitValue = barycentricCoords;
+}
+
+
+#############################################################
+
+#shader rmiss
+
+layout(location = 0) rayPayloadInNV vec3 hitValue;
+
+void main()
+{
+    hitValue = vec3(0.0, 0.0, 0.0);
+}
+
