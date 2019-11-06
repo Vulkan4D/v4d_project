@@ -79,6 +79,8 @@ void main() {
 	Vertex v1 = unpackVertex(index.y);
 	Vertex v2 = unpackVertex(index.z);
 	
+	vec3 origin = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	
 	// Interpolate normal
 	vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
 
@@ -86,14 +88,13 @@ void main() {
 	vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 
 	// Basic lighting
-	vec3 lightVector = normalize(ubo.light.xyz);
+	vec3 lightVector = normalize(ubo.light.xyz - origin);
 	float dot_product = max(dot(lightVector, normal), 0.5);
 	hitValue = color.rgb * vec3(dot_product) * ubo.light.w;
 	
 	// Shadow casting
 	float tmin = 0.001;
 	float tmax = 100.0;
-	vec3 origin = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	shadowed = true;  
 	// Offset indices to match shadow hit/miss index
 	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, origin, tmin, lightVector, tmax, 2);
