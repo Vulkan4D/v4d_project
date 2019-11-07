@@ -18,6 +18,7 @@ layout(binding = 2, set = 0) uniform UBO {
 	mat4 proj;
     vec4 light;
 	int rtx_reflection_max_recursion;
+	bool rtx_shadows;
 } ubo;
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
@@ -82,20 +83,25 @@ void main() {
 	vec3 direction = vec4(ubo.view * vec4(normalize(target), 0)).xyz;
 	
 	vec3 finalColor = vec3(0.0);
-	float reflection = 1.0;
 	float max_distance = 10000.0;
 	
-	for (int i = 0; i < ubo.rtx_reflection_max_recursion; i++) {
-		ray.reflector = 0.0;
+	if (ubo.rtx_reflection_max_recursion > 1) {
+		float reflection = 1.0;
+		for (int i = 0; i < ubo.rtx_reflection_max_recursion; i++) {
+			ray.reflector = 0.0;
+			traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
+			finalColor = mix(finalColor, ray.color, reflection);
+			if (ray.reflector <= 0.0) break;
+			reflection *= ray.reflector;
+			if (reflection < 0.01) break;
+			max_distance -= ray.distance;
+			if (max_distance <= 0) break;
+			origin = ray.origin;
+			direction = ray.direction;
+		}
+	} else {
 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
-		finalColor = mix(finalColor, ray.color, reflection);
-		if (ray.reflector <= 0.0) break;
-		reflection *= ray.reflector;
-		if (reflection < 0.01) break;
-		max_distance -= ray.distance;
-		if (max_distance <= 0) break;
-		origin = ray.origin;
-		direction = ray.direction;
+		finalColor = ray.color;
 	}
 	
 	imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(finalColor, 0.0));
@@ -124,7 +130,7 @@ void main() {
 	// Interpolate Vertex data
 	const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
 	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
-	const float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
+	// const float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
 	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 
 	// Basic shading (with light angle)
@@ -133,17 +139,21 @@ void main() {
 	ray.color = color.rgb * vec3(dot_product) * ubo.light.w;
 	
 	// Receive Shadows
-	shadowed = true;  
-	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
-	if (shadowed) {
-		ray.color *= 0.3;
+	if (ubo.rtx_shadows) {
+		shadowed = true;  
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
+		if (shadowed) {
+			ray.color *= 0.3;
+		}
 	}
 	
 	// Reflections
-	ray.distance = gl_RayTmaxNV;
-	ray.origin = hitPoint + normal * 0.001f;
-	ray.direction = reflect(gl_WorldRayDirectionNV, normal);
-	ray.reflector = reflector;
+	if (ubo.rtx_reflection_max_recursion > 1) {
+		ray.distance = gl_RayTmaxNV;
+		ray.origin = hitPoint + normal * 0.001f;
+		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
+		ray.reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
+	}
 }
 
 
@@ -190,8 +200,9 @@ void main() {
 	const float discriminant = b * b - a * c;
 
 	if (discriminant >= 0) {
-		const float t1 = (-b - sqrt(discriminant)) / a;
-		const float t2 = (-b + sqrt(discriminant)) / a;
+		const float discriminantSqrt = sqrt(discriminant);
+		const float t1 = (-b - discriminantSqrt) / a;
+		const float t2 = (-b + discriminantSqrt) / a;
 
 		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
 			attribs = sphere;
@@ -222,15 +233,19 @@ void main() {
 	ray.color = sphere.color.rgb * vec3(dot_product) * ubo.light.w;
 	
 	// Receive Shadows
-	shadowed = true;  
-	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
-	if (shadowed) {
-		ray.color *= 0.3;
+	if (ubo.rtx_shadows) {
+		shadowed = true;  
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
+		if (shadowed) {
+			ray.color *= 0.3;
+		}
 	}
 	
 	// Reflections
-	ray.distance = gl_RayTmaxNV;
-	ray.origin = hitPoint + normal * 0.001f;
-	ray.direction = reflect(gl_WorldRayDirectionNV, normal);
-	ray.reflector = sphere.reflector;
+	if (ubo.rtx_reflection_max_recursion > 1) {
+		ray.distance = gl_RayTmaxNV;
+		ray.origin = hitPoint + normal * 0.001f;
+		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
+		ray.reflector = sphere.reflector;
+	}
 }

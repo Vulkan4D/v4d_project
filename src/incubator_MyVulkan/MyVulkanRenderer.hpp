@@ -62,7 +62,8 @@ protected: // class members
 	
 	// States
 	std::recursive_mutex renderingMutex;
-	bool windowResized = false;
+	std::recursive_mutex uboMutex;
+	// bool windowResized = false;
 	uint windowWidth, windowHeight;
 	bool renderTypeDirty = false;
 	
@@ -108,16 +109,16 @@ protected: // Virtual INIT Methods
 
 	void CreateSurface() {
 		surface = window->CreateVulkanSurface(handle);
-		window->AddResizeCallback("vulkanSurface", [this](int width, int height){
-			renderingMutex.lock();
-			if (width != 0 && height != 0) {
-				windowResized = true;
-				windowWidth = (uint)width;
-				windowHeight = (uint)height;
-				renderingMutex.unlock();
-			}
-			// Rendering is paused while window is minimized
-		});
+		// window->AddResizeCallback("vulkanSurface", [this](int width, int height){
+		// 	renderingMutex.lock();
+		// 	if (width != 0 && height != 0) {
+		// 		windowResized = true;
+		// 		windowWidth = (uint)width;
+		// 		windowHeight = (uint)height;
+		// 		renderingMutex.unlock();
+		// 	}
+		// 	// Rendering is paused while window is minimized
+		// });
 	}
 	
 	void DestroySurface() {
@@ -243,7 +244,7 @@ protected: // Virtual INIT Methods
 
 	void CreateSwapChain() {
 		std::lock_guard lock(renderingMutex);
-		windowResized = false;
+		// windowResized = false;
 		
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
 		VulkanSwapChain* oldSwapChain = swapChain;
@@ -1161,8 +1162,13 @@ public: // Public Methods
 	virtual void RenderFrame() {
 		std::lock_guard lock(renderingMutex);
 		
+		// if (windowResized) {
+		// 	RecreateSwapChains();
+		// 	return;
+		// }
+		
 		// Wait for previous frame to be finished
-		// renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
+		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
 		// Get an image from the swapchain
 		uint imageIndex;
@@ -1178,7 +1184,7 @@ public: // Public Methods
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || renderTypeDirty) {
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
-			RenderFrame();
+			// RenderFrame();
 			return;
 		} else if (result == VK_SUBOPTIMAL_KHR) {
 			// LOG_VERBOSE("Swapchain is suboptimal...")
@@ -1187,7 +1193,9 @@ public: // Public Methods
 		}
 
 		// Update data every frame
+		LockUBO();
 		FrameUpdate(imageIndex);
+		UnlockUBO();
 
 		// Submit the command buffer
 		VkSubmitInfo submitInfo = {};
@@ -1210,8 +1218,8 @@ public: // Public Methods
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		
 		// Reset the fence and Submit the queue
-		// renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
-		if ((result = renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*inFlightFences[currentFrameInFlight]*//*optional fence to be signaled*/)) != VK_SUCCESS) {
+		renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
+		if ((result = renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/)) != VK_SUCCESS) {
 			LOG_ERROR((int)result)
 			throw std::runtime_error("Failed to submit draw command buffer");
 		}
@@ -1264,6 +1272,14 @@ public: // Public Methods
 	bool IsUsingRayTracing() {
 		std::lock_guard lock(renderingMutex);
 		return useRayTracing;
+	}
+
+	inline void LockUBO() {
+		uboMutex.lock();
+	}
+
+	inline void UnlockUBO() {
+		uboMutex.unlock();
 	}
 
 };

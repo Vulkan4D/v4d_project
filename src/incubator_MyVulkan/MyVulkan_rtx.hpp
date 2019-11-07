@@ -40,6 +40,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 		glm::mat4 projInverse;
 		glm::vec4 light;
 		int rtx_reflection_max_recursion;
+		bool rtx_shadows;
 	};
 	
 	VkBuffer uniformBuffer;
@@ -1126,6 +1127,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 		}
 		ubo.light = light;
 		ubo.rtx_reflection_max_recursion = rtx_reflection_max_recursion;
+		ubo.rtx_shadows = rtx_shadows;
 		// Update memory
 		void* data;
 		renderingDevice->MapMemory(uniformBufferMemory, 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
@@ -1136,5 +1138,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 public:
 	glm::vec4 light {1.0,1.0,3.0, 1.0};
 	int rtx_reflection_max_recursion = 4;
+	bool rtx_shadows = true;
 	
 };
