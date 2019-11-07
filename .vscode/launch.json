@@ -13,7 +13,6 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -35,7 +34,6 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -57,7 +55,6 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/debug",
             "environment": [
-                {"name": "VULKAN_SDK", "value": "${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers"}
             ],
             "externalConsole": false,
             "MIMode": "gdb",

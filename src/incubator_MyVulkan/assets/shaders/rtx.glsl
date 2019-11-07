@@ -17,6 +17,7 @@ layout(binding = 2, set = 0) uniform UBO {
 	mat4 view;
 	mat4 proj;
     vec4 light;
+	vec3 ambient;
 	int rtx_reflection_max_recursion;
 	bool rtx_shadows;
 } ubo;
@@ -62,6 +63,76 @@ Sphere unpackSphere(uint index) {
 	s.color = sphereBuffer[sphereStructSize * index + 3];
 	return s;
 }
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Noise functions
+
+// https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
+
+float rand(float n){return fract(sin(n) * 43758.5453123);}
+
+float rand(vec2 n) { 
+	return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
+float noise(float p){
+	float fl = floor(p);
+	float fc = fract(p);
+	return mix(rand(fl), rand(fl + 1.0), fc);
+}
+	
+float noise(vec2 n) {
+	const vec2 d = vec2(0.0, 1.0);
+	vec2 b = floor(n), f = smoothstep(vec2(0.0), vec2(1.0), fract(n));
+	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
+}
+
+// #define PI 3.14159265358979323846
+
+// float rand(vec2 c){
+// 	return fract(sin(dot(c.xy ,vec2(12.9898,78.233))) * 43758.5453);
+// }
+
+// float noise(vec2 p, float freq ){
+// 	float unit = 1.0/freq;
+// 	vec2 ij = floor(p/unit);
+// 	vec2 xy = mod(p,unit)/unit;
+// 	//xy = 3.*xy*xy-2.*xy*xy*xy;
+// 	xy = .5*(1.-cos(PI*xy));
+// 	float a = rand((ij+vec2(0.,0.)));
+// 	float b = rand((ij+vec2(1.,0.)));
+// 	float c = rand((ij+vec2(0.,1.)));
+// 	float d = rand((ij+vec2(1.,1.)));
+// 	float x1 = mix(a, b, xy.x);
+// 	float x2 = mix(c, d, xy.x);
+// 	return mix(x1, x2, xy.y);
+// }
+
+// float pNoise(vec2 p, int res){
+// 	float persistance = .5;
+// 	float n = 0.;
+// 	float normK = 0.;
+// 	float f = 4.;
+// 	float amp = 1.;
+// 	int iCount = 0;
+// 	for (int i = 0; i<50; i++){
+// 		n+=amp*noise(p, f);
+// 		f*=2.;
+// 		normK+=amp;
+// 		amp*=persistance;
+// 		if (iCount == res) break;
+// 		iCount++;
+// 	}
+// 	float nf = n/normK;
+// 	return nf*nf*nf*nf;
+// }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 
 #############################################################
@@ -132,18 +203,20 @@ void main() {
 	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
 	// const float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
 	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
+	const float specular = 1;
 
 	// Basic shading (with light angle)
 	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
-	const float dot_product = max(dot(lightVector, normal), 0.5);
-	ray.color = color.rgb * vec3(dot_product) * ubo.light.w;
+	const float dot_product = max(dot(lightVector, normal), 0.0);
+	const float shade = pow(dot_product, specular);
+	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * ubo.light.w), shade);
 	
 	// Receive Shadows
-	if (ubo.rtx_shadows) {
+	if (shade > 0.0 && ubo.rtx_shadows) {
 		shadowed = true;  
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
 		if (shadowed) {
-			ray.color *= 0.3;
+			ray.color = ubo.ambient;
 		}
 	}
 	
@@ -226,18 +299,21 @@ void main() {
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	// Normal
 	const vec3 normal = (hitPoint - sphere.pos) / sphere.radius;
+	// Specular
+	const float specular = 0.8;
 
 	// Basic shading (with light angle)
 	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
-	const float dot_product = max(dot(lightVector, normal), 0.5);
-	ray.color = sphere.color.rgb * vec3(dot_product) * ubo.light.w;
+	const float dot_product = max(dot(lightVector, normal), 0.0);
+	const float shade = pow(dot_product, specular);
+	ray.color = mix(ubo.ambient, max(ubo.ambient, sphere.color.rgb * ubo.light.w), shade);
 	
 	// Receive Shadows
-	if (ubo.rtx_shadows) {
+	if (shade > 0.0 && ubo.rtx_shadows) {
 		shadowed = true;  
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
 		if (shadowed) {
-			ray.color *= 0.3;
+			ray.color = ubo.ambient;
 		}
 	}
 	

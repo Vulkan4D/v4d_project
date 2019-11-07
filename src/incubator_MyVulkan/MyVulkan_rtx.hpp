@@ -39,6 +39,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 		glm::mat4 viewInverse;
 		glm::mat4 projInverse;
 		glm::vec4 light;
+		glm::vec3 ambient;
 		int rtx_reflection_max_recursion;
 		bool rtx_shadows;
 	};
@@ -332,15 +333,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 				0, // instanceId
 				0xff, // mask
 				2, // instanceOffset
-				0, // flags
-				rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
-			});
-			// Spheres shadows
-			testObjectGeometryInstances.push_back({
-				transform,
-				0, // instanceId
-				0xff, // mask
-				1, // instanceOffset
 				0, // flags
 				rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
 			});
@@ -1126,6 +1118,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			ubo.projInverse[1][1] *= -1;
 		}
 		ubo.light = light;
+		ubo.ambient = glm::vec3(0.15f, 0.15f, 0.15f);
 		ubo.rtx_reflection_max_recursion = rtx_reflection_max_recursion;
 		ubo.rtx_shadows = rtx_shadows;
 		// Update memory
