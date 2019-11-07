@@ -5,23 +5,20 @@
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
+	float roughness;
+	glm::vec3 normal;
 	float reflector;
 	glm::vec4 color;
-	glm::vec3 normal;
-	float roughness;
-	
-	bool operator==(const Vertex& other) const {
-		return pos == other.pos && color == other.color;
-	}
 };
-namespace std {
-	template<> struct hash<Vertex> {
-		size_t operator()(Vertex const &vertex) const {
-			return (hash<glm::vec3>()(vertex.pos) ^
-					(hash<glm::vec3>()(vertex.color) << 1));
-		}
-	};
-}
+
+struct Sphere {
+	glm::vec3 pos;
+	float radius;
+	glm::vec4 color;
+	float reflector;
+	float roughness;
+	glm::ivec2 padding;
+};
 
 class MyVulkanTest : public MyVulkanRenderer {
 	using MyVulkanRenderer::MyVulkanRenderer;
@@ -30,9 +27,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 	// Vertex Buffers for test object
 	std::vector<Vertex> testObjectVertices;
 	std::vector<uint32_t> testObjectIndices;
-	std::unordered_map<Vertex, uint32_t> testObjectUniqueVertices;
 	VkBuffer vertexBuffer, indexBuffer;
 	VkDeviceMemory vertexBufferMemory, indexBufferMemory;
+	
+	std::vector<Sphere> spheres;
 	
 	struct UBO {
 		glm::mat4 viewInverse;
@@ -76,25 +74,30 @@ class MyVulkanTest : public MyVulkanRenderer {
 	void LoadScene() override {
 
 		testObjectVertices = {
-			{{-0.5f,-0.5f, 0.0f}, 0.2f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f,-0.5f, 0.0f}, 0.2f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f, 0.5f, 0.0f}, 0.2f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-0.5f, 0.5f, 0.0f}, 0.2f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5,-0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {1.0, 0.0, 0.0, 1.0}},
+			{{ 0.5,-0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 0.0, 1.0}},
+			{{ 0.5, 0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 0.0, 1.0, 1.0}},
+			{{-0.5, 0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 1.0, 1.0}},
 			//
-			{{-0.5f,-0.5f,-0.5f}, 0.2f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f,-0.5f,-0.5f}, 0.2f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f, 0.5f,-0.5f}, 0.2f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-0.5f, 0.5f,-0.5f}, 0.2f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5,-0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {1.0, 0.0, 0.0, 1.0}},
+			{{ 0.5,-0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 0.0, 1.0}},
+			{{ 0.5, 0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 0.0, 1.0, 1.0}},
+			{{-0.5, 0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 1.0, 1.0}},
 			//
-			{{-8.0f,-8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 8.0f,-8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 8.0f, 8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-8.0f, 8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-8.0,-8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
+			{{ 8.0,-8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
+			{{ 8.0, 8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
+			{{-8.0, 8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
+		};
+		
+		spheres = {
+			{{ 0.0, 0.0, 1.0}, 1.5f, {0.5, 0.6, 0.6, 1.0}, 0.5f, 0.0f, {0,0}},
+			{{ 2.0, 2.0, 1.0}, 1.5f, {0.5, 0.6, 0.6, 1.0}, 0.5f, 0.0f, {0,0}},
 		};
 
 	}
@@ -518,10 +521,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Vertex Input structure
 			testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 				{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-				{1, offsetof(Vertex, Vertex::reflector), VK_FORMAT_R32_SFLOAT},
-				{2, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
-				{3, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32_SFLOAT},
-				{4, offsetof(Vertex, Vertex::roughness), VK_FORMAT_R32_SFLOAT},
+				{1, offsetof(Vertex, Vertex::roughness), VK_FORMAT_R32_SFLOAT},
+				{2, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32_SFLOAT},
+				{3, offsetof(Vertex, Vertex::reflector), VK_FORMAT_R32_SFLOAT},
+				{4, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 			});
 
 			// Uniforms

@@ -2,12 +2,7 @@
 #extension GL_NV_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-layout(binding = 2, set = 0) uniform UBO {
-	mat4 view;
-	mat4 proj;
-    vec4 light;
-} ubo;
-
+// Ray Tracing Payload
 struct RayPayload {
 	vec3 color;
 	vec3 origin;
@@ -16,12 +11,60 @@ struct RayPayload {
 	float distance;
 };
 
+// Layout Bindings
+layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 2, set = 0) uniform UBO {
+	mat4 view;
+	mat4 proj;
+    vec4 light;
+} ubo;
+layout(binding = 1, set = 0, rgba8) uniform image2D image;
+layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
+layout(binding = 4, set = 0) buffer Indices { uint indexBuffer[]; };
+layout(binding = 5, set = 0) readonly buffer Spheres { vec4 sphereBuffer[]; };
+
+// Vertex
+struct Vertex {
+	vec3 pos;
+	float roughness;
+	vec3 normal;
+	float reflector;
+	vec4 color;
+};
+uint vertexStructSize = 3;
+Vertex unpackVertex(uint index) {
+	Vertex v;
+	v.pos = vertexBuffer[vertexStructSize * index + 0].xyz;
+	v.roughness = vertexBuffer[vertexStructSize * index + 0].w;
+	v.normal = vertexBuffer[vertexStructSize * index + 1].xyz;
+	v.reflector = vertexBuffer[vertexStructSize * index + 1].w;
+	v.color = vertexBuffer[vertexStructSize * index + 2];
+	return v;
+}
+
+// Sphere
+struct Sphere {
+	vec3 pos;
+	float radius;
+	vec4 color;
+	float reflector;
+	float roughness;
+};
+uint sphereStructSize = 3;
+Sphere unpackSphere(uint index) {
+	Sphere s;
+	s.pos = sphereBuffer[sphereStructSize * index + 0].xyz;
+	s.radius = sphereBuffer[sphereStructSize * index + 0].w;
+	s.color = sphereBuffer[sphereStructSize * index + 1];
+	s.reflector = sphereBuffer[sphereStructSize * index + 2].x;
+	s.roughness = sphereBuffer[sphereStructSize * index + 2].y;
+	return s;
+}
+
+
 #############################################################
 
 #shader rgen
-
-layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
-layout(binding = 1, set = 0, rgba8) uniform image2D image;
 
 layout(location = 0) rayPayloadNV RayPayload ray;
 
@@ -31,9 +74,9 @@ layout (constant_id = 0) const int MAX_RECURSION = 0;
 void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
 	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
-	vec2 d = inUV * 2.0 - 1.0;
+	const vec2 d = inUV * 2.0 - 1.0;
 
-	vec3 target = vec4(ubo.proj * vec4(d.x, d.y, 1, 1)).xyz;
+	const vec3 target = vec4(ubo.proj * vec4(d.x, d.y, 1, 1)).xyz;
 	vec3 origin = vec4(ubo.view * vec4(0,0,0,1)).xyz;
 	vec3 direction = vec4(ubo.view * vec4(normalize(target), 0)).xyz;
 	
@@ -62,67 +105,42 @@ void main() {
 
 #shader rchit
 
-struct Vertex {
-	vec3 pos;
-	float reflector;
-	vec4 color;
-	vec3 normal;
-	float roughness;
-};
-uint vertexSize = 3;
-
 // Ray Tracing
 layout(location = 0) rayPayloadInNV RayPayload ray;
 layout(location = 2) rayPayloadNV bool shadowed;
 hitAttributeNV vec3 attribs;
 
-layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
-
-// Storage Buffers
-layout(binding = 3, set = 0) buffer Vertices { vec4 v[]; } vertexBuffer;
-layout(binding = 4, set = 0) buffer Indices { uint i[]; } indexBuffer;
-
-Vertex unpackVertex(uint index) {
-	Vertex v;
-	v.pos = vertexBuffer.v[vertexSize * index + 0].xyz;
-	v.reflector = vertexBuffer.v[vertexSize * index + 0].w;
-	v.color = vertexBuffer.v[vertexSize * index + 1];
-	v.normal = vertexBuffer.v[vertexSize * index + 2].xyz;
-	v.roughness = vertexBuffer.v[vertexSize * index + 2].w;
-	return v;
-}
-
 void main() {
 	// Hit Triangle vertices
 	const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-	ivec3 index = ivec3(indexBuffer.i[3 * gl_PrimitiveID], indexBuffer.i[3 * gl_PrimitiveID + 1], indexBuffer.i[3 * gl_PrimitiveID + 2]);
-	Vertex v0 = unpackVertex(index.x);
-	Vertex v1 = unpackVertex(index.y);
-	Vertex v2 = unpackVertex(index.z);
+	const ivec3 index = ivec3(indexBuffer[3 * gl_PrimitiveID], indexBuffer[3 * gl_PrimitiveID + 1], indexBuffer[3 * gl_PrimitiveID + 2]);
+	const Vertex v0 = unpackVertex(index.x);
+	const Vertex v1 = unpackVertex(index.y);
+	const Vertex v2 = unpackVertex(index.z);
 	
 	// Hit World Position
-	vec3 hitWorldPos = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
-	
+	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	// Interpolate Vertex data
-	vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
-	vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
-	float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
+	const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
+	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
+	const float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
+	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 
 	// Basic shading (with light angle)
-	vec3 lightVector = normalize(ubo.light.xyz - hitWorldPos);
-	float dot_product = max(dot(lightVector, normal), 0.5);
+	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
+	const float dot_product = max(dot(lightVector, normal), 0.5);
 	ray.color = color.rgb * vec3(dot_product) * ubo.light.w;
 	
 	// Shadow casting
 	shadowed = true;  
-	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitWorldPos, 0.001, lightVector, 10000.0, 2);
+	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
 	if (shadowed) {
 		ray.color *= 0.3;
 	}
 	
 	// Reflections
 	ray.distance = gl_RayTmaxNV;
-	ray.origin = hitWorldPos + normal * 0.001f;
+	ray.origin = hitPoint + normal * 0.001f;
 	ray.direction = reflect(gl_WorldRayDirectionNV, normal);
 	ray.reflector = reflector;
 }
@@ -149,3 +167,69 @@ void main() {
 	shadowed = false;
 }
 
+
+#############################################################
+
+#shader sphere.rint
+
+hitAttributeNV Sphere attribs;
+
+void main() {
+	const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
+	const vec3 origin = gl_WorldRayOriginNV;
+	const vec3 direction = gl_WorldRayDirectionNV;
+	const float tMin = gl_RayTminNV;
+	const float tMax = gl_RayTmaxNV;
+	
+	const vec3 oc = origin - sphere.pos;
+	const float a = dot(direction, direction);
+	const float b = dot(oc, direction);
+	const float c = dot(oc, oc) - sphere.radius * sphere.radius;
+	const float discriminant = b * b - a * c;
+
+	if (discriminant >= 0) {
+		const float t1 = (-b - sqrt(discriminant)) / a;
+		const float t2 = (-b + sqrt(discriminant)) / a;
+
+		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
+			attribs = sphere;
+			reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
+		}
+	}
+}
+
+
+#############################################################
+
+#shader sphere.rchit
+
+layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 2) rayPayloadNV bool shadowed;
+
+hitAttributeNV Sphere sphere;
+
+void main() {
+	
+	// Hit World Position
+	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	// Normal
+	const vec3 normal = (hitPoint - sphere.pos) / sphere.radius;
+
+	// Basic shading (with light angle)
+	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
+	const float dot_product = max(dot(lightVector, normal), 0.5);
+	ray.color = sphere.color.rgb * vec3(dot_product) * ubo.light.w;
+	
+	// Shadow casting
+	shadowed = true;  
+	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
+	if (shadowed) {
+		ray.color *= 0.3;
+	}
+	
+	// Reflections
+	ray.distance = gl_RayTmaxNV;
+	ray.origin = hitPoint + normal * 0.001f;
+	ray.direction = reflect(gl_WorldRayDirectionNV, normal);
+	ray.reflector = sphere.reflector;
+}
