@@ -44,6 +44,8 @@ int main() {
 		
 		vulkan->LoadRenderer();
 		
+		float camSpeed = 1.0f;
+		
 		// Input Events
 		window->AddKeyCallback("app", [window, vulkan](int key, int scancode, int action, int mods){
 			vulkan->LockUBO();
@@ -100,6 +102,7 @@ int main() {
 					case GLFW_KEY_KP_ENTER:
 						vulkan->rtx_shadows = !vulkan->rtx_shadows;
 						break;
+						
 				}
 			}
 			vulkan->UnlockUBO();
@@ -137,6 +140,28 @@ int main() {
 				double avgFrameTime = std::accumulate(frameTimes.begin(), frameTimes.end(), 0.0) / fpsNbFramesAvg;
 				glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/avgFrameTime))+" FPS via " + (vulkan->IsUsingRayTracing()? "RayTracing" : "Rasterization")).c_str());
 			
+			
+				float deltaTime = (float)currentFrameTime / 1000.0f;
+			
+				// Smooth Movements
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
+					vulkan->camPosition += vulkan->camDirection * camSpeed * deltaTime;
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
+					vulkan->camPosition -= vulkan->camDirection * camSpeed * deltaTime;
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
+					vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::vec3(0,0,1)) * camSpeed * deltaTime;
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
+					vulkan->camPosition += glm::cross(vulkan->camDirection, glm::vec3(0,0,1)) * camSpeed * deltaTime;
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
+					vulkan->camPosition += glm::vec3(0,0,1) * camSpeed * deltaTime;
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
+					vulkan->camPosition -= glm::vec3(0,0,1) * camSpeed * deltaTime;
+				}
 			}
 		// });
 		

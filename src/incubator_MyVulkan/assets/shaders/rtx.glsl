@@ -53,46 +53,6 @@ float noise(vec2 n) {
 	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
 }
 
-// #define PI 3.14159265358979323846
-
-// float rand(vec2 c){
-// 	return fract(sin(dot(c.xy ,vec2(12.9898,78.233))) * 43758.5453);
-// }
-
-// float noise(vec2 p, float freq ){
-// 	float unit = 1.0/freq;
-// 	vec2 ij = floor(p/unit);
-// 	vec2 xy = mod(p,unit)/unit;
-// 	//xy = 3.*xy*xy-2.*xy*xy*xy;
-// 	xy = .5*(1.-cos(PI*xy));
-// 	float a = rand((ij+vec2(0.,0.)));
-// 	float b = rand((ij+vec2(1.,0.)));
-// 	float c = rand((ij+vec2(0.,1.)));
-// 	float d = rand((ij+vec2(1.,1.)));
-// 	float x1 = mix(a, b, xy.x);
-// 	float x2 = mix(c, d, xy.x);
-// 	return mix(x1, x2, xy.y);
-// }
-
-// float pNoise(vec2 p, int res){
-// 	float persistance = .5;
-// 	float n = 0.;
-// 	float normK = 0.;
-// 	float f = 4.;
-// 	float amp = 1.;
-// 	int iCount = 0;
-// 	for (int i = 0; i<50; i++){
-// 		n+=amp*noise(p, f);
-// 		f*=2.;
-// 		normK+=amp;
-// 		amp*=persistance;
-// 		if (iCount == res) break;
-// 		iCount++;
-// 	}
-// 	float nf = n/normK;
-// 	return nf*nf*nf*nf;
-// }
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -105,7 +65,16 @@ float noise(vec2 n) {
 layout(location = 0) rayPayloadInNV RayPayload ray;
 layout(location = 2) rayPayloadNV bool shadowed;
 
-void ApplyStandardShading(vec3 hitPoint, vec4 color, vec3 normal, float scatter, float roughness, float specular, float metallic) {
+void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal, float scatter, float roughness, float specular, float metallic) {
+	
+	// Roughness
+	if (roughness > 0.0) {
+		float n1 = 1.0 + noise(objPoint.xy * 500.0 * roughness + 134.455) * roughness;
+		float n2 = 1.0 + noise(objPoint.yz * 500.0 * roughness + 2.5478787) * roughness;
+		float n3 = 1.0 + noise(objPoint.xz * 500.0 * roughness + -124.785) * roughness;
+		normal = normalize(normal * vec3(n1, n2, n3)/2.0);
+	}
+	
 	// Basic shading from light angle
 	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
 	const float dot_product = max(dot(lightVector, normal), 0.0);
@@ -121,7 +90,7 @@ void ApplyStandardShading(vec3 hitPoint, vec4 color, vec3 normal, float scatter,
 		}
 	}
 	
-	//TODO roughness, scatter
+	//TODO scatter, opacity
 	
 	// Reflections
 	if (ubo.rtx_reflection_max_recursion > 1) {
@@ -250,6 +219,8 @@ void main() {
 	
 	// Hit World Position
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	// Hit object Position
+	const vec3 objPoint = hitPoint - normalize(v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z);
 	// Interpolate Vertex data
 	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
@@ -258,7 +229,7 @@ void main() {
 	const float specular = v0.specular * barycentricCoords.x + v1.specular * barycentricCoords.y + v2.specular * barycentricCoords.z;
 	const float metallic = v0.metallic * barycentricCoords.x + v1.metallic * barycentricCoords.y + v2.metallic * barycentricCoords.z;
 
-	ApplyStandardShading(hitPoint, color, normal, scatter, roughness, specular, metallic);
+	ApplyStandardShading(hitPoint, objPoint, color, normal, scatter, roughness, specular, metallic);
 }
 
 
@@ -326,8 +297,10 @@ hitAttributeNV Sphere sphere;
 void main() {
 	// Hit World Position
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	// Hit object Position
+	const vec3 objPoint = hitPoint - sphere.pos;
 	// Normal
-	const vec3 normal = (hitPoint - sphere.pos) / sphere.radius;
+	const vec3 normal = objPoint / sphere.radius;
 
-	ApplyStandardShading(hitPoint, sphere.color, normal, sphere.scatter, sphere.roughness, sphere.specular, sphere.metallic);
+	ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.scatter, sphere.roughness, sphere.specular, sphere.metallic);
 }

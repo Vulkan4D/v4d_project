@@ -82,7 +82,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 	
 	
 	void Init() override {
-		clearColor = {0,0,0,1};
+		clearColor = {0.7f, 0.8f, 1.0f, 1.0f};
 		useRayTracing = true;
 	}
 
@@ -113,8 +113,8 @@ class MyVulkanTest : public MyVulkanRenderer {
 		testObjectSpheres = {
 			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
 			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.5f, /*roughness*/0.5f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.5f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		};
 
 	}
@@ -708,7 +708,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			rayTracingPipelineInfo.pStages = testShader->GetStages().data();
 			rayTracingPipelineInfo.groupCount = (uint)rayTracingShaderGroups.size();
 			rayTracingPipelineInfo.pGroups = rayTracingShaderGroups.data();
-			rayTracingPipelineInfo.maxRecursionDepth = 3;
+			rayTracingPipelineInfo.maxRecursionDepth = 2;
 			rayTracingPipelineInfo.layout = rayTracingPipelineLayout;
 			
 			if (renderingDevice->CreateRayTracingPipelinesNV(VK_NULL_HANDLE, 1, &rayTracingPipelineInfo, nullptr, &rayTracingPipeline) != VK_SUCCESS) //TODO support multiple ray tracing pipelines
@@ -1110,13 +1110,13 @@ class MyVulkanTest : public MyVulkanRenderer {
 		// ubo.model = glm::rotate(glm::mat4(1), time * glm::radians(10.0f), glm::vec3(0,0,1));
 		if (useRayTracing) {
 			// Current camera position
-			ubo.viewInverse = glm::inverse(glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1)));
+			ubo.viewInverse = glm::inverse(glm::lookAt(camPosition, camPosition + camDirection, glm::vec3(0,0,1)));
 			// Projection
 			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f));
 			ubo.projInverse[1][1] *= -1;
 		} else {
 			// Current camera position
-			ubo.viewInverse = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));
+			ubo.viewInverse = glm::lookAt(camPosition, camPosition + camDirection, glm::vec3(0,0,1));
 			// Projection
 			ubo.projInverse = glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
 			ubo.projInverse[1][1] *= -1;
@@ -1133,6 +1133,8 @@ class MyVulkanTest : public MyVulkanRenderer {
 	}
 
 public:
+	glm::vec3 camPosition = glm::vec3(2,2,2);
+	glm::vec3 camDirection = glm::vec3(-2,-2,-2);
 	glm::vec4 light {1.0,1.0,3.0, 1.0};
 	int rtx_reflection_max_recursion = 4;
 	bool rtx_shadows = true;
