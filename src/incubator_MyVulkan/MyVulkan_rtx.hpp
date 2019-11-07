@@ -7,20 +7,27 @@ struct Vertex {
 	glm::vec3 pos;
 	float roughness;
 	glm::vec3 normal;
-	float reflector;
+	float scatter;
 	glm::vec4 color;
+	glm::vec2 uv;
+	float specular;
+	float metallic;
 };
 
 struct Sphere {
 	std::pair<glm::vec3,glm::vec3> boundingBox;
-	float reflector;
+	float scatter;
 	float roughness;
 	glm::vec3 pos;
 	float radius;
 	glm::vec4 color;
+	float specular;
+	float metallic;
+	float refraction;
+	float density;
 	
-	Sphere(float reflector, float roughness, glm::vec3 pos, float radius, glm::vec4 color)
-	: boundingBox(pos - radius, pos + radius), reflector(reflector), roughness(roughness), pos(pos), radius(radius), color(color) {}
+	Sphere(float scatter, float roughness, glm::vec3 pos, float radius, glm::vec4 color, float specular, float metallic, float refraction, float density)
+	: boundingBox(pos - radius, pos + radius), scatter(scatter), roughness(roughness), pos(pos), radius(radius), color(color), specular(specular), metallic(metallic), refraction(refraction), density(density) {}
 };
 
 class MyVulkanTest : public MyVulkanRenderer {
@@ -82,20 +89,20 @@ class MyVulkanTest : public MyVulkanRenderer {
 	void LoadScene() override {
 
 		testObjectVertices = {
-			{{-0.5,-0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {1.0, 0.0, 0.0, 1.0}},
-			{{ 0.5,-0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 0.0, 1.0}},
-			{{ 0.5, 0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 0.0, 1.0, 1.0}},
-			{{-0.5, 0.5, 0.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 1.0, 1.0}},
+			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
 			//
-			{{-0.5,-0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {1.0, 0.0, 0.0, 1.0}},
-			{{ 0.5,-0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 0.0, 1.0}},
-			{{ 0.5, 0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 0.0, 1.0, 1.0}},
-			{{-0.5, 0.5,-0.5}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.0, 1.0, 1.0, 1.0}},
+			{/*pos*/{-0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
 			//
-			{{-8.0,-8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
-			{{ 8.0,-8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
-			{{ 8.0, 8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
-			{{-8.0, 8.0,-2.0}, 0.0f, {0.0, 0.0, 1.0}, 0.2f, {0.5, 0.5, 0.5, 1.0}},
+			{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.1f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
@@ -104,10 +111,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 		};
 		
 		testObjectSpheres = {
-			{0.5f, 0.0f, { 0.0, 0.0, 0.8}, 0.4f, {0.5, 0.6, 0.6, 1.0}},
-			{0.5f, 0.0f, {-2.0,-1.0, 1.5}, 0.4f, {0.5, 0.6, 0.6, 1.0}},
-			{0.9f, 0.0f, { 1.0,-1.0, 1.5}, 0.6f, {0.5, 0.5, 0.5, 1.0}},
-			{0.1f, 0.0f, { 2.0,-1.0, 0.5}, 0.3f, {1.0, 1.0, 1.0, 1.0}},
+			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.5f, /*roughness*/0.0f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		};
 
 	}
@@ -663,9 +670,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Vertex Input structure
 			testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 				{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-				{1, offsetof(Vertex, Vertex::roughness), VK_FORMAT_R32_SFLOAT},
-				{2, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32_SFLOAT},
-				{3, offsetof(Vertex, Vertex::reflector), VK_FORMAT_R32_SFLOAT},
 				{4, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 			});
 

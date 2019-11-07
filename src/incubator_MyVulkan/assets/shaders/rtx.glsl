@@ -13,6 +13,7 @@ struct RayPayload {
 
 // Layout Bindings
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 2, set = 0) uniform UBO {
 	mat4 view;
 	mat4 proj;
@@ -21,48 +22,10 @@ layout(binding = 2, set = 0) uniform UBO {
 	int rtx_reflection_max_recursion;
 	bool rtx_shadows;
 } ubo;
-layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
 layout(binding = 4, set = 0) buffer Indices { uint indexBuffer[]; };
 layout(binding = 5, set = 0) readonly buffer Spheres { vec4 sphereBuffer[]; };
 
-// Vertex
-struct Vertex {
-	vec3 pos;
-	float roughness;
-	vec3 normal;
-	float reflector;
-	vec4 color;
-};
-uint vertexStructSize = 3;
-Vertex unpackVertex(uint index) {
-	Vertex v;
-	v.pos = vertexBuffer[vertexStructSize * index + 0].xyz;
-	v.roughness = vertexBuffer[vertexStructSize * index + 0].w;
-	v.normal = vertexBuffer[vertexStructSize * index + 1].xyz;
-	v.reflector = vertexBuffer[vertexStructSize * index + 1].w;
-	v.color = vertexBuffer[vertexStructSize * index + 2];
-	return v;
-}
-
-// Sphere
-struct Sphere {
-	vec3 pos;
-	float radius;
-	vec4 color;
-	float reflector;
-	float roughness;
-};
-uint sphereStructSize = 4;
-Sphere unpackSphere(uint index) {
-	Sphere s;
-	s.reflector = sphereBuffer[sphereStructSize * index + 1].z;
-	s.roughness = sphereBuffer[sphereStructSize * index + 1].w;
-	s.pos = sphereBuffer[sphereStructSize * index + 2].xyz;
-	s.radius = sphereBuffer[sphereStructSize * index + 2].w;
-	s.color = sphereBuffer[sphereStructSize * index + 3];
-	return s;
-}
 
 
 
@@ -135,6 +98,73 @@ float noise(vec2 n) {
 
 
 
+#####################################################
+
+#common .*rchit
+
+layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 2) rayPayloadNV bool shadowed;
+
+void ApplyStandardShading(vec3 hitPoint, vec4 color, vec3 normal, float scatter, float roughness, float specular, float metallic) {
+	// Basic shading from light angle
+	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
+	const float dot_product = max(dot(lightVector, normal), 0.0);
+	const float shade = pow(dot_product, specular);
+	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * ubo.light.w), shade);
+	
+	// Receive Shadows
+	if (shade > 0.0 && ubo.rtx_shadows) {
+		shadowed = true;
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
+		if (shadowed) {
+			ray.color = ubo.ambient;
+		}
+	}
+	
+	//TODO roughness, scatter
+	
+	// Reflections
+	if (ubo.rtx_reflection_max_recursion > 1) {
+		ray.distance = gl_RayTmaxNV;
+		ray.origin = hitPoint + normal * 0.001f;
+		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
+		ray.reflector = metallic;
+	}
+}
+
+
+#####################################################
+
+#common sphere.*
+
+// Sphere
+struct Sphere {
+	float scatter;
+	float roughness;
+	vec3 pos;
+	float radius;
+	vec4 color;
+	float specular;
+	float metallic;
+	float refraction;
+	float density;
+};
+uint sphereStructSize = 5;
+Sphere unpackSphere(uint index) {
+	Sphere s;
+	s.scatter = sphereBuffer[sphereStructSize * index + 1].z;
+	s.roughness = sphereBuffer[sphereStructSize * index + 1].w;
+	s.pos = sphereBuffer[sphereStructSize * index + 2].xyz;
+	s.radius = sphereBuffer[sphereStructSize * index + 2].w;
+	s.color = sphereBuffer[sphereStructSize * index + 3];
+	s.specular = sphereBuffer[sphereStructSize * index + 4].x;
+	s.metallic = sphereBuffer[sphereStructSize * index + 4].y;
+	s.refraction = sphereBuffer[sphereStructSize * index + 4].z;
+	s.density = sphereBuffer[sphereStructSize * index + 4].w;
+	return s;
+}
+
+
 #############################################################
 
 #shader rgen
@@ -183,10 +213,32 @@ void main() {
 
 #shader rchit
 
-// Ray Tracing
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
 hitAttributeNV vec3 attribs;
+
+// Vertex
+struct Vertex {
+	vec3 pos;
+	float roughness;
+	vec3 normal;
+	float scatter;
+	vec4 color;
+	vec2 uv;
+	float specular;
+	float metallic;
+};
+uint vertexStructSize = 4;
+Vertex unpackVertex(uint index) {
+	Vertex v;
+	v.pos = vertexBuffer[vertexStructSize * index + 0].xyz;
+	v.roughness = vertexBuffer[vertexStructSize * index + 0].w;
+	v.normal = vertexBuffer[vertexStructSize * index + 1].xyz;
+	v.scatter = vertexBuffer[vertexStructSize * index + 1].w;
+	v.color = vertexBuffer[vertexStructSize * index + 2];
+	v.uv = vertexBuffer[vertexStructSize * index + 3].xy;
+	v.specular = vertexBuffer[vertexStructSize * index + 3].z;
+	v.metallic = vertexBuffer[vertexStructSize * index + 3].w;
+	return v;
+}
 
 void main() {
 	// Hit Triangle vertices
@@ -199,34 +251,14 @@ void main() {
 	// Hit World Position
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	// Interpolate Vertex data
-	const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
-	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
-	// const float reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
 	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
-	const float specular = 1;
+	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
+	const float scatter = v0.scatter * barycentricCoords.x + v1.scatter * barycentricCoords.y + v2.scatter * barycentricCoords.z;
+	const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
+	const float specular = v0.specular * barycentricCoords.x + v1.specular * barycentricCoords.y + v2.specular * barycentricCoords.z;
+	const float metallic = v0.metallic * barycentricCoords.x + v1.metallic * barycentricCoords.y + v2.metallic * barycentricCoords.z;
 
-	// Basic shading (with light angle)
-	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
-	const float dot_product = max(dot(lightVector, normal), 0.0);
-	const float shade = pow(dot_product, specular);
-	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * ubo.light.w), shade);
-	
-	// Receive Shadows
-	if (shade > 0.0 && ubo.rtx_shadows) {
-		shadowed = true;  
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
-		if (shadowed) {
-			ray.color = ubo.ambient;
-		}
-	}
-	
-	// Reflections
-	if (ubo.rtx_reflection_max_recursion > 1) {
-		ray.distance = gl_RayTmaxNV;
-		ray.origin = hitPoint + normal * 0.001f;
-		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
-		ray.reflector = v0.reflector * barycentricCoords.x + v1.reflector * barycentricCoords.y + v2.reflector * barycentricCoords.z;
-	}
+	ApplyStandardShading(hitPoint, color, normal, scatter, roughness, specular, metallic);
 }
 
 
@@ -289,9 +321,6 @@ void main() {
 
 #shader sphere.rchit
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
-
 hitAttributeNV Sphere sphere;
 
 void main() {
@@ -299,29 +328,6 @@ void main() {
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	// Normal
 	const vec3 normal = (hitPoint - sphere.pos) / sphere.radius;
-	// Specular
-	const float specular = 0.8;
 
-	// Basic shading (with light angle)
-	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
-	const float dot_product = max(dot(lightVector, normal), 0.0);
-	const float shade = pow(dot_product, specular);
-	ray.color = mix(ubo.ambient, max(ubo.ambient, sphere.color.rgb * ubo.light.w), shade);
-	
-	// Receive Shadows
-	if (shade > 0.0 && ubo.rtx_shadows) {
-		shadowed = true;  
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
-		if (shadowed) {
-			ray.color = ubo.ambient;
-		}
-	}
-	
-	// Reflections
-	if (ubo.rtx_reflection_max_recursion > 1) {
-		ray.distance = gl_RayTmaxNV;
-		ray.origin = hitPoint + normal * 0.001f;
-		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
-		ray.reflector = sphere.reflector;
-	}
+	ApplyStandardShading(hitPoint, sphere.color, normal, sphere.scatter, sphere.roughness, sphere.specular, sphere.metallic);
 }
