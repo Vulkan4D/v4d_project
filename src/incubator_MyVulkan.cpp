@@ -85,6 +85,15 @@ int main() {
 					case GLFW_KEY_HOME:
 						vulkan->light.w += 0.1f;
 						break;
+						
+					// RTX Bounce Recursion
+					case GLFW_KEY_KP_ADD:
+						vulkan->rtx_reflection_max_recursion++;
+						break;
+					case GLFW_KEY_KP_SUBTRACT:
+						vulkan->rtx_reflection_max_recursion--;
+						if (vulkan->rtx_reflection_max_recursion < 1) vulkan->rtx_reflection_max_recursion = 1;
+						break;
 				}
 			}
 		});

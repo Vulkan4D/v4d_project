@@ -72,9 +72,9 @@ protected: // class members
 	// Ray Tracing
 	bool useRayTracing = true;
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
-	VkAccelerationStructureNV rayTracingBottomLevelAccelerationStructure;
-	VkDeviceMemory rayTracingBottomLevelAccelerationStructureMemory;
-	uint64_t rayTracingBottomLevelAccelerationStructureHandle;
+	std::vector<VkAccelerationStructureNV> rayTracingBottomLevelAccelerationStructures;
+	std::vector<VkDeviceMemory> rayTracingBottomLevelAccelerationStructureMemories;
+	std::vector<uint64_t> rayTracingBottomLevelAccelerationStructureHandles;
 	VkAccelerationStructureNV rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
 	VkDeviceMemory rayTracingTopLevelAccelerationStructureMemory;
 	uint64_t rayTracingTopLevelAccelerationStructureHandle;
@@ -1162,7 +1162,7 @@ public: // Public Methods
 		std::lock_guard lock(renderingMutex);
 		
 		// Wait for previous frame to be finished
-		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
+		// renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
 
 		// Get an image from the swapchain
 		uint imageIndex;
@@ -1210,8 +1210,8 @@ public: // Public Methods
 		submitInfo.pSignalSemaphores = signalSemaphores;
 		
 		// Reset the fence and Submit the queue
-		renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
-		if ((result = renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, inFlightFences[currentFrameInFlight]/*optional fence to be signaled*/)) != VK_SUCCESS) {
+		// renderingDevice->ResetFences(1, &inFlightFences[currentFrameInFlight]); // Unlike the semaphores, we manually need to restore the fence to the unsignaled state
+		if ((result = renderingDevice->QueueSubmit(graphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*inFlightFences[currentFrameInFlight]*//*optional fence to be signaled*/)) != VK_SUCCESS) {
 			LOG_ERROR((int)result)
 			throw std::runtime_error("Failed to submit draw command buffer");
 		}

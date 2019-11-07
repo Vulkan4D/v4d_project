@@ -17,6 +17,7 @@ layout(binding = 2, set = 0) uniform UBO {
 	mat4 view;
 	mat4 proj;
     vec4 light;
+	int rtx_reflection_max_recursion;
 } ubo;
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
@@ -50,14 +51,14 @@ struct Sphere {
 	float reflector;
 	float roughness;
 };
-uint sphereStructSize = 3;
+uint sphereStructSize = 4;
 Sphere unpackSphere(uint index) {
 	Sphere s;
-	s.pos = sphereBuffer[sphereStructSize * index + 0].xyz;
-	s.radius = sphereBuffer[sphereStructSize * index + 0].w;
-	s.color = sphereBuffer[sphereStructSize * index + 1];
-	s.reflector = sphereBuffer[sphereStructSize * index + 2].x;
-	s.roughness = sphereBuffer[sphereStructSize * index + 2].y;
+	s.reflector = sphereBuffer[sphereStructSize * index + 1].z;
+	s.roughness = sphereBuffer[sphereStructSize * index + 1].w;
+	s.pos = sphereBuffer[sphereStructSize * index + 2].xyz;
+	s.radius = sphereBuffer[sphereStructSize * index + 2].w;
+	s.color = sphereBuffer[sphereStructSize * index + 3];
 	return s;
 }
 
@@ -69,7 +70,7 @@ Sphere unpackSphere(uint index) {
 layout(location = 0) rayPayloadNV RayPayload ray;
 
 // Max. number of recursion is passed via a specialization constant
-layout (constant_id = 0) const int MAX_RECURSION = 0;
+// layout (constant_id = 0) const int MAX_RECURSION = 0;
 
 void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
@@ -84,7 +85,7 @@ void main() {
 	float reflection = 1.0;
 	float max_distance = 10000.0;
 	
-	for (int i = 0; i < MAX_RECURSION; i++) {
+	for (int i = 0; i < ubo.rtx_reflection_max_recursion; i++) {
 		ray.reflector = 0.0;
 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
 		finalColor = mix(finalColor, ray.color, reflection);
@@ -131,7 +132,7 @@ void main() {
 	const float dot_product = max(dot(lightVector, normal), 0.5);
 	ray.color = color.rgb * vec3(dot_product) * ubo.light.w;
 	
-	// Shadow casting
+	// Receive Shadows
 	shadowed = true;  
 	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
 	if (shadowed) {
@@ -153,7 +154,7 @@ void main() {
 layout(location = 0) rayPayloadInNV RayPayload ray;
 
 void main() {
-	ray.color = vec3(0.0, 0.0, 0.0);
+	ray.color = vec3(0.7, 0.8, 1.0);
 }
 
 
@@ -175,7 +176,8 @@ void main() {
 hitAttributeNV Sphere attribs;
 
 void main() {
-	const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
+	// const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
+	const Sphere sphere = unpackSphere(gl_PrimitiveID);
 	const vec3 origin = gl_WorldRayOriginNV;
 	const vec3 direction = gl_WorldRayDirectionNV;
 	const float tMin = gl_RayTminNV;
@@ -209,7 +211,6 @@ layout(location = 2) rayPayloadNV bool shadowed;
 hitAttributeNV Sphere sphere;
 
 void main() {
-	
 	// Hit World Position
 	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	// Normal
@@ -220,7 +221,7 @@ void main() {
 	const float dot_product = max(dot(lightVector, normal), 0.5);
 	ray.color = sphere.color.rgb * vec3(dot_product) * ubo.light.w;
 	
-	// Shadow casting
+	// Receive Shadows
 	shadowed = true;  
 	traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 1, 0, 1, hitPoint, 0.001, lightVector, 10000.0, 2);
 	if (shadowed) {

@@ -12,12 +12,15 @@ struct Vertex {
 };
 
 struct Sphere {
+	std::pair<glm::vec3,glm::vec3> boundingBox;
+	float reflector;
+	float roughness;
 	glm::vec3 pos;
 	float radius;
 	glm::vec4 color;
-	float reflector;
-	float roughness;
-	glm::ivec2 padding;
+	
+	Sphere(float reflector, float roughness, glm::vec3 pos, float radius, glm::vec4 color)
+	: boundingBox(pos - radius, pos + radius), reflector(reflector), roughness(roughness), pos(pos), radius(radius), color(color) {}
 };
 
 class MyVulkanTest : public MyVulkanRenderer {
@@ -27,15 +30,16 @@ class MyVulkanTest : public MyVulkanRenderer {
 	// Vertex Buffers for test object
 	std::vector<Vertex> testObjectVertices;
 	std::vector<uint32_t> testObjectIndices;
-	VkBuffer vertexBuffer, indexBuffer;
-	VkDeviceMemory vertexBufferMemory, indexBufferMemory;
+	VkBuffer vertexBuffer, indexBuffer, sphereBuffer;
+	VkDeviceMemory vertexBufferMemory, indexBufferMemory, sphereBufferMemory;
 	
-	std::vector<Sphere> spheres;
+	std::vector<Sphere> testObjectSpheres;
 	
 	struct UBO {
 		glm::mat4 viewInverse;
 		glm::mat4 projInverse;
 		glm::vec4 light;
+		int rtx_reflection_max_recursion;
 	};
 	
 	VkBuffer uniformBuffer;
@@ -54,6 +58,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 
 	// Ray Tracing
 	std::vector<VkGeometryNV> testObjectGeometries;
+	std::vector<VkGeometryNV> testSphereGeometries;
 	std::vector<GeometryInstance> testObjectGeometryInstances;
 	
 	std::vector<VkRayTracingShaderGroupCreateInfoNV> rayTracingShaderGroups;
@@ -62,8 +67,9 @@ class MyVulkanTest : public MyVulkanRenderer {
 	const static int RAYTRACING_GROUP_INDEX_RMISS_SHADOW = 2;
 	const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
 	const static int RAYTRACING_GROUP_INDEX_RCHIT_SHADOW = 4;
+	const static int RAYTRACING_GROUP_INDEX_RCHIT_SPHERE = 5;
 	
-	uint32_t RTX_REFLECTION_MAX_RECURSION = 5;
+	// uint32_t RTX_REFLECTION_MAX_RECURSION = 4;
 	
 	
 	void Init() override {
@@ -95,9 +101,11 @@ class MyVulkanTest : public MyVulkanRenderer {
 			8, 9, 10, 10, 11, 8,
 		};
 		
-		spheres = {
-			{{ 0.0, 0.0, 1.0}, 1.5f, {0.5, 0.6, 0.6, 1.0}, 0.5f, 0.0f, {0,0}},
-			{{ 2.0, 2.0, 1.0}, 1.5f, {0.5, 0.6, 0.6, 1.0}, 0.5f, 0.0f, {0,0}},
+		testObjectSpheres = {
+			{0.5f, 0.0f, { 0.0, 0.0, 0.8}, 0.4f, {0.5, 0.6, 0.6, 1.0}},
+			{0.5f, 0.0f, {-2.0,-1.0, 1.5}, 0.4f, {0.5, 0.6, 0.6, 1.0}},
+			{0.9f, 0.0f, { 1.0,-1.0, 1.5}, 0.6f, {0.5, 0.5, 0.5, 1.0}},
+			{0.1f, 0.0f, { 2.0,-1.0, 0.5}, 0.3f, {1.0, 1.0, 1.0, 1.0}},
 		};
 
 	}
@@ -139,33 +147,66 @@ class MyVulkanTest : public MyVulkanRenderer {
 			renderingDevice->DestroyBuffer(stagingBuffer, nullptr);
 			renderingDevice->FreeMemory(stagingBufferMemory, nullptr);
 		}
+
+		// Spheres
+		{
+			void* data;
+			VkBuffer stagingBuffer;
+			VkDeviceMemory stagingBufferMemory;
+			VkDeviceSize bufferSize = sizeof(Sphere) * testObjectSpheres.size();
+			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+			renderingDevice->MapMemory(stagingBufferMemory, 0, bufferSize, 0, &data);
+				memcpy(data, testObjectSpheres.data(), bufferSize);
+			renderingDevice->UnmapMemory(stagingBufferMemory);
+			renderingDevice->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, sphereBuffer, sphereBufferMemory);
+			CopyBuffer(stagingBuffer, sphereBuffer, bufferSize);
+			renderingDevice->DestroyBuffer(stagingBuffer, nullptr);
+			renderingDevice->FreeMemory(stagingBufferMemory, nullptr);
+		}
+
 		
 		if (useRayTracing) {
 			
 			
 			// Geometries for bottom level acceleration structure
-			VkGeometryNV geometry {};
-			geometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
-			geometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
-			geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
-			geometry.geometry.triangles.vertexData = vertexBuffer;
-			geometry.geometry.triangles.vertexOffset = 0;
-			geometry.geometry.triangles.vertexCount = (uint)testObjectVertices.size();
-			geometry.geometry.triangles.vertexStride = sizeof(Vertex);
-			geometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
-			geometry.geometry.triangles.indexData = indexBuffer;
-			geometry.geometry.triangles.indexOffset = 0;
-			geometry.geometry.triangles.indexCount = (uint)testObjectIndices.size();
-			geometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
-			geometry.geometry.triangles.transformData = VK_NULL_HANDLE;
-			geometry.geometry.triangles.transformOffset = 0;
-			geometry.geometry.aabbs = {};
-			geometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
-			geometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
-			testObjectGeometries.push_back(geometry);
+			VkGeometryNV triangleGeometry {};
+				triangleGeometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+				triangleGeometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
+				triangleGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
+				triangleGeometry.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_NV;
+				triangleGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+				triangleGeometry.geometry.triangles.vertexData = vertexBuffer;
+				triangleGeometry.geometry.triangles.vertexOffset = 0;
+				triangleGeometry.geometry.triangles.vertexCount = (uint)testObjectVertices.size();
+				triangleGeometry.geometry.triangles.vertexStride = sizeof(Vertex);
+				triangleGeometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+				triangleGeometry.geometry.triangles.indexData = indexBuffer;
+				triangleGeometry.geometry.triangles.indexOffset = 0;
+				triangleGeometry.geometry.triangles.indexCount = (uint)testObjectIndices.size();
+				triangleGeometry.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+				triangleGeometry.geometry.triangles.transformData = VK_NULL_HANDLE;
+				triangleGeometry.geometry.triangles.transformOffset = 0;
+			testObjectGeometries.push_back(triangleGeometry);
+			
+			VkGeometryNV sphereGeometry {};
+				sphereGeometry.sType = VK_STRUCTURE_TYPE_GEOMETRY_NV;
+				sphereGeometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV;
+				sphereGeometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV;
+				sphereGeometry.geometryType = VK_GEOMETRY_TYPE_AABBS_NV;
+				sphereGeometry.flags = VK_GEOMETRY_OPAQUE_BIT_NV;
+				sphereGeometry.geometry.aabbs.aabbData = sphereBuffer;
+				sphereGeometry.geometry.aabbs.numAABBs = (uint)testObjectSpheres.size();
+				sphereGeometry.geometry.aabbs.stride = sizeof(Sphere);
+				sphereGeometry.geometry.aabbs.offset = 0;
+			testSphereGeometries.push_back(sphereGeometry);
+			
+			
+			rayTracingBottomLevelAccelerationStructures.resize(2);
+			rayTracingBottomLevelAccelerationStructureMemories.resize(2);
+			rayTracingBottomLevelAccelerationStructureHandles.resize(2);
 			
 			{
-				// Bottom Level acceleration structure
+				// Bottom Level acceleration structure for triangles
 				VkAccelerationStructureCreateInfoNV accStructCreateInfo {
 					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
 					nullptr,// pNext
@@ -180,12 +221,12 @@ class MyVulkanTest : public MyVulkanRenderer {
 						testObjectGeometries.data()// VkGeometryNV pGeometries
 					}
 				};
-				if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructure) != VK_SUCCESS)
-					throw std::runtime_error("Failed to create bottom level acceleration structure");
+				if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[0]) != VK_SUCCESS)
+					throw std::runtime_error("Failed to create bottom level acceleration structure for triangles");
 					
 				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructure;
+				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0];
 					
 				VkMemoryRequirements2 memoryRequirements2 {};
 				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
@@ -196,23 +237,74 @@ class MyVulkanTest : public MyVulkanRenderer {
 					memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
 					renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 				};
-				if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructureMemory) != VK_SUCCESS)
-					throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure");
+				if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructureMemories[0]) != VK_SUCCESS)
+					throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure for triangles");
 				
 				VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
 					VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
 					nullptr,// pNext
-					rayTracingBottomLevelAccelerationStructure,// accelerationStructure
-					rayTracingBottomLevelAccelerationStructureMemory,// memory
+					rayTracingBottomLevelAccelerationStructures[0],// accelerationStructure
+					rayTracingBottomLevelAccelerationStructureMemories[0],// memory
 					0,// VkDeviceSize memoryOffset
 					0,// uint32_t deviceIndexCount
 					nullptr// const uint32_t* pDeviceIndices
 				};
 				if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
-					throw std::runtime_error("Failed to bind bottom level acceleration structure memory");
+					throw std::runtime_error("Failed to bind bottom level acceleration structure memory for triangles");
 				
-				if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructure, sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructureHandle))
-					throw std::runtime_error("Failed to get bottom level acceleration structure handle");
+				if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[0], sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructureHandles[0]))
+					throw std::runtime_error("Failed to get bottom level acceleration structure handle for triangles");
+			}
+			
+			{
+				// Bottom Level acceleration structure for spheres
+				VkAccelerationStructureCreateInfoNV accStructCreateInfo {
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+					nullptr,// pNext
+					0,// VkDeviceSize compactedSize
+					{// VkAccelerationStructureInfoNV info
+						VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+						nullptr,// pNext
+						VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
+						0,// flags
+						0,// instanceCount
+						(uint)testSphereGeometries.size(),// geometryCount
+						testSphereGeometries.data()// VkGeometryNV pGeometries
+					}
+				};
+				if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[1]) != VK_SUCCESS)
+					throw std::runtime_error("Failed to create bottom level acceleration structure for spheres");
+					
+				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1];
+					
+				VkMemoryRequirements2 memoryRequirements2 {};
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
+				
+				VkMemoryAllocateInfo memoryAllocateInfo {
+					VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+					nullptr,// pNext
+					memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
+					renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+				};
+				if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructureMemories[1]) != VK_SUCCESS)
+					throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure for spheres");
+				
+				VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
+					VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
+					nullptr,// pNext
+					rayTracingBottomLevelAccelerationStructures[1],// accelerationStructure
+					rayTracingBottomLevelAccelerationStructureMemories[1],// memory
+					0,// VkDeviceSize memoryOffset
+					0,// uint32_t deviceIndexCount
+					nullptr// const uint32_t* pDeviceIndices
+				};
+				if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
+					throw std::runtime_error("Failed to bind bottom level acceleration structure memory for spheres");
+				
+				if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[1], sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructureHandles[1]))
+					throw std::runtime_error("Failed to get bottom level acceleration structure handle for spheres");
 			}
 			
 			VkBuffer instanceBuffer;
@@ -224,24 +316,33 @@ class MyVulkanTest : public MyVulkanRenderer {
 				0.0f, 1.0f, 0.0f, 0.0f,
 				0.0f, 0.0f, 1.0f, 0.0f
 			};
-			// Object instance
+			// Triangles instance
 			testObjectGeometryInstances.push_back({
 				transform,
 				0, // instanceId
 				0xff, // mask
 				0, // instanceOffset
 				VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
-				rayTracingBottomLevelAccelerationStructureHandle // accelerationStructureHandle
+				rayTracingBottomLevelAccelerationStructureHandles[0] // accelerationStructureHandle
 			});
-			// // Shadow instance
-			// testObjectGeometryInstances.push_back({
-			// 	transform,
-			// 	1, // instanceId
-			// 	0xff, // mask
-			// 	2, // instanceOffset
-			// 	VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
-			// 	rayTracingBottomLevelAccelerationStructureHandle // accelerationStructureHandle
-			// });
+			// Spheres instance
+			testObjectGeometryInstances.push_back({
+				transform,
+				0, // instanceId
+				0xff, // mask
+				2, // instanceOffset
+				0, // flags
+				rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
+			});
+			// Spheres shadows
+			testObjectGeometryInstances.push_back({
+				transform,
+				0, // instanceId
+				0xff, // mask
+				1, // instanceOffset
+				0, // flags
+				rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
+			});
 			
 			// Ray Tracing Geometry Instances
 			renderingDevice->CreateBuffer(sizeof(GeometryInstance) * testObjectGeometryInstances.size(), VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, instanceBuffer, instanceBufferMemory, testObjectGeometryInstances.data());
@@ -257,7 +358,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 						nullptr,// pNext
 						VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
 						0,// flags
-						1,// instanceCount
+						(uint)testObjectGeometryInstances.size(),// instanceCount
 						0,// geometryCount
 						nullptr// VkGeometryNV pGeometries
 					}
@@ -303,13 +404,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
 				memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-				VkMemoryRequirements2 memoryRequirementsBottomLevel, memoryRequirementsTopLevel;
-				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructure;
-				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel);
+				VkMemoryRequirements2 memoryRequirementsBottomLevel1, memoryRequirementsBottomLevel2, memoryRequirementsTopLevel;
+				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0];
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel1);
+				memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1];
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel2);
 				memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure;
 				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
 				// Send scratch buffer
-				const VkDeviceSize scratchBufferSize = std::max(memoryRequirementsBottomLevel.memoryRequirements.size, memoryRequirementsTopLevel.memoryRequirements.size);
+				const VkDeviceSize scratchBufferSize = std::max(memoryRequirementsBottomLevel1.memoryRequirements.size + memoryRequirementsBottomLevel2.memoryRequirements.size, memoryRequirementsTopLevel.memoryRequirements.size);
 				VkBuffer scratchBuffer;
 				VkDeviceMemory scratchBufferMemory;
 				renderingDevice->CreateBuffer(scratchBufferSize, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, scratchBuffer, scratchBufferMemory);
@@ -319,6 +422,13 @@ class MyVulkanTest : public MyVulkanRenderer {
 					VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
 					accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
 				
+					VkMemoryBarrier memoryBarrier {
+						VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+						nullptr,// pNext
+						VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
+						VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
+					};
+					
 					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
 					accelerationStructBuildInfo.geometryCount = (uint)testObjectGeometries.size();
 					accelerationStructBuildInfo.pGeometries = testObjectGeometries.data();
@@ -330,18 +440,38 @@ class MyVulkanTest : public MyVulkanRenderer {
 						VK_NULL_HANDLE, 
 						0, 
 						VK_FALSE, 
-						rayTracingBottomLevelAccelerationStructure, 
+						rayTracingBottomLevelAccelerationStructures[0], 
 						VK_NULL_HANDLE, 
 						scratchBuffer, 
 						0
 					);
 					
-					VkMemoryBarrier memoryBarrier {
-						VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-						nullptr,// pNext
-						VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
-						VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
-					};
+					renderingDevice->CmdPipelineBarrier(
+						cmdBuffer, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						0, 
+						1, &memoryBarrier, 
+						0, 0, 
+						0, 0
+					);
+					
+					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+					accelerationStructBuildInfo.geometryCount = (uint)testSphereGeometries.size();
+					accelerationStructBuildInfo.pGeometries = testSphereGeometries.data();
+					accelerationStructBuildInfo.instanceCount = 0;
+					
+					renderingDevice->CmdBuildAccelerationStructureNV(
+						cmdBuffer, 
+						&accelerationStructBuildInfo, 
+						VK_NULL_HANDLE, 
+						0, 
+						VK_FALSE, 
+						rayTracingBottomLevelAccelerationStructures[1], 
+						VK_NULL_HANDLE, 
+						scratchBuffer, 
+						memoryRequirementsBottomLevel1.memoryRequirements.size
+					);
 					
 					renderingDevice->CmdPipelineBarrier(
 						cmdBuffer, 
@@ -356,7 +486,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
 					accelerationStructBuildInfo.geometryCount = 0;
 					accelerationStructBuildInfo.pGeometries = nullptr;
-					accelerationStructBuildInfo.instanceCount = 1;
+					accelerationStructBuildInfo.instanceCount = (uint)testObjectGeometryInstances.size();
 					
 					renderingDevice->CmdBuildAccelerationStructureNV(
 						cmdBuffer, 
@@ -402,16 +532,16 @@ class MyVulkanTest : public MyVulkanRenderer {
 
 
 
-		// Pass recursion depth for reflections to ray generation shader via specialization constant
-		VkSpecializationMapEntry rgenSpecializationMapEntry {};
-		rgenSpecializationMapEntry.constantID = 0;
-		rgenSpecializationMapEntry.offset = 0;
-		rgenSpecializationMapEntry.size = sizeof(RTX_REFLECTION_MAX_RECURSION);
-		VkSpecializationInfo rgenSpecializationInfo {};
-		rgenSpecializationInfo.mapEntryCount = 1;
-		rgenSpecializationInfo.pMapEntries = &rgenSpecializationMapEntry;
-		rgenSpecializationInfo.dataSize = sizeof(RTX_REFLECTION_MAX_RECURSION);
-		rgenSpecializationInfo.pData = &RTX_REFLECTION_MAX_RECURSION;
+		// // Pass recursion depth for reflections to ray generation shader via specialization constant
+		// VkSpecializationMapEntry rgenSpecializationMapEntry {};
+		// rgenSpecializationMapEntry.constantID = 0;
+		// rgenSpecializationMapEntry.offset = 0;
+		// rgenSpecializationMapEntry.size = sizeof(RTX_REFLECTION_MAX_RECURSION);
+		// VkSpecializationInfo rgenSpecializationInfo {};
+		// rgenSpecializationInfo.mapEntryCount = 1;
+		// rgenSpecializationInfo.pMapEntries = &rgenSpecializationMapEntry;
+		// rgenSpecializationInfo.dataSize = sizeof(RTX_REFLECTION_MAX_RECURSION);
+		// rgenSpecializationInfo.pData = &RTX_REFLECTION_MAX_RECURSION;
 		
 
 		if (useRayTracing) {
@@ -419,13 +549,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 			
 			// Load shader files
 			testShader = new VulkanShaderProgram(renderingDevice, {
-				{"incubator_MyVulkan/assets/shaders/rtx.rgen", "main", &rgenSpecializationInfo},
+				{"incubator_MyVulkan/assets/shaders/rtx.rgen"/*, "main", &rgenSpecializationInfo*/},
 				{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
 				{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
 				{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
+				{"incubator_MyVulkan/assets/shaders/rtx.sphere.rchit"},
+				{"incubator_MyVulkan/assets/shaders/rtx.sphere.rint"},
 			});
 			
-			rayTracingShaderGroups.resize(5);
+			rayTracingShaderGroups.resize(6);
 			
 			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RGEN] = {
 				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
@@ -472,6 +604,16 @@ class MyVulkanTest : public MyVulkanRenderer {
 				VK_SHADER_UNUSED_NV, // anyHitShader;
 				VK_SHADER_UNUSED_NV // intersectionShader;
 			};
+			rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT_SPHERE] = {
+				VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
+				nullptr,
+				VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV,
+				VK_SHADER_UNUSED_NV, // generalShader
+				4, // closestHitShader;
+				VK_SHADER_UNUSED_NV, // anyHitShader;
+				5 // intersectionShader;
+			};
+			
 			
 			// Uniforms
 			testShader->AddLayoutBindings({
@@ -508,6 +650,13 @@ class MyVulkanTest : public MyVulkanRenderer {
 					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
 					1, // count (for array)
 					VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
+					nullptr // pImmutableSamplers
+				},
+				{// sphere buffer
+					5, // binding
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+					1, // count (for array)
+					VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stage flags
 					nullptr // pImmutableSamplers
 				},
 			});
@@ -562,7 +711,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			rayTracingPipelineInfo.pStages = testShader->GetStages().data();
 			rayTracingPipelineInfo.groupCount = (uint)rayTracingShaderGroups.size();
 			rayTracingPipelineInfo.pGroups = rayTracingShaderGroups.data();
-			rayTracingPipelineInfo.maxRecursionDepth = 2;
+			rayTracingPipelineInfo.maxRecursionDepth = 3;
 			rayTracingPipelineInfo.layout = rayTracingPipelineLayout;
 			
 			if (renderingDevice->CreateRayTracingPipelinesNV(VK_NULL_HANDLE, 1, &rayTracingPipelineInfo, nullptr, &rayTracingPipeline) != VK_SUCCESS) //TODO support multiple ray tracing pipelines
@@ -585,6 +734,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS_SHADOW);
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT);
 			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SHADOW);
+			data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SPHERE);
 			renderingDevice->UnmapMemory(rayTracingShaderBindingTableBufferMemory);
 			delete[] shaderHandleStorage;
 		}
@@ -601,7 +751,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 					{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 1},
 					{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
 					{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-					{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2},
+					{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
 				}, 
 				descriptorPool, 
 				VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
@@ -651,6 +801,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			VkDescriptorBufferInfo uniformBufferInfo = {uniformBuffer, 0, sizeof(UBO)};
 			VkDescriptorBufferInfo vertexBufferInfo = {vertexBuffer, 0, sizeof(Vertex) * testObjectVertices.size()};
 			VkDescriptorBufferInfo indexBufferInfo = {indexBuffer, 0, sizeof(uint32_t) * testObjectIndices.size()};
+			VkDescriptorBufferInfo sphereBufferInfo = {sphereBuffer, 0, sizeof(Sphere) * testObjectSpheres.size()};
 
 			std::vector<VkWriteDescriptorSet> descriptorWrites {
 				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // acceleration structure
@@ -706,6 +857,17 @@ class MyVulkanTest : public MyVulkanRenderer {
 					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
 					nullptr,// VkDescriptorImageInfo* pImageInfo
 					&indexBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
+					nullptr// VkBufferView* pTexelBufferView
+				},
+				{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sphere buffer
+					nullptr,// pNext
+					descriptorSet,// VkDescriptorSet dstSet
+					5,// uint dstBinding
+					0,// uint dstArrayElement
+					1,// uint descriptorCount
+					VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
+					nullptr,// VkDescriptorImageInfo* pImageInfo
+					&sphereBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
 					nullptr// VkBufferView* pTexelBufferView
 				},
 			};
@@ -766,9 +928,15 @@ class MyVulkanTest : public MyVulkanRenderer {
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
 			rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
 			testObjectGeometryInstances.clear();
-			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemory, nullptr);
-			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructure, nullptr);
+			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemories[0], nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[0], nullptr);
+			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemories[1], nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[1], nullptr);
+			rayTracingBottomLevelAccelerationStructureMemories.clear();
+			rayTracingBottomLevelAccelerationStructureHandles.clear();
+			rayTracingBottomLevelAccelerationStructures.clear();
 			testObjectGeometries.clear();
+			testSphereGeometries.clear();
 		}
 
 		// Shaders
@@ -781,6 +949,10 @@ class MyVulkanTest : public MyVulkanRenderer {
 		// Indices
 		renderingDevice->DestroyBuffer(indexBuffer, nullptr);
 		renderingDevice->FreeMemory(indexBufferMemory, nullptr);
+		
+		// Spheres
+		renderingDevice->DestroyBuffer(sphereBuffer, nullptr);
+		renderingDevice->FreeMemory(sphereBufferMemory, nullptr);
 		
 	}
 	
@@ -943,16 +1115,17 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Current camera position
 			ubo.viewInverse = glm::inverse(glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1)));
 			// Projection
-			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f));
+			ubo.projInverse = glm::inverse(glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f));
 			ubo.projInverse[1][1] *= -1;
 		} else {
 			// Current camera position
 			ubo.viewInverse = glm::lookAt(glm::vec3(2,2,2), glm::vec3(0,0,0), glm::vec3(0,0,1));
 			// Projection
-			ubo.projInverse = glm::perspective(glm::radians(60.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
+			ubo.projInverse = glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
 			ubo.projInverse[1][1] *= -1;
 		}
 		ubo.light = light;
+		ubo.rtx_reflection_max_recursion = rtx_reflection_max_recursion;
 		// Update memory
 		void* data;
 		renderingDevice->MapMemory(uniformBufferMemory, 0/*offset*/, sizeof(ubo), 0/*flags*/, &data);
@@ -962,6 +1135,6 @@ class MyVulkanTest : public MyVulkanRenderer {
 
 public:
 	glm::vec4 light {1.0,1.0,3.0, 1.0};
-	
+	int rtx_reflection_max_recursion = 4;
 	
 };
