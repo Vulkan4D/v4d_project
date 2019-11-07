@@ -5,7 +5,7 @@
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
-	float reflectiveness;
+	float reflector;
 	glm::vec4 color;
 	glm::vec3 normal;
 	float roughness;
@@ -65,6 +65,8 @@ class MyVulkanTest : public MyVulkanRenderer {
 	const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
 	const static int RAYTRACING_GROUP_INDEX_RCHIT_SHADOW = 4;
 	
+	uint32_t RTX_REFLECTION_MAX_RECURSION = 5;
+	
 	
 	void Init() override {
 		clearColor = {0,0,0,1};
@@ -74,20 +76,20 @@ class MyVulkanTest : public MyVulkanRenderer {
 	void LoadScene() override {
 
 		testObjectVertices = {
-			{{-0.5f,-0.5f, 0.0f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f,-0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-0.5f, 0.5f, 0.0f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f,-0.5f, 0.0f}, 0.2f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f,-0.5f, 0.0f}, 0.2f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f, 0.5f, 0.0f}, 0.2f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f, 0.5f, 0.0f}, 0.2f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 			//
-			{{-0.5f,-0.5f,-0.5f}, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f,-0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-0.5f, 0.5f,-0.5f}, 0.0f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f,-0.5f,-0.5f}, 0.2f, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f,-0.5f,-0.5f}, 0.2f, {0.0f, 1.0f, 0.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 0.5f, 0.5f,-0.5f}, 0.2f, {0.0f, 0.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-0.5f, 0.5f,-0.5f}, 0.2f, {0.0f, 1.0f, 1.0f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 			//
-			{{-8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 8.0f,-8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{ 8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
-			{{-8.0f, 8.0f,-2.0f}, 1.0f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-8.0f,-8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 8.0f,-8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{ 8.0f, 8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
+			{{-8.0f, 8.0f,-2.0f}, 0.2f, {0.5f, 0.5f, 0.5f, 1.0f}, {0.0,0.0,1.0}, 0.0},
 		};
 		testObjectIndices = {
 			0, 1, 2, 2, 3, 0,
@@ -397,10 +399,24 @@ class MyVulkanTest : public MyVulkanRenderer {
 
 
 
+		// Pass recursion depth for reflections to ray generation shader via specialization constant
+		VkSpecializationMapEntry rgenSpecializationMapEntry {};
+		rgenSpecializationMapEntry.constantID = 0;
+		rgenSpecializationMapEntry.offset = 0;
+		rgenSpecializationMapEntry.size = sizeof(RTX_REFLECTION_MAX_RECURSION);
+		VkSpecializationInfo rgenSpecializationInfo {};
+		rgenSpecializationInfo.mapEntryCount = 1;
+		rgenSpecializationInfo.pMapEntries = &rgenSpecializationMapEntry;
+		rgenSpecializationInfo.dataSize = sizeof(RTX_REFLECTION_MAX_RECURSION);
+		rgenSpecializationInfo.pData = &RTX_REFLECTION_MAX_RECURSION;
+		
 
 		if (useRayTracing) {
+			
+			
+			// Load shader files
 			testShader = new VulkanShaderProgram(renderingDevice, {
-				{"incubator_MyVulkan/assets/shaders/rtx.rgen"},
+				{"incubator_MyVulkan/assets/shaders/rtx.rgen", "main", &rgenSpecializationInfo},
 				{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
 				{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
 				{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
@@ -502,7 +518,7 @@ class MyVulkanTest : public MyVulkanRenderer {
 			// Vertex Input structure
 			testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 				{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-				{1, offsetof(Vertex, Vertex::reflectiveness), VK_FORMAT_R32_SFLOAT},
+				{1, offsetof(Vertex, Vertex::reflector), VK_FORMAT_R32_SFLOAT},
 				{2, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 				{3, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32_SFLOAT},
 				{4, offsetof(Vertex, Vertex::roughness), VK_FORMAT_R32_SFLOAT},

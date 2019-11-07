@@ -116,7 +116,11 @@ int main() {
 			glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/avgFrameTime))+" FPS via " + (vulkan->IsUsingRayTracing()? "RayTracing" : "Rasterization")).c_str());
 			
 			SLEEP(20ms)
+			// break;
+			
 		}
+		
+		// SLEEP(10s)
 		
 		vulkan->UnloadRenderer();
 		
