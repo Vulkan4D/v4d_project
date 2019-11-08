@@ -12,6 +12,7 @@
 		
 		std::map<std::string, std::function<void(int,int)>> resizeCallbacks {};
 		std::map<std::string, std::function<void(int,int,int,int)>> keyCallbacks {};
+		std::map<std::string, std::function<void(int,int,int)>> mouseButtonCallbacks {};
 
 		static int GetNextIndex() {
 			static std::atomic<int> nextIndex = 0;
@@ -49,6 +50,13 @@
 				callback(key, scancode, action, mods);
 			}
 		}
+		
+		static void MouseButtonCallback(GLFWwindow* handle, int button, int action, int mods) {
+			auto window = reinterpret_cast<Window*>(glfwGetWindowUserPointer(handle));
+			for (auto[name, callback] : window->mouseButtonCallbacks) {
+				callback(button, action, mods);
+			}
+		}
 
 	public:
 		Window(const std::string& title, int width, int height, GLFWmonitor* monitor = nullptr, GLFWwindow* share = nullptr) : index(GetNextIndex()), width(width), height(height) {
@@ -58,6 +66,7 @@
 			glfwSetWindowUserPointer(handle, this);
 			glfwSetFramebufferSizeCallback(handle, ResizeCallback);
 			glfwSetKeyCallback(handle, KeyCallback);
+			glfwSetMouseButtonCallback(handle, MouseButtonCallback);
 		}
 
 		~Window() {
@@ -101,6 +110,14 @@
 			keyCallbacks.erase(name);
 		}
 
+		void AddMouseButtonCallback(std::string name, std::function<void(int,int,int)>&& callback) {
+			mouseButtonCallbacks[name] = std::forward<std::function<void(int,int,int)>>(callback);
+		}
+		
+		void RemoveMouseButtonCallback(std::string name) {
+			mouseButtonCallbacks.erase(name);
+		}
+		
 		bool IsActive() {
 			return !glfwWindowShouldClose(handle);
 		}
