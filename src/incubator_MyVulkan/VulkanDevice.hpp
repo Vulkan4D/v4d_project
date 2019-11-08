@@ -26,8 +26,8 @@ public:
 	VulkanDevice(
 		VulkanGPU* gpu,
 		VkPhysicalDeviceFeatures& deviceFeatures,
-		std::vector<const char*> extensions,
-		std::vector<const char*> layers,
+		std::vector<const char*>& extensions,
+		std::vector<const char*>& layers,
 		const std::vector<VulkanDeviceQueueInfo>& queuesInfo
 	) : gpu(gpu) {
 		instance = gpu->GetVulkanInstance();

@@ -41,6 +41,8 @@ int main() {
 	auto* vulkan = new RayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	
 	vulkan->LoadRenderer();
+	vulkan->LoadScene();
+	vulkan->SendGraphicsToDevice();
 	
 	float camSpeed = 1.0f, mouseSensitivity = 1.0f;
 	float horizontalAngle = 0.0f;
@@ -96,6 +98,11 @@ int main() {
 				// RTX Shadows
 				case GLFW_KEY_KP_ENTER:
 					vulkan->rtx_shadows = !vulkan->rtx_shadows;
+					break;
+				
+				// Reload Renderer
+				case GLFW_KEY_R:
+					vulkan->ReloadRenderer();
 					break;
 					
 			}
@@ -167,7 +174,7 @@ int main() {
 		}
 		
 		// Rendering
-		vulkan->RenderFrame();
+		vulkan->Render();
 		
 		// Frame time
 		currentFrameTime = timer.GetElapsedMilliseconds();
@@ -178,6 +185,8 @@ int main() {
 		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/currentFrameTime))+" FPS").c_str());
 	}
 	
+	vulkan->DeleteGraphicsFromDevice();
+	vulkan->UnloadScene();
 	vulkan->UnloadRenderer();
 	
 	// Close Window and delete Vulkan

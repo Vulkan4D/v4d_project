@@ -93,16 +93,40 @@ class RayTracingRenderer : public VulkanRenderer {
 	const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
 	const static int RAYTRACING_GROUP_INDEX_RCHIT_SPHERE = 4;
 	
-	// uint32_t RTX_REFLECTION_MAX_RECURSION = 4;
-	
-	
 	void Init() override {
+		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
+		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
+		
+		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
+		deviceFeatures.geometryShader = VK_TRUE;
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.sampleRateShading = VK_TRUE;
+	}
+	
+	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
+		// Build up a score here and the GPU with the highest score will be selected.
+		// Add to the score optional specs, then multiply with mandatory specs.
+		
+		// Optional specs  -->  score += points * CONDITION
+		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
+		// score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
+		// score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+
+		// Mandatory specs  -->  score *= CONDITION
+		// score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
+		// score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
+		// score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
+	}
+	
+	void Info() override {
 		// Query the ray tracing properties of the current implementation
 		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
 		VkPhysicalDeviceProperties2 deviceProps2{};
 		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		deviceProps2.pNext = &rayTracingProperties;
 		GetPhysicalDeviceProperties2(renderingDevice->GetGPU()->GetHandle(), &deviceProps2);
+		// // MultiSampling
+		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
 	}
 
 	void CreateResources() override {
@@ -152,6 +176,7 @@ class RayTracingRenderer : public VulkanRenderer {
 		return shaderGroupHandleSize;
 	}
 
+public:
 	void LoadScene() override {
 
 		testObjectVertices = {
@@ -185,33 +210,6 @@ class RayTracingRenderer : public VulkanRenderer {
 
 
 
-
-
-
-
-
-		// // Pass recursion depth for reflections to ray generation shader via specialization constant
-		// VkSpecializationMapEntry rgenSpecializationMapEntry {};
-		// rgenSpecializationMapEntry.constantID = 0;
-		// rgenSpecializationMapEntry.offset = 0;
-		// rgenSpecializationMapEntry.size = sizeof(RTX_REFLECTION_MAX_RECURSION);
-		// VkSpecializationInfo rgenSpecializationInfo {};
-		// rgenSpecializationInfo.mapEntryCount = 1;
-		// rgenSpecializationInfo.pMapEntries = &rgenSpecializationMapEntry;
-		// rgenSpecializationInfo.dataSize = sizeof(RTX_REFLECTION_MAX_RECURSION);
-		// rgenSpecializationInfo.pData = &RTX_REFLECTION_MAX_RECURSION;
-		
-
-		
-		// Load shader files
-		testShader = new VulkanShaderProgram(renderingDevice, {
-			{"incubator_MyVulkan/assets/shaders/rtx.rgen"/*, "main", &rgenSpecializationInfo*/},
-			{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
-			{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
-			{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
-			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rchit"},
-			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rint"},
-		});
 		
 		rayTracingShaderGroups.resize(5);
 		
@@ -262,6 +260,25 @@ class RayTracingRenderer : public VulkanRenderer {
 		};
 		
 		
+	}
+
+	void UnloadScene() override {
+		
+	}
+
+protected:
+	void CreateSceneGraphics() override {
+		
+		// Load shader files
+		testShader = new VulkanShaderProgram(renderingDevice, {
+			{"incubator_MyVulkan/assets/shaders/rtx.rgen"},
+			{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
+			{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
+			{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
+			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rchit"},
+			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rint"},
+		});
+		
 		// Uniforms
 		testShader->AddLayoutBindings({
 			{// accelerationStructure
@@ -309,17 +326,6 @@ class RayTracingRenderer : public VulkanRenderer {
 		});
 		
 		
-		
-	}
-
-	void UnloadScene() override {
-		
-		// Shaders
-		delete testShader;
-		
-	}
-
-	void SendSceneToDevice() override {
 		
 		// Uniform buffers
 		CreateBuffer(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffer);
@@ -484,7 +490,7 @@ class RayTracingRenderer : public VulkanRenderer {
 		testObjectGeometryInstances.push_back({
 			transform,
 			0, // instanceId
-			0xff, // mask
+			0x1, // mask
 			0, // instanceOffset
 			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
 			rayTracingBottomLevelAccelerationStructureHandles[0] // accelerationStructureHandle
@@ -493,7 +499,7 @@ class RayTracingRenderer : public VulkanRenderer {
 		testObjectGeometryInstances.push_back({
 			transform,
 			0, // instanceId
-			0xff, // mask
+			0x2, // mask
 			1, // instanceOffset
 			0, // flags
 			rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
@@ -674,7 +680,7 @@ class RayTracingRenderer : public VulkanRenderer {
 		
 	}
 
-	void DeleteSceneFromDevice() override {
+	void DestroySceneGraphics() override {
 		
 		if (rayTracingTopLevelAccelerationStructure != VK_NULL_HANDLE) {
 			// Shader binding table
@@ -711,6 +717,9 @@ class RayTracingRenderer : public VulkanRenderer {
 		
 		// Uniform buffers
 		renderingDevice->DestroyBuffer(uniformBuffer);
+		
+		// Shaders
+		delete testShader;
 		
 	}
 	

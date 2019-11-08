@@ -16,7 +16,7 @@ protected: // class members
 	// Main Graphics Card
 	VulkanGPU* renderingGPU = nullptr; // automatically deleted in base class
 	VulkanDevice* renderingDevice;
-
+	
 	// Queues
 	VulkanQueue graphicsQueue;
 	VulkanQueue presentationQueue;
@@ -63,79 +63,101 @@ protected: // class members
 	// States
 	std::recursive_mutex renderingMutex;
 	std::recursive_mutex uboMutex;
-	// bool windowResized = false;
-	uint windowWidth, windowHeight;
-	bool renderTypeDirty = false;
+	bool swapChainDirty = false;
+
+private: // Device Extensions and features
+	std::vector<const char*> requiredDeviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+	std::vector<const char*> optionalDeviceExtensions {};
+	std::vector<const char*> deviceExtensions {};
+	std::unordered_map<std::string, bool> enabledDeviceExtensions {};
+public:
+	VkPhysicalDeviceFeatures deviceFeatures {}; // This object will be modified to keep only the enabled values.
 	
-	VkClearColorValue clearColor {0,0,0,1};
+	void RequiredDeviceExtension(const char* ext) {
+		requiredDeviceExtensions.push_back(std::move(ext));
+	}
+
+	void OptionalDeviceExtension(const char* ext) {
+		optionalDeviceExtensions.push_back(std::move(ext));
+	}
 	
+	bool IsDeviceExtensionEnabled(const char* ext) {
+		return enabledDeviceExtensions.find(ext) != enabledDeviceExtensions.end();
+	}
+
 protected: // Abstract methods
+	virtual void ScoreGPUSelection(int& score, VulkanGPU* gpu) = 0;
 	virtual void Init() = 0;
+	virtual void Info() = 0;
 	virtual void FrameUpdate(uint imageIndex) = 0;
 	// Scene
 	virtual void LoadScene() = 0;
 	virtual void UnloadScene() = 0;
-	virtual void SendSceneToDevice() = 0;
-	virtual void DeleteSceneFromDevice() = 0;
+	virtual void CreateSceneGraphics() = 0;
+	virtual void DestroySceneGraphics() = 0;
 
 protected: // Virtual INIT Methods
 
-	void CreateSurface() {
-		surface = window->CreateVulkanSurface(handle);
-		// window->AddResizeCallback("vulkanSurface", [this](int width, int height){
-		// 	renderingMutex.lock();
-		// 	if (width != 0 && height != 0) {
-		// 		windowResized = true;
-		// 		windowWidth = (uint)width;
-		// 		windowHeight = (uint)height;
-		// 		renderingMutex.unlock();
-		// 	}
-		// 	// Rendering is paused while window is minimized
-		// });
-	}
-	
-	void DestroySurface() {
-		window->RemoveResizeCallback("vulkanSurface");
-		DestroySurfaceKHR(surface, nullptr);
-	}
-
-	void CreateDevices() {
+	virtual void CreateDevices() {
 		// Select The Best Main GPU using a score system
-		renderingGPU = SelectSuitableGPU([surface=surface](int &score, VulkanGPU* gpu){
+		renderingGPU = SelectSuitableGPU([this](int& score, VulkanGPU* gpu){
 			// Build up a score here and the GPU with the highest score will be selected.
-			// Add to the score optional specs, then multiply with mandatory specs.
 
-			// Optional specs  -->  score += points * CONDITION
-			score += 100 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
-			score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
-			score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+			// Mandatory gpu requirements for rendering graphics
+			if (!gpu->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface))
+				return;
+			// User-defined required extensions
+			for (auto& ext : requiredDeviceExtensions) if (!gpu->SupportsExtension(ext))
+				return;
+			
+			score = 1;
+			
+			// Each Optional extensions adds one point to the score
+			for (auto& ext : optionalDeviceExtensions) if (gpu->SupportsExtension(ext))
+				++score;
 
-			// Mandatory specs  -->  score *= CONDITION
-			score *= gpu->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface); // Supports Graphics Queues
-			score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
-			score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
-			score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
-			score *= gpu->SupportsExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME/*"VK_KHR_swapchain"*/); // Supports SwapChains
-			score *= gpu->SupportsExtension(VK_NV_RAY_TRACING_EXTENSION_NAME/*"VK_NV_ray_tracing"*/); // Supports RayTracing
-			score *= gpu->SupportsExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing
+			// User-defined score function
+			ScoreGPUSelection(score, gpu);
 		});
 
 		LOG("Selected Rendering GPU: " << renderingGPU->GetDescription());
 
-		// Prepare Device Features
-		VkPhysicalDeviceFeatures deviceFeatures = {};
-		deviceFeatures.geometryShader = VK_TRUE;
-		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		deviceFeatures.sampleRateShading = VK_TRUE;
+		// Prepare Device Features (remove unsupported features from list of features to enable)
+		auto supportedDeviceFeatures = renderingGPU->GetFeatures();
+		const size_t deviceFeaturesArraySize = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
+		VkBool32 supportedDeviceFeaturesData[deviceFeaturesArraySize];
+		VkBool32 appDeviceFeaturesData[deviceFeaturesArraySize];
+		memcpy(supportedDeviceFeaturesData, &supportedDeviceFeatures, sizeof(VkPhysicalDeviceFeatures));
+		memcpy(appDeviceFeaturesData, &supportedDeviceFeatures, sizeof(VkPhysicalDeviceFeatures));
+		for (size_t i = 0; i < deviceFeaturesArraySize; ++i) {
+			if (appDeviceFeaturesData[i] && !supportedDeviceFeaturesData[i]) {
+				appDeviceFeaturesData[i] = VK_FALSE;
+			}
+		}
+		memcpy(&deviceFeatures, appDeviceFeaturesData, sizeof(VkPhysicalDeviceFeatures));
+		
+		// Prepare enabled extensions
+		deviceExtensions.clear();
+		for (auto& ext : requiredDeviceExtensions) {
+			deviceExtensions.push_back(ext);
+			enabledDeviceExtensions[ext] = true;
+			LOG("Enabling Device Extension: " << ext)
+		}
+		for (auto& ext : optionalDeviceExtensions) {
+			if (renderingGPU->SupportsExtension(ext)) {
+				deviceExtensions.push_back(ext);
+				enabledDeviceExtensions[ext] = true;
+				LOG("Enabling Device Extension: " << ext)
+			} else {
+				enabledDeviceExtensions[ext] = false;
+			}
+		}
+		
 		// Create Logical Device
 		renderingDevice = new VulkanDevice(
 			renderingGPU,
 			deviceFeatures,
-			{ // Device-specific Extensions string[] (NOT VULKAN INSTANCE EXTs)
-				VK_KHR_SWAPCHAIN_EXTENSION_NAME, // "VK_KHR_swapchain"
-				VK_NV_RAY_TRACING_EXTENSION_NAME, // "VK_NV_ray_tracing"
-				VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, 
-			},
+			deviceExtensions,
 			vulkanLoader->requiredInstanceLayers,
 			{// Queues
 				{
@@ -157,17 +179,14 @@ protected: // Virtual INIT Methods
 		// if (presentationQueue.handle == nullptr) {
 		// 	throw std::runtime_error("Failed to get Presentation Queue for surface");
 		// }
-
-		// MultiSampling
-		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
 	}
 
-	void DestroyDevices() {
+	virtual void DestroyDevices() {
 		delete renderingDevice;
 	}
 
-	void CreateSyncObjects() {
-		// each of the events in the RenderFrame method re set in motion using a single function call, but they are executed asynchronously. 
+	virtual void CreateSyncObjects() {
+		// each of the events in the Render method are set in motion using a single function call, but they are executed asynchronously. 
 		// The function calls will return before the opeations are actually finished and the order of execution is also undefined.
 		// Hence, we need to synchronize them.
 		// There are two ways of synchronizing swap chai events : Fences and Semaphores.
@@ -199,7 +218,7 @@ protected: // Virtual INIT Methods
 		}
 	}
 
-	void DestroySyncObjects() {
+	virtual void DestroySyncObjects() {
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			renderingDevice->DestroySemaphore(renderFinishedSemaphores[i], nullptr);
 			renderingDevice->DestroySemaphore(imageAvailableSemaphores[i], nullptr);
@@ -293,7 +312,7 @@ protected: // Virtual INIT Methods
 		}
 	}
 
-	void CreateSwapChain() {
+	virtual void CreateSwapChain() {
 		std::lock_guard lock(renderingMutex);
 		// windowResized = false;
 		
@@ -305,8 +324,8 @@ protected: // Virtual INIT Methods
 			renderingDevice,
 			surface,
 			{ // Preferred Extent (Screen Resolution)
-				windowWidth,
-				windowHeight
+				0, // width
+				0 // height
 			},
 			{ // Preferred Formats
 				{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
@@ -330,8 +349,9 @@ protected: // Virtual INIT Methods
 		if (oldSwapChain != nullptr) delete oldSwapChain;
 	}
 
-	void DestroySwapChain() {
+	virtual void DestroySwapChain() {
 		delete swapChain;
+		swapChain = nullptr;
 	}
 
 	// Graphics Pipeline
@@ -458,7 +478,11 @@ protected: // Virtual INIT Methods
 		
 
 		/////////////////////////////////////////
-		// Configure the graphics pipelines here
+		
+		// Configure the rasterization graphics pipelines here
+		// ...
+		
+		/////////////////////////////////////////
 		
 		
 		// Create the Graphics Pipeline !
@@ -497,6 +521,8 @@ protected: // Virtual INIT Methods
 	}
 	
 	virtual void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
+		VkClearColorValue clearColor = {0,0,0,1};
+		
 		// Begin Render Pass
 		VkRenderPassBeginInfo renderPassInfo = {};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -520,7 +546,11 @@ protected: // Virtual INIT Methods
 		
 		
 		/////////////////////////////////////////
+		
 		// Draw calls here
+		// ...
+		
+		/////////////////////////////////////////
 		
 		
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
@@ -560,9 +590,12 @@ protected: // Virtual INIT Methods
 				throw std::runtime_error("Faild to begin recording command buffer");
 			}
 
+			//////////////////////////////////////////////////////////
+			
 			// Commands to submit on each draw
 			RenderingCommandBuffer(commandBuffers[i], i);
 			
+			//////////////////////////////////////////////////////////
 			
 			if (renderingDevice->EndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to record command buffer");
@@ -652,32 +685,6 @@ protected: // Helper methods
 		//
 		VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		
-		
-		// // Texture Transfer
-		// if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-		// 	barrier.srcAccessMask = 0;
-		// 	barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		// 	srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		// 	dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		// } else 
-		// // Texture Fragment Shader
-		// if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-		// 	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		// 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		// 	srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		// 	dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-		// } else 
-		// // Depth Buffer
-		// if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
-		// 	barrier.srcAccessMask = 0;
-		// 	barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		// 	srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		// 	dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		// } else {
-		// 	throw std::invalid_argument("Unsupported layout transition");
-		// }
-		
-	
 		// Source layouts (old)
 		// Source access mask controls actions that have to be finished on the old layout
 		// before it will be transitioned to the new layout
@@ -771,9 +778,6 @@ protected: // Helper methods
 				break;
 		}
 
-		
-		
-		
 		/*
 		Transfer writes must occur in the pipeline transfer stage. 
 		Since the writes dont have to wait on anything, we mayy specify an empty access mask and the earliest possible pipeline stage VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT for the pre-barrier operations.
@@ -988,102 +992,96 @@ protected: // Helper methods
 		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 
-public: // Init/Reset Methods
+protected: // Init/Reset Methods
 	virtual void RecreateSwapChains() {
 		std::lock_guard lock(renderingMutex);
 		
-		renderTypeDirty = false;
-		renderingDevice->DeviceWaitIdle();
+		swapChainDirty = false;
 
-		// Destroy graphics pipeline
-		DestroyCommandBuffers();
-		DestroyGraphicsPipelines();
-		// Remove Scene data
-		DeleteSceneFromDevice();
-
-		// Destroy some resources
-		DestroyResources();
-		DestroyCommandPools();
-		DestroySyncObjects();
+		DeleteGraphicsFromDevice();
 		
 		// Re-Create the SwapChain
 		CreateSwapChain();
 		
-		// Create some resources
-		CreateSyncObjects();
-		CreateCommandPools();
-		CreateResources();
-
-		// Add Scene data
-		SendSceneToDevice();
-		// Graphics pipeline
-		CreateGraphicsPipelines(); // shaders are assigned here
-		CreateCommandBuffers(); // objects are rendered here
+		SendGraphicsToDevice();
 	}
 	
+public: // Init/Load/Reset Methods
 	virtual void LoadRenderer() {
 		std::lock_guard lock(renderingMutex);
 		
 		Init();
 		
-		// Create some resources
-		CreateCommandPools();
-		CreateResources();
+		CreateDevices();
+		CreateSyncObjects();
+		CreateSwapChain();
 		
-		// Load scene assets
-		LoadScene();
-		SendSceneToDevice();
+		Info();
 		
-		// Graphics pipeline
-		CreateGraphicsPipelines(); // shaders are assigned here
-		CreateCommandBuffers(); // objects are rendered here
-
-		// Ready to render!
-		LOG_SUCCESS("VULKAN IS READY TO RENDER!");
+		LOG_SUCCESS("Vulkan Renderer is Ready !");
 	}
 	
 	virtual void UnloadRenderer() {
 		std::lock_guard lock(renderingMutex);
+		DestroySwapChain();
+		DestroySyncObjects();
+		DestroyDevices();
+	}
+	
+	virtual void ReloadRenderer() {
+		std::lock_guard lock(renderingMutex);
+		LOG_WARN("Reloading renderer...")
 		
+		DeleteGraphicsFromDevice();
+		
+		DestroySwapChain();
+		DestroySyncObjects();
+		DestroyDevices();
+		
+		CreateDevices();
+		CreateSyncObjects();
+		CreateSwapChain();
+		
+		Info();
+		
+		SendGraphicsToDevice();
+		
+		LOG_SUCCESS("Vulkan Renderer is Ready !")
+	}
+	
+	virtual void SendGraphicsToDevice() {
+		CreateCommandPools();
+		CreateResources();
+		CreateSceneGraphics();
+		CreateGraphicsPipelines(); // shaders are assigned here
+		CreateCommandBuffers(); // objects are rendered here
+	}
+	
+	virtual void DeleteGraphicsFromDevice() {
 		// Wait for renderingDevice to be idle before destroying everything
 		renderingDevice->DeviceWaitIdle(); // We can also wait for operations in a specific command queue to be finished with vkQueueWaitIdle. These functions can be used as a very rudimentary way to perform synchronization. 
 
 		DestroyCommandBuffers();
 		DestroyGraphicsPipelines();
-		
-		DeleteSceneFromDevice();
-		UnloadScene();
-		
-		// Destroy some resources
+		DestroySceneGraphics();
 		DestroyResources();
 		DestroyCommandPools();
 	}
 	
 public: // Constructor & Destructor
-	VulkanRenderer(VulkanLoader* loader, const char* applicationName, uint applicationVersion, Window* window) : Vulkan(loader, applicationName, applicationVersion), window(window) {
-		CreateSurface();
-		CreateDevices();
-		CreateSyncObjects();
-		CreateSwapChain();
+	VulkanRenderer(VulkanLoader* loader, const char* applicationName, uint applicationVersion, Window* window)
+	 : Vulkan(loader, applicationName, applicationVersion) {
+		surface = window->CreateVulkanSurface(handle);
 	}
 
 	virtual ~VulkanRenderer() override {
-		DestroySwapChain();
-		DestroySyncObjects();
-		DestroyDevices();
-		DestroySurface();
+		DestroySurfaceKHR(surface, nullptr);
 	}
-
 
 public: // Public Methods
 
-	virtual void RenderFrame() {
+	virtual void Render() {
 		std::lock_guard lock(renderingMutex);
-		
-		// if (windowResized) {
-		// 	RecreateSwapChains();
-		// 	return;
-		// }
 		
 		// Wait for previous frame to be finished
 		renderingDevice->WaitForFences(1/*fencesCount*/, &inFlightFences[currentFrameInFlight]/*fences array*/, VK_TRUE/*wait for all fences in this array*/, std::numeric_limits<uint64_t>::max()/*timeout*/);
@@ -1099,10 +1097,10 @@ public: // Public Methods
 		);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || renderTypeDirty) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || swapChainDirty) {
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
-			// RenderFrame();
+			// Render();
 			return;
 		} else if (result == VK_SUBOPTIMAL_KHR) {
 			// LOG_VERBOSE("Swapchain is suboptimal...")
@@ -1162,7 +1160,7 @@ public: // Public Methods
 		result = renderingDevice->QueuePresentKHR(presentationQueue.handle, &presentInfo);
 
 		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || renderTypeDirty) {
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || swapChainDirty) {
 			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
 			RecreateSwapChains();
 		} else if (result == VK_SUBOPTIMAL_KHR) {

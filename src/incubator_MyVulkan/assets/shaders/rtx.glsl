@@ -47,13 +47,21 @@ float noise(float p){
 	float fc = fract(p);
 	return mix(rand(fl), rand(fl + 1.0), fc);
 }
-	
-float noise(vec2 n) {
+
+float noise(vec2 pos) {
 	const vec2 d = vec2(0.0, 1.0);
-	vec2 b = floor(n), f = smoothstep(vec2(0.0), vec2(1.0), fract(n));
+	vec2 b = floor(pos), f = smoothstep(vec2(0.0), vec2(1.0), fract(pos));
 	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
 }
 
+float noise(vec2 pos, int octaves) {
+	if (octaves == 1) return noise(pos);
+	float n = 0.0;
+	for (float i = 1.0; i <= octaves; i++) {
+		n += noise(pos * i) / i;
+	}
+	return n;
+}
 
 #extension GL_EXT_control_flow_attributes : require
 
@@ -128,9 +136,9 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	
 	// Roughness
 	if (roughness > 0.0) {
-		float n1 = 1.0 + noise(objPoint.xy * 500.0 * roughness + 134.455) * roughness;
-		float n2 = 1.0 + noise(objPoint.yz * 500.0 * roughness + 2.5478787) * roughness;
-		float n3 = 1.0 + noise(objPoint.xz * 500.0 * roughness + -124.785) * roughness;
+		float n1 = 1.0 + noise(objPoint.xy * 1000.0 * min(4.0, roughness) + 134.455, 3) * roughness / 2.0;
+		float n2 = 1.0 + noise(objPoint.yz * 1000.0 * min(4.0, roughness) + 2.5478787, 3) * roughness / 2.0;
+		float n3 = 1.0 + noise(objPoint.xz * 1000.0 * min(4.0, roughness) + -124.785, 3) * roughness / 2.0;
 		normal = normalize(normal * vec3(n1, n2, n3)/2.0);
 	}
 	
@@ -201,9 +209,6 @@ Sphere unpackSphere(uint index) {
 #shader rgen
 
 layout(location = 0) rayPayloadNV RayPayload ray;
-
-// Max. number of recursion is passed via a specialization constant
-// layout (constant_id = 0) const int MAX_RECURSION = 0;
 
 void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);

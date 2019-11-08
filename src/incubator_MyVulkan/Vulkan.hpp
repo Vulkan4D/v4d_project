@@ -162,8 +162,8 @@ public:
 		VulkanGPU* selectedGPU = nullptr;
 
 		// Select Best MainGPU
+		int bestScore = 0;
 		for (auto* gpu : availableGPUs) {
-			static int bestScore = 0;
 			int score = 0;
 
 			suitabilityFunc(score, gpu);
