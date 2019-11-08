@@ -23,7 +23,7 @@
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
-#include "incubator_MyVulkan/MyVulkan_rtx.hpp"
+#include "incubator_MyVulkan/RayTracingRenderer.hpp"
 VulkanLoader vulkanLoader;
 
 int main() {
@@ -38,7 +38,7 @@ int main() {
 	Window* window = new Window("TEST", 1280, 720);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
-	MyVulkanTest* vulkan = new MyVulkanTest(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+	auto* vulkan = new RayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	
 	vulkan->LoadRenderer();
 	
@@ -56,11 +56,6 @@ int main() {
 				// Quit
 				case GLFW_KEY_ESCAPE:
 					glfwSetWindowShouldClose(window->GetHandle(), 1);
-					break;
-					
-				// Toggle between Rasterization/RayTracing
-				case GLFW_KEY_R:
-					vulkan->ToggleRayTracing();
 					break;
 					
 				// Moving the light's position/intensity
@@ -180,7 +175,7 @@ int main() {
 		timer.Reset();
 		
 		// FPS counter
-		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/currentFrameTime))+" FPS via " + (vulkan->IsUsingRayTracing()? "RayTracing" : "Rasterization")).c_str());
+		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/currentFrameTime))+" FPS").c_str());
 	}
 	
 	vulkan->UnloadRenderer();
