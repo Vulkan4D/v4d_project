@@ -65,16 +65,16 @@ int main() {
 					
 				// Moving the light's position/intensity
 				case GLFW_KEY_LEFT:
-					vulkan->light.x -= 0.5f;
-					break;
-				case GLFW_KEY_RIGHT:
 					vulkan->light.x += 0.5f;
 					break;
+				case GLFW_KEY_RIGHT:
+					vulkan->light.x -= 0.5f;
+					break;
 				case GLFW_KEY_DOWN:
-					vulkan->light.y -= 0.5f;
+					vulkan->light.y += 0.5f;
 					break;
 				case GLFW_KEY_UP:
-					vulkan->light.y += 0.5f;
+					vulkan->light.y -= 0.5f;
 					break;
 				case GLFW_KEY_PAGE_DOWN:
 					vulkan->light.z -= 0.5f;
@@ -124,32 +124,16 @@ int main() {
 		}
 	});
 
-	// FPS counter
-	v4d::Timer timer;
-	const int fpsNbFramesAvg = 20;
-	std::array<double, fpsNbFramesAvg> frameTimes {10};
-	int frameTimesCursor = 0;
-	double minFrameTime = 1.0;
-	std::mutex frameTimesMutex;
+	// Frame timer
+	v4d::Timer timer(true);
+	double currentFrameTime = 10;
+	float deltaTime = 0.01f;
 	
 	// GameLoop
 	while (window->IsActive()) {
-		timer.Start();
-
+		// Events
 		glfwPollEvents();
 		
-		vulkan->RenderFrame();
-		
-		// Frame time
-		double currentFrameTime = timer.GetElapsedMilliseconds();
-		float deltaTime = (float)currentFrameTime / 1000.0f;
-		
-		// FPS counter
-		if (frameTimesCursor >= fpsNbFramesAvg) frameTimesCursor = 0;
-		frameTimes[frameTimesCursor++] = currentFrameTime;
-		double avgFrameTime = std::accumulate(frameTimes.begin(), frameTimes.end(), 0.0) / fpsNbFramesAvg;
-		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/avgFrameTime))+" FPS via " + (vulkan->IsUsingRayTracing()? "RayTracing" : "Rasterization")).c_str());
-	
 		// Camera Movements
 		float camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 5.0f : 1.0f;
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
@@ -186,6 +170,17 @@ int main() {
 				);
 			}
 		}
+		
+		// Rendering
+		vulkan->RenderFrame();
+		
+		// Frame time
+		currentFrameTime = timer.GetElapsedMilliseconds();
+		deltaTime = (float)currentFrameTime / 1000.0f;
+		timer.Reset();
+		
+		// FPS counter
+		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/currentFrameTime))+" FPS via " + (vulkan->IsUsingRayTracing()? "RayTracing" : "Rasterization")).c_str());
 	}
 	
 	vulkan->UnloadRenderer();

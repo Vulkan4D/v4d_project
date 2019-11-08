@@ -9,6 +9,7 @@ struct RayPayload {
 	vec3 direction;
 	float reflector;
 	float distance;
+	uint scatterSeed;
 };
 
 // Layout Bindings
@@ -53,6 +54,64 @@ float noise(vec2 n) {
 	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
 }
 
+
+#extension GL_EXT_control_flow_attributes : require
+
+// Generates a seed for a random number generator from 2 inputs plus a backoff
+// https://github.com/nvpro-samples/optix_prime_baking/blob/master/random.h
+// https://en.wikipedia.org/wiki/Tiny_Encryption_Algorithm
+uint InitRandomSeed(uint val0, uint val1)
+{
+	uint v0 = val0, v1 = val1, s0 = 0;
+
+	[[unroll]] 
+	for (uint n = 0; n < 16; n++)
+	{
+		s0 += 0x9e3779b9;
+		v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
+		v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
+	}
+
+	return v0;
+}
+
+uint RandomInt(inout uint seed)
+{
+	// LCG values from Numerical Recipes
+    return (seed = 1664525 * seed + 1013904223);
+}
+
+float RandomFloat(inout uint seed)
+{
+	// Float version using bitmask from Numerical Recipes
+	const uint one = 0x3f800000;
+	const uint msk = 0x007fffff;
+	return uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+}
+
+vec2 RandomInUnitDisk(inout uint seed)
+{
+	for (;;)
+	{
+		const vec2 p = 2 * vec2(RandomFloat(seed), RandomFloat(seed)) - 1;
+		if (dot(p, p) < 1)
+		{
+			return p;
+		}
+	}
+}
+
+vec3 RandomInUnitSphere(inout uint seed)
+{
+	for (;;)
+	{
+		const vec3 p = 2 * vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1;
+		if (dot(p, p) < 1)
+		{
+			return p;
+		}
+	}
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -76,7 +135,7 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	}
 	
 	// Basic shading from light angle
-	const vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
+	vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
 	const float dot_product = max(dot(lightVector, normal), 0.0);
 	const float shade = pow(dot_product, specular);
 	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * ubo.light.w), shade);
@@ -84,6 +143,9 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	// Receive Shadows
 	if (shade > 0.0 && ubo.rtx_shadows) {
 		shadowed = true;
+		if (scatter > 0.0) {
+			lightVector = normalize(lightVector + RandomInUnitSphere(ray.scatterSeed)/(1000.0 - scatter*1000.0));
+		}
 		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
 		if (shadowed) {
 			ray.color = ubo.ambient;
