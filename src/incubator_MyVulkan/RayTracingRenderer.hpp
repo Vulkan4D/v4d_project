@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
+#include "RayTracingShaderTable.hpp"
 
 // Test Object Vertex Data Structure
 struct Vertex {
@@ -33,7 +34,6 @@ struct Sphere {
 class RayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
-	VulkanShaderProgram* testShader;
 	// Vertex Buffers for test object
 	std::vector<Vertex> testObjectVertices;
 	std::vector<uint32_t> testObjectIndices;
@@ -71,8 +71,6 @@ class RayTracingRenderer : public VulkanRenderer {
 	VkAccelerationStructureNV rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
 	VkDeviceMemory rayTracingTopLevelAccelerationStructureMemory;
 	uint64_t rayTracingTopLevelAccelerationStructureHandle;
-	VkPipelineLayout rayTracingPipelineLayout;
-	VkPipeline rayTracingPipeline;
 	VulkanBuffer rayTracingShaderBindingTableBuffer;
 	struct RayTracingStorageImage {
 		VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -85,13 +83,7 @@ class RayTracingRenderer : public VulkanRenderer {
 	std::vector<VkGeometryNV> testObjectGeometries;
 	std::vector<VkGeometryNV> testSphereGeometries;
 	std::vector<GeometryInstance> testObjectGeometryInstances;
-	
-	std::vector<VkRayTracingShaderGroupCreateInfoNV> rayTracingShaderGroups;
-	const static int RAYTRACING_GROUP_INDEX_RGEN = 0;
-	const static int RAYTRACING_GROUP_INDEX_RMISS = 1;
-	const static int RAYTRACING_GROUP_INDEX_RMISS_SHADOW = 2;
-	const static int RAYTRACING_GROUP_INDEX_RCHIT = 3;
-	const static int RAYTRACING_GROUP_INDEX_RCHIT_SPHERE = 4;
+	RayTracingShaderTable* shaderTable = nullptr;
 	
 	void Init() override {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
@@ -169,13 +161,6 @@ class RayTracingRenderer : public VulkanRenderer {
 		}
 	}
 	
-	VkDeviceSize CopyShaderIdentifier(uint8_t* data, const uint8_t* shaderHandleStorage, uint32_t groupIndex) {
-		const uint32_t shaderGroupHandleSize = rayTracingProperties.shaderGroupHandleSize;
-		memcpy(data, shaderHandleStorage + groupIndex * shaderGroupHandleSize, shaderGroupHandleSize);
-		data += shaderGroupHandleSize;
-		return shaderGroupHandleSize;
-	}
-
 public:
 	void LoadScene() override {
 
@@ -208,124 +193,59 @@ public:
 			{/*scatter*/0.0f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		};
 
-
-
+		shaderTable = new RayTracingShaderTable("incubator_MyVulkan/assets/shaders/rtx.rgen");
+		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.rmiss");
+		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss");
+		shaderTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.rchit");
+		shaderTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.sphere.rchit", "", "incubator_MyVulkan/assets/shaders/rtx.sphere.rint");
 		
-		rayTracingShaderGroups.resize(5);
+		// Uniforms
+		shaderTable->AddLayoutBinding(// accelerationStructure
+			0, // binding
+			VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
+		);
+		shaderTable->AddLayoutBinding(// resultImage
+			1, // binding
+			VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_RAYGEN_BIT_NV // stage flags
+		);
+		shaderTable->AddLayoutBinding(// ubo
+			2, // binding
+			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV // stage flags
+		);
+		shaderTable->AddLayoutBinding(// vertex buffer
+			3, // binding
+			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
+		);
+		shaderTable->AddLayoutBinding(// index buffer
+			4, // binding
+			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
+		);
+		shaderTable->AddLayoutBinding(// sphere buffer
+			5, // binding
+			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
+			1, // count (for array)
+			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV // stage flags
+		);
 		
-		rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RGEN] = {
-			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			nullptr,
-			VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
-			0, // generalShader
-			VK_SHADER_UNUSED_NV, // closestHitShader;
-			VK_SHADER_UNUSED_NV, // anyHitShader;
-			VK_SHADER_UNUSED_NV // intersectionShader;
-		};
-		rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RMISS] = {
-			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			nullptr,
-			VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
-			1, // generalShader
-			VK_SHADER_UNUSED_NV, // closestHitShader;
-			VK_SHADER_UNUSED_NV, // anyHitShader;
-			VK_SHADER_UNUSED_NV // intersectionShader;
-		};
-		rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RMISS_SHADOW] = {
-			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			nullptr,
-			VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV,
-			2, // generalShader
-			VK_SHADER_UNUSED_NV, // closestHitShader;
-			VK_SHADER_UNUSED_NV, // anyHitShader;
-			VK_SHADER_UNUSED_NV // intersectionShader;
-		};
-		rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT] = {
-			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			nullptr,
-			VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV,
-			VK_SHADER_UNUSED_NV, // generalShader
-			3, // closestHitShader;
-			VK_SHADER_UNUSED_NV, // anyHitShader;
-			VK_SHADER_UNUSED_NV // intersectionShader;
-		};
-		rayTracingShaderGroups[RAYTRACING_GROUP_INDEX_RCHIT_SPHERE] = {
-			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
-			nullptr,
-			VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV,
-			VK_SHADER_UNUSED_NV, // generalShader
-			4, // closestHitShader;
-			VK_SHADER_UNUSED_NV, // anyHitShader;
-			5 // intersectionShader;
-		};
-		
-		
+		shaderTable->LoadShaders();
 	}
 
 	void UnloadScene() override {
-		
+		delete shaderTable;
 	}
 
 protected:
 	void CreateSceneGraphics() override {
-		
-		// Load shader files
-		testShader = new VulkanShaderProgram(renderingDevice, {
-			{"incubator_MyVulkan/assets/shaders/rtx.rgen"},
-			{"incubator_MyVulkan/assets/shaders/rtx.rmiss"},
-			{"incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss"},
-			{"incubator_MyVulkan/assets/shaders/rtx.rchit"},
-			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rchit"},
-			{"incubator_MyVulkan/assets/shaders/rtx.sphere.rint"},
-		});
-		
-		// Uniforms
-		testShader->AddLayoutBindings({
-			{// accelerationStructure
-				0, // binding
-				VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
-				1,
-				VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-			{// resultImage
-				1, // binding
-				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
-				1,
-				VK_SHADER_STAGE_RAYGEN_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-			{// ubo
-				2, // binding
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-			{// vertex buffer
-				3, // binding
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-			{// index buffer
-				4, // binding
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-			{// sphere buffer
-				5, // binding
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-				1, // count (for array)
-				VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV, // stage flags
-				nullptr // pImmutableSamplers
-			},
-		});
-		
-		
 		
 		// Uniform buffers
 		CreateBuffer(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffer);
@@ -683,13 +603,6 @@ protected:
 	void DestroySceneGraphics() override {
 		
 		if (rayTracingTopLevelAccelerationStructure != VK_NULL_HANDLE) {
-			// Shader binding table
-			renderingDevice->DestroyBuffer(rayTracingShaderBindingTableBuffer);
-			
-			// Ray tracing pipeline
-			renderingDevice->DestroyPipeline(rayTracingPipeline, nullptr);
-			renderingDevice->DestroyPipelineLayout(rayTracingPipelineLayout, nullptr);
-			
 			// Acceleration Structure
 			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructureMemory, nullptr);
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
@@ -718,61 +631,15 @@ protected:
 		// Uniform buffers
 		renderingDevice->DestroyBuffer(uniformBuffer);
 		
-		// Shaders
-		delete testShader;
-		
 	}
 	
 	void CreateGraphicsPipelines() override {
-		
-		
-		// Ray Tracing Pipeline
-	
-		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutCreateInfo.setLayoutCount = (uint)testShader->GetDescriptorSetLayouts().size();
-		pipelineLayoutCreateInfo.pSetLayouts = testShader->GetDescriptorSetLayouts().data();
-		//TODO add pipelineLayoutCreateInfo.pPushConstantRanges
-		
-		if (renderingDevice->CreatePipelineLayout(&pipelineLayoutCreateInfo, nullptr, &rayTracingPipelineLayout) != VK_SUCCESS)
-			throw std::runtime_error("Failed to create ray tracing pipeline layout");
-			
-		
-		
-	
-		VkRayTracingPipelineCreateInfoNV rayTracingPipelineInfo {};
-		rayTracingPipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV;
-		rayTracingPipelineInfo.stageCount = (uint)testShader->GetStages().size();
-		rayTracingPipelineInfo.pStages = testShader->GetStages().data();
-		rayTracingPipelineInfo.groupCount = (uint)rayTracingShaderGroups.size();
-		rayTracingPipelineInfo.pGroups = rayTracingShaderGroups.data();
-		rayTracingPipelineInfo.maxRecursionDepth = 2;
-		rayTracingPipelineInfo.layout = rayTracingPipelineLayout;
-		
-		if (renderingDevice->CreateRayTracingPipelinesNV(VK_NULL_HANDLE, 1, &rayTracingPipelineInfo, nullptr, &rayTracingPipeline) != VK_SUCCESS) //TODO support multiple ray tracing pipelines
-			throw std::runtime_error("Failed to create ray tracing pipelines");
-		
-		
-		
-		
+		shaderTable->CreateRayTracingPipeline(renderingDevice);
 		
 		// Shader Binding Table
-		const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * rayTracingShaderGroups.size();
+		const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * shaderTable->GetGroups().size();
 		CreateBuffer(sbtSize, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, rayTracingShaderBindingTableBuffer);
-		uint8_t* data;
-		renderingDevice->MapMemory(rayTracingShaderBindingTableBuffer.memory, 0, sbtSize, 0, (void**)&data);
-		auto shaderHandleStorage = new uint8_t[sbtSize];
-		if (renderingDevice->GetRayTracingShaderGroupHandlesNV(rayTracingPipeline, 0, (uint)rayTracingShaderGroups.size(), sbtSize, shaderHandleStorage) != VK_SUCCESS)
-			throw std::runtime_error("Failed to get ray tracing shader group handles");
-		data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RGEN);
-		data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS);
-		data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RMISS_SHADOW);
-		data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT);
-		data += CopyShaderIdentifier(data, shaderHandleStorage, RAYTRACING_GROUP_INDEX_RCHIT_SPHERE);
-		renderingDevice->UnmapMemory(rayTracingShaderBindingTableBuffer.memory);
-		delete[] shaderHandleStorage;
-		
-		
+		shaderTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
 		
 		
 		
@@ -800,8 +667,8 @@ protected:
 		VkDescriptorSetAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = (uint)testShader->GetDescriptorSetLayouts().size();
-		allocInfo.pSetLayouts = testShader->GetDescriptorSetLayouts().data();
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = shaderTable->GetDescriptorSetLayout();
 		if (renderingDevice->AllocateDescriptorSets(&allocInfo, &descriptorSet) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
@@ -897,6 +764,10 @@ protected:
 	}
 	
 	void DestroyGraphicsPipelines() override {
+		// Shader binding table
+		renderingDevice->DestroyBuffer(rayTracingShaderBindingTableBuffer);
+		// Ray tracing pipeline
+		shaderTable->DestroyRayTracingPipeline(renderingDevice);
 		// Descriptor Sets
 		renderingDevice->FreeDescriptorSets(descriptorPool, 1, &descriptorSet);
 		// Descriptor pools
@@ -905,17 +776,16 @@ protected:
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
-		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, rayTracingPipeline);
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, rayTracingPipelineLayout, 0, 1, &descriptorSet, 0, 0);
+		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderTable->GetPipeline());
+		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderTable->GetPipelineLayout(), 0, 1, &descriptorSet, 0, 0);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetRayGenShader = bindingStride * RAYTRACING_GROUP_INDEX_RGEN;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * RAYTRACING_GROUP_INDEX_RMISS;
-		VkDeviceSize bindingOffsetHitShader = bindingStride * RAYTRACING_GROUP_INDEX_RCHIT;
+		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderTable->GetMissGroupOffset();
+		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderTable->GetHitGroupOffset();
 		
 		renderingDevice->CmdTraceRaysNV(
 			commandBuffer, 
-			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetRayGenShader,
+			rayTracingShaderBindingTableBuffer.buffer, 0,
 			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetMissShader, bindingStride,
 			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetHitShader, bindingStride,
 			VK_NULL_HANDLE, 0, 0,

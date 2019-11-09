@@ -8,14 +8,13 @@
 
 class VulkanRenderer : public Vulkan {
 protected: // class members
-	Window* window;
 
 	// Main Render Surface
 	VkSurfaceKHR surface;
 
 	// Main Graphics Card
-	VulkanGPU* renderingGPU = nullptr; // automatically deleted in base class
-	VulkanDevice* renderingDevice;
+	VulkanGPU* renderingGPU = nullptr;
+	VulkanDevice* renderingDevice = nullptr;
 	
 	// Queues
 	VulkanQueue graphicsQueue;
@@ -25,37 +24,17 @@ protected: // class members
 	VkCommandPool commandPool;
 	VkDescriptorPool descriptorPool;
 
+	// Command buffers
+	std::vector<VkCommandBuffer> commandBuffers;
+
+	// Swap Chains
+	VulkanSwapChain* swapChain = nullptr;
+
 	// Sync objects
 	std::vector<VkSemaphore> imageAvailableSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> inFlightFences;
 	size_t currentFrameInFlight = 0;
-
-	// Swap Chains
-	VulkanSwapChain* swapChain = nullptr; // make sure this one is initialized to nullptr
-
-	// Render pass (and graphics pipelines)
-	VulkanRenderPass* renderPass = nullptr;
-
-	// Framebuffers
-	std::vector<VkFramebuffer> swapChainFrameBuffers;
-
-	// Command buffers
-	std::vector<VkCommandBuffer> commandBuffers;
-
-	// Render Target (Color Attachment)
-	VkImage colorImage = VK_NULL_HANDLE;
-	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
-	VkImageView colorImageView = VK_NULL_HANDLE;
-
-	// MultiSampling
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
-
-	// Depth Buffer
-	VkImage depthImage = VK_NULL_HANDLE;
-	VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
-	VkImageView depthImageView = VK_NULL_HANDLE;
-	VkFormat depthImageFormat;
 
 	// Constants
 	const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -64,6 +43,21 @@ protected: // class members
 	std::recursive_mutex renderingMutex;
 	std::recursive_mutex uboMutex;
 	bool swapChainDirty = false;
+
+	// Rasterization Rendering
+	VulkanRenderPass* renderPass = nullptr;
+	std::vector<VkFramebuffer> swapChainFrameBuffers;
+	// Render Target (Color Attachment)
+	VkImage colorImage = VK_NULL_HANDLE;
+	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
+	VkImageView colorImageView = VK_NULL_HANDLE;
+	// Depth Buffer
+	VkImage depthImage = VK_NULL_HANDLE;
+	VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
+	VkImageView depthImageView = VK_NULL_HANDLE;
+	VkFormat depthImageFormat;
+	// MultiSampling
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 
 private: // Device Extensions and features
 	std::vector<const char*> requiredDeviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };

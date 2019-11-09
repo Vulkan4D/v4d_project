@@ -8,8 +8,20 @@ struct VulkankVertexInputAttributeDescription {
 
 struct VulkanShaderInfo {
 	std::string filepath;
-	const char* entryPoint = "main";
-	VkSpecializationInfo *specializationInfo = nullptr;
+	std::string entryPoint;
+	VkSpecializationInfo* specializationInfo;
+	
+	VulkanShaderInfo(const std::string& filepath, const std::string& entryPoint, VkSpecializationInfo* specializationInfo = nullptr) 
+	 : filepath(filepath), entryPoint(entryPoint), specializationInfo(specializationInfo) {}
+	
+	VulkanShaderInfo(const std::string& filepath, VkSpecializationInfo* specializationInfo) 
+	 : filepath(filepath), entryPoint(""), specializationInfo(specializationInfo) {}
+	 
+	VulkanShaderInfo(const std::string& filepath)
+	 : filepath(filepath), entryPoint("main"), specializationInfo(nullptr) {}
+	
+	VulkanShaderInfo(const char* filepath)
+	 : filepath(filepath), entryPoint("main"), specializationInfo(nullptr) {}
 };
 
 struct VulkanQueue {
