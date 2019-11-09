@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "ShaderBindingTable.hpp"
+#include "VulkanShaderBindingTable.hpp"
 
 // Test Object Vertex Data Structure
 struct Vertex {
@@ -31,6 +31,31 @@ struct Sphere {
 	: boundingBox(pos - radius, pos + radius), scatter(scatter), roughness(roughness), pos(pos), radius(radius), color(color), specular(specular), metallic(metallic), refraction(refraction), density(density) {}
 };
 
+struct UBO {
+	glm::mat4 viewInverse;
+	glm::mat4 projInverse;
+	glm::vec4 light;
+	glm::vec3 ambient;
+	int rtx_reflection_max_recursion;
+	bool rtx_shadows;
+};
+
+// Ray tracing geometry instance
+struct GeometryInstance {
+	glm::mat3x4 transform;
+	uint32_t instanceId : 24;
+	uint32_t mask : 8;
+	uint32_t instanceOffset : 24;
+	uint32_t flags : 8;
+	uint64_t accelerationStructureHandle;
+};
+
+struct AccelerationStructure {
+	VkAccelerationStructureNV accelerationStructure = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+	uint64_t handle = 0;
+};
+
 class VulkanRayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
@@ -41,36 +66,13 @@ class VulkanRayTracingRenderer : public VulkanRenderer {
 	
 	std::vector<Sphere> testObjectSpheres;
 	
-	struct UBO {
-		glm::mat4 viewInverse;
-		glm::mat4 projInverse;
-		glm::vec4 light;
-		glm::vec3 ambient;
-		int rtx_reflection_max_recursion;
-		bool rtx_shadows;
-	};
-	
 	VulkanBuffer uniformBuffer;
 	VkDescriptorSet descriptorSet;
 	
-	// Ray tracing geometry instance
-	struct GeometryInstance {
-		glm::mat3x4 transform;
-		uint32_t instanceId : 24;
-		uint32_t mask : 8;
-		uint32_t instanceOffset : 24;
-		uint32_t flags : 8;
-		uint64_t accelerationStructureHandle;
-	};
-
 	// Ray Tracing stuff
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
-	std::vector<VkAccelerationStructureNV> rayTracingBottomLevelAccelerationStructures;
-	std::vector<VkDeviceMemory> rayTracingBottomLevelAccelerationStructureMemories;
-	std::vector<uint64_t> rayTracingBottomLevelAccelerationStructureHandles;
-	VkAccelerationStructureNV rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
-	VkDeviceMemory rayTracingTopLevelAccelerationStructureMemory;
-	uint64_t rayTracingTopLevelAccelerationStructureHandle;
+	std::vector<AccelerationStructure> rayTracingBottomLevelAccelerationStructures;
+	AccelerationStructure rayTracingTopLevelAccelerationStructure;
 	VulkanBuffer rayTracingShaderBindingTableBuffer;
 	struct RayTracingStorageImage {
 		VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -83,16 +85,16 @@ class VulkanRayTracingRenderer : public VulkanRenderer {
 	std::vector<VkGeometryNV> testObjectGeometries;
 	std::vector<VkGeometryNV> testSphereGeometries;
 	std::vector<GeometryInstance> testObjectGeometryInstances;
-	ShaderBindingTable* shaderTable = nullptr;
+	VulkanShaderBindingTable* shaderBindingTable = nullptr;
 	
 	void Init() override {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
 		
 		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
-		deviceFeatures.geometryShader = VK_TRUE;
-		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		deviceFeatures.sampleRateShading = VK_TRUE;
+		// deviceFeatures.geometryShader = VK_TRUE;
+		// deviceFeatures.samplerAnisotropy = VK_TRUE;
+		// deviceFeatures.sampleRateShading = VK_TRUE;
 	}
 	
 	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
@@ -193,55 +195,55 @@ public:
 			{/*scatter*/0.0f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		};
 
-		shaderTable = new ShaderBindingTable("incubator_MyVulkan/assets/shaders/rtx.rgen");
-		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.rmiss");
-		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss");
-		shaderTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.rchit");
-		shaderTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.sphere.rchit", "", "incubator_MyVulkan/assets/shaders/rtx.sphere.rint");
+		shaderBindingTable = new VulkanShaderBindingTable("incubator_MyVulkan/assets/shaders/rtx.rgen");
+		shaderBindingTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.rmiss");
+		shaderBindingTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss");
+		shaderBindingTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.rchit");
+		shaderBindingTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.sphere.rchit", "", "incubator_MyVulkan/assets/shaders/rtx.sphere.rint");
 		
 		// Uniforms
-		shaderTable->AddLayoutBinding(// accelerationStructure
+		shaderBindingTable->AddLayoutBinding(// accelerationStructure
 			0, // binding
 			VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
 		);
-		shaderTable->AddLayoutBinding(// resultImage
+		shaderBindingTable->AddLayoutBinding(// resultImage
 			1, // binding
 			VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_RAYGEN_BIT_NV // stage flags
 		);
-		shaderTable->AddLayoutBinding(// ubo
+		shaderBindingTable->AddLayoutBinding(// ubo
 			2, // binding
 			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV // stage flags
 		);
-		shaderTable->AddLayoutBinding(// vertex buffer
+		shaderBindingTable->AddLayoutBinding(// vertex buffer
 			3, // binding
 			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
 		);
-		shaderTable->AddLayoutBinding(// index buffer
+		shaderBindingTable->AddLayoutBinding(// index buffer
 			4, // binding
 			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
 		);
-		shaderTable->AddLayoutBinding(// sphere buffer
+		shaderBindingTable->AddLayoutBinding(// sphere buffer
 			5, // binding
 			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
 			1, // count (for array)
 			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV // stage flags
 		);
 		
-		shaderTable->LoadShaders();
+		shaderBindingTable->LoadShaders();
 	}
 
 	void UnloadScene() override {
-		delete shaderTable;
+		delete shaderBindingTable;
 	}
 
 protected:
@@ -292,8 +294,6 @@ protected:
 		testSphereGeometries.push_back(sphereGeometry);
 		
 		rayTracingBottomLevelAccelerationStructures.resize(2);
-		rayTracingBottomLevelAccelerationStructureMemories.resize(2);
-		rayTracingBottomLevelAccelerationStructureHandles.resize(2);
 		
 		{
 			// Bottom Level acceleration structure for triangles
@@ -311,12 +311,12 @@ protected:
 					testObjectGeometries.data()// VkGeometryNV pGeometries
 				}
 			};
-			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[0]) != VK_SUCCESS)
+			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[0].accelerationStructure) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create bottom level acceleration structure for triangles");
 				
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0];
+			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0].accelerationStructure;
 				
 			VkMemoryRequirements2 memoryRequirements2 {};
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
@@ -327,14 +327,14 @@ protected:
 				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
 				renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 			};
-			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructureMemories[0]) != VK_SUCCESS)
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[0].memory) != VK_SUCCESS)
 				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure for triangles");
 			
 			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
 				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
 				nullptr,// pNext
-				rayTracingBottomLevelAccelerationStructures[0],// accelerationStructure
-				rayTracingBottomLevelAccelerationStructureMemories[0],// memory
+				rayTracingBottomLevelAccelerationStructures[0].accelerationStructure,// accelerationStructure
+				rayTracingBottomLevelAccelerationStructures[0].memory,// memory
 				0,// VkDeviceSize memoryOffset
 				0,// uint32_t deviceIndexCount
 				nullptr// const uint32_t* pDeviceIndices
@@ -342,7 +342,7 @@ protected:
 			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
 				throw std::runtime_error("Failed to bind bottom level acceleration structure memory for triangles");
 			
-			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[0], sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructureHandles[0]))
+			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[0].accelerationStructure, sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructures[0].handle))
 				throw std::runtime_error("Failed to get bottom level acceleration structure handle for triangles");
 		}
 		
@@ -362,12 +362,12 @@ protected:
 					testSphereGeometries.data()// VkGeometryNV pGeometries
 				}
 			};
-			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[1]) != VK_SUCCESS)
+			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[1].accelerationStructure) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create bottom level acceleration structure for spheres");
 				
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1];
+			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1].accelerationStructure;
 				
 			VkMemoryRequirements2 memoryRequirements2 {};
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
@@ -378,14 +378,14 @@ protected:
 				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
 				renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 			};
-			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructureMemories[1]) != VK_SUCCESS)
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingBottomLevelAccelerationStructures[1].memory) != VK_SUCCESS)
 				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure for spheres");
 			
 			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
 				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
 				nullptr,// pNext
-				rayTracingBottomLevelAccelerationStructures[1],// accelerationStructure
-				rayTracingBottomLevelAccelerationStructureMemories[1],// memory
+				rayTracingBottomLevelAccelerationStructures[1].accelerationStructure,// accelerationStructure
+				rayTracingBottomLevelAccelerationStructures[1].memory,// memory
 				0,// VkDeviceSize memoryOffset
 				0,// uint32_t deviceIndexCount
 				nullptr// const uint32_t* pDeviceIndices
@@ -393,7 +393,7 @@ protected:
 			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
 				throw std::runtime_error("Failed to bind bottom level acceleration structure memory for spheres");
 			
-			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[1], sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructureHandles[1]))
+			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingBottomLevelAccelerationStructures[1].accelerationStructure, sizeof(uint64_t), &rayTracingBottomLevelAccelerationStructures[1].handle))
 				throw std::runtime_error("Failed to get bottom level acceleration structure handle for spheres");
 		}
 		
@@ -412,7 +412,7 @@ protected:
 			0x1, // mask
 			0, // instanceOffset
 			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // flags
-			rayTracingBottomLevelAccelerationStructureHandles[0] // accelerationStructureHandle
+			rayTracingBottomLevelAccelerationStructures[0].handle // accelerationStructureHandle
 		});
 		// Spheres instance
 		testObjectGeometryInstances.push_back({
@@ -421,7 +421,7 @@ protected:
 			0x2, // mask
 			1, // instanceOffset
 			0, // flags
-			rayTracingBottomLevelAccelerationStructureHandles[1] // accelerationStructureHandle
+			rayTracingBottomLevelAccelerationStructures[1].handle // accelerationStructureHandle
 		});
 		
 		// Ray Tracing Geometry Instances
@@ -443,12 +443,12 @@ protected:
 					nullptr// VkGeometryNV pGeometries
 				}
 			};
-			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingTopLevelAccelerationStructure) != VK_SUCCESS)
+			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.accelerationStructure) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create top level acceleration structure");
 			
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure;
+			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
 				
 			VkMemoryRequirements2 memoryRequirements2 {};
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
@@ -459,14 +459,14 @@ protected:
 				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
 				renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 			};
-			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingTopLevelAccelerationStructureMemory) != VK_SUCCESS)
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.memory) != VK_SUCCESS)
 				throw std::runtime_error("Failed to allocate memory for top level acceleration structure");
 			
 			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
 				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
 				nullptr,// pNext
-				rayTracingTopLevelAccelerationStructure,// accelerationStructure
-				rayTracingTopLevelAccelerationStructureMemory,// memory
+				rayTracingTopLevelAccelerationStructure.accelerationStructure,// accelerationStructure
+				rayTracingTopLevelAccelerationStructure.memory,// memory
 				0,// VkDeviceSize memoryOffset
 				0,// uint32_t deviceIndexCount
 				nullptr// const uint32_t* pDeviceIndices
@@ -474,7 +474,7 @@ protected:
 			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
 				throw std::runtime_error("Failed to bind top level acceleration structure memory");
 			
-			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingTopLevelAccelerationStructure, sizeof(uint64_t), &rayTracingTopLevelAccelerationStructureHandle))
+			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, sizeof(uint64_t), &rayTracingTopLevelAccelerationStructure.handle))
 				throw std::runtime_error("Failed to get top level acceleration structure handle");
 		}
 		
@@ -485,11 +485,11 @@ protected:
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
 			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
 			VkMemoryRequirements2 memoryRequirementsBottomLevel1, memoryRequirementsBottomLevel2, memoryRequirementsTopLevel;
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0];
+			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0].accelerationStructure;
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel1);
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1];
+			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1].accelerationStructure;
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel2);
-			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure;
+			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
 			// Send scratch buffer
 			const VkDeviceSize scratchBufferSize = std::max(memoryRequirementsBottomLevel1.memoryRequirements.size + memoryRequirementsBottomLevel2.memoryRequirements.size, memoryRequirementsTopLevel.memoryRequirements.size);
@@ -519,7 +519,7 @@ protected:
 					VK_NULL_HANDLE, 
 					0, 
 					VK_FALSE, 
-					rayTracingBottomLevelAccelerationStructures[0], 
+					rayTracingBottomLevelAccelerationStructures[0].accelerationStructure, 
 					VK_NULL_HANDLE, 
 					scratchBuffer.buffer, 
 					0
@@ -546,7 +546,7 @@ protected:
 					VK_NULL_HANDLE, 
 					0, 
 					VK_FALSE, 
-					rayTracingBottomLevelAccelerationStructures[1], 
+					rayTracingBottomLevelAccelerationStructures[1].accelerationStructure, 
 					VK_NULL_HANDLE, 
 					scratchBuffer.buffer, 
 					memoryRequirementsBottomLevel1.memoryRequirements.size
@@ -573,7 +573,7 @@ protected:
 					instanceBuffer.buffer, 
 					0, 
 					VK_FALSE, 
-					rayTracingTopLevelAccelerationStructure, 
+					rayTracingTopLevelAccelerationStructure.accelerationStructure, 
 					VK_NULL_HANDLE, 
 					scratchBuffer.buffer, 
 					0
@@ -601,18 +601,16 @@ protected:
 
 	void DestroySceneGraphics() override {
 		
-		if (rayTracingTopLevelAccelerationStructure != VK_NULL_HANDLE) {
+		if (rayTracingTopLevelAccelerationStructure.accelerationStructure != VK_NULL_HANDLE) {
 			// Acceleration Structure
-			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructureMemory, nullptr);
-			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure, nullptr);
-			rayTracingTopLevelAccelerationStructure = VK_NULL_HANDLE;
+			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
+			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
 			testObjectGeometryInstances.clear();
-			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemories[0], nullptr);
-			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[0], nullptr);
-			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructureMemories[1], nullptr);
-			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[1], nullptr);
-			rayTracingBottomLevelAccelerationStructureMemories.clear();
-			rayTracingBottomLevelAccelerationStructureHandles.clear();
+			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructures[0].memory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[0].accelerationStructure, nullptr);
+			renderingDevice->FreeMemory(rayTracingBottomLevelAccelerationStructures[1].memory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingBottomLevelAccelerationStructures[1].accelerationStructure, nullptr);
 			rayTracingBottomLevelAccelerationStructures.clear();
 		}
 		
@@ -634,16 +632,14 @@ protected:
 	}
 	
 	void CreateGraphicsPipelines() override {
-		shaderTable->CreateRayTracingPipeline(renderingDevice);
+		shaderBindingTable->CreateRayTracingPipeline(renderingDevice);
 		
 		// Shader Binding Table
-		const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * shaderTable->GetGroups().size();
+		const uint32_t sbtSize = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable->GetGroups().size();
 		CreateBuffer(sbtSize, VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, rayTracingShaderBindingTableBuffer);
-		shaderTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
+		shaderBindingTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
 		
-		
-		
-		
+		// Descriptor sets 
 		
 		renderingDevice->CreateDescriptorPool(
 			{
@@ -656,19 +652,12 @@ protected:
 			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 		);
 		
-
-
-		
-		
-		
-		// Descriptor sets 
-		
 		// allocate and update descriptor sets
 		VkDescriptorSetAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
 		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = shaderTable->GetDescriptorSetLayout();
+		allocInfo.pSetLayouts = shaderBindingTable->GetDescriptorSetLayout();
 		if (renderingDevice->AllocateDescriptorSets(&allocInfo, &descriptorSet) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
@@ -677,7 +666,7 @@ protected:
 		VkWriteDescriptorSetAccelerationStructureNV descriptorAccelerationStructureInfo {};
 		descriptorAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
 		descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
-		descriptorAccelerationStructureInfo.pAccelerationStructures = &rayTracingTopLevelAccelerationStructure;
+		descriptorAccelerationStructureInfo.pAccelerationStructures = &rayTracingTopLevelAccelerationStructure.accelerationStructure;
 		
 		// Storage image
 		VkDescriptorImageInfo storageImageDescriptor{};
@@ -767,7 +756,7 @@ protected:
 		// Shader binding table
 		renderingDevice->DestroyBuffer(rayTracingShaderBindingTableBuffer);
 		// Ray tracing pipeline
-		shaderTable->DestroyRayTracingPipeline(renderingDevice);
+		shaderBindingTable->DestroyRayTracingPipeline(renderingDevice);
 		// Descriptor Sets
 		renderingDevice->FreeDescriptorSets(descriptorPool, 1, &descriptorSet);
 		// Descriptor pools
@@ -776,12 +765,12 @@ protected:
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
-		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderTable->GetPipeline());
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderTable->GetPipelineLayout(), 0, 1, &descriptorSet, 0, 0);
+		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipeline());
+		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipelineLayout(), 0, 1, &descriptorSet, 0, 0);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderTable->GetMissGroupOffset();
-		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderTable->GetHitGroupOffset();
+		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable->GetMissGroupOffset();
+		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable->GetHitGroupOffset();
 		
 		renderingDevice->CmdTraceRaysNV(
 			commandBuffer, 

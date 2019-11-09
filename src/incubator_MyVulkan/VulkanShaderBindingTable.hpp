@@ -4,7 +4,7 @@
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
 
-class ShaderBindingTable {
+class VulkanShaderBindingTable {
 private:
 	
 	std::map<uint32_t, VulkanShaderInfo> shaderFiles;
@@ -76,7 +76,7 @@ public:
 		return index;
 	}
 	
-	ShaderBindingTable(VulkanShaderInfo rgen) {
+	VulkanShaderBindingTable(VulkanShaderInfo rgen) {
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
 			nullptr, // pNext

@@ -23,6 +23,7 @@
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
+// #include "incubator_MyVulkan/VulkanRasterizationRenderer.hpp"
 #include "incubator_MyVulkan/VulkanRayTracingRenderer.hpp"
 VulkanLoader vulkanLoader;
 
@@ -38,6 +39,7 @@ int main() {
 	Window* window = new Window("TEST", 1280, 720);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
+	// auto* vulkan = new VulkanRasterizationRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	auto* vulkan = new VulkanRayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	
 	vulkan->LoadRenderer();

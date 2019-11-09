@@ -11,6 +11,13 @@
             "group": "build"
         },
         {
+            "label": "cmake rebuild",
+            "type": "shell",
+            "command": "clear; cd build && rm CMakeCache.txt && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel 8",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "build"
+        },
+        {
             "label": "clean build current platform",
             "type": "shell",
             "command": "clear; tools/cleanbuild.sh",

@@ -6,43 +6,26 @@
 
 class VulkanShaderProgram {
 private:
-	VulkanDevice* device;
-	std::vector<VulkanShader*> shaders;
+	std::vector<VulkanShaderInfo> shaderFiles;
+	std::vector<VulkanShader> shaders;
 	std::vector<VkPipelineShaderStageCreateInfo> stages;
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {};
+	std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
 
 public:
 
 	VulkanShaderProgram() {
 
 	}
-	VulkanShaderProgram(VulkanDevice* device, const std::vector<VulkanShaderInfo>& infos) : device(device) {
+	VulkanShaderProgram(const std::vector<VulkanShaderInfo>& infos) {
 		for (auto& info : infos)
-			shaders.push_back(new VulkanShader(info.filepath, info.entryPoint, info.specializationInfo));
-		for (auto shader : shaders) {
-			shader->CreateShaderModule(device);
-			AddStage(shader);
-		}
-	}
-	VulkanShaderProgram(VulkanDevice* device, std::vector<VulkanShader*> shaders) : device(device) {
-		for (auto shader : shaders) {
-			shader->CreateShaderModule(device);
-			AddStage(shader);
-		}
+			shaderFiles.push_back(info);
 	}
 	
-	~VulkanShaderProgram() {
-		for (auto dsl : descriptorSetLayouts)
-			device->DestroyDescriptorSetLayout(dsl, nullptr);
-		for (auto shader : shaders) {
-			shader->DestroyShaderModule(device);
-			delete shader;
-		}
-	}
-
-	inline void AddStage(VulkanShader* shader) {
+	void AddStage(VulkanShader* shader) {
 		stages.push_back(shader->stageInfo);
 	}
 
@@ -53,23 +36,60 @@ public:
 		}
 	}
 
-	inline void AddVertexInputBinding(uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
+	void AddVertexInputBinding(uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
 		AddVertexInputBinding(bindings.size(), stride, inputRate, attrs);
 	}
 
-	inline VkDescriptorSetLayout AddLayoutBindings(const std::vector<VkDescriptorSetLayoutBinding> &lbs) {
-		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = lbs.size();
-		layoutInfo.pBindings = lbs.data();
+	void AddLayoutBinding(VkDescriptorSetLayoutBinding binding) {
+		layoutBindings.push_back(binding);
+	}
+	
+	void AddLayoutBinding(
+		uint32_t              binding,
+		VkDescriptorType      descriptorType,
+		uint32_t              descriptorCount = 1,
+		VkShaderStageFlags    stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
+		const VkSampler*      pImmutableSamplers = nullptr
+	) {
+		layoutBindings.push_back({binding, descriptorType, descriptorCount, stageFlags, pImmutableSamplers});
+	}
+	
+	VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanDevice* device) {
+		descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descriptorSetLayoutCreateInfo.bindingCount = layoutBindings.size();
+		descriptorSetLayoutCreateInfo.pBindings = layoutBindings.data();
 		size_t nextIndex = descriptorSetLayouts.size();
 		descriptorSetLayouts.resize(nextIndex + 1);
-		if (device->CreateDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayouts[nextIndex]) != VK_SUCCESS) {
+		if (device->CreateDescriptorSetLayout(&descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayouts[nextIndex]) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create descriptor set layout");
 		}
 		return std::ref(descriptorSetLayouts[nextIndex]);
 	}
 
+	void DestroyDescriptorSetLayout(VulkanDevice* device) {
+		for (auto dsl : descriptorSetLayouts)
+			device->DestroyDescriptorSetLayout(dsl, nullptr);
+		descriptorSetLayouts.clear();
+	}
+
+	void LoadShaders(VulkanDevice* device) {
+		for (auto& shader : shaderFiles) {
+			shaders.emplace_back(shader.filepath, shader.entryPoint, shader.specializationInfo);
+		}
+		for (auto& shader : shaders) {
+			shader.CreateShaderModule(device);
+			stages.push_back(shader.stageInfo);
+		}
+	}
+	
+	void UnloadShaders(VulkanDevice* device) {
+		for (auto shader : shaders) {
+			shader.DestroyShaderModule(device);
+		}
+		shaders.clear();
+		stages.clear();
+	}
+	
 	inline std::vector<VkPipelineShaderStageCreateInfo>& GetStages() {
 		return stages;
 	}

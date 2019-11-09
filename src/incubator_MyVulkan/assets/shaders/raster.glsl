@@ -10,9 +10,9 @@ struct V2F {
 
 // UNIFORMS
 layout(binding = 0) uniform UBO {
-    mat4 view;
-    mat4 proj;
-    mat4 model;
+	mat4 model;
+	mat4 view;
+	mat4 proj;
 } ubo;
 
 ##################################################################
@@ -21,15 +21,15 @@ layout(binding = 0) uniform UBO {
 
 // INPUT
 layout(location = 0) in vec3 in_position;
-layout(location = 4) in vec4 in_color;
+layout(location = 1) in vec4 in_color;
 
 // OUTPUT
 layout(location = 0) out V2F v;
 
 // ENTRY POINT
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(in_position, 1);
-    v.color = in_color;
+	gl_Position = ubo.proj * ubo.view * ubo.model * vec4(in_position, 1);
+	v.color = in_color;
 }
 
 ##################################################################
@@ -41,5 +41,5 @@ layout(location = 0) in V2F v;
 layout(location = 0) out vec4 o_color;
 
 void main() {
-    o_color = v.color;
+	o_color = v.color;
 }
