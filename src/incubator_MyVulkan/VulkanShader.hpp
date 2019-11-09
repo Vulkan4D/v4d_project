@@ -1,22 +1,17 @@
 #pragma once
 
-#include "xvk.hpp"
-#include <unordered_map>
-#include <regex>
-#include <fstream>
-
 #include "VulkanStructs.hpp"
 #include "VulkanDevice.hpp"
 
 static std::unordered_map<std::string, VkShaderStageFlagBits> SHADER_TYPES {
-	// {"vert", VK_SHADER_STAGE_VERTEX_BIT},
-	// {"tesc", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
-	// {"tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
-	// {"geom", VK_SHADER_STAGE_GEOMETRY_BIT},
-	// {"frag", VK_SHADER_STAGE_FRAGMENT_BIT},
-	// {"comp", VK_SHADER_STAGE_COMPUTE_BIT},
-	// {"mesh", VK_SHADER_STAGE_MESH_BIT_NV},
-	// {"task", VK_SHADER_STAGE_TASK_BIT_NV},
+	{"vert", VK_SHADER_STAGE_VERTEX_BIT},
+	{"tesc", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT},
+	{"tese", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT},
+	{"geom", VK_SHADER_STAGE_GEOMETRY_BIT},
+	{"frag", VK_SHADER_STAGE_FRAGMENT_BIT},
+	{"comp", VK_SHADER_STAGE_COMPUTE_BIT},
+	{"mesh", VK_SHADER_STAGE_MESH_BIT_NV},
+	{"task", VK_SHADER_STAGE_TASK_BIT_NV},
 	{"rgen", VK_SHADER_STAGE_RAYGEN_BIT_NV},
 	{"rint", VK_SHADER_STAGE_INTERSECTION_BIT_NV},
 	{"rahit", VK_SHADER_STAGE_ANY_HIT_BIT_NV},

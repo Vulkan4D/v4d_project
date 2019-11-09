@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "RayTracingShaderTable.hpp"
+#include "ShaderBindingTable.hpp"
 
 // Test Object Vertex Data Structure
 struct Vertex {
@@ -31,7 +31,7 @@ struct Sphere {
 	: boundingBox(pos - radius, pos + radius), scatter(scatter), roughness(roughness), pos(pos), radius(radius), color(color), specular(specular), metallic(metallic), refraction(refraction), density(density) {}
 };
 
-class RayTracingRenderer : public VulkanRenderer {
+class VulkanRayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
 	// Vertex Buffers for test object
@@ -83,7 +83,7 @@ class RayTracingRenderer : public VulkanRenderer {
 	std::vector<VkGeometryNV> testObjectGeometries;
 	std::vector<VkGeometryNV> testSphereGeometries;
 	std::vector<GeometryInstance> testObjectGeometryInstances;
-	RayTracingShaderTable* shaderTable = nullptr;
+	ShaderBindingTable* shaderTable = nullptr;
 	
 	void Init() override {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
@@ -193,7 +193,7 @@ public:
 			{/*scatter*/0.0f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		};
 
-		shaderTable = new RayTracingShaderTable("incubator_MyVulkan/assets/shaders/rtx.rgen");
+		shaderTable = new ShaderBindingTable("incubator_MyVulkan/assets/shaders/rtx.rgen");
 		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.rmiss");
 		shaderTable->AddMissShader("incubator_MyVulkan/assets/shaders/rtx.shadow.rmiss");
 		shaderTable->AddHitShader("incubator_MyVulkan/assets/shaders/rtx.rchit");
@@ -290,7 +290,6 @@ protected:
 			sphereGeometry.geometry.aabbs.stride = sizeof(Sphere);
 			sphereGeometry.geometry.aabbs.offset = 0;
 		testSphereGeometries.push_back(sphereGeometry);
-		
 		
 		rayTracingBottomLevelAccelerationStructures.resize(2);
 		rayTracingBottomLevelAccelerationStructureMemories.resize(2);
@@ -615,9 +614,10 @@ protected:
 			rayTracingBottomLevelAccelerationStructureMemories.clear();
 			rayTracingBottomLevelAccelerationStructureHandles.clear();
 			rayTracingBottomLevelAccelerationStructures.clear();
-			testObjectGeometries.clear();
-			testSphereGeometries.clear();
 		}
+		
+		testObjectGeometries.clear();
+		testSphereGeometries.clear();
 
 		// Vertices
 		renderingDevice->DestroyBuffer(vertexBuffer);

@@ -23,7 +23,7 @@
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
-#include "incubator_MyVulkan/RayTracingRenderer.hpp"
+#include "incubator_MyVulkan/VulkanRayTracingRenderer.hpp"
 VulkanLoader vulkanLoader;
 
 int main() {
@@ -38,15 +38,20 @@ int main() {
 	Window* window = new Window("TEST", 1280, 720);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
-	auto* vulkan = new RayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+	auto* vulkan = new VulkanRayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	
 	vulkan->LoadRenderer();
 	vulkan->LoadScene();
 	vulkan->SendGraphicsToDevice();
 	
 	float camSpeed = 1.0f, mouseSensitivity = 1.0f;
-	float horizontalAngle = 0.0f;
-	float verticalAngle = 0.0f;
+	float horizontalAngle = -2.5f;
+	float verticalAngle = -0.5f;
+	vulkan->camDirection = glm::vec3(
+		cos(verticalAngle) * sin(horizontalAngle),
+		cos(verticalAngle) * cos(horizontalAngle),
+		sin(verticalAngle)
+	);
 	
 	// Input Events
 	window->AddKeyCallback("app", [window, vulkan](int key, int scancode, int action, int mods){

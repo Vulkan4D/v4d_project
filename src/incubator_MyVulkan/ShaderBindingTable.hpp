@@ -1,14 +1,10 @@
 #pragma once
 
-#include "xvk.hpp" //TODO remove
-
-#include <vector>
-#include <map>
 #include "VulkanStructs.hpp"
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
 
-class RayTracingShaderTable {
+class ShaderBindingTable {
 private:
 	
 	std::map<uint32_t, VulkanShaderInfo> shaderFiles;
@@ -80,7 +76,7 @@ public:
 		return index;
 	}
 	
-	RayTracingShaderTable(VulkanShaderInfo rgen) {
+	ShaderBindingTable(VulkanShaderInfo rgen) {
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
 			nullptr, // pNext
