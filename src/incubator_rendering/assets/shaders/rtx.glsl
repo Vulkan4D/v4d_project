@@ -20,6 +20,7 @@ layout(binding = 2, set = 0) uniform UBO {
 	mat4 proj;
     vec4 light;
 	vec3 ambient;
+	int samplesPerPixel;
 	int rtx_reflection_max_recursion;
 	bool rtx_shadows;
 } ubo;
@@ -150,17 +151,26 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	
 	// Receive Shadows
 	if (shade > 0.0 && ubo.rtx_shadows) {
-		shadowed = true;
 		if (scatter > 0.0) {
-			lightVector = normalize(lightVector + RandomInUnitSphere(ray.scatterSeed)/(1000.0 - scatter*1000.0));
-		}
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
-		if (shadowed) {
-			ray.color = ubo.ambient;
+			float shadow = 0.0;
+			uint seed = ray.scatterSeed;
+			for (int i = 0; i < ubo.samplesPerPixel; i++) {
+				shadowed = true;
+				lightVector = normalize(lightVector + RandomInUnitSphere(seed)/(1000.0 - scatter*1000.0));
+				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
+				if (shadowed) shadow++;
+			}
+			ray.color = mix(ray.color, ubo.ambient, shadow/float(ubo.samplesPerPixel));
+		} else {
+			shadowed = true;
+			traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
+			if (shadowed) {
+				ray.color = ubo.ambient;
+			}
 		}
 	}
 	
-	//TODO scatter, opacity
+	//TODO opacity
 	
 	// Reflections
 	if (ubo.rtx_reflection_max_recursion > 1) {

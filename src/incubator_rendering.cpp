@@ -16,15 +16,15 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include "incubator_MyVulkan/Window.hpp"
+#include "incubator_rendering/Window.hpp"
 
 // Window.cpp
 // using namespace v4d::graphics;
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
-// #include "incubator_MyVulkan/VulkanRasterizationRenderer.hpp"
-#include "incubator_MyVulkan/VulkanRayTracingRenderer.hpp"
+// #include "incubator_rendering/VulkanRasterizationRenderer.hpp"
+#include "incubator_rendering/VulkanRayTracingRenderer.hpp"
 VulkanLoader vulkanLoader;
 
 int main() {
@@ -94,12 +94,25 @@ int main() {
 					break;
 					
 				// RTX Bounce Recursion
+				case GLFW_KEY_1:
+				case GLFW_KEY_2:
+				case GLFW_KEY_3:
+				case GLFW_KEY_4:
+				case GLFW_KEY_5:
+				case GLFW_KEY_6:
+				case GLFW_KEY_7:
+				case GLFW_KEY_8:
+				case GLFW_KEY_9:
+					vulkan->rtx_reflection_max_recursion = key - 48;
+					break;
+				// Samples per pixel
 				case GLFW_KEY_KP_ADD:
-					vulkan->rtx_reflection_max_recursion++;
+					vulkan->samplesPerPixel++;
 					break;
 				case GLFW_KEY_KP_SUBTRACT:
-					vulkan->rtx_reflection_max_recursion--;
-					if (vulkan->rtx_reflection_max_recursion < 1) vulkan->rtx_reflection_max_recursion = 1;
+					vulkan->samplesPerPixel--;
+					if (vulkan->samplesPerPixel < 1) vulkan->samplesPerPixel = 1;
+					if (vulkan->samplesPerPixel > 100) vulkan->samplesPerPixel = 100;
 					break;
 				
 				// RTX Shadows

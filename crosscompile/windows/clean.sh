@@ -5,6 +5,7 @@ set -e
 # Kill potentially running process on remote windows pc
 ssh WINDOWS_PC "START /wait taskkill /f /im tests.exe"
 ssh WINDOWS_PC "START /wait taskkill /f /im demo.exe"
+ssh WINDOWS_PC "START /wait taskkill /f /im incubator.exe"
 
 # Delete build on remote windows pc
 ssh WINDOWS_PC "rmdir /q /s \v4d_build\debug > NUL"
