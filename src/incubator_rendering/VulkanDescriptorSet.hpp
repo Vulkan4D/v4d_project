@@ -80,8 +80,7 @@ struct DescriptorBinding {
 				case ACCELERATION_STRUCTURE:
 					delete (VkWriteDescriptorSetAccelerationStructureNV*)writeInfo;
 				break;
-				default: 
-					throw std::runtime_error("pointerType is not implemented in destructor");
+				// default: throw std::runtime_error("pointerType is not implemented in destructor");
 			}
 		}
 	}
@@ -130,9 +129,7 @@ struct DescriptorBinding {
 				};
 				descriptorWrite.pNext = (VkWriteDescriptorSetAccelerationStructureNV*)writeInfo;
 			break;
-			default: 
-				throw std::runtime_error("pointerType is not implemented in GetWriteDescriptorSet()");
-			break;
+			// default: throw std::runtime_error("pointerType is not implemented in GetWriteDescriptorSet()");
 		}
 		return descriptorWrite;
 	}

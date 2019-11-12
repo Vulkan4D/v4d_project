@@ -555,19 +555,22 @@ protected: // Graphics configuration
 		
 		// Build Ray Tracing acceleration structures
 		{
+			VkDeviceSize allBlasReqSize = 0;
 			// RayTracing Scratch buffer
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
 			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-			VkMemoryRequirements2 memoryRequirementsBottomLevel1, memoryRequirementsBottomLevel2, memoryRequirementsTopLevel;
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[0].accelerationStructure;
-			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel1);
-			memoryRequirementsInfo.accelerationStructure = rayTracingBottomLevelAccelerationStructures[1].accelerationStructure;
-			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBottomLevel2);
+			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+				VkMemoryRequirements2 req;
+				memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &req);
+				allBlasReqSize += req.memoryRequirements.size;
+			}
+			VkMemoryRequirements2 memoryRequirementsTopLevel;
 			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
 			// Send scratch buffer
-			const VkDeviceSize scratchBufferSize = std::max(memoryRequirementsBottomLevel1.memoryRequirements.size + memoryRequirementsBottomLevel2.memoryRequirements.size, memoryRequirementsTopLevel.memoryRequirements.size);
+			const VkDeviceSize scratchBufferSize = std::max(allBlasReqSize, memoryRequirementsTopLevel.memoryRequirements.size);
 			VulkanBuffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
 			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			
@@ -584,59 +587,34 @@ protected: // Graphics configuration
 					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
 				};
 				
-				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-				accelerationStructBuildInfo.geometryCount = (uint)rayTracingBottomLevelAccelerationStructures[0].rayTracingGeometries.size();
-				accelerationStructBuildInfo.pGeometries = rayTracingBottomLevelAccelerationStructures[0].rayTracingGeometries.data();
-				accelerationStructBuildInfo.instanceCount = 0;
-				
-				renderingDevice->CmdBuildAccelerationStructureNV(
-					cmdBuffer, 
-					&accelerationStructBuildInfo, 
-					VK_NULL_HANDLE, 
-					0, 
-					VK_FALSE, 
-					rayTracingBottomLevelAccelerationStructures[0].accelerationStructure, 
-					VK_NULL_HANDLE, 
-					scratchBuffer.buffer, 
-					0
-				);
-				
-				renderingDevice->CmdPipelineBarrier(
-					cmdBuffer, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					0, 
-					1, &memoryBarrier, 
-					0, 0, 
-					0, 0
-				);
-				
-				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-				accelerationStructBuildInfo.geometryCount = (uint)rayTracingBottomLevelAccelerationStructures[1].rayTracingGeometries.size();
-				accelerationStructBuildInfo.pGeometries = rayTracingBottomLevelAccelerationStructures[1].rayTracingGeometries.data();
-				accelerationStructBuildInfo.instanceCount = 0;
-				
-				renderingDevice->CmdBuildAccelerationStructureNV(
-					cmdBuffer, 
-					&accelerationStructBuildInfo, 
-					VK_NULL_HANDLE, 
-					0, 
-					VK_FALSE, 
-					rayTracingBottomLevelAccelerationStructures[1].accelerationStructure, 
-					VK_NULL_HANDLE, 
-					scratchBuffer.buffer, 
-					memoryRequirementsBottomLevel1.memoryRequirements.size
-				);
-				
-				renderingDevice->CmdPipelineBarrier(
-					cmdBuffer, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					0, 
-					1, &memoryBarrier, 
-					0, 0, 
-					0, 0
-				);
+				for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+					accelerationStructBuildInfo.geometryCount = (uint)blas.rayTracingGeometries.size();
+					accelerationStructBuildInfo.pGeometries = blas.rayTracingGeometries.data();
+					accelerationStructBuildInfo.instanceCount = 0;
+					
+					renderingDevice->CmdBuildAccelerationStructureNV(
+						cmdBuffer, 
+						&accelerationStructBuildInfo, 
+						VK_NULL_HANDLE, 
+						0, 
+						VK_FALSE, 
+						blas.accelerationStructure, 
+						VK_NULL_HANDLE, 
+						scratchBuffer.buffer, 
+						0
+					);
+					
+					renderingDevice->CmdPipelineBarrier(
+						cmdBuffer, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						0, 
+						1, &memoryBarrier, 
+						0, 0, 
+						0, 0
+					);
+				}
 				
 				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
 				accelerationStructBuildInfo.geometryCount = 0;
