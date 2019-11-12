@@ -230,7 +230,8 @@ private: // Scene objects
 	
 private: // Scene information
 	
-	VkDescriptorSet descriptorSet;
+	std::vector<VulkanDescriptorSet> descriptorSets {};
+	std::vector<VkDescriptorSet> vkDescriptorSets {};
 	
 private: // Ray Tracing stuff
 	// RayTracingScene rayTracingScene;
@@ -380,43 +381,16 @@ public: // Scene configuration methods
 		shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
 		shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 		
-		// Uniforms
-		shaderBindingTable->AddLayoutBinding(// accelerationStructure
-			0, // binding
-			VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
-		);
-		shaderBindingTable->AddLayoutBinding(// resultImage
-			1, // binding
-			VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_RAYGEN_BIT_NV // stage flags
-		);
-		shaderBindingTable->AddLayoutBinding(// ubo
-			2, // binding
-			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV // stage flags
-		);
-		shaderBindingTable->AddLayoutBinding(// vertex buffer
-			3, // binding
-			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
-		);
-		shaderBindingTable->AddLayoutBinding(// index buffer
-			4, // binding
-			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV // stage flags
-		);
-		shaderBindingTable->AddLayoutBinding(// sphere buffer
-			5, // binding
-			VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV // stage flags
-		);
+		// Descriptor sets
+		auto& descriptorSet = descriptorSets.emplace_back(0);
+		descriptorSet.AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		descriptorSet.AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
+		
+		shaderBindingTable->AddDescriptorSet(&descriptorSet);
 		
 		shaderBindingTable->LoadShaders();
 	}
@@ -723,6 +697,10 @@ protected: // Graphics configuration
 	}
 	
 	void CreateGraphicsPipelines() override {
+		for (auto& set : descriptorSets) {
+			set.CreateDescriptorSetLayout(renderingDevice);
+		}
+		
 		shaderBindingTable->CreateRayTracingPipeline(renderingDevice);
 		
 		// Shader Binding Table
@@ -730,117 +708,50 @@ protected: // Graphics configuration
 		rayTracingShaderBindingTableBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		shaderBindingTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
 		
-		// Descriptor sets 
-		
+		// Descriptor sets / pool
+		std::map<VkDescriptorType, uint> descriptorTypes {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
+					descriptorTypes[descriptor.descriptorType] = 1;
+				} else {
+					descriptorTypes[descriptor.descriptorType]++;
+				}
+			}
+		}
 		renderingDevice->CreateDescriptorPool(
-			{
-				{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV, 1},
-				{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
-				{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
-				{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3},
-			}, 
-			descriptorPool, 
+			descriptorTypes,
+			descriptorPool,
 			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 		);
 		
-		// allocate and update descriptor sets
+		// Allocate descriptor sets
+		std::vector<VkDescriptorSetLayout> setLayouts {};
+		vkDescriptorSets.resize(descriptorSets.size());
+		setLayouts.reserve(descriptorSets.size());
+		for (auto& set : descriptorSets) {
+			setLayouts.push_back(set.GetDescriptorSetLayout());
+		}
 		VkDescriptorSetAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = shaderBindingTable->GetDescriptorSetLayout();
-		if (renderingDevice->AllocateDescriptorSets(&allocInfo, &descriptorSet) != VK_SUCCESS) {
+		allocInfo.descriptorSetCount = (uint)setLayouts.size();
+		allocInfo.pSetLayouts = setLayouts.data();
+		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
+		for (int i = 0; i < descriptorSets.size(); ++i) {
+			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
+		}
 		
-		// Descriptor sets for Ray Tracing Acceleration Structure
-		VkWriteDescriptorSetAccelerationStructureNV descriptorAccelerationStructureInfo {};
-		descriptorAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV;
-		descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
-		descriptorAccelerationStructureInfo.pAccelerationStructures = &rayTracingTopLevelAccelerationStructure.accelerationStructure;
-		
-		// Storage image
-		VkDescriptorImageInfo storageImageDescriptor{};
-		storageImageDescriptor.imageView = rayTracingStorageImage.view;
-		storageImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		
-		VkDescriptorBufferInfo uniformBufferInfo = {uniformBuffer.buffer, 0, sizeof(UBO)};
-		VkDescriptorBufferInfo vertexBufferInfo = {stagedBuffers[0]->buffer, 0, stagedBuffers[0]->size};
-		VkDescriptorBufferInfo indexBufferInfo = {stagedBuffers[1]->buffer, 0, stagedBuffers[1]->size};
-		VkDescriptorBufferInfo sphereBufferInfo = {stagedBuffers[2]->buffer, 0, stagedBuffers[2]->size};
-
-		std::vector<VkWriteDescriptorSet> descriptorWrites {
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // acceleration structure
-				&descriptorAccelerationStructureInfo,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				0,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV,// VkDescriptorType descriptorType
-				nullptr,// VkDescriptorImageInfo* pImageInfo
-				nullptr,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // result image
-				nullptr,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				1,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,// VkDescriptorType descriptorType
-				&storageImageDescriptor,// VkDescriptorImageInfo* pImageInfo
-				nullptr,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // ubo
-				nullptr,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				2,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,// VkDescriptorType descriptorType
-				nullptr,// VkDescriptorImageInfo* pImageInfo
-				&uniformBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // vertex buffer
-				nullptr,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				3,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
-				nullptr,// VkDescriptorImageInfo* pImageInfo
-				&vertexBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // index buffer
-				nullptr,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				4,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
-				nullptr,// VkDescriptorImageInfo* pImageInfo
-				&indexBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-			{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, // sphere buffer
-				nullptr,// pNext
-				descriptorSet,// VkDescriptorSet dstSet
-				5,// uint dstBinding
-				0,// uint dstArrayElement
-				1,// uint descriptorCount
-				VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,// VkDescriptorType descriptorType
-				nullptr,// VkDescriptorImageInfo* pImageInfo
-				&sphereBufferInfo,// VkDescriptorBufferInfo* pBufferInfo
-				nullptr// VkBufferView* pTexelBufferView
-			},
-		};
-
-		// Update Descriptor Sets
+		// Update descriptor sets
+		std::vector<VkWriteDescriptorSet> descriptorWrites {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
+			}
+		}
 		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-
 	}
 	
 	void DestroyGraphicsPipelines() override {
@@ -849,7 +760,8 @@ protected: // Graphics configuration
 		// Ray tracing pipeline
 		shaderBindingTable->DestroyRayTracingPipeline(renderingDevice);
 		// Descriptor Sets
-		renderingDevice->FreeDescriptorSets(descriptorPool, 1, &descriptorSet);
+		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
+		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
 		// Descriptor pools
 		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
 	}
@@ -857,7 +769,7 @@ protected: // Graphics configuration
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipeline());
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipelineLayout(), 0, 1, &descriptorSet, 0, 0);
+		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipelineLayout(), 0, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, 0);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
 		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable->GetMissGroupOffset();

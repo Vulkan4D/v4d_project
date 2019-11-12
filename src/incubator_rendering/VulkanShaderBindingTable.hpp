@@ -18,17 +18,11 @@ private:
 	uint32_t nextHitShaderOffset = 0;
 	uint32_t nextMissShaderOffset = 0;
 	
-	std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
-	
-	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+	std::vector<VulkanDescriptorSet*> descriptorSets {};
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	
 public:
-
-	VkDescriptorSetLayout* GetDescriptorSetLayout() {
-		return &descriptorSetLayout;
-	}
 
 	VkPipeline GetPipeline() const {
 		return pipeline;
@@ -126,42 +120,19 @@ public:
 		shaderObjects.clear();
 	}
 	
-	void AddLayoutBinding(VkDescriptorSetLayoutBinding binding) {
-		layoutBindings.push_back(binding);
-	}
-	
-	void AddLayoutBinding(
-		uint32_t              binding,
-		VkDescriptorType      descriptorType,
-		uint32_t              descriptorCount = 1,
-		VkShaderStageFlags    stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CALLABLE_BIT_NV,
-		const VkSampler*      pImmutableSamplers = nullptr
-	) {
-		layoutBindings.push_back({binding, descriptorType, descriptorCount, stageFlags, pImmutableSamplers});
-	}
-	
-	VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanDevice* device) {
-		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = layoutBindings.size();
-		layoutInfo.pBindings = layoutBindings.data();
-		
-		if (device->CreateDescriptorSetLayout(&layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
-			throw std::runtime_error("Failed to create descriptor set layout");
-
-		return descriptorSetLayout;
-	}
-	
-	void DestroyDescriptorSetLayout(VulkanDevice* device) {
-		device->DestroyDescriptorSetLayout(descriptorSetLayout, nullptr);
+	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
+		descriptorSets.push_back(descriptorSet);
 	}
 	
 	VkPipelineLayout CreatePipelineLayout(VulkanDevice* device) {
-		CreateDescriptorSetLayout(device);
+		std::vector<VkDescriptorSetLayout> layouts {};
+		for (auto* set : descriptorSets) {
+			layouts.push_back(set->GetDescriptorSetLayout());
+		}
 		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
 		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutCreateInfo.setLayoutCount = 1;
-		pipelineLayoutCreateInfo.pSetLayouts = &descriptorSetLayout;
+		pipelineLayoutCreateInfo.setLayoutCount = (uint)layouts.size();
+		pipelineLayoutCreateInfo.pSetLayouts = layouts.data();
 		//TODO add pipelineLayoutCreateInfo.pPushConstantRanges
 		
 		if (device->CreatePipelineLayout(&pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
@@ -172,7 +143,6 @@ public:
 
 	void DestroyPipelineLayout(VulkanDevice* device) {
 		device->DestroyPipelineLayout(pipelineLayout, nullptr);
-		DestroyDescriptorSetLayout(device);
 	}
 	
 	void CreateShaderStages(VulkanDevice* device) {

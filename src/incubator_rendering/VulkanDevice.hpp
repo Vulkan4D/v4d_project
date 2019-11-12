@@ -140,7 +140,7 @@ public:
 			throw std::runtime_error("Failed to create descriptor pool");
 		}
 	}
-	void CreateDescriptorPool(std::map<VkDescriptorType, uint> types, VkDescriptorPool& descriptorPool, VkDescriptorPoolCreateFlags flags = 0) {
+	void CreateDescriptorPool(std::map<VkDescriptorType, uint>& types, VkDescriptorPool& descriptorPool, VkDescriptorPoolCreateFlags flags = 0) {
 		std::vector<VkDescriptorPoolSize> poolSizes;
 		poolSizes.reserve(types.size());
 		VkDescriptorPoolCreateInfo poolInfo = {};

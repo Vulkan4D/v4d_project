@@ -11,6 +11,7 @@
 #include "VulkanShaderProgram.hpp"
 #include "VulkanGraphicsPipeline.hpp"
 #include "VulkanRenderPass.hpp"
+#include "VulkanDescriptorSet.hpp"
 
 // Debug Callback
 #ifdef _DEBUG
