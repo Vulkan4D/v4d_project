@@ -3,6 +3,8 @@
 #include "VulkanRenderer.hpp"
 #include "VulkanShaderBindingTable.hpp"
 
+#pragma region Geometry
+
 class Geometry {
 public:
 	VkGeometryFlagBitsNV rayTracingGeometryFlags = VK_GEOMETRY_OPAQUE_BIT_NV;
@@ -131,6 +133,10 @@ public:
 	}
 };
 
+#pragma endregion
+
+#pragma region Scene-specific structs
+
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
@@ -169,7 +175,10 @@ struct UBO {
 	bool rtx_shadows;
 };
 
-// Ray tracing geometry instance
+#pragma endregion
+
+#pragma region RayTracing structs
+
 struct GeometryInstance {
 	glm::mat3x4 transform;
 	uint32_t instanceId : 24;
@@ -205,28 +214,30 @@ struct TopLevelAccelerationStructure : public AccelerationStructure {
 // 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
 // 	VulkanShaderBindingTable* shaderBindingTable = nullptr;
 // 	VulkanBuffer rayTracingShaderBindingTableBuffer;
-	
-	
-	
 // };
+
+#pragma endregion
 
 class VulkanRayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
+private: // Buffers	
 	VulkanBuffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
 	std::vector<VulkanBuffer*> stagedBuffers {};
 	
+private: // Scene objects
 	std::vector<Geometry*> geometries {};
+	
+private: // Scene information
 	
 	VkDescriptorSet descriptorSet;
 	
-	// Ray Tracing stuff
+private: // Ray Tracing stuff
 	// RayTracingScene rayTracingScene;
 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
 	VulkanShaderBindingTable* shaderBindingTable = nullptr;
 	VulkanBuffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
-	
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
 	struct RayTracingStorageImage {
 		VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -235,6 +246,8 @@ class VulkanRayTracingRenderer : public VulkanRenderer {
 		VkFormat format;
 	} rayTracingStorageImage;
 	float rayTracingImageScale = 2;
+	
+private: // Renderer Configuration methods
 
 	void Init() override {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
@@ -312,7 +325,7 @@ class VulkanRayTracingRenderer : public VulkanRenderer {
 		}
 	}
 	
-public:
+public: // Scene configuration methods
 	void LoadScene() override {
 		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
@@ -421,7 +434,7 @@ public:
 		stagedBuffers.clear();
 	}
 
-protected:
+protected: // Graphics configuration
 	void CreateSceneGraphics() override {
 		
 		AllocateBuffersStaged(commandPool, stagedBuffers);
@@ -899,6 +912,8 @@ protected:
 		TransitionImageLayout(commandBuffer, rayTracingStorageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
 		
 	}
+	
+protected: // Methods executed on every frame
 
 	void FrameUpdate(uint imageIndex) override {
 		static auto startTime = std::chrono::high_resolution_clock::now();
@@ -926,7 +941,7 @@ protected:
 		VulkanBuffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 	}
 
-public:
+public: // user-defined state variables
 	glm::vec3 camPosition = glm::vec3(2,2,2);
 	glm::vec3 camDirection = glm::vec3(-2,-2,-2);
 	glm::vec4 light {1.0,1.0,3.0, 1.0};
