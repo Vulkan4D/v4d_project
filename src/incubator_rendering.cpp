@@ -60,6 +60,7 @@ int main() {
 		vulkan->LockUBO();
 		// Quit application upon pressing the Escape key
 		if (action != GLFW_RELEASE) {
+			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
 			switch (key) {
 				
 				// Quit

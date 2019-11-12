@@ -28,10 +28,3 @@ struct VulkanQueue {
 	uint32_t index;
 	VkQueue handle;
 };
-
-struct VulkanBuffer {
-	VkDeviceSize size = 0;
-	VkBuffer buffer = VK_NULL_HANDLE;
-	VkDeviceMemory memory = VK_NULL_HANDLE;
-	void* data = nullptr;
-};

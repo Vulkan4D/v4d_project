@@ -5,6 +5,7 @@
 #include "VulkanStructs.hpp"
 #include "VulkanGPU.hpp"
 #include "VulkanDevice.hpp"
+#include "VulkanBuffer.hpp"
 #include "VulkanSwapChain.hpp"
 #include "VulkanShader.hpp"
 #include "VulkanShaderProgram.hpp"

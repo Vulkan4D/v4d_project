@@ -361,6 +361,54 @@ protected: // Helper methods
 		renderingDevice->FreeCommandBuffers(commandPool, 1, &commandBuffer);
 	}
 
+
+	void AllocateBufferStaged(VkCommandPool commandPool, VulkanBuffer& buffer) {
+		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+		VulkanBuffer stagingBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		stagingBuffer.srcDataPointers = std::ref(buffer.srcDataPointers);
+		stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
+		buffer.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+		VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
+		EndSingleTimeCommands(commandPool, cmdBuffer);
+		stagingBuffer.Free(renderingDevice);
+	}
+	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<VulkanBuffer>& buffers) {
+		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+		std::vector<VulkanBuffer> stagingBuffers {};
+		stagingBuffers.reserve(buffers.size());
+		for (auto& buffer : buffers) {
+			auto& stagingBuffer = stagingBuffers.emplace_back(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+			stagingBuffer.srcDataPointers = std::ref(buffer.srcDataPointers);
+			stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
+			buffer.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+			VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
+		}
+		EndSingleTimeCommands(commandPool, cmdBuffer);
+		for (auto& stagingBuffer : stagingBuffers) {
+			stagingBuffer.Free(renderingDevice);
+		}
+	}
+	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<VulkanBuffer*>& buffers) {
+		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+		std::vector<VulkanBuffer> stagingBuffers {};
+		stagingBuffers.reserve(buffers.size());
+		for (auto& buffer : buffers) {
+			auto& stagingBuffer = stagingBuffers.emplace_back(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+			stagingBuffer.srcDataPointers = std::ref(buffer->srcDataPointers);
+			stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
+			buffer->usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			buffer->Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+			VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer->buffer, buffer->size);
+		}
+		EndSingleTimeCommands(commandPool, cmdBuffer);
+		for (auto& stagingBuffer : stagingBuffers) {
+			stagingBuffer.Free(renderingDevice);
+		}
+	}
+
+
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
 		auto commandBuffer = BeginSingleTimeCommands(commandPool);
 		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels);
@@ -510,66 +558,6 @@ protected: // Helper methods
 			0, nullptr,
 			1, &barrier
 		);
-	}
-
-	void CreateBufferStaged(VkDeviceSize size, VkBufferUsageFlags usage, VulkanBuffer& buffer, void* data) {
-		VulkanBuffer stagingBuffer;
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, data);
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer);
-		CopyBuffer(stagingBuffer.buffer, buffer.buffer, size);
-		renderingDevice->DestroyBuffer(stagingBuffer);
-	}
-
-	void CreateBufferStaged(VkDeviceSize size, VkBufferUsageFlags usage, VulkanBuffer& buffer, void* data, VulkanBuffer& stagingBuffer) {
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, data);
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer);
-		CopyBuffer(stagingBuffer.buffer, buffer.buffer, size);
-	}
-
-	void CreateBufferStaged(VkCommandBuffer commandBuffer, VkDeviceSize size, VkBufferUsageFlags usage, VulkanBuffer& buffer, void* data) {
-		VulkanBuffer stagingBuffer;
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, data);
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer);
-		CopyBuffer(commandBuffer, stagingBuffer.buffer, buffer.buffer, size);
-		renderingDevice->DestroyBuffer(stagingBuffer);
-	}
-
-	void CreateBufferStaged(VkCommandBuffer commandBuffer, VkDeviceSize size, VkBufferUsageFlags usage, VulkanBuffer& buffer, void* data, VulkanBuffer& stagingBuffer) {
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, data);
-		renderingDevice->CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer);
-		CopyBuffer(commandBuffer, stagingBuffer.buffer, buffer.buffer, size);
-	}
-
-	inline void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VulkanBuffer& buffer, void* data = nullptr) {
-		renderingDevice->CreateBuffer(size, usage, properties, buffer, data);
-	}
-
-	void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) {
-		auto commandBuffer = BeginSingleTimeCommands(commandPool);
-		CopyBuffer(commandBuffer, srcBuffer, dstBuffer, size, srcOffset, dstOffset);
-		EndSingleTimeCommands(commandPool, commandBuffer);
-	}
-
-	void CopyBuffer(VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, VkDeviceSize size = 0, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) {
-		auto commandBuffer = BeginSingleTimeCommands(commandPool);
-		CopyBuffer(commandBuffer, srcBuffer, dstBuffer, size, srcOffset, dstOffset);
-		EndSingleTimeCommands(commandPool, commandBuffer);
-	}
-
-	void CopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) {
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = srcOffset;
-		copyRegion.dstOffset = dstOffset;
-		copyRegion.size = size;
-		renderingDevice->CmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-	}
-
-	void CopyBuffer(VkCommandBuffer commandBuffer, VulkanBuffer srcBuffer, VulkanBuffer dstBuffer, VkDeviceSize size = 0, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) {
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = srcOffset;
-		copyRegion.dstOffset = dstOffset;
-		copyRegion.size = size == 0 ? srcBuffer.size : size;
-		renderingDevice->CmdCopyBuffer(commandBuffer, srcBuffer.buffer, dstBuffer.buffer, 1, &copyRegion);
 	}
 
 	void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {

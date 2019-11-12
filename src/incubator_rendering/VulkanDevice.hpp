@@ -3,7 +3,6 @@
 class VulkanGPU;
 
 #include "VulkanStructs.hpp"
-#include "VulkanStructs.hpp"
 #include "VulkanGPU.hpp"
 
 struct VulkanDeviceQueueInfo {
@@ -164,80 +163,6 @@ public:
 		DestroyDescriptorPool(descriptorPool, nullptr);
 	}
 
-	using xvk::Interface::DeviceInterface::CreateBuffer;
-	void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VulkanBuffer& buffer, void* data = nullptr) {
-		VkBufferCreateInfo bufferInfo = {};
-		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = size;
-		bufferInfo.usage = usage;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		
-		buffer.size = size;
-
-		if (CreateBuffer(&bufferInfo, nullptr, &buffer.buffer) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create buffer");
-		}
-
-		VkMemoryRequirements memRequirements;
-		GetBufferMemoryRequirements(buffer.buffer, &memRequirements);
-
-		VkMemoryAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = gpu->FindMemoryType(memRequirements.memoryTypeBits, properties);
-
-		// TODO !!!
-		// It should be noted that in a real world application, we're not supposed to actually call vkAllocateMemory for every individual buffer. 
-		// The maximum number of simultaneous memory allocations is limited by the maxMemoryAllocationCount physical device limit, which may be as low as 4096 even with high end hardware like a GTX 1080.
-		// The right way to allocate memory for a large number of objects at the same time is to create a custom allocator that splits up a single allocation among many different objects by using the offset parameters that we've seen in many functions.
-		// We can either implement such an allocator ourselves, or use the VulkanMemoryAllocator library provided by the GPUOpen initiative.
-		
-		if (AllocateMemory(&allocInfo, nullptr, &buffer.memory) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate buffer memory");
-		}
-		
-		if (data) {
-			MapMemory(buffer);
-			memcpy(buffer.data, data, size);
-			if ((properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
-				VkMappedMemoryRange mappedRange {};
-				mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-				mappedRange.memory = buffer.memory;
-				mappedRange.offset = 0;
-				mappedRange.size = size;
-				FlushMappedMemoryRanges(1, &mappedRange);
-			}
-			UnmapMemory(buffer);
-		}
-
-		BindBufferMemory(buffer.buffer, buffer.memory, 0);
-	}
-	
-	using xvk::Interface::DeviceInterface::DestroyBuffer;
-	void DestroyBuffer(VulkanBuffer& buffer) {
-		DestroyBuffer(buffer.buffer, nullptr);
-		FreeMemory(buffer.memory, nullptr);
-		buffer.size = 0;
-		buffer.data = nullptr;
-	}
-	
-	using xvk::Interface::DeviceInterface::MapMemory;
-	inline void MapMemory(VulkanBuffer& buffer, VkDeviceSize offset = 0, VkDeviceSize size = 0, VkMemoryMapFlags flags = 0) {
-		MapMemory(buffer.memory, offset, size == 0 ? buffer.size : size, flags, &buffer.data);
-	}
-	
-	using xvk::Interface::DeviceInterface::UnmapMemory;
-	inline void UnmapMemory(VulkanBuffer& buffer) {
-		UnmapMemory(buffer.memory);
-		buffer.data = nullptr;
-	}
-	
-	void CopyDataToBuffer(void* data, VulkanBuffer& buffer, VkDeviceSize offset = 0, VkDeviceSize size = 0, VkMemoryMapFlags flags = 0) {
-		MapMemory(buffer, offset, size, flags);
-		memcpy(buffer.data, data, size == 0 ? buffer.size : size);
-		UnmapMemory(buffer);
-	}
-	
 	using xvk::Interface::DeviceInterface::CreateImage;
 	void CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits sampleCount, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags, VkImage& image, VkDeviceMemory& imageMemory) {
 		VkImageCreateInfo imageInfo = {};
