@@ -111,6 +111,7 @@ public:
 	}
 	
 	void LoadShaders() {
+		shaderObjects.clear();
 		for (auto&[i, shader] : shaderFiles) {
 			shaderObjects.emplace_back(shader.filepath, shader.entryPoint, shader.specializationInfo);
 		}
@@ -118,6 +119,20 @@ public:
 	
 	void UnloadShaders() {
 		shaderObjects.clear();
+	}
+	
+	void CreateShaderStages(VulkanDevice* device) {
+		for (auto& shader : shaderObjects) {
+			shader.CreateShaderModule(device);
+			stages.push_back(shader.stageInfo);
+		}
+	}
+	
+	void DestroyShaderStages(VulkanDevice* device) {
+		stages.clear();
+		for (auto& shader : shaderObjects) {
+			shader.DestroyShaderModule(device);
+		}
 	}
 	
 	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
@@ -143,20 +158,6 @@ public:
 
 	void DestroyPipelineLayout(VulkanDevice* device) {
 		device->DestroyPipelineLayout(pipelineLayout, nullptr);
-	}
-	
-	void CreateShaderStages(VulkanDevice* device) {
-		for (auto& shader : shaderObjects) {
-			shader.CreateShaderModule(device);
-			stages.push_back(shader.stageInfo);
-		}
-	}
-	
-	void DestroyShaderStages(VulkanDevice* device) {
-		stages.clear();
-		for (auto& shader : shaderObjects) {
-			shader.DestroyShaderModule(device);
-		}
 	}
 	
 	VkPipeline CreateRayTracingPipeline(VulkanDevice* device) {

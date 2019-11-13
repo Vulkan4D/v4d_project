@@ -3,6 +3,7 @@
 #include "VulkanStructs.hpp"
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
+#include "VulkanDescriptorSet.hpp"
 
 class VulkanShaderProgram {
 private:
@@ -11,9 +12,10 @@ private:
 	std::vector<VkPipelineShaderStageCreateInfo> stages;
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
-	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
-	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {};
-	std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
+	
+	std::vector<VulkanDescriptorSet*> descriptorSets {};
+	
+	std::vector<VkDescriptorSetLayout> layouts {};
 
 public:
 
@@ -25,10 +27,6 @@ public:
 			shaderFiles.push_back(info);
 	}
 	
-	void AddStage(VulkanShader* shader) {
-		stages.push_back(shader->stageInfo);
-	}
-
 	void AddVertexInputBinding(uint32_t binding, uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
 		bindings.emplace_back(VkVertexInputBindingDescription{binding, stride, inputRate});
 		for (auto attr : attrs) {
@@ -40,70 +38,53 @@ public:
 		AddVertexInputBinding(bindings.size(), stride, inputRate, attrs);
 	}
 
-	void AddLayoutBinding(VkDescriptorSetLayoutBinding binding) {
-		layoutBindings.push_back(binding);
-	}
-	
-	void AddLayoutBinding(
-		uint32_t              binding,
-		VkDescriptorType      descriptorType,
-		uint32_t              descriptorCount = 1,
-		VkShaderStageFlags    stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS,
-		const VkSampler*      pImmutableSamplers = nullptr
-	) {
-		layoutBindings.push_back({binding, descriptorType, descriptorCount, stageFlags, pImmutableSamplers});
-	}
-	
-	VkDescriptorSetLayout CreateDescriptorSetLayout(VulkanDevice* device) {
-		descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		descriptorSetLayoutCreateInfo.bindingCount = layoutBindings.size();
-		descriptorSetLayoutCreateInfo.pBindings = layoutBindings.data();
-		size_t nextIndex = descriptorSetLayouts.size();
-		descriptorSetLayouts.resize(nextIndex + 1);
-		if (device->CreateDescriptorSetLayout(&descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayouts[nextIndex]) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create descriptor set layout");
-		}
-		return std::ref(descriptorSetLayouts[nextIndex]);
-	}
-
-	void DestroyDescriptorSetLayout(VulkanDevice* device) {
-		for (auto dsl : descriptorSetLayouts)
-			device->DestroyDescriptorSetLayout(dsl, nullptr);
-		descriptorSetLayouts.clear();
-	}
-
-	void LoadShaders(VulkanDevice* device) {
+	void LoadShaders() {
+		shaders.clear();
 		for (auto& shader : shaderFiles) {
 			shaders.emplace_back(shader.filepath, shader.entryPoint, shader.specializationInfo);
 		}
+	}
+	
+	void UnloadShaders() {
+		shaders.clear();
+	}
+	
+	void CreateShaderStages(VulkanDevice* device) {
 		for (auto& shader : shaders) {
 			shader.CreateShaderModule(device);
 			stages.push_back(shader.stageInfo);
 		}
 	}
 	
-	void UnloadShaders(VulkanDevice* device) {
-		for (auto shader : shaders) {
+	void DestroyShaderStages(VulkanDevice* device) {
+		stages.clear();
+		for (auto& shader : shaders) {
 			shader.DestroyShaderModule(device);
 		}
-		shaders.clear();
-		stages.clear();
 	}
 	
-	inline std::vector<VkPipelineShaderStageCreateInfo>& GetStages() {
-		return stages;
-	}
-
-	inline std::vector<VkVertexInputBindingDescription>& GetBindings() {
-		return bindings;
-	}
-
-	inline std::vector<VkVertexInputAttributeDescription>& GetAttributes() {
-		return attributes;
+	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
+		descriptorSets.push_back(descriptorSet);
 	}
 	
-	inline std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() {
-		return descriptorSetLayouts;
+	inline std::vector<VkPipelineShaderStageCreateInfo>* GetStages() {
+		return &stages;
+	}
+
+	inline std::vector<VkVertexInputBindingDescription>* GetBindings() {
+		return &bindings;
+	}
+
+	inline std::vector<VkVertexInputAttributeDescription>* GetAttributes() {
+		return &attributes;
+	}
+	
+	inline std::vector<VkDescriptorSetLayout>* GetDescriptorSetLayouts() {
+		if (layouts.size() > 0) layouts.clear();
+		for (auto* set : descriptorSets) {
+			layouts.push_back(set->GetDescriptorSetLayout());
+		}
+		return &layouts;
 	}
 
 };

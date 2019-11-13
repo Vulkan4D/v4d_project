@@ -8,10 +8,10 @@ class VulkanGraphicsPipeline {
 private:
 	VulkanDevice* device;
 
-	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
-	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
-	std::vector<VkVertexInputBindingDescription> bindings;
-	std::vector<VkVertexInputAttributeDescription> attributes;
+	std::vector<VkDescriptorSetLayout>* descriptorSetLayouts;
+	std::vector<VkPipelineShaderStageCreateInfo>* shaderStages;
+	std::vector<VkVertexInputBindingDescription>* bindings;
+	std::vector<VkVertexInputAttributeDescription>* attributes;
 
 public:
 	VkPipeline handle = VK_NULL_HANDLE;
@@ -54,17 +54,17 @@ public:
 	void Prepare() {
 
 		// Bindings and Attributes
-		vertexInputInfo.vertexBindingDescriptionCount = bindings.size();
-		vertexInputInfo.pVertexBindingDescriptions = bindings.data();
-		vertexInputInfo.vertexAttributeDescriptionCount = attributes.size();
-		vertexInputInfo.pVertexAttributeDescriptions = attributes.data();
+		vertexInputInfo.vertexBindingDescriptionCount = bindings->size();
+		vertexInputInfo.pVertexBindingDescriptions = bindings->data();
+		vertexInputInfo.vertexAttributeDescriptionCount = attributes->size();
+		vertexInputInfo.pVertexAttributeDescriptions = attributes->data();
 
 		// Pipeline Layout
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo {};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		if (descriptorSetLayouts.size() > 0) {
-			pipelineLayoutInfo.setLayoutCount = descriptorSetLayouts.size();
-			pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
+		if (descriptorSetLayouts->size() > 0) {
+			pipelineLayoutInfo.setLayoutCount = descriptorSetLayouts->size();
+			pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts->data();
 		}
 
 		// Dynamic states
@@ -95,8 +95,8 @@ public:
 		pipelineCreateInfo.pColorBlendState = &colorBlending;
 
 		// Shaders
-		pipelineCreateInfo.stageCount = shaderStages.size();
-		pipelineCreateInfo.pStages = shaderStages.data();
+		pipelineCreateInfo.stageCount = shaderStages->size();
+		pipelineCreateInfo.pStages = shaderStages->data();
 	}
 
 	void Create() {
@@ -110,26 +110,11 @@ public:
 		device->DestroyPipelineLayout(pipelineLayout, nullptr);
 	}
 
-	void AddShaderStage(VulkanShader* shader) {
-		shaderStages.push_back(shader->stageInfo);
-	}
-
 	void SetShaderProgram(VulkanShaderProgram* shaderProgram) {
-		shaderStages = ref(shaderProgram->GetStages());
-		bindings = ref(shaderProgram->GetBindings());
-		attributes = ref(shaderProgram->GetAttributes());
-		descriptorSetLayouts = ref(shaderProgram->GetDescriptorSetLayouts());
-	}
-
-	void AddVertexInputBinding(uint32_t binding, uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
-		bindings.emplace_back(VkVertexInputBindingDescription{binding, stride, inputRate});
-		for (auto attr : attrs) {
-			attributes.emplace_back(VkVertexInputAttributeDescription{attr.location, binding, attr.format, attr.offset});
-		}
-	}
-
-	inline void AddVertexInputBinding(uint32_t stride, VkVertexInputRate inputRate, std::vector<VulkankVertexInputAttributeDescription> attrs) {
-		AddVertexInputBinding(bindings.size(), stride, inputRate, attrs);
+		shaderStages = shaderProgram->GetStages();
+		bindings = shaderProgram->GetBindings();
+		attributes = shaderProgram->GetAttributes();
+		descriptorSetLayouts = shaderProgram->GetDescriptorSetLayouts();
 	}
 
 	void AddAlphaBlendingAttachment() {

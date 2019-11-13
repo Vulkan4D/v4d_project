@@ -1,7 +1,20 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
+#include "VulkanDescriptorSet.hpp"
 #include "VulkanShaderProgram.hpp"
+#include "Geometry.hpp"
+
+
+
+													// GLM
+													#define GLM_FORCE_RADIANS
+													#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+													#include <glm/glm.hpp>
+													#include <glm/gtc/matrix_transform.hpp>
+													#include <glm/gtx/hash.hpp>
+
+
 
 // Test Object Vertex Data Structure
 struct Vertex {
@@ -18,15 +31,14 @@ struct UBO {
 class VulkanRasterizationRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
-	// Vertex Buffers for test object
-	std::vector<Vertex> testObjectVertices;
-	std::vector<uint32_t> testObjectIndices;
-	VulkanBuffer vertexBuffer, indexBuffer;
+	VulkanBuffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	std::vector<VulkanBuffer*> stagedBuffers {};
+	std::vector<Geometry*> geometries {};
 	
 	VulkanShaderProgram* testShader;
 	
-	std::vector<VulkanBuffer> uniformBuffers;
-	std::vector<VkDescriptorSet> descriptorSets;
+	std::vector<VulkanDescriptorSet> descriptorSets {};
+	std::vector<VkDescriptorSet> vkDescriptorSets {};
 	
 	// Rasterization Rendering
 	VulkanRenderPass* renderPass = nullptr;
@@ -151,8 +163,11 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	
 public:
 	void LoadScene() override {
+		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 
-		testObjectVertices = {
+		// Add triangle geometries
+		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
 			{/*pos*/{-0.5,-0.5, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0}},
 			{/*pos*/{ 0.5,-0.5, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0}},
 			{/*pos*/{ 0.5, 0.5, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0}},
@@ -167,17 +182,17 @@ public:
 			{/*pos*/{ 8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
 			{/*pos*/{ 8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
 			{/*pos*/{-8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-		};
-		testObjectIndices = {
+		}, {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
-		};
+		}, vertexBuffer, indexBuffer);
+		geometries.push_back(trianglesGeometry1);
 		
 		// Shader program
 		testShader = new VulkanShaderProgram({
-			{"incubator_MyVulkan/assets/shaders/raster.vert"},
-			{"incubator_MyVulkan/assets/shaders/raster.frag"},
+			{"incubator_rendering/assets/shaders/raster.vert"},
+			{"incubator_rendering/assets/shaders/raster.frag"},
 		});
 
 		// Vertex Input structure
@@ -186,14 +201,17 @@ public:
 			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
 
-		// Uniforms
-		testShader->AddLayoutBinding(// ubo
-			0, // binding
-			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
-			1, // count (for array)
-			VK_SHADER_STAGE_VERTEX_BIT // VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_GEOMETRY_BIT, VK_SHADER_STAGE_ALL_GRAPHICS, ...
-		);
+		// Assign buffer data
+		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
+		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+
+		// Descriptor sets
+		auto& descriptorSet = descriptorSets.emplace_back(0);
+		descriptorSet.AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
 		
+		testShader->AddDescriptorSet(&descriptorSet);
+		
+		testShader->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -203,85 +221,88 @@ public:
 protected:
 	void CreateSceneGraphics() override {
 		
-		testShader->LoadShaders(renderingDevice);
-		testShader->CreateDescriptorSetLayout(renderingDevice);
+		AllocateBuffersStaged(commandPool, stagedBuffers);
 		
-		// Uniform buffers
-		uniformBuffers.resize(swapChain->imageViews.size());
-		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			CreateBuffer(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i]);
-		}
+		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 
-		// Vertices
-		CreateBufferStaged(sizeof(Vertex) * testObjectVertices.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, vertexBuffer, testObjectVertices.data());
-
-		// Indices
-		CreateBufferStaged(sizeof(uint32_t) * testObjectIndices.size(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, indexBuffer, testObjectIndices.data());
-
-		// Descriptor sets
-		
-		renderingDevice->CreateDescriptorPool(
-			{
-				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
-				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
-			}, 
-			swapChain->imageViews.size(), 
-			descriptorPool, 
-			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-		);
-		
-		std::vector<VkDescriptorSetLayout> layouts;
-		layouts.reserve(swapChain->imageViews.size() * testShader->GetDescriptorSetLayouts().size());
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			for (auto layout : testShader->GetDescriptorSetLayouts()) {
-				layouts.push_back(layout);
-			}
-		}
-		
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = layouts.size();
-		allocInfo.pSetLayouts = layouts.data();
-		descriptorSets.resize(swapChain->imageViews.size());
-		if (renderingDevice->AllocateDescriptorSets(&allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets");
-		}
-		
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			std::array<VkWriteDescriptorSet, 1> descriptorWrites = {};
-
-			// ubo
-			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[0].dstSet = descriptorSets[i];
-			descriptorWrites[0].dstBinding = 0; // layout(binding = 0) uniform...
-			descriptorWrites[0].dstArrayElement = 0; // array
-			descriptorWrites[0].descriptorCount = 1; // array
-			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			VkDescriptorBufferInfo bufferInfo = {uniformBuffers[i].buffer, 0, sizeof(UBO)};
-			descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-			// Update Descriptor Sets
-			renderingDevice->UpdateDescriptorSets(descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-		}
 	}
 
 	void DestroySceneGraphics() override {
-		// Descriptor Sets
-		renderingDevice->FreeDescriptorSets(descriptorPool, descriptorSets.size(), descriptorSets.data());
-		// Buffers
-		for (size_t i = 0; i < uniformBuffers.size(); i++) {
-			renderingDevice->DestroyBuffer(uniformBuffers[i]);
-		}
-		renderingDevice->DestroyBuffer(vertexBuffer);
-		renderingDevice->DestroyBuffer(indexBuffer);
-		renderingDevice->DestroyDescriptorPool(descriptorPool);
 		
-		testShader->DestroyDescriptorSetLayout(renderingDevice);
-		testShader->UnloadShaders(renderingDevice);
+		for (auto& buffer : stagedBuffers) {
+			buffer->Free(renderingDevice);
+		}
+		
+		// Uniform buffers
+		uniformBuffer.Free(renderingDevice);
+		
 	}
 	
 	void CreateGraphicsPipelines() override {
+		for (auto& set : descriptorSets) {
+			set.CreateDescriptorSetLayout(renderingDevice);
+		}
+		
+		
+		
+		
+		testShader->CreateShaderStages(renderingDevice);
+		
+		
+		
+		
+		
+		// Descriptor sets / pool
+		std::map<VkDescriptorType, uint> descriptorTypes {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
+					descriptorTypes[descriptor.descriptorType] = 1;
+				} else {
+					descriptorTypes[descriptor.descriptorType]++;
+				}
+			}
+		}
+		renderingDevice->CreateDescriptorPool(
+			descriptorTypes,
+			descriptorPool,
+			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+		);
+		
+		// Allocate descriptor sets
+		std::vector<VkDescriptorSetLayout> setLayouts {};
+		vkDescriptorSets.resize(descriptorSets.size());
+		setLayouts.reserve(descriptorSets.size());
+		for (auto& set : descriptorSets) {
+			setLayouts.push_back(set.GetDescriptorSetLayout());
+		}
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = (uint)setLayouts.size();
+		allocInfo.pSetLayouts = setLayouts.data();
+		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate descriptor sets");
+		}
+		for (int i = 0; i < descriptorSets.size(); ++i) {
+			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
+		}
+		
+		// Update descriptor sets
+		std::vector<VkWriteDescriptorSet> descriptorWrites {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
+			}
+		}
+		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+		
+		
+		
+		
+		
+		
+		
 		
 		renderPass = new VulkanRenderPass(renderingDevice);
 
@@ -506,12 +527,24 @@ protected:
 	}
 	
 	void DestroyGraphicsPipelines() override {
+		// Frame Buffer
 		for (auto framebuffer : swapChainFrameBuffers) {
 			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
 		}
 		swapChainFrameBuffers.clear();
+		
+		// Render pass
 		renderPass->DestroyGraphicsPipelines();
 		delete renderPass;
+		
+		// Descriptor Sets
+		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
+		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
+		// Descriptor pools
+		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
+		
+		// Shader
+		testShader->DestroyShaderStages(renderingDevice);
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
@@ -547,22 +580,21 @@ protected:
 		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
 		
 		// Bind Descriptor Sets (Uniforms)
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, 1/*count*/, &descriptorSets[imageIndex], 0, nullptr);
+		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
 
 
 		// Test Object
-		VkBuffer vertexBuffers[] = {vertexBuffer.buffer};
 		VkDeviceSize offsets[] = {0};
-		renderingDevice->CmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+		renderingDevice->CmdBindVertexBuffers(commandBuffer, 0, 1, &stagedBuffers[0]->buffer, offsets);
 		// renderingDevice->CmdDraw(commandBuffer,
 		// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
 		// 	1, // instanceCount
 		// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
 		// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
 		// );
-		renderingDevice->CmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+		renderingDevice->CmdBindIndexBuffer(commandBuffer, stagedBuffers[1]->buffer, 0, VK_INDEX_TYPE_UINT32);
 		renderingDevice->CmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(testObjectIndices.size()), // indexCount
+			static_cast<uint32_t>(stagedBuffers[1]->size / sizeof(uint32_t)), // indexCount
 			1, // instanceCount
 			0, // firstVertex (defines the lowest value of gl_VertexIndex)
 			0, // vertexOffset
@@ -599,7 +631,7 @@ protected:
 		ubo.proj[1][1] *= -1;
 
 		// Update memory
-		renderingDevice->CopyDataToBuffer(&ubo, uniformBuffers[imageIndex]);
+		VulkanBuffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 	}
 
 public:
