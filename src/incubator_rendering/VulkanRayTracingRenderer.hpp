@@ -48,15 +48,6 @@ struct UBO {
 
 #pragma region RayTracing structs
 
-struct GeometryInstance {
-	glm::mat3x4 transform;
-	uint32_t instanceId : 24;
-	uint32_t mask : 8;
-	uint32_t instanceOffset : 24;
-	uint32_t flags : 8; // VkGeometryInstanceFlagBitsNV
-	uint64_t accelerationStructureHandle;
-};
-
 struct AccelerationStructure {
 	VkAccelerationStructureNV accelerationStructure = VK_NULL_HANDLE;
 	VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -74,8 +65,17 @@ struct BottomLevelAccelerationStructure : public AccelerationStructure {
 	}
 };
 
+struct RayTracingGeometryInstance {
+	glm::mat3x4 transform;
+	uint32_t instanceId : 24;
+	uint32_t mask : 8;
+	uint32_t instanceOffset : 24;
+	uint32_t flags : 8; // VkGeometryInstanceFlagBitsNV
+	uint64_t accelerationStructureHandle;
+};
+
 struct TopLevelAccelerationStructure : public AccelerationStructure {
-	std::vector<GeometryInstance> instances {};
+	std::vector<RayTracingGeometryInstance> instances {};
 };
 
 // class RayTracingScene {
@@ -87,6 +87,17 @@ struct TopLevelAccelerationStructure : public AccelerationStructure {
 
 #pragma endregion
 
+struct GeometryInstance {
+	glm::mat3x4 transform;
+	uint32_t instanceId;
+	// Ray tracing
+	uint32_t rayTracingMask;
+	uint32_t rayTracingShaderHitOffset;
+	uint32_t rayTracingFlags;
+	BottomLevelAccelerationStructure* rayTracingBlas;
+	int rayTracingGeometryInstanceIndex = -1;
+};
+
 class VulkanRayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
@@ -96,6 +107,7 @@ private: // Buffers
 	
 private: // Scene objects
 	std::vector<Geometry*> geometries {};
+	std::vector<GeometryInstance> geometryInstances {};
 	
 private: // Scene information
 	
@@ -247,8 +259,8 @@ public: // Scene configuration methods
 		shaderBindingTable = new VulkanShaderBindingTable("incubator_rendering/assets/shaders/rtx.rgen");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
-		shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
-		shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
+		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
+		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 		
 		// Descriptor sets
 		auto& descriptorSet = descriptorSets.emplace_back(0);
@@ -262,9 +274,37 @@ public: // Scene configuration methods
 		shaderBindingTable->AddDescriptorSet(&descriptorSet);
 		
 		shaderBindingTable->LoadShaders();
+		
+		// Assign instances
+		glm::mat3x4 transform {
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f
+		};
+		geometryInstances.reserve(2);
+		// Triangles instance
+		geometryInstances.push_back({
+			transform,
+			0, // instanceId
+			0x1, // mask
+			trianglesShaderOffset, // instanceOffset
+			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+			&rayTracingBottomLevelAccelerationStructures[0]
+		});
+		// Spheres instance
+		geometryInstances.push_back({
+			transform,
+			0, // instanceId
+			0x2, // mask
+			spheresShaderOffset, // instanceOffset
+			0, // flags
+			&rayTracingBottomLevelAccelerationStructures[1]
+		});
+		
 	}
 
 	void UnloadScene() override {
+		geometryInstances.clear();
 		delete shaderBindingTable;
 		rayTracingBottomLevelAccelerationStructures.clear();
 		for (auto* geometry : geometries) {
@@ -280,12 +320,13 @@ public: // Scene configuration methods
 protected: // Graphics configuration
 	void CreateSceneGraphics() override {
 		
-		AllocateBuffersStaged(commandPool, stagedBuffers);
+		{ // Buffers
+			AllocateBuffersStaged(commandPool, stagedBuffers);
+			// Uniform buffer
+			uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		}
 		
-		// Uniform buffer
-		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		
-		// Acceleration structures
+		// Bottom level Acceleration structures
 		for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
 			blas.GenerateRayTracingGeometries();
 			
@@ -340,36 +381,19 @@ protected: // Graphics configuration
 				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
 		}
 		
-		VulkanBuffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
-		
-		// Geometry instances for top level acceleration structure
-		glm::mat3x4 transform {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f
-		};
-		// Triangles instance
-		rayTracingTopLevelAccelerationStructure.instances.push_back({
-			transform,
-			0, // instanceId
-			0x1, // mask
-			0, // instanceOffset
-			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-			rayTracingBottomLevelAccelerationStructures[0].handle // accelerationStructureHandle
-		});
-		// Spheres instance
-		rayTracingTopLevelAccelerationStructure.instances.push_back({
-			transform,
-			0, // instanceId
-			0x2, // mask
-			1, // instanceOffset
-			0, // flags
-			rayTracingBottomLevelAccelerationStructures[1].handle // accelerationStructureHandle
-		});
-		
-		instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
-		
-		AllocateBufferStaged(commandPool, instanceBuffer);
+		// Geometry Instances
+		rayTracingTopLevelAccelerationStructure.instances.reserve(geometryInstances.size());
+		for (auto& instance : geometryInstances) if (instance.rayTracingBlas) {
+			instance.rayTracingGeometryInstanceIndex = (int)rayTracingTopLevelAccelerationStructure.instances.size();
+			rayTracingTopLevelAccelerationStructure.instances.push_back({
+				instance.transform,
+				instance.instanceId,
+				instance.rayTracingMask,
+				instance.rayTracingShaderHitOffset,
+				instance.rayTracingFlags,
+				instance.rayTracingBlas->handle
+			});
+		}
 		
 		{
 			// Top Level acceleration structure
@@ -424,6 +448,11 @@ protected: // Graphics configuration
 		
 		// Build Ray Tracing acceleration structures
 		{
+			// Instance buffer
+			VulkanBuffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
+			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
+			AllocateBufferStaged(commandPool, instanceBuffer);
+			
 			VkDeviceSize allBlasReqSize = 0;
 			// RayTracing Scratch buffer
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
@@ -517,10 +546,13 @@ protected: // Graphics configuration
 			scratchBuffer.Free(renderingDevice);
 			instanceBuffer.Free(renderingDevice);
 		}
-		
 	}
 
 	void DestroySceneGraphics() override {
+		// Geometry instances
+		for (auto& instance : geometryInstances) if (instance.rayTracingBlas) {
+			instance.rayTracingGeometryInstanceIndex = -1;
+		}
 		
 		// Acceleration Structures
 		if (rayTracingTopLevelAccelerationStructure.accelerationStructure != VK_NULL_HANDLE) {
