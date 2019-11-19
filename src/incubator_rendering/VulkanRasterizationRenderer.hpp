@@ -186,7 +186,7 @@ public:
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
-		}, vertexBuffer, indexBuffer);
+		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
 		// Shader program
@@ -239,69 +239,7 @@ protected:
 	}
 	
 	void CreateGraphicsPipelines() override {
-		for (auto& set : descriptorSets) {
-			set.CreateDescriptorSetLayout(renderingDevice);
-		}
-		
-		
-		
-		
 		testShader->CreateShaderStages(renderingDevice);
-		
-		
-		
-		
-		
-		// Descriptor sets / pool
-		std::map<VkDescriptorType, uint> descriptorTypes {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
-				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
-					descriptorTypes[descriptor.descriptorType] = 1;
-				} else {
-					descriptorTypes[descriptor.descriptorType]++;
-				}
-			}
-		}
-		renderingDevice->CreateDescriptorPool(
-			descriptorTypes,
-			descriptorPool,
-			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-		);
-		
-		// Allocate descriptor sets
-		std::vector<VkDescriptorSetLayout> setLayouts {};
-		vkDescriptorSets.resize(descriptorSets.size());
-		setLayouts.reserve(descriptorSets.size());
-		for (auto& set : descriptorSets) {
-			setLayouts.push_back(set.GetDescriptorSetLayout());
-		}
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = (uint)setLayouts.size();
-		allocInfo.pSetLayouts = setLayouts.data();
-		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets");
-		}
-		for (int i = 0; i < descriptorSets.size(); ++i) {
-			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
-		}
-		
-		// Update descriptor sets
-		std::vector<VkWriteDescriptorSet> descriptorWrites {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
-				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
-			}
-		}
-		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-		
-		
-		
-		
-		
-		
 		
 		
 		renderPass = new VulkanRenderPass(renderingDevice);
@@ -536,12 +474,6 @@ protected:
 		// Render pass
 		renderPass->DestroyGraphicsPipelines();
 		delete renderPass;
-		
-		// Descriptor Sets
-		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
-		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
-		// Descriptor pools
-		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
 		
 		// Shader
 		testShader->DestroyShaderStages(renderingDevice);

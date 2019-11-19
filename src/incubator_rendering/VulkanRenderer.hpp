@@ -43,6 +43,10 @@ protected: // class members
 	std::recursive_mutex renderingMutex;
 	std::recursive_mutex uboMutex;
 	bool swapChainDirty = false;
+	
+	// Descriptor sets
+	std::vector<VulkanDescriptorSet> descriptorSets {};
+	std::vector<VkDescriptorSet> vkDescriptorSets {};
 
 private: // Device Extensions and features
 	std::vector<const char*> requiredDeviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -219,6 +223,68 @@ protected: // Virtual INIT Methods
 	
 	virtual void DestroyCommandPools() {
 		renderingDevice->DestroyCommandPool(commandPool);
+	}
+	
+	virtual void CreateDescriptorSets() {
+		for (auto& set : descriptorSets) {
+			set.CreateDescriptorSetLayout(renderingDevice);
+		}
+		
+		// Descriptor sets / pool
+		std::map<VkDescriptorType, uint> descriptorTypes {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
+					descriptorTypes[descriptor.descriptorType] = 1;
+				} else {
+					descriptorTypes[descriptor.descriptorType]++;
+				}
+			}
+		}
+		renderingDevice->CreateDescriptorPool(
+			descriptorTypes,
+			descriptorPool,
+			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+		);
+		
+		// Allocate descriptor sets
+		std::vector<VkDescriptorSetLayout> setLayouts {};
+		vkDescriptorSets.resize(descriptorSets.size());
+		setLayouts.reserve(descriptorSets.size());
+		for (auto& set : descriptorSets) {
+			setLayouts.push_back(set.GetDescriptorSetLayout());
+		}
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = (uint)setLayouts.size();
+		allocInfo.pSetLayouts = setLayouts.data();
+		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate descriptor sets");
+		}
+		for (int i = 0; i < descriptorSets.size(); ++i) {
+			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
+		}
+		
+		UpdateDescriptorSets();
+	}
+	
+	virtual void DestroyDescriptorSets() {
+		// Descriptor Sets
+		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
+		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
+		// Descriptor pools
+		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
+	}
+
+	virtual void UpdateDescriptorSets() {
+		std::vector<VkWriteDescriptorSet> descriptorWrites {};
+		for (auto& set : descriptorSets) {
+			for (auto&[binding, descriptor] : set.GetBindings()) {
+				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
+			}
+		}
+		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 	}
 
 	virtual void CreateSwapChain() {
@@ -748,6 +814,7 @@ public: // Init/Load/Reset Methods
 		CreateCommandPools();
 		CreateResources();
 		CreateSceneGraphics();
+		CreateDescriptorSets();
 		CreateGraphicsPipelines(); // shaders are assigned here
 		CreateCommandBuffers(); // objects are rendered here
 	}
@@ -758,6 +825,7 @@ public: // Init/Load/Reset Methods
 
 		DestroyCommandBuffers();
 		DestroyGraphicsPipelines();
+		DestroyDescriptorSets();
 		DestroySceneGraphics();
 		DestroyResources();
 		DestroyCommandPools();

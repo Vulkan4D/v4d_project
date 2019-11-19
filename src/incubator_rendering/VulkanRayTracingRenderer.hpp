@@ -78,13 +78,6 @@ struct TopLevelAccelerationStructure : public AccelerationStructure {
 	std::vector<RayTracingGeometryInstance> instances {};
 };
 
-// class RayTracingScene {
-// 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
-// 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
-// 	VulkanShaderBindingTable* shaderBindingTable = nullptr;
-// 	VulkanBuffer rayTracingShaderBindingTableBuffer;
-// };
-
 #pragma endregion
 
 struct GeometryInstance {
@@ -109,13 +102,7 @@ private: // Scene objects
 	std::vector<Geometry*> geometries {};
 	std::vector<GeometryInstance> geometryInstances {};
 	
-private: // Scene information
-	
-	std::vector<VulkanDescriptorSet> descriptorSets {};
-	std::vector<VkDescriptorSet> vkDescriptorSets {};
-	
 private: // Ray Tracing stuff
-	// RayTracingScene rayTracingScene;
 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
 	VulkanShaderBindingTable* shaderBindingTable = nullptr;
@@ -128,46 +115,19 @@ private: // Ray Tracing stuff
 		VkFormat format;
 	} rayTracingStorageImage;
 	float rayTracingImageScale = 2;
-	
-private: // Renderer Configuration methods
-
-	void Init() override {
+	void RayTracingInit() {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
-
-		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
-		// deviceFeatures.geometryShader = VK_TRUE;
-		// deviceFeatures.samplerAnisotropy = VK_TRUE;
-		// deviceFeatures.sampleRateShading = VK_TRUE;
 	}
-	
-	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
-		// Build up a score here and the GPU with the highest score will be selected.
-		// Add to the score optional specs, then multiply with mandatory specs.
-		
-		// Optional specs  -->  score += points * CONDITION
-		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
-		// score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
-		// score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
-
-		// Mandatory specs  -->  score *= CONDITION
-		// score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
-		// score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
-		// score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
-	}
-	
-	void Info() override {
+	void RayTracingInfo() {
 		// Query the ray tracing properties of the current implementation
 		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
 		VkPhysicalDeviceProperties2 deviceProps2{};
 		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		deviceProps2.pNext = &rayTracingProperties;
 		GetPhysicalDeviceProperties2(renderingDevice->GetGPU()->GetHandle(), &deviceProps2);
-		// // MultiSampling
-		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
 	}
-
-	void CreateResources() override {
+	void CreateRayTracingResources() {
 		VkFormat colorFormat = swapChain->format.format;
 		renderingDevice->CreateImage(
 			(uint)((float)swapChain->extent.width * rayTracingImageScale),
@@ -197,8 +157,7 @@ private: // Renderer Configuration methods
 		
 		TransitionImageLayout(rayTracingStorageImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1);
 	}
-	
-	void DestroyResources() override {
+	void DestroyRayTracingResources() {
 		if (rayTracingStorageImage.image != VK_NULL_HANDLE) {
 			renderingDevice->DestroyImageView(rayTracingStorageImage.view, nullptr);
 			renderingDevice->DestroyImage(rayTracingStorageImage.image, nullptr);
@@ -206,125 +165,7 @@ private: // Renderer Configuration methods
 			rayTracingStorageImage.image = VK_NULL_HANDLE;
 		}
 	}
-	
-public: // Scene configuration methods
-	void LoadScene() override {
-		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* sphereBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		
-		// Add triangle geometries
-		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			//
-			{/*pos*/{-0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			//
-			{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-		}, {
-			0, 1, 2, 2, 3, 0,
-			4, 5, 6, 6, 7, 4,
-			8, 9, 10, 10, 11, 8,
-		}, vertexBuffer, indexBuffer);
-		geometries.push_back(trianglesGeometry1);
-		
-		// Add procedural geometries
-		auto* spheresGeometry1 = new ProceduralGeometry<Sphere>({
-			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{0.9, 0.7, 0.0, 1.0}, /*specular*/1.0f, /*metallic*/0.0f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
-		}, sphereBuffer);
-		geometries.push_back(spheresGeometry1);
-
-		// Assign geometries to acceleration structures
-		rayTracingBottomLevelAccelerationStructures.resize(2);
-		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
-		rayTracingBottomLevelAccelerationStructures[1].geometries.push_back(spheresGeometry1);
-		
-		// Assign buffer data
-		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
-		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
-		sphereBuffer->AddSrcDataPtr(&spheresGeometry1->aabbData);
-
-		// Ray tracing shaders
-		shaderBindingTable = new VulkanShaderBindingTable("incubator_rendering/assets/shaders/rtx.rgen");
-		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
-		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
-		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
-		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
-		
-		// Descriptor sets
-		auto& descriptorSet = descriptorSets.emplace_back(0);
-		descriptorSet.AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		descriptorSet.AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
-		
-		shaderBindingTable->AddDescriptorSet(&descriptorSet);
-		
-		shaderBindingTable->LoadShaders();
-		
-		// Assign instances
-		glm::mat3x4 transform {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f
-		};
-		geometryInstances.reserve(2);
-		// Triangles instance
-		geometryInstances.push_back({
-			transform,
-			0, // instanceId
-			0x1, // mask
-			trianglesShaderOffset, // instanceOffset
-			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-			&rayTracingBottomLevelAccelerationStructures[0]
-		});
-		// Spheres instance
-		geometryInstances.push_back({
-			transform,
-			0, // instanceId
-			0x2, // mask
-			spheresShaderOffset, // instanceOffset
-			0, // flags
-			&rayTracingBottomLevelAccelerationStructures[1]
-		});
-		
-	}
-
-	void UnloadScene() override {
-		geometryInstances.clear();
-		delete shaderBindingTable;
-		rayTracingBottomLevelAccelerationStructures.clear();
-		for (auto* geometry : geometries) {
-			delete geometry;
-		}
-		geometries.clear();
-		for (auto* buffer : stagedBuffers) {
-			delete buffer;
-		}
-		stagedBuffers.clear();
-	}
-
-protected: // Graphics configuration
-	void CreateSceneGraphics() override {
-		
-		{ // Buffers
-			AllocateBuffersStaged(commandPool, stagedBuffers);
-			// Uniform buffer
-			uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		}
+	void CreateRayTracingAccelerationStructures() {
 		
 		// Bottom level Acceleration structures
 		for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
@@ -547,13 +388,11 @@ protected: // Graphics configuration
 			instanceBuffer.Free(renderingDevice);
 		}
 	}
-
-	void DestroySceneGraphics() override {
+	void DestroyRayTracingAccelerationStructures() {
 		// Geometry instances
 		for (auto& instance : geometryInstances) if (instance.rayTracingBlas) {
 			instance.rayTracingGeometryInstanceIndex = -1;
 		}
-		
 		// Acceleration Structures
 		if (rayTracingTopLevelAccelerationStructure.accelerationStructure != VK_NULL_HANDLE) {
 			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
@@ -566,6 +405,184 @@ protected: // Graphics configuration
 				blas.rayTracingGeometries.clear();
 			}
 		}
+	}
+	void CreateRayTracingPipeline() {
+		shaderBindingTable->CreateRayTracingPipeline(renderingDevice);
+		
+		// Shader Binding Table
+		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable->GetGroups().size();
+		rayTracingShaderBindingTableBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		shaderBindingTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
+	}
+	void DestroyRayTracingPipeline() {
+		// Shader binding table
+		rayTracingShaderBindingTableBuffer.Free(renderingDevice);
+		// Ray tracing pipeline
+		shaderBindingTable->DestroyRayTracingPipeline(renderingDevice);
+	}
+	
+private: // Renderer Configuration methods
+
+	void Init() override {
+		RayTracingInit();
+		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
+		// deviceFeatures.geometryShader = VK_TRUE;
+		// deviceFeatures.samplerAnisotropy = VK_TRUE;
+		// deviceFeatures.sampleRateShading = VK_TRUE;
+	}
+	
+	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
+		// Build up a score here and the GPU with the highest score will be selected.
+		// Add to the score optional specs, then multiply with mandatory specs.
+		
+		// Optional specs  -->  score += points * CONDITION
+		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
+		// score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
+		// score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+
+		// Mandatory specs  -->  score *= CONDITION
+		// score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
+		// score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
+		// score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
+	}
+	
+	void Info() override {
+		RayTracingInfo();
+		// // MultiSampling
+		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
+	}
+
+	void CreateResources() override {
+		CreateRayTracingResources();
+	}
+	
+	void DestroyResources() override {
+		DestroyRayTracingResources();
+	}
+	
+public: // Scene configuration methods
+	void LoadScene() override {
+		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		VulkanBuffer* sphereBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		
+		// Add triangle geometries
+		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
+			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			//
+			{/*pos*/{-0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			//
+			{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+		}, {
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
+		}, vertexBuffer, 0, indexBuffer, 0);
+		geometries.push_back(trianglesGeometry1);
+		
+		// Add procedural geometries
+		auto* spheresGeometry1 = new ProceduralGeometry<Sphere>({
+			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{0.9, 0.7, 0.0, 1.0}, /*specular*/1.0f, /*metallic*/0.0f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
+		}, sphereBuffer);
+		geometries.push_back(spheresGeometry1);
+
+		// Assign geometries to acceleration structures
+		rayTracingBottomLevelAccelerationStructures.resize(2);
+		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
+		rayTracingBottomLevelAccelerationStructures[1].geometries.push_back(spheresGeometry1);
+		
+		// Assign buffer data
+		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
+		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+		sphereBuffer->AddSrcDataPtr(&spheresGeometry1->aabbData);
+
+		// Ray tracing shaders
+		shaderBindingTable = new VulkanShaderBindingTable("incubator_rendering/assets/shaders/rtx.rgen");
+		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
+		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
+		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
+		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
+		
+		// Descriptor sets
+		auto& descriptorSet = descriptorSets.emplace_back(0);
+		descriptorSet.AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		descriptorSet.AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet.AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
+		
+		shaderBindingTable->AddDescriptorSet(&descriptorSet);
+		
+		shaderBindingTable->LoadShaders();
+		
+		// Assign instances
+		glm::mat3x4 transform {
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f
+		};
+		geometryInstances.reserve(2);
+		// Triangles instance
+		geometryInstances.push_back({
+			transform,
+			0, // instanceId
+			0x1, // mask
+			trianglesShaderOffset, // instanceOffset
+			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+			&rayTracingBottomLevelAccelerationStructures[0]
+		});
+		// Spheres instance
+		geometryInstances.push_back({
+			transform,
+			0, // instanceId
+			0x2, // mask
+			spheresShaderOffset, // instanceOffset
+			0, // flags
+			&rayTracingBottomLevelAccelerationStructures[1]
+		});
+		
+	}
+
+	void UnloadScene() override {
+		geometryInstances.clear();
+		delete shaderBindingTable;
+		rayTracingBottomLevelAccelerationStructures.clear();
+		for (auto* geometry : geometries) {
+			delete geometry;
+		}
+		geometries.clear();
+		for (auto* buffer : stagedBuffers) {
+			delete buffer;
+		}
+		stagedBuffers.clear();
+	}
+
+protected: // Graphics configuration
+	void CreateSceneGraphics() override {
+		// Staged Buffers
+		AllocateBuffersStaged(commandPool, stagedBuffers);
+		// Uniform buffer
+		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		
+		CreateRayTracingAccelerationStructures();
+	}
+
+	void DestroySceneGraphics() override {
+		// Ray Tracing
+		DestroyRayTracingAccelerationStructures();
 		
 		for (auto& buffer : stagedBuffers) {
 			buffer->Free(renderingDevice);
@@ -576,73 +593,11 @@ protected: // Graphics configuration
 	}
 	
 	void CreateGraphicsPipelines() override {
-		for (auto& set : descriptorSets) {
-			set.CreateDescriptorSetLayout(renderingDevice);
-		}
-		
-		shaderBindingTable->CreateRayTracingPipeline(renderingDevice);
-		
-		// Shader Binding Table
-		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable->GetGroups().size();
-		rayTracingShaderBindingTableBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-		shaderBindingTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
-		
-		// Descriptor sets / pool
-		std::map<VkDescriptorType, uint> descriptorTypes {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
-				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
-					descriptorTypes[descriptor.descriptorType] = 1;
-				} else {
-					descriptorTypes[descriptor.descriptorType]++;
-				}
-			}
-		}
-		renderingDevice->CreateDescriptorPool(
-			descriptorTypes,
-			descriptorPool,
-			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-		);
-		
-		// Allocate descriptor sets
-		std::vector<VkDescriptorSetLayout> setLayouts {};
-		vkDescriptorSets.resize(descriptorSets.size());
-		setLayouts.reserve(descriptorSets.size());
-		for (auto& set : descriptorSets) {
-			setLayouts.push_back(set.GetDescriptorSetLayout());
-		}
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = (uint)setLayouts.size();
-		allocInfo.pSetLayouts = setLayouts.data();
-		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets");
-		}
-		for (int i = 0; i < descriptorSets.size(); ++i) {
-			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
-		}
-		
-		// Update descriptor sets
-		std::vector<VkWriteDescriptorSet> descriptorWrites {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
-				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
-			}
-		}
-		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+		CreateRayTracingPipeline();
 	}
 	
 	void DestroyGraphicsPipelines() override {
-		// Shader binding table
-		rayTracingShaderBindingTableBuffer.Free(renderingDevice);
-		// Ray tracing pipeline
-		shaderBindingTable->DestroyRayTracingPipeline(renderingDevice);
-		// Descriptor Sets
-		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
-		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
-		// Descriptor pools
-		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
+		DestroyRayTracingPipeline();
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {

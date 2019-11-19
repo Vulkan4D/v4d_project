@@ -4,19 +4,6 @@ class Geometry {
 public:
 	VkGeometryFlagBitsNV rayTracingGeometryFlags = VK_GEOMETRY_OPAQUE_BIT_NV;
 
-	VulkanBuffer* vertexBuffer = nullptr;
-	VulkanBuffer* indexBuffer = nullptr;
-	VulkanBuffer* aabbBuffer = nullptr;
-
-	VkDeviceSize vertexOffset = 0;
-	VkDeviceSize aabbOffset = 0;
-
-	VkDeviceSize vertexCount = 0;
-	VkDeviceSize aabbCount = 0;
-	
-	VkDeviceSize indexOffset = 0;
-	VkDeviceSize indexCount = 0;
-	
 	virtual void* GetData() = 0;
 	virtual void* GetIndexData() = 0;
 	virtual VkGeometryNV GetRayTracingGeometry() const = 0;
@@ -30,6 +17,17 @@ public:
 	
 	std::vector<V, std::allocator<V>> vertexData {};
 	std::vector<I, std::allocator<I>> indexData {};
+	
+	VulkanBuffer* vertexBuffer = nullptr;
+	VkDeviceSize vertexOffset = 0;
+	VkDeviceSize vertexCount = 0;
+	
+	VulkanBuffer* indexBuffer = nullptr;
+	VkDeviceSize indexOffset = 0;
+	VkDeviceSize indexCount = 0;
+
+	VulkanBuffer* transformBuffer = nullptr;
+	VkDeviceSize transformOffset = 0;
 	
 	void* GetData() override {
 		return vertexData.data();
@@ -60,22 +58,24 @@ public:
 		triangleGeometry.geometry.triangles.indexCount = (uint)indexData.size();
 		triangleGeometry.geometry.triangles.indexType = sizeof(I) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
 		
-		triangleGeometry.geometry.triangles.transformData = VK_NULL_HANDLE;
-		triangleGeometry.geometry.triangles.transformOffset = 0;
-		
 		triangleGeometry.geometry.triangles.vertexData = vertexBuffer->buffer;
 		triangleGeometry.geometry.triangles.indexData = indexBuffer->buffer;
+		
+		triangleGeometry.geometry.triangles.transformData = transformBuffer? transformBuffer->buffer : VK_NULL_HANDLE;
+		triangleGeometry.geometry.triangles.transformOffset = transformOffset;
 		
 		return triangleGeometry;
 	}
 	
 	TriangleGeometry(){}
-	TriangleGeometry(std::vector<V>&& vertexData, std::vector<I>&& indexData, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer, VkDeviceSize vertexOffset = 0, VkDeviceSize indexOffset = 0)
+	TriangleGeometry(std::vector<V>&& vertexData, std::vector<I>&& indexData, VulkanBuffer* vertexBuffer, VkDeviceSize vertexOffset, VulkanBuffer* indexBuffer, VkDeviceSize indexOffset, VulkanBuffer* transformBuffer = nullptr, VkDeviceSize transformOffset = 0)
 	 : vertexData(std::forward<std::vector<V>>(vertexData)), indexData(std::forward<std::vector<I>>(indexData)) {
 		this->vertexBuffer = vertexBuffer;
 		this->indexBuffer = indexBuffer;
+		this->transformBuffer = transformBuffer;
 		this->vertexOffset = vertexOffset;
 		this->indexOffset = indexOffset;
+		this->transformOffset = transformOffset;
 		this->vertexCount = vertexData.size();
 		this->indexCount = indexData.size();
 	}
@@ -90,6 +90,10 @@ template<class V>
 class ProceduralGeometry : public Geometry {
 public:
 	std::vector<V, std::allocator<V>> aabbData {};
+	
+	VulkanBuffer* aabbBuffer = nullptr;
+	VkDeviceSize aabbOffset = 0;
+	VkDeviceSize aabbCount = 0;
 	
 	void* GetData() override {
 		return aabbData.data();
