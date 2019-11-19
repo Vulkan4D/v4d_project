@@ -11,7 +11,7 @@ struct Vertex {
 	glm::vec3 pos;
 	float roughness;
 	glm::vec3 normal;
-	float scatter;
+	float emissive;
 	glm::vec4 color;
 	glm::vec2 uv;
 	float specular;
@@ -19,7 +19,7 @@ struct Vertex {
 };
 
 struct Sphere : public ProceduralGeometryData {
-	float scatter;
+	float emissive;
 	float roughness;
 	glm::vec3 pos;
 	float radius;
@@ -29,8 +29,8 @@ struct Sphere : public ProceduralGeometryData {
 	float refraction;
 	float density;
 	
-	Sphere(float scatter, float roughness, glm::vec3 pos, float radius, glm::vec4 color, float specular, float metallic, float refraction, float density)
-	: ProceduralGeometryData(pos - radius, pos + radius), scatter(scatter), roughness(roughness), pos(pos), radius(radius), color(color), specular(specular), metallic(metallic), refraction(refraction), density(density) {}
+	Sphere(float emissive, float roughness, glm::vec3 pos, float radius, glm::vec4 color, float specular, float metallic, float refraction, float density)
+	: ProceduralGeometryData(pos - radius, pos + radius), emissive(emissive), roughness(roughness), pos(pos), radius(radius), color(color), specular(specular), metallic(metallic), refraction(refraction), density(density) {}
 };
 
 struct UBO {
@@ -468,33 +468,63 @@ public: // Scene configuration methods
 		
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5, 0.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
 			//
-			{/*pos*/{-0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			//
-			{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
-			{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{0.0, 0.0, 1.0}, /*scatter*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5,-0.5,-0.5}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{ 0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			{/*pos*/{-0.5, 0.5,-0.5}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
+			
+			// bottom white
+			/*  8 */{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.5f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.1f},
+			/*  9 */{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.5f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.1f},
+			/* 10 */{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.5f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.1f},
+			/* 11 */{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.5f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.1f},
+			
+			// top gray
+			/* 12 */{/*pos*/{-8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0,-1.0}, /*emissive*/0.0f, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.4f},
+			/* 13 */{/*pos*/{ 8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0,-1.0}, /*emissive*/0.0f, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.4f},
+			/* 14 */{/*pos*/{ 8.0, 8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0,-1.0}, /*emissive*/0.0f, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.4f},
+			/* 15 */{/*pos*/{-8.0, 8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0,-1.0}, /*emissive*/0.0f, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.4f},
+			
+			// left red
+			/* 16 */{/*pos*/{ 8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{-1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 17 */{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{-1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 18 */{/*pos*/{ 8.0, 8.0, 4.0}, /*roughness*/0.0f, /*normal*/{-1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 19 */{/*pos*/{ 8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{-1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			
+			// back blue
+			/* 20 */{/*pos*/{ 8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 1.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 21 */{/*pos*/{ 8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 1.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 22 */{/*pos*/{-8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 1.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 23 */{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 1.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			
+			// right green
+			/* 24 */{/*pos*/{-8.0, 8.0,-2.0}, /*roughness*/0.0f, /*normal*/{ 1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 25 */{/*pos*/{-8.0,-8.0,-2.0}, /*roughness*/0.0f, /*normal*/{ 1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 26 */{/*pos*/{-8.0, 8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
+			/* 27 */{/*pos*/{-8.0,-8.0, 4.0}, /*roughness*/0.0f, /*normal*/{ 1.0, 0.0, 0.0}, /*emissive*/0.0f, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.0f},
 		}, {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
+			//
+			12, 13, 14, 14, 15, 12,
+			16, 17, 18, 18, 19, 17,
+			20, 21, 22, 22, 23, 21,
+			24, 25, 26, 26, 27, 25,
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
 		// Add procedural geometries
 		auto* spheresGeometry1 = new ProceduralGeometry<Sphere>({
-			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{0.5, 0.6, 0.6, 1.0}, /*specular*/1.0f, /*metallic*/0.5f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.0f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{0.9, 0.7, 0.0, 1.0}, /*specular*/1.0f, /*metallic*/0.0f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
-			{/*scatter*/0.6f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*emissive*/0.0f, /*roughness*/0.0f, /*pos*/{ 0.0, 0.0, 0.8}, /*radius*/0.4f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/1.0f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*emissive*/0.0f, /*roughness*/0.99f, /*pos*/{-2.0,-1.0, 1.5}, /*radius*/0.4f, /*color*/{1.0, 0.8, 0.0, 1.0}, /*specular*/1.0f, /*metallic*/0.4f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*emissive*/0.0f, /*roughness*/0.5f, /*pos*/{ 1.0,-1.0, 1.5}, /*radius*/0.6f, /*color*/{0.5, 0.5, 0.5, 1.0}, /*specular*/1.0f, /*metallic*/0.9f, /*refraction*/0.5f, /*density*/0.5f},
+			{/*emissive*/0.0f, /*roughness*/0.5f, /*pos*/{ 2.0,-1.0, 0.5}, /*radius*/0.3f, /*color*/{1.0, 1.0, 1.0, 1.0}, /*specular*/1.0f, /*metallic*/0.1f, /*refraction*/0.5f, /*density*/0.5f},
 		}, sphereBuffer);
 		geometries.push_back(spheresGeometry1);
 
@@ -676,7 +706,7 @@ protected: // Methods executed on every frame
 		ubo.projInverse[1][1] *= -1;
 
 		ubo.light = light;
-		ubo.ambient = glm::vec3(0.15f, 0.15f, 0.15f);
+		ubo.ambient = glm::vec3(0.0f, 0.0f, 0.0f);
 		ubo.samplesPerPixel = samplesPerPixel;
 		ubo.rtx_reflection_max_recursion = rtx_reflection_max_recursion;
 		ubo.rtx_shadows = rtx_shadows;

@@ -9,7 +9,6 @@ struct RayPayload {
 	vec3 direction;
 	float reflector;
 	float distance;
-	uint scatterSeed;
 };
 
 // Layout Bindings
@@ -228,7 +227,7 @@ float snoise(vec4 v){
 layout(location = 0) rayPayloadInNV RayPayload ray;
 layout(location = 2) rayPayloadNV bool shadowed;
 
-void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal, float scatter, float roughness, float specular, float metallic) {
+void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal, float emissive, float roughness, float specular, float metallic) {
 	
 	// Roughness
 	if (roughness > 0.0) {
@@ -246,22 +245,10 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	
 	// Receive Shadows
 	if (shade > 0.0 && ubo.rtx_shadows) {
-		if (scatter > 0.0) {
-			float shadow = 0.0;
-			uint seed = ray.scatterSeed;
-			for (int i = 0; i < ubo.samplesPerPixel; i++) {
-				shadowed = true;
-				lightVector = normalize(lightVector + RandomInUnitSphere(seed)/(1000.0 - scatter*1000.0));
-				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
-				if (shadowed) shadow++;
-			}
-			ray.color = mix(ray.color, ubo.ambient, shadow/float(ubo.samplesPerPixel));
-		} else {
-			shadowed = true;
-			traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
-			if (shadowed) {
-				ray.color = ubo.ambient;
-			}
+		shadowed = true;
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
+		if (shadowed) {
+			ray.color = ubo.ambient;
 		}
 	}
 	
@@ -283,7 +270,7 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 
 // Sphere
 struct Sphere {
-	float scatter;
+	float emissive;
 	float roughness;
 	vec3 pos;
 	float radius;
@@ -296,7 +283,7 @@ struct Sphere {
 uint sphereStructSize = 5;
 Sphere unpackSphere(uint index) {
 	Sphere s;
-	s.scatter = sphereBuffer[sphereStructSize * index + 1].z;
+	s.emissive = sphereBuffer[sphereStructSize * index + 1].z;
 	s.roughness = sphereBuffer[sphereStructSize * index + 1].w;
 	s.pos = sphereBuffer[sphereStructSize * index + 2].xyz;
 	s.radius = sphereBuffer[sphereStructSize * index + 2].w;
@@ -361,7 +348,7 @@ struct Vertex {
 	vec3 pos;
 	float roughness;
 	vec3 normal;
-	float scatter;
+	float emissive;
 	vec4 color;
 	vec2 uv;
 	float specular;
@@ -373,7 +360,7 @@ Vertex unpackVertex(uint index) {
 	v.pos = vertexBuffer[vertexStructSize * index + 0].xyz;
 	v.roughness = vertexBuffer[vertexStructSize * index + 0].w;
 	v.normal = vertexBuffer[vertexStructSize * index + 1].xyz;
-	v.scatter = vertexBuffer[vertexStructSize * index + 1].w;
+	v.emissive = vertexBuffer[vertexStructSize * index + 1].w;
 	v.color = vertexBuffer[vertexStructSize * index + 2];
 	v.uv = vertexBuffer[vertexStructSize * index + 3].xy;
 	v.specular = vertexBuffer[vertexStructSize * index + 3].z;
@@ -396,12 +383,12 @@ void main() {
 	// Interpolate Vertex data
 	const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
 	const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
-	const float scatter = v0.scatter * barycentricCoords.x + v1.scatter * barycentricCoords.y + v2.scatter * barycentricCoords.z;
+	const float emissive = v0.emissive * barycentricCoords.x + v1.emissive * barycentricCoords.y + v2.emissive * barycentricCoords.z;
 	const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
 	const float specular = v0.specular * barycentricCoords.x + v1.specular * barycentricCoords.y + v2.specular * barycentricCoords.z;
 	const float metallic = v0.metallic * barycentricCoords.x + v1.metallic * barycentricCoords.y + v2.metallic * barycentricCoords.z;
 
-	ApplyStandardShading(hitPoint, objPoint, color, normal, scatter, roughness, specular, metallic);
+	ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 }
 
 
@@ -490,6 +477,6 @@ void main() {
 	// 	float b = (snoise(vec4(objPoint, ubo.time / 60.0) * 15.0, 20) / 2.0 + 0.5) * min(g, 0.7);
 	// 	ray.color = vec3(max(r + g + b, 0.3), min(r - 0.2, max(g, b + 0.3)), b) * 1.8;
 	// } else {
-	ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.scatter, sphere.roughness, sphere.specular, sphere.metallic);
+	ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.emissive, sphere.roughness, sphere.specular, sphere.metallic);
 	// }
 }
