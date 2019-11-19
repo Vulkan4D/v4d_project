@@ -122,16 +122,20 @@ public:
 	}
 	
 	void CreateShaderStages(VulkanDevice* device) {
-		for (auto& shader : shaderObjects) {
-			shader.CreateShaderModule(device);
-			stages.push_back(shader.stageInfo);
+		if (stages.size() == 0) {
+			for (auto& shader : shaderObjects) {
+				shader.CreateShaderModule(device);
+				stages.push_back(shader.stageInfo);
+			}
 		}
 	}
 	
 	void DestroyShaderStages(VulkanDevice* device) {
-		stages.clear();
-		for (auto& shader : shaderObjects) {
-			shader.DestroyShaderModule(device);
+		if (stages.size() > 0) {
+			stages.clear();
+			for (auto& shader : shaderObjects) {
+				shader.DestroyShaderModule(device);
+			}
 		}
 	}
 	

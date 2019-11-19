@@ -5,17 +5,6 @@
 #include "VulkanShaderProgram.hpp"
 #include "Geometry.hpp"
 
-
-
-													// GLM
-													#define GLM_FORCE_RADIANS
-													#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-													#include <glm/glm.hpp>
-													#include <glm/gtc/matrix_transform.hpp>
-													#include <glm/gtx/hash.hpp>
-
-
-
 // Test Object Vertex Data Structure
 struct Vertex {
 	glm::vec3 pos;
@@ -37,10 +26,52 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	
 	VulkanShaderProgram* testShader;
 	
-	std::vector<VulkanDescriptorSet> descriptorSets {};
-	std::vector<VkDescriptorSet> vkDescriptorSets {};
-	
-	// Rasterization Rendering
+private: // Rasterization Rendering
+	struct RasterizationPipeline {
+		VulkanGraphicsPipeline* graphicsPipeline = nullptr;
+		
+		VulkanShaderProgram* shaderProgram;
+		VulkanBuffer* vertexBuffer;
+		VulkanBuffer* indexBuffer;
+		
+		RasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer)
+		 : shaderProgram(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
+		
+		void Configure(VulkanGraphicsPipeline* pipeline) {
+			graphicsPipeline = pipeline;
+			// Color Blending
+			graphicsPipeline->AddAlphaBlendingAttachment(); // Fragment Shader output 0
+		}
+		
+		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
+			// Test Object
+			VkDeviceSize offsets[] = {0};
+			device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
+			// device->CmdDraw(commandBuffer,
+			// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
+			// 	1, // instanceCount
+			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
+			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+			// );
+			device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+			device->CmdDrawIndexed(commandBuffer,
+				static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
+				1, // instanceCount
+				0, // firstVertex (defines the lowest value of gl_VertexIndex)
+				0, // vertexOffset
+				0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+			);
+			
+			// // simple draw triangle...
+			// device->CmdDraw(commandBuffer,
+			// 	3, // vertexCount
+			// 	1, // instanceCount
+			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
+			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+			// );
+		}
+	};
+	std::vector<RasterizationPipeline> rasterizationPipelines {};
 	VulkanRenderPass* renderPass = nullptr;
 	std::vector<VkFramebuffer> swapChainFrameBuffers;
 	// Render Target (Color Attachment)
@@ -55,35 +86,7 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	VkFormat depthImageFormat;
 	// MultiSampling
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
-
-	void Init() override {
-		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
-		deviceFeatures.geometryShader = VK_TRUE;
-		deviceFeatures.samplerAnisotropy = VK_TRUE;
-		deviceFeatures.sampleRateShading = VK_TRUE;
-	}
-	
-	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
-		// Build up a score here and the GPU with the highest score will be selected.
-		// Add to the score optional specs, then multiply with mandatory specs.
-		
-		// Optional specs  -->  score += points * CONDITION
-		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
-		score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
-		score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
-
-		// Mandatory specs  -->  score *= CONDITION
-		score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
-		score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
-		score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
-	}
-	
-	void Info() override {
-		// MultiSampling
-		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
-	}
-
-	void CreateResources() override {
+	void CreateRasterizationResources() {
 		VkImageViewCreateInfo viewInfo = {};
 		
 		VkFormat colorFormat = swapChain->format.format;
@@ -145,8 +148,7 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 		// Transition Layout
 		TransitionImageLayout(depthImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 	}
-	
-	void DestroyResources() override {
+	void DestroyRasterizationResources() {
 		if (colorImage != VK_NULL_HANDLE) {
 			renderingDevice->DestroyImageView(colorImageView, nullptr);
 			renderingDevice->DestroyImage(colorImage, nullptr);
@@ -160,88 +162,7 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 			depthImage = VK_NULL_HANDLE;
 		}
 	}
-	
-public:
-	void LoadScene() override {
-		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-
-		// Add triangle geometries
-		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/{-0.5,-0.5, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5,-0.5, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5, 0.5, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0}},
-			{/*pos*/{-0.5, 0.5, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0}},
-			//
-			{/*pos*/{-0.5,-0.5,-0.5}, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5,-0.5,-0.5}, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5, 0.5,-0.5}, /*color*/{0.0, 0.0, 1.0, 1.0}},
-			{/*pos*/{-0.5, 0.5,-0.5}, /*color*/{0.0, 1.0, 1.0, 1.0}},
-			//
-			{/*pos*/{-8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{ 8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{ 8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{-8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-		}, {
-			0, 1, 2, 2, 3, 0,
-			4, 5, 6, 6, 7, 4,
-			8, 9, 10, 10, 11, 8,
-		}, vertexBuffer, 0, indexBuffer, 0);
-		geometries.push_back(trianglesGeometry1);
-		
-		// Shader program
-		testShader = new VulkanShaderProgram({
-			{"incubator_rendering/assets/shaders/raster.vert"},
-			{"incubator_rendering/assets/shaders/raster.frag"},
-		});
-
-		// Vertex Input structure
-		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
-			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
-		});
-
-		// Assign buffer data
-		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
-		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
-
-		// Descriptor sets
-		auto& descriptorSet = descriptorSets.emplace_back(0);
-		descriptorSet.AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
-		
-		testShader->AddDescriptorSet(&descriptorSet);
-		
-		testShader->LoadShaders();
-	}
-
-	void UnloadScene() override {
-		delete testShader;
-	}
-
-protected:
-	void CreateSceneGraphics() override {
-		
-		AllocateBuffersStaged(commandPool, stagedBuffers);
-		
-		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-
-	}
-
-	void DestroySceneGraphics() override {
-		
-		for (auto& buffer : stagedBuffers) {
-			buffer->Free(renderingDevice);
-		}
-		
-		// Uniform buffers
-		uniformBuffer.Free(renderingDevice);
-		
-	}
-	
-	void CreateGraphicsPipelines() override {
-		testShader->CreateShaderStages(renderingDevice);
-		
-		
+	void CreateRasterizationPipelines() {
 		renderPass = new VulkanRenderPass(renderingDevice);
 
 		// Color Attachment (Fragment shader Standard Output)
@@ -333,113 +254,30 @@ protected:
 		// The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments and subpasses. 
 		// The VkAttachmentReference objects reference attachments using the indices of this array.
 
-		//////////////
-		// Not sure if this block is really necessary......
-			// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
-			// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
-			// There are two ways to deal with this problem.
-			// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
-			// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-			VkSubpassDependency dependency = {};
-				dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-				dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-				// These two specify the operations to wait on and the stages in which these operations occur. 
-				// We need to wait for the swap chain to finish reading from the image before we can access it. 
-				// This can be accomplished by waiting on the color attachment output stage itself.
-				dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependency.srcAccessMask = 0;
-				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-				dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		//////////////
-		
+		// Render Pass Dependencies
+		// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
+		// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
+		// There are two ways to deal with this problem.
+		// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
+		// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
+		VkSubpassDependency dependency = {};
+			dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+			dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+			// These two specify the operations to wait on and the stages in which these operations occur. 
+			// We need to wait for the swap chain to finish reading from the image before we can access it. 
+			// This can be accomplished by waiting on the color attachment output stage itself.
+			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.srcAccessMask = 0;
+			// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+			// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 		// Set dependency to the render pass info
 		renderPass->renderPassInfo.dependencyCount = 1;
 		renderPass->renderPassInfo.pDependencies = &dependency;
 
+		// Create the render pass
 		renderPass->Create();
-		
-
-		/////////////////////////////////////////
-		
-		// Configure the rasterization graphics pipelines here
-		
-		auto* graphicsPipeline1 = renderPass->NewGraphicsPipeline(renderingDevice, 0);
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		
-		// Shader stages (programmable stages of the graphics pipeline)
-		
-		graphicsPipeline1->SetShaderProgram(testShader);
-
-		// Input Assembly
-		graphicsPipeline1->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		graphicsPipeline1->inputAssembly.primitiveRestartEnable = VK_FALSE; // If set to VK_TRUE, then it's possible to break up lines and triangles in the _STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF.
-
-		// Color Blending
-		graphicsPipeline1->AddAlphaBlendingAttachment(); // Fragment Shader output 0
-
-		
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Fixed-function state
-		// Global graphics settings when starting the game
-
-		// Rasterizer
-		graphicsPipeline1->rasterizer.depthClampEnable = VK_FALSE; // if set to VK_TRUE, then fragments that are beyond the near and far planes are clamped to them as opposed to discarding them. This is useful in some special cases like shadow maps. Using this requires enabling a GPU feature.
-		graphicsPipeline1->rasterizer.rasterizerDiscardEnable = VK_FALSE; // if set to VK_TRUE, then geometry never passes through the rasterizer stage. This basically disables any output to the framebuffer.
-		graphicsPipeline1->rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // Using any mode other than fill requires enabling a GPU feature.
-		graphicsPipeline1->rasterizer.lineWidth = 1; // The maximum line width that is supported depends on the hardware and any line thicker than 1.0f requires you to enable the wideLines GPU feature.
-		graphicsPipeline1->rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; // Face culling
-		graphicsPipeline1->rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // Vertex faces draw order
-		graphicsPipeline1->rasterizer.depthBiasEnable = VK_FALSE;
-		graphicsPipeline1->rasterizer.depthBiasConstantFactor = 0;
-		graphicsPipeline1->rasterizer.depthBiasClamp = 0;
-		graphicsPipeline1->rasterizer.depthBiasSlopeFactor = 0;
-
-		// Multisampling (AntiAliasing)
-		graphicsPipeline1->multisampling.sampleShadingEnable = VK_TRUE;
-		graphicsPipeline1->multisampling.minSampleShading = 0.2f; // Min fraction for sample shading (0-1). Closer to one is smoother.
-		graphicsPipeline1->multisampling.rasterizationSamples = msaaSamples;
-		graphicsPipeline1->multisampling.pSampleMask = nullptr;
-		graphicsPipeline1->multisampling.alphaToCoverageEnable = VK_FALSE;
-		graphicsPipeline1->multisampling.alphaToOneEnable = VK_FALSE;
-
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Dynamic settings that CAN be changed at runtime but NOT every frame
-		graphicsPipeline1->dynamicStates = {};
-
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
-		// Create DAS GRAFIKS PIPELINE !!!
-		// Fixed-function stage
-		graphicsPipeline1->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
-		
-		// Depth stencil
-		graphicsPipeline1->depthStencilState.depthTestEnable = VK_TRUE;
-		graphicsPipeline1->depthStencilState.depthWriteEnable = VK_TRUE;
-		graphicsPipeline1->depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-		// Used for the optional depth bound test. This allows to only keep fragments that fall within the specified depth range.
-		graphicsPipeline1->depthStencilState.depthBoundsTestEnable = VK_FALSE;
-			// graphicsPipeline1->depthStencilState.minDepthBounds = 0.0f;
-			// graphicsPipeline1->depthStencilState.maxDepthBounds = 1.0f;
-		// Stencil Buffer operations
-		graphicsPipeline1->depthStencilState.stencilTestEnable = VK_FALSE;
-		graphicsPipeline1->depthStencilState.front = {};
-		graphicsPipeline1->depthStencilState.back = {};
-
-		
-		// Optional.
-		// Vulkan allows you to create a new graphics pipeline by deriving from an existing pipeline. 
-		// The idea of pipeline derivatives is that it is less expensive to set up pipelines when they have much functionality in common with an existing pipeline and switching between pipelines from the same parent can also be done quicker.
-		// You can either specify the handle of an existing pipeline with basePipelineHandle or reference another pipeline that is about to be created by index with basePipelineIndex. 
-		// These are only used if VK_PIPELINE_CREATE_DERIVATIVE_BIT flag is also specified in the flags field of VkGraphicsPipelineCreateInfo.
-		graphicsPipeline1->pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-		graphicsPipeline1->pipelineCreateInfo.basePipelineIndex = -1;
-		
-		/////////////////////////////////////////
-		
-		
-		// Create the Graphics Pipeline !
-		renderPass->CreateGraphicsPipelines();
 		
 		// Frame Buffers
 		swapChainFrameBuffers.resize(swapChain->imageViews.size());
@@ -462,9 +300,25 @@ protected:
 				throw std::runtime_error("Failed to create framebuffer");
 			}
 		}
+		
+		// Shaders
+		for (auto& pipeline : rasterizationPipelines) {
+			auto* graphicsPipeline = renderPass->NewGraphicsPipeline(renderingDevice, 0);
+			// Multisampling (AntiAliasing)
+			graphicsPipeline->multisampling.rasterizationSamples = msaaSamples;
+			// Pipeline Create Info
+			graphicsPipeline->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
+			// Shader stages
+			pipeline.shaderProgram->CreateShaderStages(renderingDevice);
+			graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
+			// Configure
+			pipeline.Configure(graphicsPipeline);
+		}
+		
+		// Create Graphics Pipelines !
+		renderPass->CreateGraphicsPipelines();
 	}
-	
-	void DestroyGraphicsPipelines() override {
+	void DestroyRasterizationPipelines() {
 		// Frame Buffer
 		for (auto framebuffer : swapChainFrameBuffers) {
 			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
@@ -475,8 +329,130 @@ protected:
 		renderPass->DestroyGraphicsPipelines();
 		delete renderPass;
 		
-		// Shader
-		testShader->DestroyShaderStages(renderingDevice);
+		// Shaders
+		for (auto& pipeline : rasterizationPipelines) {
+			pipeline.shaderProgram->DestroyShaderStages(renderingDevice);
+		}
+	}
+
+private: // Renderer Configuration methods
+	void Init() override {
+		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
+		deviceFeatures.geometryShader = VK_TRUE;
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
+		deviceFeatures.sampleRateShading = VK_TRUE;
+	}
+	
+	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
+		// Build up a score here and the GPU with the highest score will be selected.
+		// Add to the score optional specs, then multiply with mandatory specs.
+		
+		// Optional specs  -->  score += points * CONDITION
+		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
+		score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
+		score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+
+		// Mandatory specs  -->  score *= CONDITION
+		score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
+		score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
+		score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
+	}
+	
+	void Info() override {
+		// MultiSampling
+		msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
+	}
+
+	void CreateResources() override {
+		CreateRasterizationResources();
+	}
+	
+	void DestroyResources() override {
+		DestroyRasterizationResources();
+	}
+	
+public: // Scene configuration methods
+	void LoadScene() override {
+		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+
+		// Add triangle geometries
+		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
+			{/*pos*/{-0.5,-0.5, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/{ 0.5,-0.5, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/{ 0.5, 0.5, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0}},
+			{/*pos*/{-0.5, 0.5, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0}},
+			//
+			{/*pos*/{-0.5,-0.5,-0.5}, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/{ 0.5,-0.5,-0.5}, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/{ 0.5, 0.5,-0.5}, /*color*/{0.0, 0.0, 1.0, 1.0}},
+			{/*pos*/{-0.5, 0.5,-0.5}, /*color*/{0.0, 1.0, 1.0, 1.0}},
+			//
+			{/*pos*/{-8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
+			{/*pos*/{ 8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
+			{/*pos*/{ 8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
+			{/*pos*/{-8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
+		}, {
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
+		}, vertexBuffer, 0, indexBuffer, 0);
+		geometries.push_back(trianglesGeometry1);
+		
+		// Shader program
+		testShader = new VulkanShaderProgram({
+			{"incubator_rendering/assets/shaders/raster.vert"},
+			{"incubator_rendering/assets/shaders/raster.frag"},
+		});
+
+		// Vertex Input structure
+		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
+			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
+			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
+		});
+
+		// Assign buffer data
+		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
+		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+
+		// Descriptor sets
+		auto& descriptorSet = descriptorSets.emplace_back(0);
+		descriptorSet.AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
+		
+		testShader->AddDescriptorSet(&descriptorSet);
+		
+		testShader->LoadShaders();
+		
+		rasterizationPipelines.emplace_back(testShader, vertexBuffer, indexBuffer);
+	}
+
+	void UnloadScene() override {
+		delete testShader;
+	}
+
+protected: // Graphics configuration
+	void CreateSceneGraphics() override {
+		// Staged Buffers
+		AllocateBuffersStaged(commandPool, stagedBuffers);
+		// Uniform buffer
+		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+	}
+
+	void DestroySceneGraphics() override {
+		for (auto& buffer : stagedBuffers) {
+			buffer->Free(renderingDevice);
+		}
+
+		// Uniform buffers
+		uniformBuffer.Free(renderingDevice);
+	}
+	
+	void CreateGraphicsPipelines() override {
+		CreateRasterizationPipelines();
+	}
+	
+	void DestroyGraphicsPipelines() override {
+		DestroyRasterizationPipelines();
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
@@ -502,52 +478,24 @@ protected:
 																VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
 															*/
 		
-		
 		/////////////////////////////////////////
 		
-		// Draw calls here
-		// ...
-		
-		// We can now bind the graphics pipeline
-		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
-		
-		// Bind Descriptor Sets (Uniforms)
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderPass->graphicsPipelines[0]->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
+		for (auto& pipeline : rasterizationPipelines) {
+			// We can now bind the graphics pipeline
+			renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
+			
+			// Bind Descriptor Sets
+			renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
 
-
-		// Test Object
-		VkDeviceSize offsets[] = {0};
-		renderingDevice->CmdBindVertexBuffers(commandBuffer, 0, 1, &stagedBuffers[0]->buffer, offsets);
-		// renderingDevice->CmdDraw(commandBuffer,
-		// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
-		// 	1, // instanceCount
-		// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-		// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-		// );
-		renderingDevice->CmdBindIndexBuffer(commandBuffer, stagedBuffers[1]->buffer, 0, VK_INDEX_TYPE_UINT32);
-		renderingDevice->CmdDrawIndexed(commandBuffer,
-			static_cast<uint32_t>(stagedBuffers[1]->size / sizeof(uint32_t)), // indexCount
-			1, // instanceCount
-			0, // firstVertex (defines the lowest value of gl_VertexIndex)
-			0, // vertexOffset
-			0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-		);
-		
-		// // simple draw triangle...
-		// renderingDevice->CmdDraw(commandBuffer,
-		// 	3, // vertexCount
-		// 	1, // instanceCount
-		// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-		// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-		// );
-
-		
+			// Draw
+			pipeline.Draw(renderingDevice, commandBuffer);
+		}
 		/////////////////////////////////////////
-		
 		
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 	}
-
+	
+protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
@@ -566,7 +514,7 @@ protected:
 		VulkanBuffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 	}
 
-public:
+public: // user-defined state variables
 	glm::vec3 camPosition = glm::vec3(2,2,2);
 	glm::vec3 camDirection = glm::vec3(-2,-2,-2);
 	
