@@ -425,10 +425,18 @@ private: // Renderer Configuration methods
 
 	void Init() override {
 		RayTracingInit();
+		
 		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
 		// deviceFeatures.geometryShader = VK_TRUE;
 		// deviceFeatures.samplerAnisotropy = VK_TRUE;
 		// deviceFeatures.sampleRateShading = VK_TRUE;
+		
+		// Preferences
+		preferredPresentModes = {
+			VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+			VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+			VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
+		};
 	}
 	
 	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {

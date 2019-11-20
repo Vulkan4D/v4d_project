@@ -48,6 +48,13 @@ protected: // class members
 	std::vector<VulkanDescriptorSet> descriptorSets {};
 	std::vector<VkDescriptorSet> vkDescriptorSets {};
 
+	// Preferences
+	std::vector<VkPresentModeKHR> preferredPresentModes {
+		// VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+		// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+		// VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
+	};
+
 private: // Device Extensions and features
 	std::vector<const char*> requiredDeviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	std::vector<const char*> optionalDeviceExtensions {};
@@ -289,7 +296,6 @@ protected: // Virtual INIT Methods
 
 	virtual void CreateSwapChain() {
 		std::lock_guard lock(renderingMutex);
-		// windowResized = false;
 		
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
 		VulkanSwapChain* oldSwapChain = swapChain;
@@ -305,11 +311,7 @@ protected: // Virtual INIT Methods
 			{ // Preferred Formats
 				{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
 			},
-			{ // Preferred Present Modes
-				VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
-				VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
-				VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
-			}
+			preferredPresentModes
 		);
 		// Assign queues
 		swapChain->AssignQueues({graphicsQueue.index, presentationQueue.index});
