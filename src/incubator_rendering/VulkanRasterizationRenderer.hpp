@@ -598,11 +598,10 @@ public: // Scene configuration methods
 		if (postProcessingEnabled) {
 			// Shader program
 			ppShader = new VulkanShaderProgram(postProcessingPipelineLayout, {
-				{"incubator_rendering/assets/shaders/raster.pp.vert"},
-				{"incubator_rendering/assets/shaders/raster.pp.frag"},
+				{"incubator_rendering/assets/shaders/postProcessing.vert"},
+				{"incubator_rendering/assets/shaders/postProcessing.frag"},
 			});
 			postProcessingPipelines.emplace_back(ppShader);
-
 
 			ppShader->LoadShaders();
 		}
@@ -736,7 +735,7 @@ protected: // Graphics configuration
 				graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 				graphicsPipeline->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
 				graphicsPipeline->pipelineCreateInfo.pVertexInputState = &emptyInputState;
-				graphicsPipeline->AddOpaqueAttachment();
+				graphicsPipeline->AddAlphaBlendingAttachment();
 				// Shader stages
 				pipeline.shaderProgram->CreateShaderStages(renderingDevice);
 				graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
