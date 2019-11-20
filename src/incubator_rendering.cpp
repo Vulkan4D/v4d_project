@@ -1,3 +1,5 @@
+// #define USE_RAY_TRACING
+
 #include "config.hh"
 #include <common/pch.hh>
 #include <numeric>
@@ -23,8 +25,11 @@
 std::unordered_map<int, Window*> Window::windows{};
 
 // Vulkan
-// #include "incubator_rendering/VulkanRasterizationRenderer.hpp"
-#include "incubator_rendering/VulkanRayTracingRenderer.hpp"
+#ifdef USE_RAY_TRACING
+	#include "incubator_rendering/VulkanRayTracingRenderer.hpp"
+#else
+	#include "incubator_rendering/VulkanRasterizationRenderer.hpp"
+#endif
 VulkanLoader vulkanLoader;
 
 int main() {
@@ -39,17 +44,20 @@ int main() {
 	Window* window = new Window("TEST", 1280, 720);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
-	// auto* vulkan = new VulkanRasterizationRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+#ifdef USE_RAY_TRACING
 	auto* vulkan = new VulkanRayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+#else
+	auto* vulkan = new VulkanRasterizationRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+#endif
 	
 	vulkan->LoadRenderer();
 	vulkan->LoadScene();
 	vulkan->SendGraphicsToDevice();
 	
-	float camSpeed = 1.0f, mouseSensitivity = 1.0f;
-	float horizontalAngle = -2.5f;
-	float verticalAngle = -0.5f;
-	vulkan->camDirection = glm::vec3(
+	double camSpeed = 2.0, mouseSensitivity = 1.0;
+	double horizontalAngle = -2.5;
+	double verticalAngle = -0.5;
+	vulkan->camDirection = glm::dvec3(
 		cos(verticalAngle) * sin(horizontalAngle),
 		cos(verticalAngle) * cos(horizontalAngle),
 		sin(verticalAngle)
@@ -68,6 +76,7 @@ int main() {
 					glfwSetWindowShouldClose(window->GetHandle(), 1);
 					break;
 					
+#ifdef USE_RAY_TRACING
 				// Moving the light's position/intensity
 				case GLFW_KEY_LEFT:
 					vulkan->light.x += 0.5f;
@@ -120,6 +129,7 @@ int main() {
 				case GLFW_KEY_KP_ENTER:
 					vulkan->rtx_shadows = !vulkan->rtx_shadows;
 					break;
+#endif
 				
 				// Reload Renderer
 				case GLFW_KEY_R:
@@ -150,7 +160,7 @@ int main() {
 	// Frame timer
 	v4d::Timer timer(true);
 	double currentFrameTime = 10;
-	float deltaTime = 0.01f;
+	double deltaTime = 0.01f;
 	
 	// GameLoop
 	while (window->IsActive()) {
@@ -158,7 +168,7 @@ int main() {
 		glfwPollEvents();
 		
 		// Camera Movements
-		float camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 5.0f : 1.0f;
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : 1.0;
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			vulkan->camPosition += vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
 		}
@@ -166,27 +176,27 @@ int main() {
 			vulkan->camPosition -= vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::vec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			vulkan->camPosition += glm::cross(vulkan->camDirection, glm::vec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->camPosition += glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			vulkan->camPosition += glm::vec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->camPosition += glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			vulkan->camPosition -= glm::vec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->camPosition -= glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
 		}
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
 			double x, y;
 			glfwGetCursorPos(window->GetHandle(), &x, &y);
 			glfwSetCursorPos(window->GetHandle(), 0, 0);
 			if (x != 0 || y != 0) {
-				horizontalAngle += float(x * mouseSensitivity * deltaTime);
-				verticalAngle -= float(y * mouseSensitivity * deltaTime);
-				if (verticalAngle < -1.5f) verticalAngle = -1.5f;
-				if (verticalAngle > 1.5f) verticalAngle = 1.5f;
-				vulkan->camDirection = glm::vec3(
+				horizontalAngle += double(x * mouseSensitivity * deltaTime);
+				verticalAngle -= double(y * mouseSensitivity * deltaTime);
+				if (verticalAngle < -1.5) verticalAngle = -1.5;
+				if (verticalAngle > 1.5) verticalAngle = 1.5;
+				vulkan->camDirection = glm::dvec3(
 					cos(verticalAngle) * sin(horizontalAngle),
 					cos(verticalAngle) * cos(horizontalAngle),
 					sin(verticalAngle)
@@ -199,7 +209,7 @@ int main() {
 		
 		// Frame time
 		currentFrameTime = timer.GetElapsedMilliseconds();
-		deltaTime = (float)currentFrameTime / 1000.0f;
+		deltaTime = (double)currentFrameTime / 1000.0f;
 		timer.Reset();
 		
 		// FPS counter

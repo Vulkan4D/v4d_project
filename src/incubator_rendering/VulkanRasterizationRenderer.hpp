@@ -7,14 +7,15 @@
 
 // Test Object Vertex Data Structure
 struct Vertex {
-	glm::vec3 pos;
+	// glm::dvec3 pos;
+	double posX, posY, posZ;
 	glm::vec4 color;
 };
 
 struct UBO {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
+	glm::dmat4 proj;
+	glm::dmat4 view;
+	glm::dmat4 model;
 };
 
 class VulkanRasterizationRenderer : public VulkanRenderer {
@@ -375,27 +376,57 @@ public: // Scene configuration methods
 	void LoadScene() override {
 		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-
+		
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/{-0.5,-0.5, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5,-0.5, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5, 0.5, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0}},
-			{/*pos*/{-0.5, 0.5, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0}},
+			{/*pos*/-1.5,-1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/ 1.5,-1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/ 1.5, 1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/-1.5, 1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
 			//
-			{/*pos*/{-0.5,-0.5,-0.5}, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5,-0.5,-0.5}, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/{ 0.5, 0.5,-0.5}, /*color*/{0.0, 0.0, 1.0, 1.0}},
-			{/*pos*/{-0.5, 0.5,-0.5}, /*color*/{0.0, 1.0, 1.0, 1.0}},
-			//
-			{/*pos*/{-8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{ 8.0,-8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{ 8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
-			{/*pos*/{-8.0, 8.0,-2.0}, /*color*/{0.5, 0.5, 0.5, 1.0}},
+			{/*pos*/-1.5,-1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/ 1.5,-1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/ 1.5, 1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/-1.5, 1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			
+			// bottom white
+			/*  8 */{/*pos*/-8.0,-8.0,-2.0, /*color*/{1.0,1.0,1.0, 1.0}},
+			/*  9 */{/*pos*/ 8.0,-8.0,-2.0, /*color*/{1.0,1.0,1.0, 1.0}},
+			/* 10 */{/*pos*/ 8.0, 8.0,-2.0, /*color*/{1.0,1.0,1.0, 1.0}},
+			/* 11 */{/*pos*/-8.0, 8.0,-2.0, /*color*/{1.0,1.0,1.0, 1.0}},
+			
+			// top gray
+			/* 12 */{/*pos*/-8.0,-8.0, 4.0, /*color*/{0.5,0.5,0.5, 1.0}},
+			/* 13 */{/*pos*/ 8.0,-8.0, 4.0, /*color*/{0.5,0.5,0.5, 1.0}},
+			/* 14 */{/*pos*/ 8.0, 8.0, 4.0, /*color*/{0.5,0.5,0.5, 1.0}},
+			/* 15 */{/*pos*/-8.0, 8.0, 4.0, /*color*/{0.5,0.5,0.5, 1.0}},
+			
+			// left red
+			/* 16 */{/*pos*/ 8.0, 8.0,-2.0, /*color*/{1.0,0.0,0.0, 1.0}},
+			/* 17 */{/*pos*/ 8.0,-8.0,-2.0, /*color*/{1.0,0.0,0.0, 1.0}},
+			/* 18 */{/*pos*/ 8.0, 8.0, 4.0, /*color*/{1.0,0.0,0.0, 1.0}},
+			/* 19 */{/*pos*/ 8.0,-8.0, 4.0, /*color*/{1.0,0.0,0.0, 1.0}},
+			
+			// back blue
+			/* 20 */{/*pos*/ 8.0,-8.0, 4.0, /*color*/{0.0,0.0,1.0, 1.0}},
+			/* 21 */{/*pos*/ 8.0,-8.0,-2.0, /*color*/{0.0,0.0,1.0, 1.0}},
+			/* 22 */{/*pos*/-8.0,-8.0, 4.0, /*color*/{0.0,0.0,1.0, 1.0}},
+			/* 23 */{/*pos*/-8.0,-8.0,-2.0, /*color*/{0.0,0.0,1.0, 1.0}},
+			
+			// right green
+			/* 24 */{/*pos*/-8.0, 8.0,-2.0, /*color*/{0.0,1.0,0.0, 1.0}},
+			/* 25 */{/*pos*/-8.0,-8.0,-2.0, /*color*/{0.0,1.0,0.0, 1.0}},
+			/* 26 */{/*pos*/-8.0, 8.0, 4.0, /*color*/{0.0,1.0,0.0, 1.0}},
+			/* 27 */{/*pos*/-8.0,-8.0, 4.0, /*color*/{0.0,1.0,0.0, 1.0}},
 		}, {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
+			//
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
@@ -407,8 +438,10 @@ public: // Scene configuration methods
 
 		// Vertex Input structure
 		testShader->AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
-			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32_SFLOAT},
-			{1, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
+			{0, offsetof(Vertex, Vertex::posX), VK_FORMAT_R64_SFLOAT},
+			{1, offsetof(Vertex, Vertex::posY), VK_FORMAT_R64_SFLOAT},
+			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
+			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
 
 		// Assign buffer data
@@ -499,15 +532,15 @@ protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
 		UBO ubo = {};
 		// Slowly rotate the test object
-		ubo.model = glm::rotate(glm::mat4(1), time * glm::radians(10.0f), glm::vec3(0,0,1));
+		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
 		// Current camera position
-		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::vec3(0,0,1));
+		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1));
 		// Projection
-		ubo.proj = glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f);
+		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		ubo.proj[1][1] *= -1;
 
 		// Update memory
@@ -515,7 +548,7 @@ protected: // Methods executed on every frame
 	}
 
 public: // user-defined state variables
-	glm::vec3 camPosition = glm::vec3(2,2,2);
-	glm::vec3 camDirection = glm::vec3(-2,-2,-2);
+	glm::dvec3 camPosition = glm::dvec3(2,2,2);
+	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
 	
 };

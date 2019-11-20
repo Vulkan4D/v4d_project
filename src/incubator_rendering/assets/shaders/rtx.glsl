@@ -15,11 +15,11 @@ struct RayPayload {
 layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 2, set = 0) uniform UBO {
-	mat4 view;
-	mat4 proj;
-    vec4 light;
+	dmat4 view;
+	dmat4 proj;
+    dvec4 light;
 	vec3 ambient;
-	float time;
+	double time;
 	int samplesPerPixel;
 	int rtx_reflection_max_recursion;
 	bool rtx_shadows;
@@ -238,15 +238,15 @@ void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal,
 	}
 	
 	// Basic shading from light angle
-	vec3 lightVector = normalize(ubo.light.xyz - hitPoint);
+	vec3 lightVector = normalize(vec3(ubo.light.xyz) - hitPoint);
 	const float dot_product = max(dot(lightVector, normal), 0.0);
 	const float shade = pow(dot_product, specular);
-	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * ubo.light.w), shade);
+	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * float(ubo.light.w)), shade);
 	
 	// Receive Shadows
 	if (shade > 0.0 && ubo.rtx_shadows) {
 		shadowed = true;
-		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(ubo.light.xyz - hitPoint), 2);
+		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(vec3(ubo.light.xyz) - hitPoint), 2);
 		if (shadowed) {
 			ray.color = ubo.ambient;
 		}
@@ -307,9 +307,9 @@ void main() {
 	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
 	const vec2 d = inUV * 2.0 - 1.0;
 
-	const vec3 target = vec4(ubo.proj * vec4(d.x, d.y, 1, 1)).xyz;
-	vec3 origin = vec4(ubo.view * vec4(0,0,0,1)).xyz;
-	vec3 direction = vec4(ubo.view * vec4(normalize(target), 0)).xyz;
+	const vec3 target = vec4(ubo.proj * dvec4(d.x, d.y, 1, 1)).xyz;
+	vec3 origin = vec4(ubo.view * dvec4(0,0,0,1)).xyz;
+	vec3 direction = vec4(ubo.view * dvec4(normalize(target), 0)).xyz;
 	
 	vec3 finalColor = vec3(0.0);
 	float max_distance = 10000.0;

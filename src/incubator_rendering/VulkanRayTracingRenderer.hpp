@@ -34,11 +34,11 @@ struct Sphere : public ProceduralGeometryData {
 };
 
 struct UBO {
-	glm::mat4 viewInverse;
-	glm::mat4 projInverse;
-	glm::vec4 light;
+	glm::dmat4 viewInverse;
+	glm::dmat4 projInverse;
+	glm::dvec4 light;
 	glm::vec3 ambient;
-	float time;
+	double time;
 	int samplesPerPixel;
 	int rtx_reflection_max_recursion;
 	bool rtx_shadows;
@@ -512,10 +512,10 @@ public: // Scene configuration methods
 			4, 5, 6, 6, 7, 4,
 			8, 9, 10, 10, 11, 8,
 			//
-			12, 13, 14, 14, 15, 12,
-			16, 17, 18, 18, 19, 17,
-			20, 21, 22, 22, 23, 21,
-			24, 25, 26, 26, 27, 25,
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
@@ -694,15 +694,15 @@ protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
 		UBO ubo = {};
 		// Slowly rotate the test object
-		// ubo.model = glm::rotate(glm::mat4(1), time * glm::radians(10.0f), glm::vec3(0,0,1));
+		// ubo.model = glm::rotate(glm::dmat4(1), time * glm::radians(10.0), glm::dvec3(0,0,1));
 		
 		// Current camera position
-		ubo.viewInverse = glm::inverse(glm::lookAt(camPosition, camPosition + camDirection, glm::vec3(0,0,1)));
+		ubo.viewInverse = glm::inverse(glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1)));
 		// Projection
-		ubo.projInverse = glm::inverse(glm::perspective(glm::radians(80.0f), (float) swapChain->extent.width / (float) swapChain->extent.height, 0.1f, 100.0f));
+		ubo.projInverse = glm::inverse(glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17)); // 1cm - 1 000 000 UA
 		ubo.projInverse[1][1] *= -1;
 
 		ubo.light = light;
@@ -718,9 +718,9 @@ protected: // Methods executed on every frame
 	}
 
 public: // user-defined state variables
-	glm::vec3 camPosition = glm::vec3(2,2,2);
-	glm::vec3 camDirection = glm::vec3(-2,-2,-2);
-	glm::vec4 light {1.0,1.0,3.0, 1.0};
+	glm::dvec3 camPosition = glm::dvec3(2,2,2);
+	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
+	glm::dvec4 light {1.0,1.0,3.0, 1.0};
 	int samplesPerPixel = 2;
 	int rtx_reflection_max_recursion = 4;
 	bool rtx_shadows = true;
