@@ -4,6 +4,7 @@
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
 #include "VulkanDescriptorSet.hpp"
+#include "VulkanPipelineLayout.hpp"
 
 class VulkanShaderProgram {
 private:
@@ -14,7 +15,6 @@ private:
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	
 	std::vector<VulkanDescriptorSet*> descriptorSets {};
-	
 	std::vector<VkDescriptorSetLayout> layouts {};
 
 public:
@@ -83,7 +83,7 @@ public:
 		return &attributes;
 	}
 	
-	inline std::vector<VkDescriptorSetLayout>* GetDescriptorSetLayouts() {
+	std::vector<VkDescriptorSetLayout>* GetDescriptorSetLayouts() {
 		if (layouts.size() > 0) layouts.clear();
 		for (auto* set : descriptorSets) {
 			layouts.push_back(set->GetDescriptorSetLayout());

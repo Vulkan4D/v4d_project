@@ -6,11 +6,17 @@
 #include "VulkanBuffer.hpp"
 #include "VulkanDescriptorSet.hpp"
 
+struct CombinedImageSampler {
+	VkSampler sampler;
+	VkImageView imageView;
+};
+
 enum DescriptorPointerType {
 	STORAGE_BUFFER, // VulkanBuffer ---> VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
 	UNIFORM_BUFFER, // VulkanBuffer ---> VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
 	IMAGE_VIEW, // VkImageView ---> VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
 	ACCELERATION_STRUCTURE, // VkAccelerationStructureNV ---> VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
+	COMBINED_IMAGE_SAMPLER, // VkImageView ---> VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
 };
 
 #define DESCRIPTOR_SET_ADD_BINDING_TYPE(descriptor_type, data_ptr_type, name, stage_flags, t)\
@@ -40,13 +46,13 @@ enum DescriptorPointerType {
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( STORAGE_BUFFER, VulkanBuffer, storageBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( UNIFORM_BUFFER, VulkanBuffer, uniformBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( IMAGE_VIEW, VkImageView, imageView, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE )\
+	DESCRIPTOR_SET_ADD_BINDING_TYPE( COMBINED_IMAGE_SAMPLER, CombinedImageSampler, combinedImageSampler, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( ACCELERATION_STRUCTURE, VkAccelerationStructureNV, accelerationStructure, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV )\
 
 // Not implemented yet
     // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
     // VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC
     // VK_DESCRIPTOR_TYPE_SAMPLER
-    // VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
     // VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
     // VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER
     // VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER
@@ -75,6 +81,7 @@ struct DescriptorBinding {
 					delete (VkDescriptorBufferInfo*)writeInfo;
 				break;
 				case IMAGE_VIEW:
+				case COMBINED_IMAGE_SAMPLER:
 					delete (VkDescriptorImageInfo*)writeInfo;
 				break;
 				case ACCELERATION_STRUCTURE:
@@ -116,6 +123,14 @@ struct DescriptorBinding {
 				writeInfo = new VkDescriptorImageInfo {
 					VK_NULL_HANDLE,// VkSampler sampler
 					*(VkImageView*)data,// VkImageView imageView
+					VK_IMAGE_LAYOUT_GENERAL,// VkImageLayout imageLayout
+				};
+				descriptorWrite.pImageInfo = (VkDescriptorImageInfo*)writeInfo;
+			break;
+			case COMBINED_IMAGE_SAMPLER:
+				writeInfo = new VkDescriptorImageInfo {
+					((CombinedImageSampler*)data)->sampler,// VkSampler sampler
+					((CombinedImageSampler*)data)->imageView,// VkImageView imageView
 					VK_IMAGE_LAYOUT_GENERAL,// VkImageLayout imageLayout
 				};
 				descriptorWrite.pImageInfo = (VkDescriptorImageInfo*)writeInfo;

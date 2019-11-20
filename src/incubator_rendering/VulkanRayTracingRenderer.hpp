@@ -554,15 +554,15 @@ public: // Scene configuration methods
 		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 		
 		// Descriptor sets
-		auto& descriptorSet = descriptorSets.emplace_back(0);
-		descriptorSet.AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		descriptorSet.AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet.AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
+		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		descriptorSet->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
 		
-		shaderBindingTable->AddDescriptorSet(&descriptorSet);
+		shaderBindingTable->AddDescriptorSet(descriptorSet);
 		
 		shaderBindingTable->LoadShaders();
 		
@@ -595,17 +595,28 @@ public: // Scene configuration methods
 	}
 
 	void UnloadScene() override {
-		geometryInstances.clear();
+		// Shaders
 		delete shaderBindingTable;
+		
+		// Geometries
+		geometryInstances.clear();
 		rayTracingBottomLevelAccelerationStructures.clear();
 		for (auto* geometry : geometries) {
 			delete geometry;
 		}
 		geometries.clear();
+		
+		// Staged buffers
 		for (auto* buffer : stagedBuffers) {
 			delete buffer;
 		}
 		stagedBuffers.clear();
+		
+		// Descriptor sets
+		for (auto* set : descriptorSets) {
+			delete set;
+		}
+		descriptorSets.clear();
 	}
 
 protected: // Graphics configuration

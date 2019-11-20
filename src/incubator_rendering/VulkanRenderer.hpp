@@ -3,6 +3,7 @@
 #include <v4d.h>
 
 #include "Vulkan.hpp"
+#include "VulkanPipelineLayout.hpp"
 
 /////////////////////////////////////////////
 
@@ -45,8 +46,9 @@ protected: // class members
 	bool swapChainDirty = false;
 	
 	// Descriptor sets
-	std::vector<VulkanDescriptorSet> descriptorSets {};
+	std::vector<VulkanDescriptorSet*> descriptorSets {};
 	std::vector<VkDescriptorSet> vkDescriptorSets {};
+	std::vector<VulkanPipelineLayout*> pipelineLayouts {};
 
 	// Preferences
 	std::vector<VkPresentModeKHR> preferredPresentModes {
@@ -233,14 +235,14 @@ protected: // Virtual INIT Methods
 	}
 	
 	virtual void CreateDescriptorSets() {
-		for (auto& set : descriptorSets) {
-			set.CreateDescriptorSetLayout(renderingDevice);
+		for (auto* set : descriptorSets) {
+			set->CreateDescriptorSetLayout(renderingDevice);
 		}
 		
 		// Descriptor sets / pool
 		std::map<VkDescriptorType, uint> descriptorTypes {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
+		for (auto* set : descriptorSets) {
+			for (auto&[binding, descriptor] : set->GetBindings()) {
 				if (descriptorTypes.find(descriptor.descriptorType) == descriptorTypes.end()) {
 					descriptorTypes[descriptor.descriptorType] = 1;
 				} else {
@@ -258,8 +260,8 @@ protected: // Virtual INIT Methods
 		std::vector<VkDescriptorSetLayout> setLayouts {};
 		vkDescriptorSets.resize(descriptorSets.size());
 		setLayouts.reserve(descriptorSets.size());
-		for (auto& set : descriptorSets) {
-			setLayouts.push_back(set.GetDescriptorSetLayout());
+		for (auto* set : descriptorSets) {
+			setLayouts.push_back(set->GetDescriptorSetLayout());
 		}
 		VkDescriptorSetAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -270,25 +272,30 @@ protected: // Virtual INIT Methods
 			throw std::runtime_error("Failed to allocate descriptor sets");
 		}
 		for (int i = 0; i < descriptorSets.size(); ++i) {
-			descriptorSets[i].descriptorSet = vkDescriptorSets[i];
+			descriptorSets[i]->descriptorSet = vkDescriptorSets[i];
 		}
 		
 		UpdateDescriptorSets();
+		
+		// Pipeline layouts
+		for (auto* layout : pipelineLayouts) {
+			layout->LoadSetLayouts();
+		}
 	}
 	
 	virtual void DestroyDescriptorSets() {
 		// Descriptor Sets
 		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
-		for (auto& set : descriptorSets) set.DestroyDescriptorSetLayout(renderingDevice);
+		for (auto* set : descriptorSets) set->DestroyDescriptorSetLayout(renderingDevice);
 		// Descriptor pools
 		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
 	}
 
 	virtual void UpdateDescriptorSets() {
 		std::vector<VkWriteDescriptorSet> descriptorWrites {};
-		for (auto& set : descriptorSets) {
-			for (auto&[binding, descriptor] : set.GetBindings()) {
-				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set.descriptorSet));
+		for (auto* set : descriptorSets) {
+			for (auto&[binding, descriptor] : set->GetBindings()) {
+				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set->descriptorSet));
 			}
 		}
 		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);

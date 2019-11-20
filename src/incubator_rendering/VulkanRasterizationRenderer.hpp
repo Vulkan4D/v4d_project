@@ -3,6 +3,7 @@
 #include "VulkanRenderer.hpp"
 #include "VulkanDescriptorSet.hpp"
 #include "VulkanShaderProgram.hpp"
+#include "VulkanPipelineLayout.hpp"
 #include "Geometry.hpp"
 
 // Test Object Vertex Data Structure
@@ -26,22 +27,28 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	std::vector<Geometry*> geometries {};
 	
 	VulkanShaderProgram* testShader;
+	VulkanShaderProgram* ppShader;
+	CombinedImageSampler postProcessingSampler;
 	
 private: // Rasterization Rendering
-	struct RasterizationPipeline {
+	struct RenderingPipeline {
 		VulkanGraphicsPipeline* graphicsPipeline = nullptr;
-		
 		VulkanShaderProgram* shaderProgram;
+		
+		RenderingPipeline(VulkanShaderProgram* shaderProgram) : shaderProgram(shaderProgram) {}
+		virtual void Configure() = 0;
+		virtual void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) = 0;
+		virtual ~RenderingPipeline() {}
+	};
+	struct VertexRasterizationPipeline : public RenderingPipeline {
 		VulkanBuffer* vertexBuffer;
 		VulkanBuffer* indexBuffer;
 		
-		RasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer)
-		 : shaderProgram(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
+		VertexRasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer)
+		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
 		
-		void Configure(VulkanGraphicsPipeline* pipeline) {
-			graphicsPipeline = pipeline;
-			// Color Blending
-			graphicsPipeline->AddAlphaBlendingAttachment(); // Fragment Shader output 0
+		void Configure() {
+			
 		}
 		
 		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
@@ -72,9 +79,25 @@ private: // Rasterization Rendering
 			// );
 		}
 	};
-	std::vector<RasterizationPipeline> rasterizationPipelines {};
+	struct PostProcessingPipeline : public RenderingPipeline {
+
+		PostProcessingPipeline(VulkanShaderProgram* shaderProgram)
+		 : RenderingPipeline(shaderProgram) {}
+		
+		void Configure() {
+			graphicsPipeline->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+			graphicsPipeline->rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		}
+		
+		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
+			device->CmdDraw(commandBuffer, 3, 1, 0, 0);
+		}
+	};
+	std::vector<VertexRasterizationPipeline> rasterizationPipelines {};
+	std::vector<PostProcessingPipeline> postProcessingPipelines {};
 	VulkanRenderPass* renderPass = nullptr;
-	std::vector<VkFramebuffer> swapChainFrameBuffers;
+	VulkanRenderPass* postProcessingRenderPass = nullptr;
+	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers;
 	VkClearColorValue clearColor = {0,0,0,1};
 	// Render Target (Color Attachment)
 	VkImage colorImage = VK_NULL_HANDLE;
@@ -91,15 +114,15 @@ private: // Rasterization Rendering
 	VkImageView depthImageView = VK_NULL_HANDLE;
 	VkFormat depthImageFormat;
 	// MultiSampling
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_4_BIT;
-	const bool deferredRendering = true;
-	float renderingResolutionScale = !deferredRendering?1: 2.0f;
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_2_BIT;
+	const bool postProcessingEnabled = true;
+	float renderingResolutionScale = !postProcessingEnabled?1: 2.0f;
 	
 	void CreateRasterizationResources() {
 		VkImageViewCreateInfo viewInfo = {};
 		
 		// Format
-		colorImageFormat = deferredRendering ?
+		colorImageFormat = postProcessingEnabled ?
 			  renderingGPU->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
 			: swapChain->format.format;
 		
@@ -112,9 +135,11 @@ private: // Rasterization Rendering
 			1, msaaSamples,
 			colorImageFormat,
 			VK_IMAGE_TILING_OPTIMAL,
-			deferredRendering? 
-				  (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
-				: (VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+			(postProcessingEnabled? 
+				  (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT)
+				: (VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT)
+			),
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			colorImage,
 			colorImageMemory
@@ -133,31 +158,53 @@ private: // Rasterization Rendering
 		}
 		TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
 		
-		// tmp resolve image for multisampled deferred rendering
-		renderingDevice->CreateImage(
-			width,
-			height,
-			1, VK_SAMPLE_COUNT_1_BIT,
-			colorImageFormat,
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			colorImage2,
-			colorImageMemory2
-		);
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = colorImage2;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = colorImageFormat;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
-		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &colorImageView2) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create texture image view");
+		if (postProcessingEnabled) {
+			// tmp resolve image for multisampled deferred rendering
+			renderingDevice->CreateImage(
+				width,
+				height,
+				1, VK_SAMPLE_COUNT_1_BIT,
+				colorImageFormat,
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				colorImage2,
+				colorImageMemory2
+			);
+			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			viewInfo.image = colorImage2;
+			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewInfo.format = colorImageFormat;
+			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			viewInfo.subresourceRange.baseMipLevel = 0;
+			viewInfo.subresourceRange.levelCount = 1;
+			viewInfo.subresourceRange.baseArrayLayer = 0;
+			viewInfo.subresourceRange.layerCount = 1;
+			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &colorImageView2) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create texture image view");
+			}
+			TransitionImageLayout(colorImage2, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+			
+			// Create sampler
+			VkSamplerCreateInfo sampler {};
+			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.magFilter = VK_FILTER_LINEAR;
+			sampler.minFilter = VK_FILTER_LINEAR;
+			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			sampler.addressModeV = sampler.addressModeU;
+			sampler.addressModeW = sampler.addressModeU;
+			sampler.mipLodBias = 0.0f;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.compareOp = VK_COMPARE_OP_NEVER;
+			sampler.minLod = 0.0f;
+			sampler.maxLod = 1.0f;
+			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+			if (renderingDevice->CreateSampler(&sampler, nullptr, &postProcessingSampler.sampler) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create sampler");
+			postProcessingSampler.imageView = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? colorImageView2 : colorImageView;
 		}
-		TransitionImageLayout(colorImage2, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
 		
 		// Depth image Format
 		depthImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
@@ -196,7 +243,8 @@ private: // Rasterization Rendering
 			renderingDevice->FreeMemory(colorImageMemory, nullptr);
 			colorImage = VK_NULL_HANDLE;
 		}
-		if (colorImage2 != VK_NULL_HANDLE) {
+		if (postProcessingEnabled && colorImage2 != VK_NULL_HANDLE) {
+			renderingDevice->DestroySampler(postProcessingSampler.sampler, nullptr);
 			renderingDevice->DestroyImageView(colorImageView2, nullptr);
 			renderingDevice->DestroyImage(colorImage2, nullptr);
 			renderingDevice->FreeMemory(colorImageMemory2, nullptr);
@@ -236,7 +284,7 @@ private: // Rasterization Rendering
 			// The caveat of this special value is that the contents of the image are not guaranteed to be preserved, but that doesnt matter since were going to clear it anyway. 
 			// We want the image to be ready for presentation using the swap chain after rendering, which is why we use VK_IMAGE_LAYOUT_PRESENT_SRC_KHR as finalLayout.
 			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			colorAttachment.finalLayout = (deferredRendering || msaaSamples != VK_SAMPLE_COUNT_1_BIT)? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			colorAttachment.finalLayout = (postProcessingEnabled || msaaSamples != VK_SAMPLE_COUNT_1_BIT)? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 									/*	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = Images used as color attachment (use this for color attachment with multisampling, adapt rendering pipeline)
 										VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = Images to be presented in the swap chain (use this for color attachment when no multisampling, adapt rendering pipeline)
 										VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = Images to be used as destination for a memory copy operation
@@ -274,14 +322,14 @@ private: // Rasterization Rendering
 		if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
 			// Resolve Attachment (Final Output Color)
 			VkAttachmentDescription colorAttachmentResolve = {};
-				colorAttachmentResolve.format = deferredRendering? colorImageFormat : swapChain->format.format;
+				colorAttachmentResolve.format = postProcessingEnabled? colorImageFormat : swapChain->format.format;
 				colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
 				colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 				colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				colorAttachmentResolve.finalLayout = deferredRendering? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+				colorAttachmentResolve.finalLayout = postProcessingEnabled? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			renderPass->AddAttachment(colorAttachmentResolve);
 			colorAttachmentResolveRef = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 		}
@@ -335,7 +383,7 @@ private: // Rasterization Rendering
 		VkPipelineViewportStateCreateInfo viewportState = swapChain->viewportState;
 		VkViewport viewport {};
 		VkRect2D scissor {};
-		if (deferredRendering) {
+		if (postProcessingEnabled) {
 			viewport.x = 0;
 			viewport.y = 0;
 			viewport.width = (float) width;
@@ -356,10 +404,10 @@ private: // Rasterization Rendering
 		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
 			
 			std::vector<VkImageView> attachments {
-				(msaaSamples != VK_SAMPLE_COUNT_1_BIT || deferredRendering)? colorImageView : swapChain->imageViews[i],
+				(msaaSamples != VK_SAMPLE_COUNT_1_BIT || postProcessingEnabled)? colorImageView : swapChain->imageViews[i],
 				depthImageView,
 			};
-			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) attachments.push_back(deferredRendering? colorImageView2 : swapChain->imageViews[i]);
+			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) attachments.push_back(postProcessingEnabled? colorImageView2 : swapChain->imageViews[i]);
 			
 			// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
 			VkFramebufferCreateInfo framebufferCreateInfo = {};
@@ -382,11 +430,14 @@ private: // Rasterization Rendering
 			graphicsPipeline->multisampling.rasterizationSamples = msaaSamples;
 			// Pipeline Create Info
 			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
+			// Color Blending
+			graphicsPipeline->AddAlphaBlendingAttachment();
 			// Shader stages
 			pipeline.shaderProgram->CreateShaderStages(renderingDevice);
 			graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
 			// Configure
-			pipeline.Configure(graphicsPipeline);
+			pipeline.graphicsPipeline = graphicsPipeline;
+			pipeline.Configure();
 		}
 		
 		// Create Graphics Pipelines !
@@ -418,8 +469,8 @@ private: // Renderer Configuration methods
 		
 		// Preferences
 		preferredPresentModes = {
-			VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
-			VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+			// VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+			// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
 			VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 		};
 	}
@@ -454,6 +505,21 @@ private: // Renderer Configuration methods
 	
 public: // Scene configuration methods
 	void LoadScene() override {
+		// Descriptor sets
+		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
+		auto* ppDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(1));
+		ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
+		
+		// Pileline layouts
+		auto* mainPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		auto* postProcessingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		
+		mainPipelineLayout->AddDescriptorSet(descriptorSet);
+		postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
+		
+		//////
+		
 		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
@@ -510,6 +576,10 @@ public: // Scene configuration methods
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
+		// Assign buffer data
+		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
+		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+
 		// Shader program
 		testShader = new VulkanShaderProgram({
 			{"incubator_rendering/assets/shaders/raster.vert"},
@@ -524,23 +594,62 @@ public: // Scene configuration methods
 			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
 
-		// Assign buffer data
-		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
-		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
-
-		// Descriptor sets
-		auto& descriptorSet = descriptorSets.emplace_back(0);
-		descriptorSet.AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
-		
-		testShader->AddDescriptorSet(&descriptorSet);
+		testShader->AddDescriptorSet(descriptorSet);
+		testShader->AddDescriptorSet(ppDescriptorSet);
 		
 		testShader->LoadShaders();
 		
 		rasterizationPipelines.emplace_back(testShader, vertexBuffer, indexBuffer);
+		
+		// Post processing
+		if (postProcessingEnabled) {
+			// Shader program
+			ppShader = new VulkanShaderProgram({
+				{"incubator_rendering/assets/shaders/raster.pp.vert"},
+				{"incubator_rendering/assets/shaders/raster.pp.frag"},
+			});
+
+			// Descriptor sets
+			
+			ppShader->AddDescriptorSet(descriptorSet);
+			ppShader->AddDescriptorSet(ppDescriptorSet);
+			
+			ppShader->LoadShaders();
+			
+			postProcessingPipelines.emplace_back(ppShader);
+		}
 	}
 
 	void UnloadScene() override {
+		// Shaders
 		delete testShader;
+		if (postProcessingEnabled) {
+			delete ppShader;
+		}
+		
+		// Geometries
+		for (auto* geometry : geometries) {
+			delete geometry;
+		}
+		geometries.clear();
+		
+		// Staged buffers
+		for (auto* buffer : stagedBuffers) {
+			delete buffer;
+		}
+		stagedBuffers.clear();
+		
+		// Pipeline Layouts
+		for (auto* layout : pipelineLayouts) {
+			delete layout;
+		}
+		pipelineLayouts.clear();
+		
+		// Descriptor sets
+		for (auto* set : descriptorSets) {
+			delete set;
+		}
+		descriptorSets.clear();
 	}
 
 protected: // Graphics configuration
@@ -562,10 +671,115 @@ protected: // Graphics configuration
 	
 	void CreateGraphicsPipelines() override {
 		CreateRasterizationPipelines();
+		
+		if (postProcessingEnabled) {
+			// Post-Processing Pipelines
+			VkPipelineVertexInputStateCreateInfo emptyInputState {};
+			emptyInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			emptyInputState.vertexAttributeDescriptionCount = 0;
+			emptyInputState.pVertexAttributeDescriptions = nullptr;
+			emptyInputState.vertexBindingDescriptionCount = 0;
+			emptyInputState.pVertexBindingDescriptions = nullptr;
+			
+			// Create the render pass
+			postProcessingRenderPass = new VulkanRenderPass(renderingDevice);
+			
+			// Color Attachment (Fragment shader Standard Output)
+			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
+				colorAttachment.format = swapChain->format.format;
+				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // What to do with the attachment before rendering
+				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // What to do with the attachment after rendering
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			postProcessingRenderPass->AddAttachment(colorAttachment);
+			VkAttachmentReference colorAttachmentRef = {
+				0, // layout(location = 0) for output data in the fragment shader
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; // VK_PIPELINE_BIND_POINT_COMPUTE is also possible !!!
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttachmentRef;
+			postProcessingRenderPass->AddSubpass(subpass);
+			//
+			VkSubpassDependency dependency = {};
+				dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+				dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+				// These two specify the operations to wait on and the stages in which these operations occur. 
+				// We need to wait for the swap chain to finish reading from the image before we can access it. 
+				// This can be accomplished by waiting on the color attachment output stage itself.
+				dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependency.srcAccessMask = 0;
+				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+				dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			// Set dependency to the render pass info
+			postProcessingRenderPass->renderPassInfo.dependencyCount = 1;
+			postProcessingRenderPass->renderPassInfo.pDependencies = &dependency;
+
+			postProcessingRenderPass->Create();
+
+			// Frame Buffers
+			swapChainPostProcessingFrameBuffers.resize(swapChain->imageViews.size());
+			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
+				// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
+				VkFramebufferCreateInfo framebufferCreateInfo = {};
+				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferCreateInfo.renderPass = postProcessingRenderPass->handle;
+				framebufferCreateInfo.attachmentCount = 1;
+				framebufferCreateInfo.pAttachments = &swapChain->imageViews[i]; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
+				framebufferCreateInfo.width = swapChain->extent.width;
+				framebufferCreateInfo.height = swapChain->extent.height;
+				framebufferCreateInfo.layers = 1; // refers to the number of layers in image arrays
+				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &swapChainPostProcessingFrameBuffers[i]) != VK_SUCCESS) {
+					throw std::runtime_error("Failed to create framebuffer");
+				}
+			}
+			
+			// Shaders
+			for (auto& pipeline : postProcessingPipelines) {
+				auto* graphicsPipeline = postProcessingRenderPass->NewGraphicsPipeline(renderingDevice, 0);
+				// pipeline configuration
+				graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+				graphicsPipeline->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
+				graphicsPipeline->pipelineCreateInfo.pVertexInputState = &emptyInputState;
+				graphicsPipeline->AddOpaqueAttachment();
+				// Shader stages
+				pipeline.shaderProgram->CreateShaderStages(renderingDevice);
+				graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
+				// Configure
+				pipeline.graphicsPipeline = graphicsPipeline;
+				pipeline.Configure();
+			}
+
+			// Create Graphics Pipelines !
+			postProcessingRenderPass->CreateGraphicsPipelines();
+		}
 	}
 	
 	void DestroyGraphicsPipelines() override {
 		DestroyRasterizationPipelines();
+		
+		// Post-Processing Pipelines
+		if (postProcessingEnabled) {
+			// Frame Buffer
+			for (auto framebuffer : swapChainPostProcessingFrameBuffers) {
+				renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
+			}
+			swapChainPostProcessingFrameBuffers.clear();
+			
+			// Render pass
+			postProcessingRenderPass->DestroyGraphicsPipelines();
+			delete postProcessingRenderPass;
+
+			// Shaders
+			for (auto& pipeline : postProcessingPipelines) {
+				pipeline.shaderProgram->DestroyShaderStages(renderingDevice);
+			}
+		}
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
@@ -598,7 +812,7 @@ protected: // Graphics configuration
 		
 		for (auto& pipeline : rasterizationPipelines) {
 			// We can now bind the graphics pipeline
-			renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle); // The second parameter specifies if the pipeline object is a graphics or compute pipeline.
+			renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle);
 			
 			// Bind Descriptor Sets
 			renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
@@ -610,39 +824,35 @@ protected: // Graphics configuration
 		
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		
-		if (deferredRendering) {
-			TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-			
+		if (postProcessingEnabled) {
 			auto resolvedImage = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? colorImage2 : colorImage;
+			TransitionImageLayout(commandBuffer, resolvedImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
 			
-			//TODO post processing here
-		
-			TransitionImageLayout(commandBuffer, resolvedImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
+			// Begin Render Pass
+			VkRenderPassBeginInfo ppRenderPassInfo = {};
+			ppRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			ppRenderPassInfo.renderPass = postProcessingRenderPass->handle;
+			ppRenderPassInfo.framebuffer = swapChainPostProcessingFrameBuffers[imageIndex]; // We create a framebuffer for each swap chain image that specifies it as color attachment
+			// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
+			ppRenderPassInfo.renderArea.offset = {0, 0};
+			ppRenderPassInfo.renderArea.extent = {swapChain->extent.width, swapChain->extent.height};
+			// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
+			std::array<VkClearValue, 2> clearValues = {};
+			clearValues[0].color = clearColor;
+			clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
+			ppRenderPassInfo.clearValueCount = clearValues.size();
+			ppRenderPassInfo.pClearValues = clearValues.data();
+			//
+			renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &ppRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 			
-			VkImageBlit blit = {};
-				blit.srcOffsets[0] = { 0, 0, 0 };
-				blit.srcOffsets[1] = { width, height, 1 };
-				blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				blit.srcSubresource.mipLevel = 0;
-				blit.srcSubresource.baseArrayLayer = 0;
-				blit.srcSubresource.layerCount = 1;
-				blit.dstOffsets[0] = { 0, 0, 0 };
-				blit.dstOffsets[1] = { (int)swapChain->extent.width, (int)swapChain->extent.height, 1 };
-				blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				blit.dstSubresource.mipLevel = 0;
-				blit.dstSubresource.baseArrayLayer = 0;
-				blit.dstSubresource.layerCount = 1;
-			renderingDevice->CmdBlitImage(
-				commandBuffer,
-				resolvedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				swapChain->images[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				1, &blit,
-				VK_FILTER_LINEAR
-			);
+			// post processing here
+			for (auto& pipeline : postProcessingPipelines) {
+				renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle);
+				renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
+				pipeline.Draw(renderingDevice, commandBuffer);
+			}
 			
-			// TransitionImageLayout(commandBuffer, resolvedImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
-			
-			TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
+			renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		}
 	}
 	
