@@ -3,7 +3,6 @@
 #include "VulkanStructs.hpp"
 #include "VulkanShader.hpp"
 #include "VulkanDevice.hpp"
-#include "VulkanDescriptorSet.hpp"
 #include "VulkanPipelineLayout.hpp"
 
 class VulkanShaderProgram {
@@ -14,15 +13,11 @@ private:
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	
-	std::vector<VulkanDescriptorSet*> descriptorSets {};
-	std::vector<VkDescriptorSetLayout> layouts {};
-
+	VulkanPipelineLayout* pipelineLayout = nullptr;
+	
 public:
 
-	VulkanShaderProgram() {
-
-	}
-	VulkanShaderProgram(const std::vector<VulkanShaderInfo>& infos) {
+	VulkanShaderProgram(VulkanPipelineLayout* pipelineLayout = nullptr, const std::vector<VulkanShaderInfo>& infos = {}) : pipelineLayout(pipelineLayout) {
 		for (auto& info : infos)
 			shaderFiles.push_back(info);
 	}
@@ -67,8 +62,12 @@ public:
 		}
 	}
 	
-	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
-		descriptorSets.push_back(descriptorSet);
+	void SetPipelineLayout(VulkanPipelineLayout* layout) {
+		this->pipelineLayout = layout;
+	}
+	
+	VulkanPipelineLayout* GetPipelineLayout() const {
+		return pipelineLayout;
 	}
 	
 	inline std::vector<VkPipelineShaderStageCreateInfo>* GetStages() {
@@ -83,12 +82,4 @@ public:
 		return &attributes;
 	}
 	
-	std::vector<VkDescriptorSetLayout>* GetDescriptorSetLayouts() {
-		if (layouts.size() > 0) layouts.clear();
-		for (auto* set : descriptorSets) {
-			layouts.push_back(set->GetDescriptorSetLayout());
-		}
-		return &layouts;
-	}
-
 };

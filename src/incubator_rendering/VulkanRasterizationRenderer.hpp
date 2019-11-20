@@ -505,20 +505,18 @@ private: // Renderer Configuration methods
 	
 public: // Scene configuration methods
 	void LoadScene() override {
-		// Descriptor sets
+		// Descriptor sets & Pipeline Layouts
 		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
 		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
-		auto* ppDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(1));
-		ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
-		
-		// Pileline layouts
-		auto* mainPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
-		auto* postProcessingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
-		
+		VulkanPipelineLayout* mainPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
 		mainPipelineLayout->AddDescriptorSet(descriptorSet);
-		postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
-		
-		//////
+		VulkanPipelineLayout* postProcessingPipelineLayout = nullptr;
+		if (postProcessingEnabled) {
+			auto* ppDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+			ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
+			postProcessingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+			postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
+		}
 		
 		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
@@ -581,7 +579,7 @@ public: // Scene configuration methods
 		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
 
 		// Shader program
-		testShader = new VulkanShaderProgram({
+		testShader = new VulkanShaderProgram(mainPipelineLayout, {
 			{"incubator_rendering/assets/shaders/raster.vert"},
 			{"incubator_rendering/assets/shaders/raster.frag"},
 		});
@@ -593,31 +591,23 @@ public: // Scene configuration methods
 			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
 			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
-
-		testShader->AddDescriptorSet(descriptorSet);
-		testShader->AddDescriptorSet(ppDescriptorSet);
-		
-		testShader->LoadShaders();
-		
 		rasterizationPipelines.emplace_back(testShader, vertexBuffer, indexBuffer);
+
 		
 		// Post processing
 		if (postProcessingEnabled) {
 			// Shader program
-			ppShader = new VulkanShaderProgram({
+			ppShader = new VulkanShaderProgram(postProcessingPipelineLayout, {
 				{"incubator_rendering/assets/shaders/raster.pp.vert"},
 				{"incubator_rendering/assets/shaders/raster.pp.frag"},
 			});
-
-			// Descriptor sets
-			
-			ppShader->AddDescriptorSet(descriptorSet);
-			ppShader->AddDescriptorSet(ppDescriptorSet);
-			
-			ppShader->LoadShaders();
-			
 			postProcessingPipelines.emplace_back(ppShader);
+
+
+			ppShader->LoadShaders();
 		}
+		
+		testShader->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -811,12 +801,7 @@ protected: // Graphics configuration
 		/////////////////////////////////////////
 		
 		for (auto& pipeline : rasterizationPipelines) {
-			// We can now bind the graphics pipeline
-			renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle);
-			
-			// Bind Descriptor Sets
-			renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
-
+			pipeline.graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 			// Draw
 			pipeline.Draw(renderingDevice, commandBuffer);
 		}
@@ -847,8 +832,7 @@ protected: // Graphics configuration
 			
 			// post processing here
 			for (auto& pipeline : postProcessingPipelines) {
-				renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->handle);
-				renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline->pipelineLayout, 0/*firstSet*/, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
+				pipeline.graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 				pipeline.Draw(renderingDevice, commandBuffer);
 			}
 			

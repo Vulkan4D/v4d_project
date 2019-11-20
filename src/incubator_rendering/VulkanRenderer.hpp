@@ -279,11 +279,16 @@ protected: // Virtual INIT Methods
 		
 		// Pipeline layouts
 		for (auto* layout : pipelineLayouts) {
-			layout->LoadSetLayouts();
+			layout->Create(renderingDevice);
 		}
 	}
 	
 	virtual void DestroyDescriptorSets() {
+		// Pipeline layouts
+		for (auto* layout : pipelineLayouts) {
+			layout->Destroy(renderingDevice);
+		}
+		
 		// Descriptor Sets
 		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
 		for (auto* set : descriptorSets) set->DestroyDescriptorSetLayout(renderingDevice);

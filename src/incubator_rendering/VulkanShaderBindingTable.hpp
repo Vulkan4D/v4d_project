@@ -18,8 +18,7 @@ private:
 	uint32_t nextHitShaderOffset = 0;
 	uint32_t nextMissShaderOffset = 0;
 	
-	std::vector<VulkanDescriptorSet*> descriptorSets {};
-	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	VulkanPipelineLayout* pipelineLayout = nullptr;
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	
 public:
@@ -28,7 +27,7 @@ public:
 		return pipeline;
 	}
 	
-	VkPipelineLayout GetPipelineLayout() const {
+	VulkanPipelineLayout* GetPipelineLayout() const {
 		return pipelineLayout;
 	}
 	
@@ -70,7 +69,7 @@ public:
 		return index;
 	}
 	
-	VulkanShaderBindingTable(VulkanShaderInfo rgen) {
+	VulkanShaderBindingTable(VulkanPipelineLayout* pipelineLayout, VulkanShaderInfo rgen) : pipelineLayout(pipelineLayout) {
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
 			nullptr, // pNext
@@ -139,33 +138,7 @@ public:
 		}
 	}
 	
-	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
-		descriptorSets.push_back(descriptorSet);
-	}
-	
-	VkPipelineLayout CreatePipelineLayout(VulkanDevice* device) {
-		std::vector<VkDescriptorSetLayout> layouts {};
-		for (auto* set : descriptorSets) {
-			layouts.push_back(set->GetDescriptorSetLayout());
-		}
-		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
-		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutCreateInfo.setLayoutCount = (uint)layouts.size();
-		pipelineLayoutCreateInfo.pSetLayouts = layouts.data();
-		//TODO add pipelineLayoutCreateInfo.pPushConstantRanges
-		
-		if (device->CreatePipelineLayout(&pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-			throw std::runtime_error("Failed to create ray tracing pipeline layout");
-			
-		return pipelineLayout;
-	}
-
-	void DestroyPipelineLayout(VulkanDevice* device) {
-		device->DestroyPipelineLayout(pipelineLayout, nullptr);
-	}
-	
 	VkPipeline CreateRayTracingPipeline(VulkanDevice* device) {
-		CreatePipelineLayout(device);
 		CreateShaderStages(device);
 		
 		VkRayTracingPipelineCreateInfoNV rayTracingPipelineInfo {};
@@ -175,7 +148,7 @@ public:
 		rayTracingPipelineInfo.groupCount = (uint)groups.size();
 		rayTracingPipelineInfo.pGroups = groups.data();
 		rayTracingPipelineInfo.maxRecursionDepth = 2;
-		rayTracingPipelineInfo.layout = pipelineLayout;
+		rayTracingPipelineInfo.layout = pipelineLayout->handle;
 		
 		if (device->CreateRayTracingPipelinesNV(VK_NULL_HANDLE, 1, &rayTracingPipelineInfo, nullptr, &pipeline) != VK_SUCCESS) //TODO support multiple ray tracing pipelines
 			throw std::runtime_error("Failed to create ray tracing pipelines");
@@ -186,7 +159,6 @@ public:
 	void DestroyRayTracingPipeline(VulkanDevice* device) {
 		device->DestroyPipeline(pipeline, nullptr);
 		DestroyShaderStages(device);
-		DestroyPipelineLayout(device);
 	}
 	
 	void WriteShaderBindingTableToBuffer(VulkanDevice* device, VulkanBuffer* buffer, uint32_t shaderGroupHandleSize) {

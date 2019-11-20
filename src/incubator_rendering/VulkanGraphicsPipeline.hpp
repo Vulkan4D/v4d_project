@@ -3,19 +3,19 @@
 #include "VulkanStructs.hpp"
 #include "VulkanDevice.hpp"
 #include "VulkanShader.hpp"
+#include "VulkanPipelineLayout.hpp"
 
 class VulkanGraphicsPipeline {
 private:
 	VulkanDevice* device;
 
-	std::vector<VkDescriptorSetLayout>* descriptorSetLayouts;
 	std::vector<VkPipelineShaderStageCreateInfo>* shaderStages;
 	std::vector<VkVertexInputBindingDescription>* bindings;
 	std::vector<VkVertexInputAttributeDescription>* attributes;
 
 public:
 	VkPipeline handle = VK_NULL_HANDLE;
-	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+	VulkanPipelineLayout* pipelineLayout;
 
 	VkPipelineRasterizationStateCreateInfo rasterizer {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		nullptr, // const void* pNext
@@ -100,14 +100,6 @@ public:
 		vertexInputInfo.vertexAttributeDescriptionCount = attributes->size();
 		vertexInputInfo.pVertexAttributeDescriptions = attributes->data();
 
-		// Pipeline Layout
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo {};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		if (descriptorSetLayouts->size() > 0) {
-			pipelineLayoutInfo.setLayoutCount = descriptorSetLayouts->size();
-			pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts->data();
-		}
-
 		// Dynamic states
 		if (dynamicStates.size() > 0) {
 			dynamicStateCreateInfo.dynamicStateCount = (uint)dynamicStates.size();
@@ -117,14 +109,7 @@ public:
 			pipelineCreateInfo.pDynamicState = nullptr;
 		}
 		
-		//TODO
-		pipelineLayoutInfo.pushConstantRangeCount = 0;
-		pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-		if (device->CreatePipelineLayout(&pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create pipeline layout");
-		}
-		pipelineCreateInfo.layout = pipelineLayout;
+		pipelineCreateInfo.layout = pipelineLayout->handle;
 
 		// Fixed functions
 		pipelineCreateInfo.pVertexInputState = &vertexInputInfo;
@@ -148,14 +133,13 @@ public:
 
 	~VulkanGraphicsPipeline() {
 		device->DestroyPipeline(handle, nullptr);
-		device->DestroyPipelineLayout(pipelineLayout, nullptr);
 	}
 
 	void SetShaderProgram(VulkanShaderProgram* shaderProgram) {
 		shaderStages = shaderProgram->GetStages();
 		bindings = shaderProgram->GetBindings();
 		attributes = shaderProgram->GetAttributes();
-		descriptorSetLayouts = shaderProgram->GetDescriptorSetLayouts();
+		pipelineLayout = shaderProgram->GetPipelineLayout();
 	}
 
 	void AddAlphaBlendingAttachment() {
@@ -182,6 +166,11 @@ public:
 		blendingAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 		blendingAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
 		colorBlendAttachments.push_back(blendingAttachmentState);
+	}
+	
+	void Bind(VulkanDevice* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {
+		device->CmdBindPipeline(commandBuffer, bindPoint, handle);
+		pipelineLayout->Bind(device, commandBuffer);
 	}
 
 };

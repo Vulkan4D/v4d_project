@@ -470,10 +470,25 @@ private: // Renderer Configuration methods
 	
 public: // Scene configuration methods
 	void LoadScene() override {
+		
+		// Buffers
 		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		VulkanBuffer* sphereBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
+		// Descriptor sets
+		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		descriptorSet->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
+		
+		// Pipeline layouts
+		auto* rayTracingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		rayTracingPipelineLayout->AddDescriptorSet(descriptorSet);
+
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
 			{/*pos*/{-0.5,-0.5, 0.0}, /*roughness*/0.0f, /*normal*/{ 0.0, 0.0, 1.0}, /*emissive*/0.0f, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*specular*/1.0f, /*metallic*/0.2f},
@@ -547,24 +562,11 @@ public: // Scene configuration methods
 		sphereBuffer->AddSrcDataPtr(&spheresGeometry1->aabbData);
 
 		// Ray tracing shaders
-		shaderBindingTable = new VulkanShaderBindingTable("incubator_rendering/assets/shaders/rtx.rgen");
+		shaderBindingTable = new VulkanShaderBindingTable(rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
 		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
 		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
-		
-		// Descriptor sets
-		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
-		descriptorSet->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet->AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
-		descriptorSet->AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet->AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
-		
-		shaderBindingTable->AddDescriptorSet(descriptorSet);
-		
-		shaderBindingTable->LoadShaders();
 		
 		// Assign instances
 		glm::mat3x4 transform {
@@ -592,6 +594,8 @@ public: // Scene configuration methods
 			&rayTracingBottomLevelAccelerationStructures[1]
 		});
 		
+		
+		shaderBindingTable->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -611,6 +615,12 @@ public: // Scene configuration methods
 			delete buffer;
 		}
 		stagedBuffers.clear();
+		
+		// Pipeline Layouts
+		for (auto* layout : pipelineLayouts) {
+			delete layout;
+		}
+		pipelineLayouts.clear();
 		
 		// Descriptor sets
 		for (auto* set : descriptorSets) {
@@ -652,7 +662,7 @@ protected: // Graphics configuration
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipeline());
-		renderingDevice->CmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipelineLayout(), 0, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, 0);
+		shaderBindingTable->GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
 		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable->GetMissGroupOffset();
