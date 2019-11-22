@@ -155,6 +155,19 @@ public:
 		colorBlendAttachments.push_back(blendingAttachmentState);
 	}
 
+	void AddColorAddAttachment() {
+		VkPipelineColorBlendAttachmentState blendingAttachmentState {};
+		blendingAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		blendingAttachmentState.blendEnable = VK_TRUE;
+		blendingAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		blendingAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		blendingAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+		blendingAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		blendingAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		blendingAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachments.push_back(blendingAttachmentState);
+	}
+
 	void AddOpaqueAttachment() {
 		VkPipelineColorBlendAttachmentState blendingAttachmentState {};
 		blendingAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -166,6 +179,30 @@ public:
 		blendingAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 		blendingAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
 		colorBlendAttachments.push_back(blendingAttachmentState);
+	}
+	
+	void AddOitAttachments() {
+		VkPipelineColorBlendAttachmentState colorBlending {};
+		colorBlending.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colorBlending.blendEnable = VK_TRUE;
+		colorBlending.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlending.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlending.colorBlendOp = VK_BLEND_OP_ADD;
+		colorBlending.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlending.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		colorBlending.alphaBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachments.push_back(colorBlending);
+		
+		VkPipelineColorBlendAttachmentState oitBufferBlending {};
+		oitBufferBlending.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		oitBufferBlending.blendEnable = VK_TRUE;
+		oitBufferBlending.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		oitBufferBlending.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		oitBufferBlending.colorBlendOp = VK_BLEND_OP_ADD;
+		oitBufferBlending.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		oitBufferBlending.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		oitBufferBlending.alphaBlendOp = VK_BLEND_OP_ADD;
+		colorBlendAttachments.push_back(oitBufferBlending);
 	}
 	
 	void Bind(VulkanDevice* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {

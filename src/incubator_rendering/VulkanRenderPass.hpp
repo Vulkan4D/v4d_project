@@ -10,10 +10,10 @@ private:
 
 public:
 	VkRenderPassCreateInfo renderPassInfo {};
-	std::vector<VkSubpassDescription> subpasses;
-	std::vector<VkAttachmentDescription> attachments; // This struct defines the output data from the fragment shader (o_color)
-	VkRenderPass handle;
-	std::vector<VulkanGraphicsPipeline*> graphicsPipelines;
+	std::vector<VkSubpassDescription> subpasses {};
+	std::vector<VkAttachmentDescription> attachments {}; // This struct defines the output data from the fragment shader (o_color)
+	VkRenderPass handle = VK_NULL_HANDLE;
+	std::vector<VulkanGraphicsPipeline*> graphicsPipelines {};
 
 	VulkanRenderPass(VulkanDevice* device) : device(device) {
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -39,8 +39,10 @@ public:
 		subpasses.push_back(subpass);
 	}
 
-	void AddAttachment(VkAttachmentDescription &attachment) {
+	uint32_t AddAttachment(VkAttachmentDescription &attachment) {
+		uint32_t index = attachments.size();
 		attachments.push_back(attachment);
+		return index;
 	}
 
 	VulkanGraphicsPipeline* NewGraphicsPipeline(VulkanDevice* device, uint32_t subpass = 0) {

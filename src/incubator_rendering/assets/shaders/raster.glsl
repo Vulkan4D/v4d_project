@@ -1,5 +1,3 @@
-// This shader needs 3 empty vertices
-
 #version 460 core
 #extension GL_ARB_separate_shader_objects : enable
 
@@ -13,6 +11,7 @@ layout(set = 0, binding = 0) uniform UBO {
 	dmat4 proj;
 	dmat4 view;
 	dmat4 model;
+	dvec3 cameraPosition;
 } ubo;
 
 ##################################################################
@@ -41,7 +40,12 @@ void main() {
 layout(location = 0) in V2F v;
 
 layout(location = 0) out vec4 o_color;
+// layout(location = 1) out vec4 oitBuffer;
 
 void main() {
 	o_color = v.color;
+	
+	// float oit_weight = o_color.a;
+	// o_color = vec4(o_color.rgb * o_color.a, o_color.a) * oit_weight;
+	// oitBuffer = vec4(0,0,0, o_color.a);
 }

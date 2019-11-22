@@ -17,6 +17,7 @@ struct UBO {
 	glm::dmat4 proj;
 	glm::dmat4 view;
 	glm::dmat4 model;
+	// glm::dvec3 cameraPosition;
 };
 
 class VulkanRasterizationRenderer : public VulkanRenderer {
@@ -29,6 +30,7 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	VulkanShaderProgram* testShader;
 	VulkanShaderProgram* ppShader;
 	CombinedImageSampler postProcessingSampler;
+	CombinedImageSampler oitBufferSampler;
 	
 private: // Rasterization Rendering
 	struct RenderingPipeline {
@@ -42,41 +44,46 @@ private: // Rasterization Rendering
 	};
 	struct VertexRasterizationPipeline : public RenderingPipeline {
 		VulkanBuffer* vertexBuffer;
-		VulkanBuffer* indexBuffer;
+		VulkanBuffer* indexBuffer = nullptr;
+		uint32_t vertexCount = 0;
+		
+		VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		
 		VertexRasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer)
 		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
 		
+		VertexRasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, uint32_t vertexCount)
+		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), vertexCount(vertexCount) {}
+		
 		void Configure() {
-			
+			graphicsPipeline->inputAssembly.topology = topology;
+			graphicsPipeline->rasterizer.cullMode = VK_CULL_MODE_NONE;
+			graphicsPipeline->depthStencilState.depthWriteEnable = VK_FALSE;
+			graphicsPipeline->depthStencilState.depthTestEnable = VK_FALSE;
 		}
 		
 		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
-			// Test Object
 			VkDeviceSize offsets[] = {0};
 			device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
-			// device->CmdDraw(commandBuffer,
-			// 	static_cast<uint32_t>(testObjectVertices.size()), // vertexCount
-			// 	1, // instanceCount
-			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			// );
-			device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-			device->CmdDrawIndexed(commandBuffer,
-				static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
-				1, // instanceCount
-				0, // firstVertex (defines the lowest value of gl_VertexIndex)
-				0, // vertexOffset
-				0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			);
-			
-			// // simple draw triangle...
-			// device->CmdDraw(commandBuffer,
-			// 	3, // vertexCount
-			// 	1, // instanceCount
-			// 	0, // firstVertex (defines the lowest value of gl_VertexIndex)
-			// 	0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-			// );
+			if (indexBuffer == nullptr) {
+				// Draw vertices
+				device->CmdDraw(commandBuffer,
+					vertexCount, // vertexCount
+					1, // instanceCount
+					0, // firstVertex (defines the lowest value of gl_VertexIndex)
+					0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+				);
+			} else {
+				// Draw indices
+				device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+				device->CmdDrawIndexed(commandBuffer,
+					static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
+					1, // instanceCount
+					0, // firstVertex (defines the lowest value of gl_VertexIndex)
+					0, // vertexOffset
+					0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+				);
+			}
 		}
 	};
 	struct PostProcessingPipeline : public RenderingPipeline {
@@ -104,19 +111,27 @@ private: // Rasterization Rendering
 	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
 	VkImageView colorImageView = VK_NULL_HANDLE;
 	VkFormat colorImageFormat;
+	// Order-Independent Transparency
+	VkImage oitBufferImage = VK_NULL_HANDLE;
+	VkDeviceMemory oitBufferImageMemory = VK_NULL_HANDLE;
+	VkImageView oitBufferImageView = VK_NULL_HANDLE;
+	VkFormat oitBufferImageFormat;
 	// tmp resolve image for multisampled deferred rendering
-	VkImage colorImage2 = VK_NULL_HANDLE;
-	VkDeviceMemory colorImageMemory2 = VK_NULL_HANDLE;
-	VkImageView colorImageView2 = VK_NULL_HANDLE;
+	VkImage ppImage = VK_NULL_HANDLE;
+	VkDeviceMemory ppImageMemory = VK_NULL_HANDLE;
+	VkImageView ppImageView = VK_NULL_HANDLE;
 	// Depth Buffer
 	VkImage depthImage = VK_NULL_HANDLE;
 	VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
 	VkImageView depthImageView = VK_NULL_HANDLE;
 	VkFormat depthImageFormat;
-	// MultiSampling
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_2_BIT;
-	const bool postProcessingEnabled = true;
-	float renderingResolutionScale = !postProcessingEnabled?1: 2.0f;
+	
+	// Graphics settings
+	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
+	const bool postProcessingEnabled = 							true;
+	const bool oitEnabled = !postProcessingEnabled?false : 		false;
+	float renderingResolutionScale = !postProcessingEnabled?1: 	2.0;
+	
 	
 	void CreateRasterizationResources() {
 		VkImageViewCreateInfo viewInfo = {};
@@ -158,6 +173,54 @@ private: // Rasterization Rendering
 		}
 		TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
 		
+		if (oitEnabled) {
+			oitBufferImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+			renderingDevice->CreateImage(
+				width,
+				height,
+				1, msaaSamples,
+				colorImageFormat,
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				oitBufferImage,
+				oitBufferImageMemory
+			);
+			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			viewInfo.image = oitBufferImage;
+			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewInfo.format = colorImageFormat;
+			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			viewInfo.subresourceRange.baseMipLevel = 0;
+			viewInfo.subresourceRange.levelCount = 1;
+			viewInfo.subresourceRange.baseArrayLayer = 0;
+			viewInfo.subresourceRange.layerCount = 1;
+			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &oitBufferImageView) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create texture image view");
+			}
+			TransitionImageLayout(oitBufferImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+			
+			// Create sampler
+			VkSamplerCreateInfo sampler {};
+			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.magFilter = VK_FILTER_LINEAR;
+			sampler.minFilter = VK_FILTER_LINEAR;
+			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			sampler.addressModeV = sampler.addressModeU;
+			sampler.addressModeW = sampler.addressModeU;
+			sampler.mipLodBias = 0.0f;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.compareOp = VK_COMPARE_OP_NEVER;
+			sampler.minLod = 0.0f;
+			sampler.maxLod = 1.0f;
+			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+			if (renderingDevice->CreateSampler(&sampler, nullptr, &oitBufferSampler.sampler) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create sampler");
+			oitBufferSampler.imageView = oitBufferImageView;
+		}
+		
 		if (postProcessingEnabled) {
 			// tmp resolve image for multisampled deferred rendering
 			renderingDevice->CreateImage(
@@ -168,11 +231,11 @@ private: // Rasterization Rendering
 				VK_IMAGE_TILING_OPTIMAL,
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				colorImage2,
-				colorImageMemory2
+				ppImage,
+				ppImageMemory
 			);
 			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = colorImage2;
+			viewInfo.image = ppImage;
 			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			viewInfo.format = colorImageFormat;
 			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -180,10 +243,10 @@ private: // Rasterization Rendering
 			viewInfo.subresourceRange.levelCount = 1;
 			viewInfo.subresourceRange.baseArrayLayer = 0;
 			viewInfo.subresourceRange.layerCount = 1;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &colorImageView2) != VK_SUCCESS) {
+			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &ppImageView) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to create texture image view");
 			}
-			TransitionImageLayout(colorImage2, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+			TransitionImageLayout(ppImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
 			
 			// Create sampler
 			VkSamplerCreateInfo sampler {};
@@ -203,7 +266,7 @@ private: // Rasterization Rendering
 			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
 			if (renderingDevice->CreateSampler(&sampler, nullptr, &postProcessingSampler.sampler) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create sampler");
-			postProcessingSampler.imageView = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? colorImageView2 : colorImageView;
+			postProcessingSampler.imageView = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? ppImageView : colorImageView;
 		}
 		
 		// Depth image Format
@@ -243,12 +306,19 @@ private: // Rasterization Rendering
 			renderingDevice->FreeMemory(colorImageMemory, nullptr);
 			colorImage = VK_NULL_HANDLE;
 		}
-		if (postProcessingEnabled && colorImage2 != VK_NULL_HANDLE) {
+		if (postProcessingEnabled && ppImage != VK_NULL_HANDLE) {
 			renderingDevice->DestroySampler(postProcessingSampler.sampler, nullptr);
-			renderingDevice->DestroyImageView(colorImageView2, nullptr);
-			renderingDevice->DestroyImage(colorImage2, nullptr);
-			renderingDevice->FreeMemory(colorImageMemory2, nullptr);
-			colorImage2 = VK_NULL_HANDLE;
+			renderingDevice->DestroyImageView(ppImageView, nullptr);
+			renderingDevice->DestroyImage(ppImage, nullptr);
+			renderingDevice->FreeMemory(ppImageMemory, nullptr);
+			ppImage = VK_NULL_HANDLE;
+		}
+		if (oitEnabled && oitBufferImage != VK_NULL_HANDLE) {
+			renderingDevice->DestroySampler(oitBufferSampler.sampler, nullptr);
+			renderingDevice->DestroyImageView(oitBufferImageView, nullptr);
+			renderingDevice->DestroyImage(oitBufferImage, nullptr);
+			renderingDevice->FreeMemory(oitBufferImageMemory, nullptr);
+			oitBufferImage = VK_NULL_HANDLE;
 		}
 		if (depthImage != VK_NULL_HANDLE) {
 			renderingDevice->DestroyImageView(depthImageView, nullptr);
@@ -295,16 +365,36 @@ private: // Rasterization Rendering
 			// Every subpass references one or more of the attachments that we've described using the structure in the previous sections. 
 			// These references are themselves VkAttachmentReference structs that look like this:
 		renderPass->AddAttachment(colorAttachment);
-		VkAttachmentReference colorAttachmentRef = {
+		VkAttachmentReference colorAttachmentRefs[2] = {{
 			0, // layout(location = 0) for output data in the fragment shader
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-		};
+		}};
+		uint colorAttachmentCount = 1;
 		// The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array.
 		// Our array consists of a single VkAttachmentDescription, so its index is 0. 
 		// The layout specifies which layout we would like the attachment to have during a subpass that uses this reference.
 		// Vulkan will automatically transition the attachment to this layout when the subpass is started.
 		// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
 
+		if (oitEnabled) {
+			// Color Attachment (Fragment shader Standard Output)
+			VkAttachmentDescription oitBufferAttachment = {}; // defines the output data from the fragment shader (o_color)
+				oitBufferAttachment.format = oitBufferImageFormat;
+				oitBufferAttachment.samples = msaaSamples; // Need more with multisampling
+				// Color and depth data
+				oitBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				oitBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil data
+				oitBufferAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				oitBufferAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				oitBufferAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				oitBufferAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			renderPass->AddAttachment(oitBufferAttachment);
+			colorAttachmentRefs[1] = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+			++colorAttachmentCount;
+		}
+		
+		
 		// Depth Attachment
 		VkAttachmentDescription depthAttachment = {};
 			depthAttachment.format = depthImageFormat;
@@ -315,9 +405,10 @@ private: // Rasterization Rendering
 			depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		renderPass->AddAttachment(depthAttachment);
-		VkAttachmentReference depthAttachmentRef = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-
+		VkAttachmentReference depthAttachmentRef = {renderPass->AddAttachment(depthAttachment), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+		
+		
+		
 		VkAttachmentReference colorAttachmentResolveRef;
 		if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
 			// Resolve Attachment (Final Output Color)
@@ -330,15 +421,15 @@ private: // Rasterization Rendering
 				colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				colorAttachmentResolve.finalLayout = postProcessingEnabled? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-			renderPass->AddAttachment(colorAttachmentResolve);
-			colorAttachmentResolveRef = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+			colorAttachmentResolveRef = {renderPass->AddAttachment(colorAttachmentResolve), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 		}
+		
 		
 		// SubPass
 		VkSubpassDescription subpass = {};
 			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; // VK_PIPELINE_BIND_POINT_COMPUTE is also possible !!!
-			subpass.colorAttachmentCount = 1;
-			subpass.pColorAttachments = &colorAttachmentRef;
+			subpass.colorAttachmentCount = colorAttachmentCount;
+			subpass.pColorAttachments = colorAttachmentRefs;
 			subpass.pDepthStencilAttachment = &depthAttachmentRef;
 			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) subpass.pResolveAttachments = &colorAttachmentResolveRef;
 		renderPass->AddSubpass(subpass);
@@ -405,9 +496,10 @@ private: // Rasterization Rendering
 			
 			std::vector<VkImageView> attachments {
 				(msaaSamples != VK_SAMPLE_COUNT_1_BIT || postProcessingEnabled)? colorImageView : swapChain->imageViews[i],
-				depthImageView,
 			};
-			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) attachments.push_back(postProcessingEnabled? colorImageView2 : swapChain->imageViews[i]);
+			if (oitEnabled) attachments.push_back(oitBufferImageView);
+			attachments.push_back(depthImageView);
+			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) attachments.push_back(postProcessingEnabled? ppImageView : swapChain->imageViews[i]);
 			
 			// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
 			VkFramebufferCreateInfo framebufferCreateInfo = {};
@@ -431,7 +523,9 @@ private: // Rasterization Rendering
 			// Pipeline Create Info
 			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
 			// Color Blending
-			graphicsPipeline->AddAlphaBlendingAttachment();
+			if (oitEnabled) graphicsPipeline->AddOitAttachments();
+			// else graphicsPipeline->AddAlphaBlendingAttachment();
+			else graphicsPipeline->AddColorAddAttachment();
 			// Shader stages
 			pipeline.shaderProgram->CreateShaderStages(renderingDevice);
 			graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
@@ -504,7 +598,42 @@ private: // Renderer Configuration methods
 	}
 	
 public: // Scene configuration methods
+
+	struct Galaxy {
+		glm::vec4 posr;
+	};
+	
+	std::vector<Galaxy> galaxies {
+		{{-10, 0, 0, 4 * renderingResolutionScale}},
+		{{-2, 4, 0, 4 * renderingResolutionScale}},
+		{{-1, 1, 5, 4 * renderingResolutionScale}},
+		{{-15, -1, -2, 4 * renderingResolutionScale}},
+	};
+	VulkanShaderProgram* galaxyShader = nullptr;
+	
 	void LoadScene() override {
+		// Galaxy
+		
+		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT);
+		VulkanPipelineLayout* galaxyPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		galaxyPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
+		VulkanBuffer* galaxiesBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		galaxyShader = new VulkanShaderProgram(galaxyPipelineLayout, {
+			{"incubator_rendering/assets/shaders/galaxy.geom"},
+			{"incubator_rendering/assets/shaders/galaxy.vert"},
+			{"incubator_rendering/assets/shaders/galaxy.frag"},
+		});
+		galaxyShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
+			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
+		});
+		galaxiesBuffer->AddSrcDataPtr(&galaxies);
+		rasterizationPipelines.emplace_back(galaxyShader, galaxiesBuffer, galaxies.size()).topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyShader->LoadShaders();
+		
+		
+		// Objects
+		
 		// Descriptor sets & Pipeline Layouts
 		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
 		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
@@ -514,6 +643,7 @@ public: // Scene configuration methods
 		if (postProcessingEnabled) {
 			auto* ppDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
 			ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
+			if (oitEnabled) ppDescriptorSet->AddBinding_combinedImageSampler(1, &oitBufferSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
 			postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
 		}
@@ -523,15 +653,15 @@ public: // Scene configuration methods
 		
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/-1.5,-1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/ 1.5,-1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/ 1.5, 1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
-			{/*pos*/-1.5, 1.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/-0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
+			{/*pos*/ 0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
+			{/*pos*/ 0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
+			{/*pos*/-0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
 			//
-			{/*pos*/-1.5,-1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/ 1.5,-1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/ 1.5, 1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
-			{/*pos*/-1.5, 1.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/-0.5,-0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/ 0.5,-0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/ 0.5, 0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
+			{/*pos*/-0.5, 0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
 			
 			// bottom white
 			/*  8 */{/*pos*/-8.0,-8.0,-2.0, /*color*/{1.0,1.0,1.0, 1.0}},
@@ -565,12 +695,12 @@ public: // Scene configuration methods
 		}, {
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
-			8, 9, 10, 10, 11, 8,
 			//
-			13, 12, 14, 14, 12, 15,
-			16, 17, 18, 18, 17, 19,
-			20, 21, 22, 22, 21, 23,
-			25, 24, 26, 26, 27, 25,
+			// 8, 9, 10, 10, 11, 8,
+			// 13, 12, 14, 14, 12, 15,
+			// 16, 17, 18, 18, 17, 19,
+			// 20, 21, 22, 22, 21, 23,
+			// 25, 24, 26, 26, 27, 25,
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
@@ -785,9 +915,10 @@ protected: // Graphics configuration
 		renderPassInfo.renderArea.offset = {0, 0};
 		renderPassInfo.renderArea.extent = {(uint)width, (uint)height};
 		// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-		std::array<VkClearValue, 2> clearValues = {};
+		std::array<VkClearValue, 3> clearValues = {};
 		clearValues[0].color = clearColor;
 		clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
+		clearValues[2].color = {0.0f,0.0f,0.0f,0.0f};
 		renderPassInfo.clearValueCount = clearValues.size();
 		renderPassInfo.pClearValues = clearValues.data();
 		//
@@ -809,8 +940,10 @@ protected: // Graphics configuration
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		
 		if (postProcessingEnabled) {
-			auto resolvedImage = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? colorImage2 : colorImage;
+			auto resolvedImage = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? ppImage : colorImage;
 			TransitionImageLayout(commandBuffer, resolvedImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
+			
+			if (oitEnabled) TransitionImageLayout(commandBuffer, oitBufferImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
 			
 			// Begin Render Pass
 			VkRenderPassBeginInfo ppRenderPassInfo = {};
@@ -821,9 +954,8 @@ protected: // Graphics configuration
 			ppRenderPassInfo.renderArea.offset = {0, 0};
 			ppRenderPassInfo.renderArea.extent = {swapChain->extent.width, swapChain->extent.height};
 			// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-			std::array<VkClearValue, 2> clearValues = {};
+			std::array<VkClearValue, 1> clearValues = {};
 			clearValues[0].color = clearColor;
-			clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
 			ppRenderPassInfo.clearValueCount = clearValues.size();
 			ppRenderPassInfo.pClearValues = clearValues.data();
 			//
@@ -849,6 +981,7 @@ protected: // Methods executed on every frame
 		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
 		// Current camera position
+		// ubo.cameraPosition = camPosition;
 		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1));
 		// Projection
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
