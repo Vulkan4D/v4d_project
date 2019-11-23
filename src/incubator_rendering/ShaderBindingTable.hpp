@@ -1,15 +1,15 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanShader.hpp"
-#include "VulkanDevice.hpp"
+#include "Shader.hpp"
+#include "Device.hpp"
 
-class VulkanShaderBindingTable {
+class ShaderBindingTable {
 private:
 	
-	std::map<uint32_t, VulkanShaderInfo> shaderFiles;
+	std::map<uint32_t, ShaderInfo> shaderFiles;
 	std::vector<VkRayTracingShaderGroupCreateInfoNV> groups;
-	std::vector<VulkanShader> shaderObjects;
+	std::vector<Shader> shaderObjects;
 	std::vector<VkPipelineShaderStageCreateInfo> stages;
 	
 	uint32_t hitGroupOffset = 0;
@@ -18,7 +18,7 @@ private:
 	uint32_t nextHitShaderOffset = 0;
 	uint32_t nextMissShaderOffset = 0;
 	
-	VulkanPipelineLayout* pipelineLayout = nullptr;
+	PipelineLayout* pipelineLayout = nullptr;
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	
 public:
@@ -27,7 +27,7 @@ public:
 		return pipeline;
 	}
 	
-	VulkanPipelineLayout* GetPipelineLayout() const {
+	PipelineLayout* GetPipelineLayout() const {
 		return pipelineLayout;
 	}
 	
@@ -55,7 +55,7 @@ public:
 		// closestHitShader must be either VK_SHADER_UNUSED_NV or a valid index into pStages referring to a shader of VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV
 		// anyHitShader must be either VK_SHADER_UNUSED_NV or a valid index into pStages referring to a shader of VK_SHADER_STAGE_ANY_HIT_BIT_NV
 	
-	uint32_t GetOrAddShaderFileIndex(VulkanShaderInfo&& shader) {
+	uint32_t GetOrAddShaderFileIndex(ShaderInfo&& shader) {
 		uint32_t index = 0;
 		for (auto&[i, s] : shaderFiles) {
 			if (s.filepath == shader.filepath) {
@@ -69,7 +69,7 @@ public:
 		return index;
 	}
 	
-	VulkanShaderBindingTable(VulkanPipelineLayout* pipelineLayout, VulkanShaderInfo rgen) : pipelineLayout(pipelineLayout) {
+	ShaderBindingTable(PipelineLayout* pipelineLayout, ShaderInfo rgen) : pipelineLayout(pipelineLayout) {
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
 			nullptr, // pNext
@@ -81,7 +81,7 @@ public:
 		});
 	}
 	
-	uint32_t AddMissShader(VulkanShaderInfo rmiss) {
+	uint32_t AddMissShader(ShaderInfo rmiss) {
 		if (missGroupOffset == 0) missGroupOffset = groups.size();
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
@@ -95,7 +95,7 @@ public:
 		return nextMissShaderOffset++;
 	}
 	
-	uint32_t AddHitShader(VulkanShaderInfo rchit, VulkanShaderInfo rahit = "", VulkanShaderInfo rint = "") {
+	uint32_t AddHitShader(ShaderInfo rchit, ShaderInfo rahit = "", ShaderInfo rint = "") {
 		if (hitGroupOffset == 0) hitGroupOffset = groups.size();
 		groups.push_back({
 			VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV,
@@ -120,7 +120,7 @@ public:
 		shaderObjects.clear();
 	}
 	
-	void CreateShaderStages(VulkanDevice* device) {
+	void CreateShaderStages(Device* device) {
 		if (stages.size() == 0) {
 			for (auto& shader : shaderObjects) {
 				shader.CreateShaderModule(device);
@@ -129,7 +129,7 @@ public:
 		}
 	}
 	
-	void DestroyShaderStages(VulkanDevice* device) {
+	void DestroyShaderStages(Device* device) {
 		if (stages.size() > 0) {
 			stages.clear();
 			for (auto& shader : shaderObjects) {
@@ -138,7 +138,7 @@ public:
 		}
 	}
 	
-	VkPipeline CreateRayTracingPipeline(VulkanDevice* device) {
+	VkPipeline CreateRayTracingPipeline(Device* device) {
 		CreateShaderStages(device);
 		
 		VkRayTracingPipelineCreateInfoNV rayTracingPipelineInfo {};
@@ -156,12 +156,12 @@ public:
 		return pipeline;
 	}
 	
-	void DestroyRayTracingPipeline(VulkanDevice* device) {
+	void DestroyRayTracingPipeline(Device* device) {
 		device->DestroyPipeline(pipeline, nullptr);
 		DestroyShaderStages(device);
 	}
 	
-	void WriteShaderBindingTableToBuffer(VulkanDevice* device, VulkanBuffer* buffer, uint32_t shaderGroupHandleSize) {
+	void WriteShaderBindingTableToBuffer(Device* device, Buffer* buffer, uint32_t shaderGroupHandleSize) {
 		uint32_t sbtSize = shaderGroupHandleSize * groups.size();
 		uint8_t* data;
 		device->MapMemory(buffer->memory, 0, sbtSize, 0, (void**)&data);

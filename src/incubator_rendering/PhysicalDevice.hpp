@@ -2,7 +2,7 @@
 
 #include "VulkanStructs.hpp"
 
-class VulkanGPU {
+class PhysicalDevice {
 private:
 	xvk::Interface::InstanceInterface* vulkanInstance;
 	VkPhysicalDevice handle;
@@ -13,10 +13,10 @@ private:
 	std::vector<VkExtensionProperties>* supportedExtensions = nullptr;
 
 public:
-	VulkanGPU(xvk::Interface::InstanceInterface* vulkanInstance, VkPhysicalDevice handle) : vulkanInstance(vulkanInstance), handle(handle) {
+	PhysicalDevice(xvk::Interface::InstanceInterface* vulkanInstance, VkPhysicalDevice handle) : vulkanInstance(vulkanInstance), handle(handle) {
 		// Properties
 		vulkanInstance->GetPhysicalDeviceProperties(handle, &deviceProperties);
-		LOG_VERBOSE("DETECTED GPU: " << deviceProperties.deviceName);
+		LOG_VERBOSE("DETECTED PhysicalDevice: " << deviceProperties.deviceName);
 		// Features
 		vulkanInstance->GetPhysicalDeviceFeatures(handle, &deviceFeatures);
 		// Queue Families
@@ -31,7 +31,7 @@ public:
 		vulkanInstance->EnumerateDeviceExtensionProperties(handle, nullptr, &supportedExtensionsCount, supportedExtensions->data());
 	}
 
-	~VulkanGPU() {
+	~PhysicalDevice() {
 		delete queueFamilies;
 		delete supportedExtensions;
 	}

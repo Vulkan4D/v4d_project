@@ -1,13 +1,13 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanDevice.hpp"
-#include "VulkanShader.hpp"
-#include "VulkanPipelineLayout.hpp"
+#include "Device.hpp"
+#include "Shader.hpp"
+#include "PipelineLayout.hpp"
 
-class VulkanGraphicsPipeline {
+class GraphicsPipeline {
 private:
-	VulkanDevice* device;
+	Device* device;
 
 	std::vector<VkPipelineShaderStageCreateInfo>* shaderStages;
 	std::vector<VkVertexInputBindingDescription>* bindings;
@@ -15,7 +15,7 @@ private:
 
 public:
 	VkPipeline handle = VK_NULL_HANDLE;
-	VulkanPipelineLayout* pipelineLayout;
+	PipelineLayout* pipelineLayout;
 
 	VkPipelineRasterizationStateCreateInfo rasterizer {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		nullptr, // const void* pNext
@@ -68,7 +68,7 @@ public:
 	VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {};
 	std::vector<VkDynamicState> dynamicStates {}; // Dynamic settings that CAN be changed at runtime but NOT every frame
 
-	VulkanGraphicsPipeline(VulkanDevice* device) : device(device) {
+	GraphicsPipeline(Device* device) : device(device) {
 		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 		dynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -131,11 +131,11 @@ public:
 		}
 	}
 
-	~VulkanGraphicsPipeline() {
+	~GraphicsPipeline() {
 		device->DestroyPipeline(handle, nullptr);
 	}
 
-	void SetShaderProgram(VulkanShaderProgram* shaderProgram) {
+	void SetShaderProgram(ShaderProgram* shaderProgram) {
 		shaderStages = shaderProgram->GetStages();
 		bindings = shaderProgram->GetBindings();
 		attributes = shaderProgram->GetAttributes();
@@ -205,7 +205,7 @@ public:
 		colorBlendAttachments.push_back(oitBufferBlending);
 	}
 	
-	void Bind(VulkanDevice* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {
+	void Bind(Device* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {
 		device->CmdBindPipeline(commandBuffer, bindPoint, handle);
 		pipelineLayout->Bind(device, commandBuffer);
 	}

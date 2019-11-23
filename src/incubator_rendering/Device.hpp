@@ -1,11 +1,11 @@
 #pragma once
 
-class VulkanGPU;
+class PhysicalDevice;
 
 #include "VulkanStructs.hpp"
-#include "VulkanGPU.hpp"
+#include "PhysicalDevice.hpp"
 
-struct VulkanDeviceQueueInfo {
+struct DeviceQueueInfo {
 	std::string name;
 	VkDeviceQueueCreateFlags flags;
 	uint count;
@@ -13,30 +13,30 @@ struct VulkanDeviceQueueInfo {
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 };
 
-class VulkanDevice : public xvk::Interface::DeviceInterface {
+class Device : public xvk::Interface::DeviceInterface {
 private:
-	VulkanGPU* gpu;
+	PhysicalDevice* physicalDevice;
 
 	VkDeviceCreateInfo createInfo {};
 	VkDeviceQueueCreateInfo* queueCreateInfo;
 	std::unordered_map<std::string, std::vector<VulkanQueue>> queues;
 
 public:
-	VulkanDevice(
-		VulkanGPU* gpu,
+	Device(
+		PhysicalDevice* physicalDevice,
 		VkPhysicalDeviceFeatures& deviceFeatures,
 		std::vector<const char*>& extensions,
 		std::vector<const char*>& layers,
-		const std::vector<VulkanDeviceQueueInfo>& queuesInfo
-	) : gpu(gpu) {
-		instance = gpu->GetVulkanInstance();
+		const std::vector<DeviceQueueInfo>& queuesInfo
+	) : physicalDevice(physicalDevice) {
+		instance = physicalDevice->GetVulkanInstance();
 
 		// Queues
 		queueCreateInfo = new VkDeviceQueueCreateInfo[queuesInfo.size()];
 		for (uint i = 0; i < queuesInfo.size(); i++) {
 			queueCreateInfo[i] = {};
 			queueCreateInfo[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			queueCreateInfo[i].queueFamilyIndex = gpu->GetQueueFamilyIndexFromFlags(queuesInfo[i].flags, queuesInfo[i].count, queuesInfo[i].surface);
+			queueCreateInfo[i].queueFamilyIndex = physicalDevice->GetQueueFamilyIndexFromFlags(queuesInfo[i].flags, queuesInfo[i].count, queuesInfo[i].surface);
 			queueCreateInfo[i].queueCount = queuesInfo[i].count;
 			queueCreateInfo[i].pQueuePriorities = queuesInfo[i].priorities.data();
 		}
@@ -50,7 +50,7 @@ public:
 		createInfo.enabledLayerCount = layers.size();
 		createInfo.ppEnabledLayerNames = layers.data();
 
-		if (gpu->CreateDevice(&createInfo, nullptr, &handle) != VK_SUCCESS) {
+		if (physicalDevice->CreateDevice(&createInfo, nullptr, &handle) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to create logical device");
 		}
 		
@@ -60,7 +60,7 @@ public:
 		for (auto queueInfo : queuesInfo) {
 			queues[queueInfo.name] = std::vector<VulkanQueue>(queueInfo.count);
 			for (uint i = 0; i < queueInfo.count; i++) {
-				auto queueFamilyIndex = gpu->GetQueueFamilyIndexFromFlags(queueInfo.flags, queueInfo.count, queuesInfo[i].surface);
+				auto queueFamilyIndex = physicalDevice->GetQueueFamilyIndexFromFlags(queueInfo.flags, queueInfo.count, queuesInfo[i].surface);
 				auto *q = &queues[queueInfo.name][i];
 				q->index = queueFamilyIndex;
 				GetDeviceQueue(queueFamilyIndex, i, &(q->handle));
@@ -68,7 +68,7 @@ public:
 		}
 	}
 
-	~VulkanDevice() {
+	~Device() {
 		DeviceWaitIdle();
 		delete[] queueCreateInfo;
 		DestroyDevice(nullptr);
@@ -80,15 +80,15 @@ public:
 	}
 
 	inline VkPhysicalDevice GetPhysicalDeviceHandle() const {
-		return gpu->GetHandle();
+		return physicalDevice->GetHandle();
 	}
 
-	inline VulkanGPU* GetGPU() const {
-		return gpu;
+	inline PhysicalDevice* GetPhysicalDevice() const {
+		return physicalDevice;
 	}
 
 	VulkanQueue GetPresentationQueue(VkSurfaceKHR surface, VkDeviceQueueCreateFlags flags = 0) {
-		return GetQueue(gpu->GetQueueFamilyIndexFromFlags(flags, 1, surface));
+		return GetQueue(physicalDevice->GetQueueFamilyIndexFromFlags(flags, 1, surface));
 	}
 
 	VulkanQueue GetQueue(std::string name, uint index = 0) {
@@ -191,7 +191,7 @@ public:
 		VkMemoryAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = gpu->FindMemoryType(memRequirements.memoryTypeBits, memoryPropertyFlags);
+		allocInfo.memoryTypeIndex = physicalDevice->FindMemoryType(memRequirements.memoryTypeBits, memoryPropertyFlags);
 
 		if (AllocateMemory(&allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate image memory");

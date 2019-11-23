@@ -18,15 +18,15 @@ public:
 	std::vector<V, std::allocator<V>> vertexData {};
 	std::vector<I, std::allocator<I>> indexData {};
 	
-	VulkanBuffer* vertexBuffer = nullptr;
+	Buffer* vertexBuffer = nullptr;
 	VkDeviceSize vertexOffset = 0;
 	VkDeviceSize vertexCount = 0;
 	
-	VulkanBuffer* indexBuffer = nullptr;
+	Buffer* indexBuffer = nullptr;
 	VkDeviceSize indexOffset = 0;
 	VkDeviceSize indexCount = 0;
 
-	VulkanBuffer* transformBuffer = nullptr;
+	Buffer* transformBuffer = nullptr;
 	VkDeviceSize transformOffset = 0;
 	
 	void* GetData() override {
@@ -68,7 +68,7 @@ public:
 	}
 	
 	TriangleGeometry(){}
-	TriangleGeometry(std::vector<V>&& vertexData, std::vector<I>&& indexData, VulkanBuffer* vertexBuffer, VkDeviceSize vertexOffset, VulkanBuffer* indexBuffer, VkDeviceSize indexOffset, VulkanBuffer* transformBuffer = nullptr, VkDeviceSize transformOffset = 0)
+	TriangleGeometry(std::vector<V>&& vertexData, std::vector<I>&& indexData, Buffer* vertexBuffer, VkDeviceSize vertexOffset, Buffer* indexBuffer, VkDeviceSize indexOffset, Buffer* transformBuffer = nullptr, VkDeviceSize transformOffset = 0)
 	 : vertexData(std::forward<std::vector<V>>(vertexData)), indexData(std::forward<std::vector<I>>(indexData)) {
 		this->vertexBuffer = vertexBuffer;
 		this->indexBuffer = indexBuffer;
@@ -91,7 +91,7 @@ class ProceduralGeometry : public Geometry {
 public:
 	std::vector<V, std::allocator<V>> aabbData {};
 	
-	VulkanBuffer* aabbBuffer = nullptr;
+	Buffer* aabbBuffer = nullptr;
 	VkDeviceSize aabbOffset = 0;
 	VkDeviceSize aabbCount = 0;
 	
@@ -124,7 +124,7 @@ public:
 	}
 	
 	ProceduralGeometry(){}
-	ProceduralGeometry(std::vector<V>&& aabbData, VulkanBuffer* aabbBuffer, VkDeviceSize aabbOffset = 0)
+	ProceduralGeometry(std::vector<V>&& aabbData, Buffer* aabbBuffer, VkDeviceSize aabbOffset = 0)
 	 : aabbData(std::forward<std::vector<V>>(aabbData)) {
 		this->aabbBuffer = aabbBuffer;
 		this->aabbOffset = aabbOffset;

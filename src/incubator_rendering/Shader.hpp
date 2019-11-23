@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanDevice.hpp"
+#include "Device.hpp"
 
 static std::unordered_map<std::string, VkShaderStageFlagBits> SHADER_TYPES {
 	{"vert", VK_SHADER_STAGE_VERTEX_BIT},
@@ -20,7 +20,7 @@ static std::unordered_map<std::string, VkShaderStageFlagBits> SHADER_TYPES {
 	{"rcall", VK_SHADER_STAGE_CALLABLE_BIT_NV},
 };
 
-class VulkanShader {
+class Shader {
 private:
 
 	std::string filepath;
@@ -36,7 +36,7 @@ public:
 	
 	VkPipelineShaderStageCreateInfo stageInfo;
 
-	VulkanShader(std::string filepath, std::string entryPoint = "main", VkSpecializationInfo* specializationInfo = nullptr)
+	Shader(std::string filepath, std::string entryPoint = "main", VkSpecializationInfo* specializationInfo = nullptr)
 	 : filepath(filepath), entryPoint(entryPoint), specializationInfo(specializationInfo) {
 		// Automatically add .spv if not present at the end of the filepath
 		if (!std::regex_match(filepath, std::regex(R"(\.spv$)"))) {
@@ -70,7 +70,7 @@ public:
 
 	}
 	
-	VkShaderModule CreateShaderModule(VulkanDevice* device, VkPipelineShaderStageCreateFlags flags = 0) {
+	VkShaderModule CreateShaderModule(Device* device, VkPipelineShaderStageCreateFlags flags = 0) {
 		// Create the shaderModule
 		VkShaderModuleCreateInfo createInfo {};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -92,7 +92,7 @@ public:
 		return module;
 	}
 
-	void DestroyShaderModule(VulkanDevice* device) {
+	void DestroyShaderModule(Device* device) {
 		device->DestroyShaderModule(module, nullptr);
 	}
 

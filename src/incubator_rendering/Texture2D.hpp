@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanDevice.hpp"
+#include "Device.hpp"
 
 // https://github.com/nothings/stb
 #define STB_IMAGE_IMPLEMENTATION
@@ -138,7 +138,7 @@ public:
 		pixelBufferStandalone = true;
 	}
 
-	void AllocateVulkanStagingMemory(VulkanDevice* device) {
+	void AllocateVulkanStagingMemory(Device* device) {
 		if (!pixels) {
 			if (filepath == "") {
 				throw std::runtime_error("Pixels are empty and no filepath defined");
@@ -153,12 +153,12 @@ public:
 		device->UnmapMemory(stagingBufferMemory);
 	}
 
-	void FreeVulkanStagingMemory(VulkanDevice* device) {
+	void FreeVulkanStagingMemory(Device* device) {
 		device->DestroyBuffer(stagingBuffer, nullptr);
 		device->FreeMemory(stagingBufferMemory, nullptr);
 	}
 
-	void CreateVulkanImage(VulkanDevice* device, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags) {
+	void CreateVulkanImage(Device* device, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags) {
 		VkImageCreateInfo imageInfo = {};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -177,8 +177,8 @@ public:
 						// If we want to be able to directly access texels in the memory of the image, then we must use VK_IMAGE_TILING_LINEAR
 		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 								/*
-									VK_IMAGE_LAYOUT_UNDEFINED : Not usable by the GPU and the very first transition will discard the texels
-									VK_IMAGE_LAYOUT_PREINITIALIZED : Not usable by the GPU, but the first transition will preserve the texels
+									VK_IMAGE_LAYOUT_UNDEFINED : Not usable by the PhysicalDevice and the very first transition will discard the texels
+									VK_IMAGE_LAYOUT_PREINITIALIZED : Not usable by the PhysicalDevice, but the first transition will preserve the texels
 								*/
 								// There are few situations where it is necessary for the texels to be preserved during the first transition.
 								// One example would be if we wanted to use an image as a staging image in combination with the VK_IMAGE_TILING_LINEAR layout.
@@ -199,7 +199,7 @@ public:
 		VkMemoryAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = device->GetGPU()->FindMemoryType(memRequirements.memoryTypeBits, memoryPropertyFlags);
+		allocInfo.memoryTypeIndex = device->GetPhysicalDevice()->FindMemoryType(memRequirements.memoryTypeBits, memoryPropertyFlags);
 		
 		if (device->AllocateMemory(&allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to allocate image memory");
@@ -208,12 +208,12 @@ public:
 		device->BindImageMemory(image, imageMemory, 0);
 	}
 
-	void DestroyVulkanImage(VulkanDevice* device) {
+	void DestroyVulkanImage(Device* device) {
 		device->DestroyImage(image, nullptr);
 		device->FreeMemory(imageMemory, nullptr);
 	}
 
-	void CreateVulkanImageView(VulkanDevice* device) {
+	void CreateVulkanImageView(Device* device) {
 		VkImageViewCreateInfo viewInfo = {};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = image;
@@ -230,7 +230,7 @@ public:
 		}
 	}
 
-	void DestroyVulkanImageView(VulkanDevice* device) {
+	void DestroyVulkanImageView(Device* device) {
 		device->DestroyImageView(imageView, nullptr);
 	}
 
@@ -266,7 +266,7 @@ public:
 		samplerAnisotropy = anisotropy;
 	}
 
-	void CreateVulkanSampler(VulkanDevice* device, float mipLodBias = 0) {
+	void CreateVulkanSampler(Device* device, float mipLodBias = 0) {
 		VkSamplerCreateInfo samplerInfo = {};
 		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		// VK_FILTER_LINEAR or VK_FILTER_NEAREST
@@ -295,7 +295,7 @@ public:
 		}
 	}
 
-	void DestroyVulkanSampler(VulkanDevice* device) {
+	void DestroyVulkanSampler(Device* device) {
 		device->DestroySampler(sampler, nullptr);
 	}
 

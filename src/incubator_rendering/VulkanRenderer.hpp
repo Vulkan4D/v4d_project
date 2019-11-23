@@ -1,21 +1,20 @@
 #pragma once
-#include <common/pch.hh>
 #include <v4d.h>
 
-#include "Vulkan.hpp"
-#include "VulkanPipelineLayout.hpp"
+#include "Instance.hpp"
+#include "PipelineLayout.hpp"
 
 /////////////////////////////////////////////
 
-class VulkanRenderer : public Vulkan {
+class VulkanRenderer : public Instance {
 protected: // class members
 
 	// Main Render Surface
 	VkSurfaceKHR surface;
 
 	// Main Graphics Card
-	VulkanGPU* renderingGPU = nullptr;
-	VulkanDevice* renderingDevice = nullptr;
+	PhysicalDevice* renderingPhysicalDevice = nullptr;
+	Device* renderingDevice = nullptr;
 	
 	// Queues
 	VulkanQueue graphicsQueue;
@@ -29,7 +28,7 @@ protected: // class members
 	std::vector<VkCommandBuffer> commandBuffers;
 
 	// Swap Chains
-	VulkanSwapChain* swapChain = nullptr;
+	SwapChain* swapChain = nullptr;
 
 	// Sync objects
 	std::vector<VkSemaphore> imageAvailableSemaphores;
@@ -46,9 +45,9 @@ protected: // class members
 	bool swapChainDirty = false;
 	
 	// Descriptor sets
-	std::vector<VulkanDescriptorSet*> descriptorSets {};
+	std::vector<DescriptorSet*> descriptorSets {};
 	std::vector<VkDescriptorSet> vkDescriptorSets {};
-	std::vector<VulkanPipelineLayout*> pipelineLayouts {};
+	std::vector<PipelineLayout*> pipelineLayouts {};
 
 	// Preferences
 	std::vector<VkPresentModeKHR> preferredPresentModes {
@@ -79,7 +78,7 @@ public:
 
 protected: // Pure Virtual (abstract) methods
 	// Init
-	virtual void ScoreGPUSelection(int& score, VulkanGPU* gpu) = 0;
+	virtual void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) = 0;
 	virtual void Init() = 0;
 	virtual void Info() = 0;
 	virtual void CreateResources() = 0;
@@ -99,31 +98,31 @@ protected: // Pure Virtual (abstract) methods
 protected: // Virtual INIT Methods
 
 	virtual void CreateDevices() {
-		// Select The Best Main GPU using a score system
-		renderingGPU = SelectSuitableGPU([this](int& score, VulkanGPU* gpu){
-			// Build up a score here and the GPU with the highest score will be selected.
+		// Select The Best Main PhysicalDevice using a score system
+		renderingPhysicalDevice = SelectSuitablePhysicalDevice([this](int& score, PhysicalDevice* physicalDevice){
+			// Build up a score here and the PhysicalDevice with the highest score will be selected.
 
-			// Mandatory gpu requirements for rendering graphics
-			if (!gpu->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface))
+			// Mandatory physicalDevice requirements for rendering graphics
+			if (!physicalDevice->QueueFamiliesContainsFlags(VK_QUEUE_GRAPHICS_BIT, 1, surface))
 				return;
 			// User-defined required extensions
-			for (auto& ext : requiredDeviceExtensions) if (!gpu->SupportsExtension(ext))
+			for (auto& ext : requiredDeviceExtensions) if (!physicalDevice->SupportsExtension(ext))
 				return;
 			
 			score = 1;
 			
 			// Each Optional extensions adds one point to the score
-			for (auto& ext : optionalDeviceExtensions) if (gpu->SupportsExtension(ext))
+			for (auto& ext : optionalDeviceExtensions) if (physicalDevice->SupportsExtension(ext))
 				++score;
 
 			// User-defined score function
-			ScoreGPUSelection(score, gpu);
+			ScorePhysicalDeviceSelection(score, physicalDevice);
 		});
 
-		LOG("Selected Rendering GPU: " << renderingGPU->GetDescription());
+		LOG("Selected Rendering PhysicalDevice: " << renderingPhysicalDevice->GetDescription());
 
 		// Prepare Device Features (remove unsupported features from list of features to enable)
-		auto supportedDeviceFeatures = renderingGPU->GetFeatures();
+		auto supportedDeviceFeatures = renderingPhysicalDevice->GetFeatures();
 		const size_t deviceFeaturesArraySize = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
 		VkBool32 supportedDeviceFeaturesData[deviceFeaturesArraySize];
 		VkBool32 appDeviceFeaturesData[deviceFeaturesArraySize];
@@ -144,7 +143,7 @@ protected: // Virtual INIT Methods
 			LOG("Enabling Device Extension: " << ext)
 		}
 		for (auto& ext : optionalDeviceExtensions) {
-			if (renderingGPU->SupportsExtension(ext)) {
+			if (renderingPhysicalDevice->SupportsExtension(ext)) {
 				deviceExtensions.push_back(ext);
 				enabledDeviceExtensions[ext] = true;
 				LOG("Enabling Device Extension: " << ext)
@@ -154,8 +153,8 @@ protected: // Virtual INIT Methods
 		}
 		
 		// Create Logical Device
-		renderingDevice = new VulkanDevice(
-			renderingGPU,
+		renderingDevice = new Device(
+			renderingPhysicalDevice,
 			deviceFeatures,
 			deviceExtensions,
 			vulkanLoader->requiredInstanceLayers,
@@ -310,10 +309,10 @@ protected: // Virtual INIT Methods
 		std::lock_guard lock(renderingMutex);
 		
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
-		VulkanSwapChain* oldSwapChain = swapChain;
+		SwapChain* oldSwapChain = swapChain;
 
 		// Create the new swapchain object
-		swapChain = new VulkanSwapChain(
+		swapChain = new SwapChain(
 			renderingDevice,
 			surface,
 			{ // Preferred Extent (Screen Resolution)
@@ -442,20 +441,20 @@ protected: // Helper methods
 	}
 
 
-	void AllocateBufferStaged(VkCommandPool commandPool, VulkanBuffer& buffer) {
+	void AllocateBufferStaged(VkCommandPool commandPool, Buffer& buffer) {
 		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
-		VulkanBuffer stagingBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		Buffer stagingBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 		stagingBuffer.srcDataPointers = std::ref(buffer.srcDataPointers);
 		stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
 		buffer.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
-		VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
+		Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
 		EndSingleTimeCommands(commandPool, cmdBuffer);
 		stagingBuffer.Free(renderingDevice);
 	}
-	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<VulkanBuffer>& buffers) {
+	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<Buffer>& buffers) {
 		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
-		std::vector<VulkanBuffer> stagingBuffers {};
+		std::vector<Buffer> stagingBuffers {};
 		stagingBuffers.reserve(buffers.size());
 		for (auto& buffer : buffers) {
 			auto& stagingBuffer = stagingBuffers.emplace_back(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -463,16 +462,16 @@ protected: // Helper methods
 			stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
 			buffer.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
-			VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
+			Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
 		}
 		EndSingleTimeCommands(commandPool, cmdBuffer);
 		for (auto& stagingBuffer : stagingBuffers) {
 			stagingBuffer.Free(renderingDevice);
 		}
 	}
-	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<VulkanBuffer*>& buffers) {
+	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<Buffer*>& buffers) {
 		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
-		std::vector<VulkanBuffer> stagingBuffers {};
+		std::vector<Buffer> stagingBuffers {};
 		stagingBuffers.reserve(buffers.size());
 		for (auto& buffer : buffers) {
 			auto& stagingBuffer = stagingBuffers.emplace_back(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -480,7 +479,7 @@ protected: // Helper methods
 			stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
 			buffer->usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			buffer->Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
-			VulkanBuffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer->buffer, buffer->size);
+			Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer->buffer, buffer->size);
 		}
 		EndSingleTimeCommands(commandPool, cmdBuffer);
 		for (auto& stagingBuffer : stagingBuffers) {
@@ -676,7 +675,7 @@ protected: // Helper methods
 
 	void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t width, int32_t height, uint32_t mipLevels) {
 		VkFormatProperties formatProperties;
-		renderingGPU->GetPhysicalDeviceFormatProperties(imageFormat, &formatProperties);
+		renderingPhysicalDevice->GetPhysicalDeviceFormatProperties(imageFormat, &formatProperties);
 		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
@@ -846,8 +845,8 @@ public: // Init/Load/Reset Methods
 	}
 	
 public: // Constructor & Destructor
-	VulkanRenderer(VulkanLoader* loader, const char* applicationName, uint applicationVersion, Window* window)
-	 : Vulkan(loader, applicationName, applicationVersion) {
+	VulkanRenderer(Loader* loader, const char* applicationName, uint applicationVersion, Window* window)
+	 : Instance(loader, applicationName, applicationVersion) {
 		surface = window->CreateVulkanSurface(handle);
 	}
 

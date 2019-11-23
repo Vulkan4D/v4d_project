@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "VulkanShaderBindingTable.hpp"
+#include "ShaderBindingTable.hpp"
 #include "Geometry.hpp"
 
 #pragma region Scene-specific structs
@@ -95,8 +95,8 @@ class VulkanRayTracingRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
 private: // Buffers	
-	VulkanBuffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
-	std::vector<VulkanBuffer*> stagedBuffers {};
+	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	std::vector<Buffer*> stagedBuffers {};
 	
 private: // Scene objects
 	std::vector<Geometry*> geometries {};
@@ -105,8 +105,8 @@ private: // Scene objects
 private: // Ray Tracing stuff
 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
-	VulkanShaderBindingTable* shaderBindingTable = nullptr;
-	VulkanBuffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
+	ShaderBindingTable* shaderBindingTable = nullptr;
+	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
 	struct RayTracingStorageImage {
 		VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -125,7 +125,7 @@ private: // Ray Tracing stuff
 		VkPhysicalDeviceProperties2 deviceProps2{};
 		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		deviceProps2.pNext = &rayTracingProperties;
-		GetPhysicalDeviceProperties2(renderingDevice->GetGPU()->GetHandle(), &deviceProps2);
+		GetPhysicalDeviceProperties2(renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
 	}
 	void CreateRayTracingResources() {
 		VkFormat colorFormat = swapChain->format.format;
@@ -201,7 +201,7 @@ private: // Ray Tracing stuff
 				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 				nullptr,// pNext
 				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
-				renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 			};
 			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &blas.memory) != VK_SUCCESS)
 				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure");
@@ -266,7 +266,7 @@ private: // Ray Tracing stuff
 				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
 				nullptr,// pNext
 				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
-				renderingDevice->GetGPU()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
 			};
 			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.memory) != VK_SUCCESS)
 				throw std::runtime_error("Failed to allocate memory for top level acceleration structure");
@@ -290,7 +290,7 @@ private: // Ray Tracing stuff
 		// Build Ray Tracing acceleration structures
 		{
 			// Instance buffer
-			VulkanBuffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
+			Buffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
 			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
 			AllocateBufferStaged(commandPool, instanceBuffer);
 			
@@ -310,7 +310,7 @@ private: // Ray Tracing stuff
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
 			// Send scratch buffer
 			const VkDeviceSize scratchBufferSize = std::max(allBlasReqSize, memoryRequirementsTopLevel.memoryRequirements.size);
-			VulkanBuffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
+			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
 			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			
 			auto cmdBuffer = BeginSingleTimeCommands(commandPool);
@@ -439,25 +439,25 @@ private: // Renderer Configuration methods
 		};
 	}
 	
-	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
-		// Build up a score here and the GPU with the highest score will be selected.
+	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
+		// Build up a score here and the PhysicalDevice with the highest score will be selected.
 		// Add to the score optional specs, then multiply with mandatory specs.
 		
 		// Optional specs  -->  score += points * CONDITION
-		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
-		// score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
-		// score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+		score += 10 * (physicalDevice->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
+		// score += 20 * physicalDevice->GetFeatures().tessellationShader; // Supports Tessellation
+		// score += physicalDevice->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
 
 		// Mandatory specs  -->  score *= CONDITION
-		// score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
-		// score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
-		// score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
+		// score *= physicalDevice->GetFeatures().geometryShader; // Supports Geometry Shaders
+		// score *= physicalDevice->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
+		// score *= physicalDevice->GetFeatures().sampleRateShading; // Supports Sample Shading
 	}
 	
 	void Info() override {
 		RayTracingInfo();
 		// // MultiSampling
-		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingGPU->GetMaxUsableSampleCount());
+		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingPhysicalDevice->GetMaxUsableSampleCount());
 	}
 
 	void CreateResources() override {
@@ -472,12 +472,12 @@ public: // Scene configuration methods
 	void LoadScene() override {
 		
 		// Buffers
-		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* sphereBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* vertexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* indexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* sphereBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
 		// Descriptor sets
-		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		auto* descriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		descriptorSet->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		descriptorSet->AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
@@ -486,7 +486,7 @@ public: // Scene configuration methods
 		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
 		
 		// Pipeline layouts
-		auto* rayTracingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		auto* rayTracingPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		rayTracingPipelineLayout->AddDescriptorSet(descriptorSet);
 
 		// Add triangle geometries
@@ -562,7 +562,7 @@ public: // Scene configuration methods
 		sphereBuffer->AddSrcDataPtr(&spheresGeometry1->aabbData);
 
 		// Ray tracing shaders
-		shaderBindingTable = new VulkanShaderBindingTable(rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen");
+		shaderBindingTable = new ShaderBindingTable(rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
 		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
@@ -743,7 +743,7 @@ protected: // Methods executed on every frame
 		ubo.time = time;
 		
 		// Update memory
-		VulkanBuffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 	}
 
 public: // user-defined state variables

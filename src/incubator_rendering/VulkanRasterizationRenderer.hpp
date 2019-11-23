@@ -1,9 +1,9 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "VulkanDescriptorSet.hpp"
-#include "VulkanShaderProgram.hpp"
-#include "VulkanPipelineLayout.hpp"
+#include "DescriptorSet.hpp"
+#include "ShaderProgram.hpp"
+#include "PipelineLayout.hpp"
 #include "Geometry.hpp"
 
 // Test Object Vertex Data Structure
@@ -23,36 +23,36 @@ struct UBO {
 class VulkanRasterizationRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
-	VulkanBuffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
-	std::vector<VulkanBuffer*> stagedBuffers {};
+	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	std::vector<Buffer*> stagedBuffers {};
 	std::vector<Geometry*> geometries {};
 	
-	VulkanShaderProgram* testShader;
-	VulkanShaderProgram* ppShader;
+	ShaderProgram* testShader;
+	ShaderProgram* ppShader;
 	CombinedImageSampler postProcessingSampler;
 	CombinedImageSampler oitBufferSampler;
 	
 private: // Rasterization Rendering
 	struct RenderingPipeline {
-		VulkanGraphicsPipeline* graphicsPipeline = nullptr;
-		VulkanShaderProgram* shaderProgram;
+		GraphicsPipeline* graphicsPipeline = nullptr;
+		ShaderProgram* shaderProgram;
 		
-		RenderingPipeline(VulkanShaderProgram* shaderProgram) : shaderProgram(shaderProgram) {}
+		RenderingPipeline(ShaderProgram* shaderProgram) : shaderProgram(shaderProgram) {}
 		virtual void Configure() = 0;
-		virtual void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) = 0;
+		virtual void Draw(Device* device, VkCommandBuffer commandBuffer) = 0;
 		virtual ~RenderingPipeline() {}
 	};
 	struct VertexRasterizationPipeline : public RenderingPipeline {
-		VulkanBuffer* vertexBuffer;
-		VulkanBuffer* indexBuffer = nullptr;
+		Buffer* vertexBuffer;
+		Buffer* indexBuffer = nullptr;
 		uint32_t vertexCount = 0;
 		
 		VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		
-		VertexRasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, VulkanBuffer* indexBuffer)
+		VertexRasterizationPipeline(ShaderProgram* shaderProgram, Buffer* vertexBuffer, Buffer* indexBuffer)
 		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
 		
-		VertexRasterizationPipeline(VulkanShaderProgram* shaderProgram, VulkanBuffer* vertexBuffer, uint32_t vertexCount)
+		VertexRasterizationPipeline(ShaderProgram* shaderProgram, Buffer* vertexBuffer, uint32_t vertexCount)
 		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), vertexCount(vertexCount) {}
 		
 		void Configure() {
@@ -62,7 +62,7 @@ private: // Rasterization Rendering
 			graphicsPipeline->depthStencilState.depthTestEnable = VK_FALSE;
 		}
 		
-		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
+		void Draw(Device* device, VkCommandBuffer commandBuffer) {
 			VkDeviceSize offsets[] = {0};
 			device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
 			if (indexBuffer == nullptr) {
@@ -88,7 +88,7 @@ private: // Rasterization Rendering
 	};
 	struct PostProcessingPipeline : public RenderingPipeline {
 
-		PostProcessingPipeline(VulkanShaderProgram* shaderProgram)
+		PostProcessingPipeline(ShaderProgram* shaderProgram)
 		 : RenderingPipeline(shaderProgram) {}
 		
 		void Configure() {
@@ -96,14 +96,14 @@ private: // Rasterization Rendering
 			graphicsPipeline->rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		}
 		
-		void Draw(VulkanDevice* device, VkCommandBuffer commandBuffer) {
+		void Draw(Device* device, VkCommandBuffer commandBuffer) {
 			device->CmdDraw(commandBuffer, 3, 1, 0, 0);
 		}
 	};
 	std::vector<VertexRasterizationPipeline> rasterizationPipelines {};
 	std::vector<PostProcessingPipeline> postProcessingPipelines {};
-	VulkanRenderPass* renderPass = nullptr;
-	VulkanRenderPass* postProcessingRenderPass = nullptr;
+	RenderPass* renderPass = nullptr;
+	RenderPass* postProcessingRenderPass = nullptr;
 	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers;
 	VkClearColorValue clearColor = {0,0,0,1};
 	// Render Target (Color Attachment)
@@ -127,10 +127,10 @@ private: // Rasterization Rendering
 	VkFormat depthImageFormat;
 	
 	// Graphics settings
-	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
-	const bool postProcessingEnabled = 							true;
+	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_1_BIT;
+	const bool postProcessingEnabled = 							false;
 	const bool oitEnabled = !postProcessingEnabled?false : 		false;
-	float renderingResolutionScale = !postProcessingEnabled?1: 	2.0;
+	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
 	
 	
 	void CreateRasterizationResources() {
@@ -138,7 +138,7 @@ private: // Rasterization Rendering
 		
 		// Format
 		colorImageFormat = postProcessingEnabled ?
-			  renderingGPU->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
+			  renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
 			: swapChain->format.format;
 		
 		int width = (int)((float)swapChain->extent.width * renderingResolutionScale);
@@ -174,7 +174,7 @@ private: // Rasterization Rendering
 		TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
 		
 		if (oitEnabled) {
-			oitBufferImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+			oitBufferImageFormat = renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
 			renderingDevice->CreateImage(
 				width,
 				height,
@@ -270,7 +270,7 @@ private: // Rasterization Rendering
 		}
 		
 		// Depth image Format
-		depthImageFormat = renderingGPU->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+		depthImageFormat = renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 		// Depth Image
 		renderingDevice->CreateImage(
 			width, 
@@ -328,7 +328,7 @@ private: // Rasterization Rendering
 		}
 	}
 	void CreateRasterizationPipelines() {
-		renderPass = new VulkanRenderPass(renderingDevice);
+		renderPass = new RenderPass(renderingDevice);
 
 		// Color Attachment (Fragment shader Standard Output)
 		VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
@@ -569,24 +569,24 @@ private: // Renderer Configuration methods
 		};
 	}
 	
-	void ScoreGPUSelection(int& score, VulkanGPU* gpu) {
-		// Build up a score here and the GPU with the highest score will be selected.
+	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
+		// Build up a score here and the PhysicalDevice with the highest score will be selected.
 		// Add to the score optional specs, then multiply with mandatory specs.
 		
 		// Optional specs  -->  score += points * CONDITION
-		score += 10 * (gpu->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated GPU
-		score += 20 * gpu->GetFeatures().tessellationShader; // Supports Tessellation
-		score += gpu->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
+		score += 10 * (physicalDevice->GetProperties().deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU); // Is a Dedicated PhysicalDevice
+		score += 20 * physicalDevice->GetFeatures().tessellationShader; // Supports Tessellation
+		score += physicalDevice->GetProperties().limits.framebufferColorSampleCounts; // Add sample counts to the score (1-64)
 
 		// Mandatory specs  -->  score *= CONDITION
-		score *= gpu->GetFeatures().geometryShader; // Supports Geometry Shaders
-		score *= gpu->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
-		score *= gpu->GetFeatures().sampleRateShading; // Supports Sample Shading
+		score *= physicalDevice->GetFeatures().geometryShader; // Supports Geometry Shaders
+		score *= physicalDevice->GetFeatures().samplerAnisotropy; // Supports Anisotropic filtering
+		score *= physicalDevice->GetFeatures().sampleRateShading; // Supports Sample Shading
 	}
 	
 	void Info() override {
 		// MultiSampling
-		msaaSamples = std::min(msaaSamples, renderingGPU->GetMaxUsableSampleCount());
+		msaaSamples = std::min(msaaSamples, renderingPhysicalDevice->GetMaxUsableSampleCount());
 	}
 
 	void CreateResources() override {
@@ -601,31 +601,38 @@ public: // Scene configuration methods
 
 	struct Galaxy {
 		glm::vec4 posr;
+		int seed;
 	};
 	
-	std::vector<Galaxy> galaxies {
-		{{-10, 0, 0, 4 * renderingResolutionScale}},
-		{{-2, 4, 0, 4 * renderingResolutionScale}},
-		{{-1, 1, 5, 4 * renderingResolutionScale}},
-		{{-15, -1, -2, 4 * renderingResolutionScale}},
-	};
-	VulkanShaderProgram* galaxyShader = nullptr;
+	std::vector<Galaxy> galaxies {};
+	ShaderProgram* galaxyShader = nullptr;
 	
 	void LoadScene() override {
 		// Galaxy
 		
-		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		for (int x = 0; x < 20; ++x) {
+			for (int y = 0; y < 20; ++y) {
+				for (int z = 0; z < 20; ++z) {
+					galaxies.push_back({
+						{x,y,z, 4*renderingResolutionScale}, x*y*z*3+3
+					});
+				}
+			}
+		}
+		
+		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT);
-		VulkanPipelineLayout* galaxyPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		PipelineLayout* galaxyPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
-		VulkanBuffer* galaxiesBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		galaxyShader = new VulkanShaderProgram(galaxyPipelineLayout, {
+		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		galaxyShader = new ShaderProgram(galaxyPipelineLayout, {
 			{"incubator_rendering/assets/shaders/galaxy.geom"},
 			{"incubator_rendering/assets/shaders/galaxy.vert"},
 			{"incubator_rendering/assets/shaders/galaxy.frag"},
 		});
 		galaxyShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
+			{1, offsetof(Galaxy, Galaxy::seed), VK_FORMAT_R32_UINT},
 		});
 		galaxiesBuffer->AddSrcDataPtr(&galaxies);
 		rasterizationPipelines.emplace_back(galaxyShader, galaxiesBuffer, galaxies.size()).topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -635,21 +642,21 @@ public: // Scene configuration methods
 		// Objects
 		
 		// Descriptor sets & Pipeline Layouts
-		auto* descriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+		auto* descriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
-		VulkanPipelineLayout* mainPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+		PipelineLayout* mainPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		mainPipelineLayout->AddDescriptorSet(descriptorSet);
-		VulkanPipelineLayout* postProcessingPipelineLayout = nullptr;
+		PipelineLayout* postProcessingPipelineLayout = nullptr;
 		if (postProcessingEnabled) {
-			auto* ppDescriptorSet = descriptorSets.emplace_back(new VulkanDescriptorSet(0));
+			auto* ppDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 			ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 			if (oitEnabled) ppDescriptorSet->AddBinding_combinedImageSampler(1, &oitBufferSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
-			postProcessingPipelineLayout = pipelineLayouts.emplace_back(new VulkanPipelineLayout());
+			postProcessingPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 			postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
 		}
 		
-		VulkanBuffer* vertexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		VulkanBuffer* indexBuffer = stagedBuffers.emplace_back(new VulkanBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* vertexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* indexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
@@ -709,7 +716,7 @@ public: // Scene configuration methods
 		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
 
 		// Shader program
-		testShader = new VulkanShaderProgram(mainPipelineLayout, {
+		testShader = new ShaderProgram(mainPipelineLayout, {
 			{"incubator_rendering/assets/shaders/raster.vert"},
 			{"incubator_rendering/assets/shaders/raster.frag"},
 		});
@@ -727,7 +734,7 @@ public: // Scene configuration methods
 		// Post processing
 		if (postProcessingEnabled) {
 			// Shader program
-			ppShader = new VulkanShaderProgram(postProcessingPipelineLayout, {
+			ppShader = new ShaderProgram(postProcessingPipelineLayout, {
 				{"incubator_rendering/assets/shaders/postProcessing.vert"},
 				{"incubator_rendering/assets/shaders/postProcessing.frag"},
 			});
@@ -801,7 +808,7 @@ protected: // Graphics configuration
 			emptyInputState.pVertexBindingDescriptions = nullptr;
 			
 			// Create the render pass
-			postProcessingRenderPass = new VulkanRenderPass(renderingDevice);
+			postProcessingRenderPass = new RenderPass(renderingDevice);
 			
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
@@ -988,7 +995,7 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 
 		// Update memory
-		VulkanBuffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 	}
 
 public: // user-defined state variables

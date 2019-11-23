@@ -1,11 +1,11 @@
 #pragma once
 
-#include "VulkanDescriptorSet.hpp"
-#include "VulkanDevice.hpp"
+#include "DescriptorSet.hpp"
+#include "Device.hpp"
 
-struct VulkanPipelineLayout {
+struct PipelineLayout {
 	
-	std::vector<VulkanDescriptorSet*> descriptorSets {};
+	std::vector<DescriptorSet*> descriptorSets {};
 	std::vector<VkDescriptorSetLayout> layouts {};
 	std::vector<VkDescriptorSet> vkDescriptorSets {};
 	VkPipelineLayout handle = VK_NULL_HANDLE;
@@ -14,11 +14,11 @@ struct VulkanPipelineLayout {
 		return &layouts;
 	}
 
-	void AddDescriptorSet(VulkanDescriptorSet* descriptorSet) {
+	void AddDescriptorSet(DescriptorSet* descriptorSet) {
 		descriptorSets.push_back(descriptorSet);
 	}
 	
-	void Create(VulkanDevice* device) {
+	void Create(Device* device) {
 		for (auto* set : descriptorSets) {
 			layouts.push_back(set->GetDescriptorSetLayout());
 		}
@@ -46,13 +46,13 @@ struct VulkanPipelineLayout {
 		}
 	}
 	
-	void Destroy(VulkanDevice* device) {
+	void Destroy(Device* device) {
 		vkDescriptorSets.clear();
 		device->DestroyPipelineLayout(handle, nullptr);
 		layouts.clear();
 	}
 	
-	void Bind(VulkanDevice* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {
+	void Bind(Device* device, VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) {
 		device->CmdBindDescriptorSets(commandBuffer, bindPoint, handle, 0, (uint)vkDescriptorSets.size(), vkDescriptorSets.data(), 0, nullptr);
 	}
 	

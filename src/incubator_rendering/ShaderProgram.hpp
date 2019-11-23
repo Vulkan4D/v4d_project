@@ -1,23 +1,23 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanShader.hpp"
-#include "VulkanDevice.hpp"
-#include "VulkanPipelineLayout.hpp"
+#include "Shader.hpp"
+#include "Device.hpp"
+#include "PipelineLayout.hpp"
 
-class VulkanShaderProgram {
+class ShaderProgram {
 private:
-	std::vector<VulkanShaderInfo> shaderFiles;
-	std::vector<VulkanShader> shaders;
+	std::vector<ShaderInfo> shaderFiles;
+	std::vector<Shader> shaders;
 	std::vector<VkPipelineShaderStageCreateInfo> stages;
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	
-	VulkanPipelineLayout* pipelineLayout = nullptr;
+	PipelineLayout* pipelineLayout = nullptr;
 	
 public:
 
-	VulkanShaderProgram(VulkanPipelineLayout* pipelineLayout = nullptr, const std::vector<VulkanShaderInfo>& infos = {}) : pipelineLayout(pipelineLayout) {
+	ShaderProgram(PipelineLayout* pipelineLayout = nullptr, const std::vector<ShaderInfo>& infos = {}) : pipelineLayout(pipelineLayout) {
 		for (auto& info : infos)
 			shaderFiles.push_back(info);
 	}
@@ -44,7 +44,7 @@ public:
 		shaders.clear();
 	}
 	
-	void CreateShaderStages(VulkanDevice* device) {
+	void CreateShaderStages(Device* device) {
 		if (stages.size() == 0) {
 			for (auto& shader : shaders) {
 				shader.CreateShaderModule(device);
@@ -53,7 +53,7 @@ public:
 		}
 	}
 	
-	void DestroyShaderStages(VulkanDevice* device) {
+	void DestroyShaderStages(Device* device) {
 		if (stages.size() > 0) {
 			stages.clear();
 			for (auto& shader : shaders) {
@@ -62,11 +62,11 @@ public:
 		}
 	}
 	
-	void SetPipelineLayout(VulkanPipelineLayout* layout) {
+	void SetPipelineLayout(PipelineLayout* layout) {
 		this->pipelineLayout = layout;
 	}
 	
-	VulkanPipelineLayout* GetPipelineLayout() const {
+	PipelineLayout* GetPipelineLayout() const {
 		return pipelineLayout;
 	}
 	

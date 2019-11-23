@@ -6,21 +6,21 @@ struct VulkankVertexInputAttributeDescription {
 	VkFormat    format;
 };
 
-struct VulkanShaderInfo {
+struct ShaderInfo {
 	std::string filepath;
 	std::string entryPoint;
 	VkSpecializationInfo* specializationInfo;
 	
-	VulkanShaderInfo(const std::string& filepath, const std::string& entryPoint, VkSpecializationInfo* specializationInfo = nullptr) 
+	ShaderInfo(const std::string& filepath, const std::string& entryPoint, VkSpecializationInfo* specializationInfo = nullptr) 
 	 : filepath(filepath), entryPoint(entryPoint), specializationInfo(specializationInfo) {}
 	
-	VulkanShaderInfo(const std::string& filepath, VkSpecializationInfo* specializationInfo) 
+	ShaderInfo(const std::string& filepath, VkSpecializationInfo* specializationInfo) 
 	 : filepath(filepath), entryPoint(""), specializationInfo(specializationInfo) {}
 	 
-	VulkanShaderInfo(const std::string& filepath)
+	ShaderInfo(const std::string& filepath)
 	 : filepath(filepath), entryPoint("main"), specializationInfo(nullptr) {}
 	
-	VulkanShaderInfo(const char* filepath)
+	ShaderInfo(const char* filepath)
 	 : filepath(filepath), entryPoint("main"), specializationInfo(nullptr) {}
 };
 

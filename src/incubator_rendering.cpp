@@ -1,8 +1,6 @@
 // #define USE_RAY_TRACING
 
 #include "config.hh"
-#include <common/pch.hh>
-#include <numeric>
 #include <v4d.h>
 
 #define XVK_INTERFACE_RAW_FUNCTIONS_ACCESSIBILITY private
@@ -30,7 +28,7 @@ std::unordered_map<int, Window*> Window::windows{};
 #else
 	#include "incubator_rendering/VulkanRasterizationRenderer.hpp"
 #endif
-VulkanLoader vulkanLoader;
+Loader vulkanLoader;
 
 int main() {
 	

@@ -1,25 +1,25 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanDevice.hpp"
-#include "VulkanGraphicsPipeline.hpp"
+#include "Device.hpp"
+#include "GraphicsPipeline.hpp"
 
-class VulkanRenderPass {
+class RenderPass {
 private:
-	VulkanDevice* device;
+	Device* device;
 
 public:
 	VkRenderPassCreateInfo renderPassInfo {};
 	std::vector<VkSubpassDescription> subpasses {};
 	std::vector<VkAttachmentDescription> attachments {}; // This struct defines the output data from the fragment shader (o_color)
 	VkRenderPass handle = VK_NULL_HANDLE;
-	std::vector<VulkanGraphicsPipeline*> graphicsPipelines {};
+	std::vector<GraphicsPipeline*> graphicsPipelines {};
 
-	VulkanRenderPass(VulkanDevice* device) : device(device) {
+	RenderPass(Device* device) : device(device) {
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	}
 
-	~VulkanRenderPass() {
+	~RenderPass() {
 		device->DestroyRenderPass(handle, nullptr);
 	}
 
@@ -45,8 +45,8 @@ public:
 		return index;
 	}
 
-	VulkanGraphicsPipeline* NewGraphicsPipeline(VulkanDevice* device, uint32_t subpass = 0) {
-		auto* graphicsPipeline = new VulkanGraphicsPipeline(device);
+	GraphicsPipeline* NewGraphicsPipeline(Device* device, uint32_t subpass = 0) {
+		auto* graphicsPipeline = new GraphicsPipeline(device);
 		graphicsPipelines.push_back(graphicsPipeline);
 		// Render passes 
 		// The reference to the render pass and the index of the sub pass where this graphics pipeline will be used. 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <v4d.h>
+
 // Settings
 struct ProjectSettings : public v4d::io::ConfigFile {
 	CONFIGFILE_STRUCT(ProjectSettings)

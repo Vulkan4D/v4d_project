@@ -1,11 +1,11 @@
 #pragma once
 
 #include "VulkanStructs.hpp"
-#include "VulkanDevice.hpp"
+#include "Device.hpp"
 
-struct VulkanSwapChain {
+struct SwapChain {
 private:
-	VulkanDevice* device;
+	Device* device;
 	VkSurfaceKHR surface;
 
 	VkSwapchainKHR handle;
@@ -26,32 +26,32 @@ public:
 	std::vector<VkImageView> imageViews {};
 
 	// Constructor
-	VulkanSwapChain(){}
-	VulkanSwapChain(VulkanDevice* device, VkSurfaceKHR surface) : device(device), surface(surface) {
+	SwapChain(){}
+	SwapChain(Device* device, VkSurfaceKHR surface) : device(device), surface(surface) {
 		ResolveCapabilities(device->GetPhysicalDeviceHandle());
 		ResolveFormats(device->GetPhysicalDeviceHandle());
 		ResolvePresentModes(device->GetPhysicalDeviceHandle());
 
 		// Check Swap Chain Support
 		if (formats.empty())
-			throw std::runtime_error("GPU Swap Chain does not support any image format");
+			throw std::runtime_error("PhysicalDevice Swap Chain does not support any image format");
 		if (presentModes.empty())
-			throw std::runtime_error("GPU Swap Chain does not support any presentation mode");
+			throw std::runtime_error("PhysicalDevice Swap Chain does not support any presentation mode");
 
 		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		createInfo.surface = surface;
 	}
-	VulkanSwapChain(
-		VulkanDevice* device, 
+	SwapChain(
+		Device* device, 
 		VkSurfaceKHR surface, 
 		VkExtent2D preferredExtent, 
 		const std::vector<VkSurfaceFormatKHR> preferredFormats, 
 		const std::vector<VkPresentModeKHR> preferredPresentModes
-	) : VulkanSwapChain(device, surface) {
+	) : SwapChain(device, surface) {
 		SetConfiguration(preferredExtent, preferredFormats, preferredPresentModes);
 	}
 
-	~VulkanSwapChain() {
+	~SwapChain() {
 		for_each(imageViews.begin(), imageViews.end(), [this](const VkImageView& imageView) {
 			device->DestroyImageView(imageView, nullptr);
 		});
@@ -113,7 +113,7 @@ public:
 		createInfo.pQueueFamilyIndices = queues.data();
 	}
 
-	void Create(VulkanSwapChain* oldSwapChain = nullptr) {
+	void Create(SwapChain* oldSwapChain = nullptr) {
 		// Check for an old swapchain
 		if (oldSwapChain != nullptr) createInfo.oldSwapchain = oldSwapChain->GetHandle();
 
@@ -162,24 +162,24 @@ public:
 	}
 
 	inline void ResolveCapabilities(VkPhysicalDevice physicalDevice) {
-		device->GetGPU()->GetPhysicalDeviceSurfaceCapabilitiesKHR(surface, &capabilities);
+		device->GetPhysicalDevice()->GetPhysicalDeviceSurfaceCapabilitiesKHR(surface, &capabilities);
 	}
 
 	inline void ResolveFormats(VkPhysicalDevice physicalDevice) {
 		uint formatCount;
-		device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, nullptr);
+		device->GetPhysicalDevice()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, nullptr);
 		if (formatCount > 0) {
 			formats.resize(formatCount);
-			device->GetGPU()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, formats.data());
+			device->GetPhysicalDevice()->GetPhysicalDeviceSurfaceFormatsKHR(surface, &formatCount, formats.data());
 		}
 	}
 
 	inline void ResolvePresentModes(VkPhysicalDevice physicalDevice) {
 		uint presentModeCount;
-		device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, nullptr);
+		device->GetPhysicalDevice()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, nullptr);
 		if (presentModeCount > 0) {
 			presentModes.resize(presentModeCount);
-			device->GetGPU()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, presentModes.data());
+			device->GetPhysicalDevice()->GetPhysicalDeviceSurfacePresentModesKHR(surface, &presentModeCount, presentModes.data());
 		}
 	}
 

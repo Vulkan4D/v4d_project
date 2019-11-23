@@ -1,6 +1,3 @@
-// Pre-compiled common header
-#include <common/pch.hh>
-
 // Project Config
 #include "config.hh"
 

@@ -3,8 +3,8 @@
 #include <vector>
 #include <map>
 #include <xvk.hpp>
-#include "VulkanBuffer.hpp"
-#include "VulkanDescriptorSet.hpp"
+#include "Buffer.hpp"
+#include "DescriptorSet.hpp"
 
 struct CombinedImageSampler {
 	VkSampler sampler;
@@ -12,8 +12,8 @@ struct CombinedImageSampler {
 };
 
 enum DescriptorPointerType {
-	STORAGE_BUFFER, // VulkanBuffer ---> VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
-	UNIFORM_BUFFER, // VulkanBuffer ---> VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+	STORAGE_BUFFER, // Buffer ---> VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+	UNIFORM_BUFFER, // Buffer ---> VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
 	IMAGE_VIEW, // VkImageView ---> VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
 	ACCELERATION_STRUCTURE, // VkAccelerationStructureNV ---> VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV
 	COMBINED_IMAGE_SAMPLER, // VkImageView ---> VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
@@ -43,8 +43,8 @@ enum DescriptorPointerType {
 	}
 	
 #define DESCRIPTOR_SET_DEFINE_BINDINGS\
-	DESCRIPTOR_SET_ADD_BINDING_TYPE( STORAGE_BUFFER, VulkanBuffer, storageBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER )\
-	DESCRIPTOR_SET_ADD_BINDING_TYPE( UNIFORM_BUFFER, VulkanBuffer, uniformBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER )\
+	DESCRIPTOR_SET_ADD_BINDING_TYPE( STORAGE_BUFFER, Buffer, storageBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER )\
+	DESCRIPTOR_SET_ADD_BINDING_TYPE( UNIFORM_BUFFER, Buffer, uniformBuffer, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( IMAGE_VIEW, VkImageView, imageView, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( COMBINED_IMAGE_SAMPLER, CombinedImageSampler, combinedImageSampler, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER )\
 	DESCRIPTOR_SET_ADD_BINDING_TYPE( ACCELERATION_STRUCTURE, VkAccelerationStructureNV, accelerationStructure, VK_SHADER_STAGE_ALL, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV )\
@@ -105,17 +105,17 @@ struct DescriptorBinding {
 		switch (pointerType) {
 			case STORAGE_BUFFER:
 				writeInfo = new VkDescriptorBufferInfo {
-					((VulkanBuffer*)data)->buffer,// VkBuffer buffer
+					((Buffer*)data)->buffer,// VkBuffer buffer
 					0,// VkDeviceSize offset
-					((VulkanBuffer*)data)->size,// VkDeviceSize range
+					((Buffer*)data)->size,// VkDeviceSize range
 				};
 				descriptorWrite.pBufferInfo = (VkDescriptorBufferInfo*)writeInfo;
 			break;
 			case UNIFORM_BUFFER:
 				writeInfo = new VkDescriptorBufferInfo {
-					((VulkanBuffer*)data)->buffer,// VkBuffer buffer
+					((Buffer*)data)->buffer,// VkBuffer buffer
 					0,// VkDeviceSize offset
-					((VulkanBuffer*)data)->size,// VkDeviceSize range
+					((Buffer*)data)->size,// VkDeviceSize range
 				};
 				descriptorWrite.pBufferInfo = (VkDescriptorBufferInfo*)writeInfo;
 			break;
@@ -150,7 +150,7 @@ struct DescriptorBinding {
 	}
 };
 
-class VulkanDescriptorSet {
+class DescriptorSet {
 public:
 	uint32_t set;
 	VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
@@ -160,7 +160,7 @@ private:
 	
 public:
 	
-	VulkanDescriptorSet(uint32_t set) : set(set) {}
+	DescriptorSet(uint32_t set) : set(set) {}
 	
 	std::map<uint32_t, DescriptorBinding>& GetBindings() {
 		return bindings;
@@ -170,7 +170,7 @@ public:
 		return descriptorSetLayout;
 	}
 	
-	void CreateDescriptorSetLayout(VulkanDevice* device) {
+	void CreateDescriptorSetLayout(Device* device) {
 		std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
 		for (auto& [binding, set] : bindings) {
 			layoutBindings.push_back({binding, set.descriptorType, set.descriptorCount, set.stageFlags, set.pImmutableSamplers});
@@ -184,7 +184,7 @@ public:
 			throw std::runtime_error("Failed to create descriptor set layout");
 	}
 	
-	void DestroyDescriptorSetLayout(VulkanDevice* device) {
+	void DestroyDescriptorSetLayout(Device* device) {
 		device->DestroyDescriptorSetLayout(descriptorSetLayout, nullptr);
 		descriptorSetLayout = VK_NULL_HANDLE;
 	}
