@@ -845,7 +845,7 @@ public: // Init/Load/Reset Methods
 	
 public: // Constructor & Destructor
 	VulkanRenderer(Loader* loader, const char* applicationName, uint applicationVersion, Window* window)
-	 : Instance(loader, applicationName, applicationVersion) {
+	 : Instance(loader, applicationName, applicationVersion, true) {
 		surface = window->CreateVulkanSurface(handle);
 	}
 

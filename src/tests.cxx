@@ -1,6 +1,8 @@
 // Project Config
 #include "config.hh"
 
+#define LOGGER_PREFIX " [tests] "
+
 // V4D Core Header
 #include <v4d.h>
 

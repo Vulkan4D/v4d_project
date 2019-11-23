@@ -520,9 +520,36 @@ private: // Rasterization Rendering
 			// Pipeline Create Info
 			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
 			// Color Blending
-			if (oitEnabled) graphicsPipeline->AddOitAttachments();
-			// else graphicsPipeline->AddAlphaBlendingAttachment();
-			else graphicsPipeline->AddColorAddAttachment();
+			if (oitEnabled) {
+				graphicsPipeline->AddColorBlendAttachmentState(
+					VK_TRUE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_OP_ADD,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_OP_ADD
+				);
+				graphicsPipeline->AddColorBlendAttachmentState(
+					VK_TRUE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_OP_ADD,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_FACTOR_ONE,
+					VK_BLEND_OP_ADD
+				);
+			}
+			// else graphicsPipeline->AddColorBlendAttachmentState();
+			else graphicsPipeline->AddColorBlendAttachmentState(
+				VK_TRUE,
+				VK_BLEND_FACTOR_ONE,
+				VK_BLEND_FACTOR_ONE,
+				VK_BLEND_OP_ADD,
+				VK_BLEND_FACTOR_ONE,
+				VK_BLEND_FACTOR_ONE,
+				VK_BLEND_OP_ADD
+			);
 			// Shader stages
 			pipeline.shaderProgram->CreateShaderStages(renderingDevice);
 			graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
@@ -869,7 +896,7 @@ protected: // Graphics configuration
 				graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 				graphicsPipeline->pipelineCreateInfo.pViewportState = &swapChain->viewportState;
 				graphicsPipeline->pipelineCreateInfo.pVertexInputState = &emptyInputState;
-				graphicsPipeline->AddAlphaBlendingAttachment();
+				graphicsPipeline->AddColorBlendAttachmentState();
 				// Shader stages
 				pipeline.shaderProgram->CreateShaderStages(renderingDevice);
 				graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);

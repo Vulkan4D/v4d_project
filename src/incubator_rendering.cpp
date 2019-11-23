@@ -1,4 +1,4 @@
-#define USE_RAY_TRACING
+// #define USE_RAY_TRACING
 
 #include "config.hh"
 #include <v4d.h>
