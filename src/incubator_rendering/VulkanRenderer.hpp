@@ -1,8 +1,7 @@
 #pragma once
 #include <v4d.h>
 
-#include "Instance.hpp"
-#include "PipelineLayout.hpp"
+using namespace v4d::graphics::vulkan;
 
 /////////////////////////////////////////////
 
@@ -17,8 +16,8 @@ protected: // class members
 	Device* renderingDevice = nullptr;
 	
 	// Queues
-	VulkanQueue graphicsQueue;
-	VulkanQueue presentationQueue;
+	Queue graphicsQueue;
+	Queue presentationQueue;
 
 	// Pools
 	VkCommandPool commandPool;

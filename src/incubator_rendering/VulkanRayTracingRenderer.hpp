@@ -1,8 +1,10 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "ShaderBindingTable.hpp"
+
 #include "Geometry.hpp"
+
+using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Scene-specific structs
 

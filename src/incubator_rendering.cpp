@@ -1,13 +1,7 @@
-// #define USE_RAY_TRACING
+#define USE_RAY_TRACING
 
 #include "config.hh"
 #include <v4d.h>
-
-#define XVK_INTERFACE_RAW_FUNCTIONS_ACCESSIBILITY private
-#include "xvk.hpp"
-
-// GLFW
-#include <GLFW/glfw3.h>
 
 // GLM
 #define GLM_FORCE_RADIANS
@@ -16,11 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include "incubator_rendering/Window.hpp"
-
-// Window.cpp
-// using namespace v4d::graphics;
-std::unordered_map<int, Window*> Window::windows{};
+using namespace v4d::graphics;
 
 // Vulkan
 #ifdef USE_RAY_TRACING

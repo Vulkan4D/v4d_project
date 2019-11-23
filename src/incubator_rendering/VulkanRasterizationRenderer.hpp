@@ -1,9 +1,6 @@
 #pragma once
 
 #include "VulkanRenderer.hpp"
-#include "DescriptorSet.hpp"
-#include "ShaderProgram.hpp"
-#include "PipelineLayout.hpp"
 #include "Geometry.hpp"
 
 // Test Object Vertex Data Structure

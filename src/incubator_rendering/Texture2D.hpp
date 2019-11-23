@@ -1,7 +1,9 @@
 #pragma once
 
-#include "VulkanStructs.hpp"
-#include "Device.hpp"
+
+
+using namespace v4d::graphics::vulkan;
+
 
 // https://github.com/nothings/stb
 #define STB_IMAGE_IMPLEMENTATION

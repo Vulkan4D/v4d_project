@@ -95,7 +95,9 @@
         "any": "cpp",
         "hash_set": "cpp",
         "forward_list": "cpp",
-        "*.include": "cpp"
+        "*.include": "cpp",
+        "__functional_base_03": "cpp",
+        "*.inc": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
