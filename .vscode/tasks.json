@@ -41,7 +41,14 @@
         {
             "label": "unit tests windows",
             "type": "shell",
-            "command": "clear; cd build && rm CMakeCache.txt && x86_64-w64-mingw32-cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8 && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
+            "command": "clear; cd build && rm CMakeCache.txt && x86_64-w64-mingw32-cmake -DCMAKE_BUILD_TYPE=Debug -DCOMPILE_ASSETS=OFF .. && cmake --build . --parallel 8 && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "test"
+        },
+        {
+            "label": "build debug windows",
+            "type": "shell",
+            "command": "clear; cd build && rm CMakeCache.txt && x86_64-w64-mingw32-cmake -DCMAKE_BUILD_TYPE=Debug -DCOMPILE_ASSETS=OFF .. && cmake --build . --parallel 8 && ssh WINDOWS_PC \"START /wait taskkill /f /im demo.exe\" && ssh WINDOWS_PC \"START /wait taskkill /f /im incubator.exe\" && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },

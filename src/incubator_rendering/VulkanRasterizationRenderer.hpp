@@ -634,11 +634,11 @@ public: // Scene configuration methods
 	void LoadScene() override {
 		// Galaxy
 		
-		for (int x = 0; x < 20; ++x) {
-			for (int y = 0; y < 20; ++y) {
-				for (int z = 0; z < 20; ++z) {
+		for (int x = 0; x < 32; ++x) {
+			for (int y = 0; y < 32; ++y) {
+				for (int z = 0; z < 32; ++z) {
 					galaxies.push_back({
-						{x,y,z, 4*renderingResolutionScale}, x*y*z*3+3
+						{x,y,z, 2*renderingResolutionScale}, x*y*z*3+3
 					});
 				}
 			}
