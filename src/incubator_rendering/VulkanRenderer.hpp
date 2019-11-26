@@ -487,13 +487,13 @@ protected: // Helper methods
 	}
 
 
-	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
+	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
 		auto commandBuffer = BeginSingleTimeCommands(commandPool);
-		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels);
+		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels, layerCount);
 		EndSingleTimeCommands(commandPool, commandBuffer);
 	}
 	
-	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) {
+	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
 		VkImageMemoryBarrier barrier = {};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		barrier.oldLayout = oldLayout; // VK_IMAGE_LAYOUT_UNDEFINED if we dont care about existing contents of the image
@@ -506,7 +506,7 @@ protected: // Helper methods
 		barrier.subresourceRange.baseMipLevel = 0;
 		barrier.subresourceRange.levelCount = mipLevels;
 		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
+		barrier.subresourceRange.layerCount = layerCount;
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = 0;
 		//

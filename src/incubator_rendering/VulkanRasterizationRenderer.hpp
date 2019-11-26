@@ -14,7 +14,7 @@ struct UBO {
 	glm::dmat4 proj;
 	glm::dmat4 view;
 	glm::dmat4 model;
-	// glm::dvec3 cameraPosition;
+	glm::dvec3 cameraPosition;
 };
 
 class VulkanRasterizationRenderer : public VulkanRenderer {
@@ -40,7 +40,7 @@ private: // Rasterization Rendering
 		virtual ~RenderingPipeline() {}
 	};
 	struct VertexRasterizationPipeline : public RenderingPipeline {
-		Buffer* vertexBuffer;
+		Buffer* vertexBuffer = nullptr;
 		Buffer* indexBuffer = nullptr;
 		uint32_t vertexCount = 0;
 		
@@ -52,6 +52,9 @@ private: // Rasterization Rendering
 		VertexRasterizationPipeline(ShaderProgram* shaderProgram, Buffer* vertexBuffer, uint32_t vertexCount)
 		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), vertexCount(vertexCount) {}
 		
+		VertexRasterizationPipeline(ShaderProgram* shaderProgram, uint32_t vertexCount)
+		 : RenderingPipeline(shaderProgram), vertexCount(vertexCount) {}
+		
 		void Configure() {
 			graphicsPipeline->inputAssembly.topology = topology;
 			graphicsPipeline->rasterizer.cullMode = VK_CULL_MODE_NONE;
@@ -61,9 +64,7 @@ private: // Rasterization Rendering
 		
 		void Draw(Device* device, VkCommandBuffer commandBuffer) {
 			VkDeviceSize offsets[] = {0};
-			device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
-			if (indexBuffer == nullptr) {
-				// Draw vertices
+			if (vertexBuffer == nullptr) {
 				device->CmdDraw(commandBuffer,
 					vertexCount, // vertexCount
 					1, // instanceCount
@@ -71,15 +72,26 @@ private: // Rasterization Rendering
 					0  // firstInstance (defines the lowest value of gl_InstanceIndex)
 				);
 			} else {
-				// Draw indices
-				device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-				device->CmdDrawIndexed(commandBuffer,
-					static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
-					1, // instanceCount
-					0, // firstVertex (defines the lowest value of gl_VertexIndex)
-					0, // vertexOffset
-					0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-				);
+				device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
+				if (indexBuffer == nullptr) {
+					// Draw vertices
+					device->CmdDraw(commandBuffer,
+						vertexCount, // vertexCount
+						1, // instanceCount
+						0, // firstVertex (defines the lowest value of gl_VertexIndex)
+						0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+					);
+				} else {
+					// Draw indices
+					device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
+					device->CmdDrawIndexed(commandBuffer,
+						static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
+						1, // instanceCount
+						0, // firstVertex (defines the lowest value of gl_VertexIndex)
+						0, // vertexOffset
+						0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+					);
+				}
 			}
 		}
 	};
@@ -101,7 +113,9 @@ private: // Rasterization Rendering
 	std::vector<PostProcessingPipeline> postProcessingPipelines {};
 	RenderPass* renderPass = nullptr;
 	RenderPass* postProcessingRenderPass = nullptr;
-	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers;
+	RenderPass* galaxyGenRenderPass = nullptr;
+	RenderPass* galaxyFadeRenderPass = nullptr;
+	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers, galaxyGenFrameBuffers, galaxyFadeFrameBuffers;
 	VkClearColorValue clearColor = {0,0,0,1};
 	// Render Target (Color Attachment)
 	VkImage colorImage = VK_NULL_HANDLE;
@@ -591,6 +605,8 @@ private: // Renderer Configuration methods
 			// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
 			VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 		};
+		
+		RequiredDeviceExtension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
 	}
 	
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
@@ -615,10 +631,68 @@ private: // Renderer Configuration methods
 
 	void CreateResources() override {
 		CreateRasterizationResources();
+		
+		// Galaxy Cube resources
+		galaxyCubeImageFormat = swapChain->format.format;
+		VkImageViewCreateInfo viewInfo = {};
+		renderingDevice->CreateImage(
+			swapChain->extent.width,
+			swapChain->extent.width,
+			1, VK_SAMPLE_COUNT_1_BIT,
+			galaxyCubeImageFormat,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			galaxyCubeImage,
+			galaxyCubeImageMemory,
+			6,
+			VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+		);
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = galaxyCubeImage;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		viewInfo.format = galaxyCubeImageFormat;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 6;
+		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &galaxyCubeImageView) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create texture image view for galaxy cube");
+		}
+		TransitionImageLayout(galaxyCubeImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, 6);
+		// Sampler
+		VkSamplerCreateInfo sampler {};
+		sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler.maxAnisotropy = 1.0f;
+		sampler.magFilter = VK_FILTER_LINEAR;
+		sampler.minFilter = VK_FILTER_LINEAR;
+		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		sampler.addressModeV = sampler.addressModeU;
+		sampler.addressModeW = sampler.addressModeU;
+		sampler.mipLodBias = 0.0f;
+		sampler.maxAnisotropy = 1.0f;
+		sampler.compareOp = VK_COMPARE_OP_NEVER;
+		sampler.minLod = 0.0f;
+		sampler.maxLod = 1.0f;
+		sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		if (renderingDevice->CreateSampler(&sampler, nullptr, &galaxyCubeSampler.sampler) != VK_SUCCESS)
+			throw std::runtime_error("Failed to create sampler");
+		galaxyCubeSampler.imageView = galaxyCubeImageView;
 	}
 	
 	void DestroyResources() override {
 		DestroyRasterizationResources();
+		
+		// Galaxy Cube resources
+		if (galaxyCubeImage != VK_NULL_HANDLE) {
+			renderingDevice->DestroySampler(galaxyCubeSampler.sampler, nullptr);
+			renderingDevice->DestroyImageView(galaxyCubeImageView, nullptr);
+			renderingDevice->DestroyImage(galaxyCubeImage, nullptr);
+			renderingDevice->FreeMemory(galaxyCubeImageMemory, nullptr);
+			galaxyCubeImage = VK_NULL_HANDLE;
+		}
 	}
 	
 public: // Scene configuration methods
@@ -629,38 +703,76 @@ public: // Scene configuration methods
 	};
 	
 	std::vector<Galaxy> galaxies {};
-	ShaderProgram* galaxyShader = nullptr;
+	ShaderProgram* galaxyGenShader = nullptr;
+	ShaderProgram* galaxyBoxShader = nullptr;
+	ShaderProgram* galaxyFadeShader = nullptr;
+	VkImage galaxyCubeImage = VK_NULL_HANDLE;
+	VkDeviceMemory galaxyCubeImageMemory = VK_NULL_HANDLE;
+	VkImageView galaxyCubeImageView = VK_NULL_HANDLE;
+	VkFormat galaxyCubeImageFormat;
+	CombinedImageSampler galaxyCubeSampler;
+	VertexRasterizationPipeline* galaxyGenPipeline = nullptr;
+	VertexRasterizationPipeline* galaxyFadePipeline = nullptr;
 	
 	void LoadScene() override {
-		// Galaxy
 		
+		
+		// Galaxy Gen
 		for (int x = 0; x < 32; ++x) {
 			for (int y = 0; y < 32; ++y) {
 				for (int z = 0; z < 32; ++z) {
 					galaxies.push_back({
-						{x,y,z, 2*renderingResolutionScale}, x*y*z*3+3
+						{x-16, y-16, z-16, 3}, x*y*z*3+3
 					});
 				}
 			}
 		}
-		
 		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT);
-		PipelineLayout* galaxyPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		galaxyPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
+		PipelineLayout* galaxyGenPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
+		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		galaxyShader = new ShaderProgram(galaxyPipelineLayout, {
-			{"incubator_rendering/assets/shaders/galaxy.geom"},
-			{"incubator_rendering/assets/shaders/galaxy.vert"},
-			{"incubator_rendering/assets/shaders/galaxy.frag"},
+		galaxyGenShader = new ShaderProgram(galaxyGenPipelineLayout, {
+			{"incubator_rendering/assets/shaders/galaxy.gen.geom"},
+			{"incubator_rendering/assets/shaders/galaxy.gen.vert"},
+			{"incubator_rendering/assets/shaders/galaxy.gen.frag"},
 		});
-		galaxyShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
+		galaxyGenShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
 			{1, offsetof(Galaxy, Galaxy::seed), VK_FORMAT_R32_UINT},
 		});
 		galaxiesBuffer->AddSrcDataPtr(&galaxies);
-		rasterizationPipelines.emplace_back(galaxyShader, galaxiesBuffer, galaxies.size()).topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-		galaxyShader->LoadShaders();
+		galaxyGenPipeline = new VertexRasterizationPipeline(galaxyGenShader, galaxiesBuffer, galaxies.size());
+		galaxyGenPipeline->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyGenShader->LoadShaders();
+		
+		
+		
+		// Galaxy Box
+		auto* galaxyBoxDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
+		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
+		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
+		PipelineLayout* galaxyBoxPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
+		galaxyBoxPipelineLayout->AddDescriptorSet(galaxyBoxDescriptorSet);
+		galaxyBoxShader = new ShaderProgram(galaxyBoxPipelineLayout, {
+			{"incubator_rendering/assets/shaders/galaxy.box.vert"},
+			{"incubator_rendering/assets/shaders/galaxy.box.frag"},
+		});
+		rasterizationPipelines.emplace_back(galaxyBoxShader, 14).topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		galaxyBoxShader->LoadShaders();
+		
+		
+		
+		// Galaxy Fade
+		galaxyFadeShader = new ShaderProgram(galaxyBoxPipelineLayout, {
+			{"incubator_rendering/assets/shaders/galaxy.fade.vert"},
+			{"incubator_rendering/assets/shaders/galaxy.fade.geom"},
+			{"incubator_rendering/assets/shaders/galaxy.fade.frag"},
+		});
+		galaxyFadePipeline = new VertexRasterizationPipeline(galaxyFadeShader, 6);
+		galaxyFadePipeline->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyFadeShader->LoadShaders();
+		
 		
 		
 		// Objects
@@ -772,6 +884,9 @@ public: // Scene configuration methods
 
 	void UnloadScene() override {
 		// Shaders
+		delete galaxyGenShader;
+		delete galaxyBoxShader;
+		delete galaxyFadeShader;
 		delete testShader;
 		if (postProcessingEnabled) {
 			delete ppShader;
@@ -908,6 +1023,256 @@ protected: // Graphics configuration
 			// Create Graphics Pipelines !
 			postProcessingRenderPass->CreateGraphicsPipelines();
 		}
+		
+		
+		
+		{
+			// Galaxy Gen
+			galaxyGenRenderPass = new RenderPass(renderingDevice);
+
+			// Color Attachment (Fragment shader Standard Output)
+			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
+				colorAttachment.format = galaxyCubeImageFormat;
+				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
+				// Color and depth data
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil data
+				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+				galaxyGenRenderPass->AddAttachment(colorAttachment);
+			VkAttachmentReference colorAttachmentRefs = {
+				0, // layout(location = 0) for output data in the fragment shader
+				VK_IMAGE_LAYOUT_GENERAL
+			};
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttachmentRefs;
+				subpass.pDepthStencilAttachment = nullptr;
+			galaxyGenRenderPass->AddSubpass(subpass);
+			// VkSubpassDescription subpass2 = {};
+			// 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			// 	subpass.colorAttachmentCount = 1;
+			// 	subpass.pColorAttachments = &colorAttachmentRefs;
+			// 	subpass.inputAttachmentCount = 1;
+			// 	subpass.pInputAttachments = &colorAttachmentRefs;
+			// galaxyGenRenderPass->AddSubpass(subpass2);
+			std::array<VkSubpassDependency, 1> dependencies {};
+				dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+				dependencies[0].dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+				// These two specify the operations to wait on and the stages in which these operations occur. 
+				// We need to wait for the swap chain to finish reading from the image before we can access it. 
+				// This can be accomplished by waiting on the color attachment output stage itself.
+				dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependencies[0].srcAccessMask = 0;
+				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+				dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				// //
+				// dependencies[1].srcSubpass = 0; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+				// dependencies[1].dstSubpass = 1; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+				// // These two specify the operations to wait on and the stages in which these operations occur. 
+				// // We need to wait for the swap chain to finish reading from the image before we can access it. 
+				// // This can be accomplished by waiting on the color attachment output stage itself.
+				// dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				// dependencies[1].srcAccessMask = 0;
+				// // The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+				// // These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+				// dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				// dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			// Set dependency to the render pass info
+			galaxyGenRenderPass->renderPassInfo.dependencyCount = (uint)dependencies.size();
+			galaxyGenRenderPass->renderPassInfo.pDependencies = dependencies.data();
+
+			// Create the render pass
+			galaxyGenRenderPass->Create();
+			
+			VkPipelineViewportStateCreateInfo viewportState {};
+			VkViewport viewport {};
+			VkRect2D scissor {};
+			viewport.x = 0;
+			viewport.y = 0;
+			viewport.width = (float) swapChain->extent.width;
+			viewport.height = (float) swapChain->extent.width;
+			viewport.minDepth = 0;
+			viewport.maxDepth = 1;
+			scissor.offset = {0, 0};
+			scissor.extent = {(uint)swapChain->extent.width, (uint)swapChain->extent.width};
+			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportState.viewportCount = 1;
+			viewportState.scissorCount = 1;
+			viewportState.pViewports = &viewport;
+			viewportState.pScissors = &scissor;
+			
+			// Frame Buffers
+			galaxyGenFrameBuffers.resize(swapChain->imageViews.size());
+			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
+				VkFramebufferCreateInfo framebufferCreateInfo = {};
+				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferCreateInfo.renderPass = galaxyGenRenderPass->handle;
+				framebufferCreateInfo.attachmentCount = 1;
+				framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
+				framebufferCreateInfo.width = (uint)swapChain->extent.width;
+				framebufferCreateInfo.height = (uint)swapChain->extent.width;
+				framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
+				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyGenFrameBuffers[i]) != VK_SUCCESS) {
+					throw std::runtime_error("Failed to create galaxy gen framebuffer");
+				}
+			}
+			
+			// Shaders
+			auto* graphicsPipeline = galaxyGenRenderPass->NewGraphicsPipeline(renderingDevice, 0);
+			// Multisampling (AntiAliasing)
+			graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			// Pipeline Create Info
+			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
+			// Color Blending
+			graphicsPipeline->AddColorBlendAttachmentState();
+			// Shader stages
+			galaxyGenPipeline->shaderProgram->CreateShaderStages(renderingDevice);
+			graphicsPipeline->SetShaderProgram(galaxyGenPipeline->shaderProgram);
+			// Configure
+			galaxyGenPipeline->graphicsPipeline = graphicsPipeline;
+			galaxyGenPipeline->Configure();
+			// // Fade
+			// auto* graphicsPipeline2 = galaxyGenRenderPass->NewGraphicsPipeline(renderingDevice, 1);
+			// // Multisampling (AntiAliasing)
+			// graphicsPipeline2->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			// // Pipeline Create Info
+			// graphicsPipeline2->pipelineCreateInfo.pViewportState = &viewportState;
+			// // Color Blending
+			// graphicsPipeline2->AddColorBlendAttachmentState();
+			// // Shader stages
+			// galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
+			// graphicsPipeline2->SetShaderProgram(galaxyFadePipeline->shaderProgram);
+			// // Configure
+			// galaxyFadePipeline->graphicsPipeline = graphicsPipeline2;
+			// galaxyFadePipeline->Configure();
+			
+			
+			// Create Graphics Pipelines !
+			galaxyGenRenderPass->CreateGraphicsPipelines();
+		}
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		/////////////////////
+		
+		
+		
+		
+		{
+			
+			// Galaxy Fade
+			galaxyFadeRenderPass = new RenderPass(renderingDevice);
+
+			// Color Attachment (Fragment shader Standard Output)
+			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
+				colorAttachment.format = galaxyCubeImageFormat;
+				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
+				// Color and depth data
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil data
+				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+				galaxyFadeRenderPass->AddAttachment(colorAttachment);
+			VkAttachmentReference colorAttachmentRefs = {
+				0, // layout(location = 0) for output data in the fragment shader
+				VK_IMAGE_LAYOUT_GENERAL
+			};
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttachmentRefs;
+				subpass.pDepthStencilAttachment = nullptr;
+			galaxyFadeRenderPass->AddSubpass(subpass);
+			std::array<VkSubpassDependency, 1> dependencies {};
+				dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+				dependencies[0].dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+				// These two specify the operations to wait on and the stages in which these operations occur. 
+				// We need to wait for the swap chain to finish reading from the image before we can access it. 
+				// This can be accomplished by waiting on the color attachment output stage itself.
+				dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependencies[0].srcAccessMask = 0;
+				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+				dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			// Set dependency to the render pass info
+			galaxyFadeRenderPass->renderPassInfo.dependencyCount = (uint)dependencies.size();
+			galaxyFadeRenderPass->renderPassInfo.pDependencies = dependencies.data();
+
+			// Create the render pass
+			galaxyFadeRenderPass->Create();
+			
+			VkPipelineViewportStateCreateInfo viewportState {};
+			VkViewport viewport {};
+			VkRect2D scissor {};
+			viewport.x = 0;
+			viewport.y = 0;
+			viewport.width = (float) swapChain->extent.width;
+			viewport.height = (float) swapChain->extent.width;
+			viewport.minDepth = 0;
+			viewport.maxDepth = 1;
+			scissor.offset = {0, 0};
+			scissor.extent = {(uint)swapChain->extent.width, (uint)swapChain->extent.width};
+			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			viewportState.viewportCount = 1;
+			viewportState.scissorCount = 1;
+			viewportState.pViewports = &viewport;
+			viewportState.pScissors = &scissor;
+			
+			// Frame Buffers
+			galaxyFadeFrameBuffers.resize(swapChain->imageViews.size());
+			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
+				VkFramebufferCreateInfo framebufferCreateInfo = {};
+				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferCreateInfo.renderPass = galaxyFadeRenderPass->handle;
+				framebufferCreateInfo.attachmentCount = 1;
+				framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
+				framebufferCreateInfo.width = (uint)swapChain->extent.width;
+				framebufferCreateInfo.height = (uint)swapChain->extent.width;
+				framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
+				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyFadeFrameBuffers[i]) != VK_SUCCESS) {
+					throw std::runtime_error("Failed to create galaxy gen framebuffer");
+				}
+			}
+			
+			// Shaders
+			auto* graphicsPipeline2 = galaxyFadeRenderPass->NewGraphicsPipeline(renderingDevice, 0);
+			// Multisampling (AntiAliasing)
+			graphicsPipeline2->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+			// Pipeline Create Info
+			graphicsPipeline2->pipelineCreateInfo.pViewportState = &viewportState;
+			// Color Blending
+			graphicsPipeline2->AddColorBlendAttachmentState();
+			// Shader stages
+			galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
+			graphicsPipeline2->SetShaderProgram(galaxyFadePipeline->shaderProgram);
+			// Configure
+			galaxyFadePipeline->graphicsPipeline = graphicsPipeline2;
+			galaxyFadePipeline->Configure();
+			
+			
+			// Create Graphics Pipelines !
+			galaxyFadeRenderPass->CreateGraphicsPipelines();
+		}
 	}
 	
 	void DestroyGraphicsPipelines() override {
@@ -930,9 +1295,57 @@ protected: // Graphics configuration
 				pipeline.shaderProgram->DestroyShaderStages(renderingDevice);
 			}
 		}
+		
+		// Galaxy Gen
+		for (auto framebuffer : galaxyGenFrameBuffers) {
+			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
+		}
+		galaxyGenFrameBuffers.clear();
+		galaxyGenRenderPass->DestroyGraphicsPipelines();
+		delete galaxyGenRenderPass;
+		galaxyGenPipeline->shaderProgram->DestroyShaderStages(renderingDevice);
+		
+		// Galaxy Fade
+		for (auto framebuffer : galaxyFadeFrameBuffers) {
+			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
+		}
+		galaxyFadeFrameBuffers.clear();
+		galaxyFadeRenderPass->DestroyGraphicsPipelines();
+		delete galaxyFadeRenderPass;
+		galaxyFadePipeline->shaderProgram->DestroyShaderStages(renderingDevice);
+	}
+	
+	void RenderGalaxy(VkCommandBuffer commandBuffer, int imageIndex) {
+		
+		// Begin Render Pass
+		VkRenderPassBeginInfo renderPassInfo = {};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
+		renderPassInfo.framebuffer = galaxyGenFrameBuffers[imageIndex];
+		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
+		renderPassInfo.renderArea.offset = {0, 0};
+		renderPassInfo.renderArea.extent = {(uint)swapChain->extent.width, (uint)swapChain->extent.width};
+		// std::array<VkClearValue, 1> clearValues = {};
+		// clearValues[0].color = clearColor;
+		// renderPassInfo.clearValueCount = clearValues.size();
+		// renderPassInfo.pClearValues = clearValues.data();
+
+		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
+		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		
+		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
+		renderPassInfo.framebuffer = galaxyFadeFrameBuffers[imageIndex];
+		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyFadePipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+		galaxyFadePipeline->Draw(renderingDevice, commandBuffer);
+		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+		
+		RenderGalaxy(commandBuffer, imageIndex);
 		
 		int width = (int)((float)swapChain->extent.width * renderingResolutionScale);
 		int height = (int)((float)swapChain->extent.height * renderingResolutionScale);
@@ -1000,6 +1413,7 @@ protected: // Graphics configuration
 			
 			renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		}
+		
 	}
 	
 protected: // Methods executed on every frame
@@ -1012,7 +1426,7 @@ protected: // Methods executed on every frame
 		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
 		// Current camera position
-		// ubo.cameraPosition = camPosition;
+		ubo.cameraPosition = camPosition;
 		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1));
 		// Projection
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)

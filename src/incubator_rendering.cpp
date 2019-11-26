@@ -43,8 +43,10 @@ int main() {
 	vulkan->SendGraphicsToDevice();
 	
 	double camSpeed = 2.0, mouseSensitivity = 1.0;
-	double horizontalAngle = -2.5;
-	double verticalAngle = -0.5;
+	// double horizontalAngle = -2.5;
+	// double verticalAngle = -0.5;
+	double horizontalAngle = 0;
+	double verticalAngle = 0;
 	vulkan->camDirection = glm::dvec3(
 		cos(verticalAngle) * sin(horizontalAngle),
 		cos(verticalAngle) * cos(horizontalAngle),
