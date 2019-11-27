@@ -7,6 +7,8 @@ layout(set = 0, binding = 0) uniform UBO {
 	dmat4 view;
 	dmat4 model;
 	dvec3 cameraPosition;
+	float speed;
+	int galaxyFrameIndex;
 } ubo;
 
 ##################################################################
@@ -20,7 +22,7 @@ layout(location = 0) out uint out_seed;
 
 void main() {
 	gl_Position = posr; // passthrough
-	out_seed = seed;
+	out_seed = seed + ubo.galaxyFrameIndex;
 }
 
 ##################################################################
@@ -61,12 +63,20 @@ void main(void) {
 		
 		gl_PointSize = radius + RandomFloat(fseed) + smoothstep(MAX_VIEW_DISTANCE, 0, length(pos))*2;
 		
-		vec3 color = vec3(RandomFloat(fseed)*2.5, RandomFloat(fseed)*1.5, RandomFloat(fseed));
-
+		vec4 starType = normalize(vec4(
+			/*red*/		(RandomFloat(fseed) * 2 - 1) * 1.3 ,
+			/*yellow*/	(RandomFloat(fseed) * 2 - 1) * 1.5 ,
+			/*blue*/	(RandomFloat(fseed) * 2 - 1) * 0.7 ,
+			/*white*/	(RandomFloat(fseed) * 2 - 1) * 1.8 
+		));
+		
+		vec3 color =/*red*/		vec3( 1.0 , 0.8 , 0.6 ) * starType.x +
+					/*yellow*/	vec3( 1.0 , 1.0 , 0.7 ) * starType.y +
+					/*blue*/	vec3( 0.6 , 0.8 , 1.0 ) * starType.z +
+					/*white*/	vec3( 1.0 , 1.0 , 1.0 ) * starType.w ;
+		
 		out_color = vec4(
-			max(color.g, color.r),
-			color.g,
-			min(color.g, color.b), 
+			color,
 			RandomFloat(fseed) * smoothstep(MAX_VIEW_DISTANCE, 0, length(pos))
 		);
 		
@@ -172,7 +182,7 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0,0,0, 0.05);
+	out_color = vec4(0.003,0.003,0.003, 1);
 }
 
 ##################################################################

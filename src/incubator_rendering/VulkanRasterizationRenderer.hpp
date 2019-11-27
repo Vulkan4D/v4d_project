@@ -15,12 +15,19 @@ struct UBO {
 	glm::dmat4 view;
 	glm::dmat4 model;
 	glm::dvec3 cameraPosition;
+	float speed;
+	int galaxyFrameIndex;
+};
+
+struct ConditionalRendering {
+	int fadeGalaxy;
 };
 
 class VulkanRasterizationRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
 	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	Buffer conditionalRenderingBuffer {VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT, sizeof(ConditionalRendering)};
 	std::vector<Buffer*> stagedBuffers {};
 	std::vector<Geometry*> geometries {};
 	
@@ -607,6 +614,7 @@ private: // Renderer Configuration methods
 		};
 		
 		RequiredDeviceExtension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
+		RequiredDeviceExtension(VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME);
 	}
 	
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
@@ -641,7 +649,7 @@ private: // Renderer Configuration methods
 			1, VK_SAMPLE_COUNT_1_BIT,
 			galaxyCubeImageFormat,
 			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			galaxyCubeImage,
 			galaxyCubeImageMemory,
@@ -722,13 +730,13 @@ public: // Scene configuration methods
 			for (int y = 0; y < 32; ++y) {
 				for (int z = 0; z < 32; ++z) {
 					galaxies.push_back({
-						{x-16, y-16, z-16, 3}, x*y*z*3+3
+						{x-16, y-16, z-16, 2}, x*y*z*3+3
 					});
 				}
 			}
 		}
 		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT);
+		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* galaxyGenPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
@@ -750,7 +758,7 @@ public: // Scene configuration methods
 		
 		// Galaxy Box
 		auto* galaxyBoxDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
+		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* galaxyBoxPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyBoxPipelineLayout->AddDescriptorSet(galaxyBoxDescriptorSet);
@@ -779,7 +787,7 @@ public: // Scene configuration methods
 		
 		// Descriptor sets & Pipeline Layouts
 		auto* descriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT);
+		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* mainPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		mainPipelineLayout->AddDescriptorSet(descriptorSet);
 		PipelineLayout* postProcessingPipelineLayout = nullptr;
@@ -921,8 +929,9 @@ protected: // Graphics configuration
 	void CreateSceneGraphics() override {
 		// Staged Buffers
 		AllocateBuffersStaged(commandPool, stagedBuffers);
-		// Uniform buffer
+		// Other buffers
 		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		conditionalRenderingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 	}
 
 	void DestroySceneGraphics() override {
@@ -930,8 +939,9 @@ protected: // Graphics configuration
 			buffer->Free(renderingDevice);
 		}
 
-		// Uniform buffers
+		// Other buffers
 		uniformBuffer.Free(renderingDevice);
+		conditionalRenderingBuffer.Free(renderingDevice);
 	}
 	
 	void CreateGraphicsPipelines() override {
@@ -1125,21 +1135,29 @@ protected: // Graphics configuration
 				}
 			}
 			
-			// Shaders
+			// Galaxy Gen
 			auto* graphicsPipeline = galaxyGenRenderPass->NewGraphicsPipeline(renderingDevice, 0);
 			// Multisampling (AntiAliasing)
 			graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 			// Pipeline Create Info
 			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
 			// Color Blending
-			graphicsPipeline->AddColorBlendAttachmentState();
+			graphicsPipeline->AddColorBlendAttachmentState(
+				/*blendEnable*/				VK_TRUE,
+				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_SRC_ALPHA,
+				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*colorBlendOp*/			VK_BLEND_OP_ADD,
+				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*alphaBlendOp*/			VK_BLEND_OP_MIN
+			);
 			// Shader stages
 			galaxyGenPipeline->shaderProgram->CreateShaderStages(renderingDevice);
 			graphicsPipeline->SetShaderProgram(galaxyGenPipeline->shaderProgram);
 			// Configure
 			galaxyGenPipeline->graphicsPipeline = graphicsPipeline;
 			galaxyGenPipeline->Configure();
-			// // Fade
+			// // Galaxy Fade
 			// auto* graphicsPipeline2 = galaxyGenRenderPass->NewGraphicsPipeline(renderingDevice, 1);
 			// // Multisampling (AntiAliasing)
 			// graphicsPipeline2->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -1254,14 +1272,22 @@ protected: // Graphics configuration
 				}
 			}
 			
-			// Shaders
+			// Galaxy Fade
 			auto* graphicsPipeline2 = galaxyFadeRenderPass->NewGraphicsPipeline(renderingDevice, 0);
 			// Multisampling (AntiAliasing)
 			graphicsPipeline2->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 			// Pipeline Create Info
 			graphicsPipeline2->pipelineCreateInfo.pViewportState = &viewportState;
 			// Color Blending
-			graphicsPipeline2->AddColorBlendAttachmentState();
+			graphicsPipeline2->AddColorBlendAttachmentState(
+				/*blendEnable*/				VK_TRUE,
+				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*colorBlendOp*/			VK_BLEND_OP_REVERSE_SUBTRACT,
+				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*alphaBlendOp*/			VK_BLEND_OP_MAX
+			);
 			// Shader stages
 			galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
 			graphicsPipeline2->SetShaderProgram(galaxyFadePipeline->shaderProgram);
@@ -1320,8 +1346,6 @@ protected: // Graphics configuration
 		// Begin Render Pass
 		VkRenderPassBeginInfo renderPassInfo = {};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
-		renderPassInfo.framebuffer = galaxyGenFrameBuffers[imageIndex];
 		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
 		renderPassInfo.renderArea.offset = {0, 0};
 		renderPassInfo.renderArea.extent = {(uint)swapChain->extent.width, (uint)swapChain->extent.width};
@@ -1329,18 +1353,34 @@ protected: // Graphics configuration
 		// clearValues[0].color = clearColor;
 		// renderPassInfo.clearValueCount = clearValues.size();
 		// renderPassInfo.pClearValues = clearValues.data();
-
-		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
-		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		
+		
+		// Galaxy Fade
+		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {
+			VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT,// VkStructureType sType
+			nullptr,// const void* pNext
+			conditionalRenderingBuffer.buffer,// VkBuffer buffer
+			0,// VkDeviceSize offset
+			0,// VkConditionalRenderingFlagsEXT flags
+		};
+		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyFadeFrameBuffers[imageIndex];
 		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyFadePipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyFadePipeline->Draw(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
+		
+
+		// Galaxy Gen
+		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
+		renderPassInfo.framebuffer = galaxyGenFrameBuffers[imageIndex];
+		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
+		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
+		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
@@ -1421,7 +1461,8 @@ protected: // Methods executed on every frame
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
-		UBO ubo = {};
+		UBO ubo {};
+		ConditionalRendering conditionalRendering {};
 		// Slowly rotate the test object
 		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
@@ -1431,13 +1472,37 @@ protected: // Methods executed on every frame
 		// Projection
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		ubo.proj[1][1] *= -1;
+		
+		// Galaxy convergence
+		galaxyFrameIndex++;
+		if (galaxyFrameIndex >= 100) galaxyFrameIndex = 100;
+		if (speed > 0) galaxyFrameIndex = 0;
+		ubo.speed = speed;
+		ubo.galaxyFrameIndex = galaxyFrameIndex;
+		conditionalRendering.fadeGalaxy = speed>0? 1:0;
 
 		// Update memory
 		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+		Buffer::CopyDataToBuffer(renderingDevice, &conditionalRendering, &conditionalRenderingBuffer);
+		
+		if (previousSpeed != speed) {
+			previousSpeed = speed;
+			if (speed == 0) {
+				VkClearColorValue clearColor {.0,.0,.0,.0};
+				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
+				auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &clearRange);
+				EndSingleTimeCommands(commandPool, cmdBuffer);
+			}
+		}
 	}
-
+	
 public: // user-defined state variables
+	int galaxyFrameIndex = 0;
+	float speed = 0;
+	float previousSpeed = 0;
 	glm::dvec3 camPosition = glm::dvec3(2,2,2);
 	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
+	
 	
 };

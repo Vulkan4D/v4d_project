@@ -158,24 +158,31 @@ int main() {
 		glfwPollEvents();
 		
 		// Camera Movements
+		vulkan->speed = 0;
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : 1.0;
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			vulkan->camPosition += vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
 			vulkan->camPosition -= vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
 			vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
 			vulkan->camPosition += glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
 			vulkan->camPosition += glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
 			vulkan->camPosition -= glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
 		}
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
 			double x, y;
