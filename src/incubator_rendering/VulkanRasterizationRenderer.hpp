@@ -17,10 +17,12 @@ struct UBO {
 	glm::dvec3 cameraPosition;
 	float speed;
 	int galaxyFrameIndex;
+	bool toggleTest;
 };
 
 struct ConditionalRendering {
 	int fadeGalaxy;
+	int genGalaxy;
 };
 
 class VulkanRasterizationRenderer : public VulkanRenderer {
@@ -145,10 +147,10 @@ private: // Rasterization Rendering
 	VkFormat depthImageFormat;
 	
 	// Graphics settings
-	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_1_BIT;
-	const bool postProcessingEnabled = 							false;
+	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
+	const bool postProcessingEnabled = 							true;
 	const bool oitEnabled = !postProcessingEnabled?false : 		false;
-	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
+	float renderingResolutionScale = !postProcessingEnabled?1: 	2.0;
 	
 	
 	void CreateRasterizationResources() {
@@ -730,7 +732,7 @@ public: // Scene configuration methods
 			for (int y = 0; y < 32; ++y) {
 				for (int z = 0; z < 32; ++z) {
 					galaxies.push_back({
-						{x-16, y-16, z-16, 2}, x*y*z*3+3
+						{x*5, y*5, z*5, 1}, x*y*z*3+3
 					});
 				}
 			}
@@ -758,7 +760,7 @@ public: // Scene configuration methods
 		
 		// Galaxy Box
 		auto* galaxyBoxDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* galaxyBoxPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyBoxPipelineLayout->AddDescriptorSet(galaxyBoxDescriptorSet);
@@ -1144,12 +1146,12 @@ protected: // Graphics configuration
 			// Color Blending
 			graphicsPipeline->AddColorBlendAttachmentState(
 				/*blendEnable*/				VK_TRUE,
-				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_SRC_ALPHA,
+				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*colorBlendOp*/			VK_BLEND_OP_ADD,
+				/*colorBlendOp*/			VK_BLEND_OP_MAX,
 				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*alphaBlendOp*/			VK_BLEND_OP_MIN
+				/*alphaBlendOp*/			VK_BLEND_OP_MAX
 			);
 			// Shader stages
 			galaxyGenPipeline->shaderProgram->CreateShaderStages(renderingDevice);
@@ -1284,9 +1286,9 @@ protected: // Graphics configuration
 				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*colorBlendOp*/			VK_BLEND_OP_REVERSE_SUBTRACT,
-				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*alphaBlendOp*/			VK_BLEND_OP_MAX
+				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ZERO,
+				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ZERO,
+				/*alphaBlendOp*/			VK_BLEND_OP_MIN
 			);
 			// Shader stages
 			galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
@@ -1354,8 +1356,7 @@ protected: // Graphics configuration
 		// renderPassInfo.clearValueCount = clearValues.size();
 		// renderPassInfo.pClearValues = clearValues.data();
 		
-		
-		// Galaxy Fade
+		// Conditional rendering
 		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {
 			VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT,// VkStructureType sType
 			nullptr,// const void* pNext
@@ -1363,6 +1364,9 @@ protected: // Graphics configuration
 			0,// VkDeviceSize offset
 			0,// VkConditionalRenderingFlagsEXT flags
 		};
+		
+		// Galaxy Fade
+		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::fadeGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyFadeFrameBuffers[imageIndex];
@@ -1372,14 +1376,16 @@ protected: // Graphics configuration
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
-
 		// Galaxy Gen
+		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::genGalaxy);
+		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyGenFrameBuffers[imageIndex];
 		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 	}
 	
@@ -1474,17 +1480,22 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 		
 		// Galaxy convergence
+		const int convergences = 200;
 		galaxyFrameIndex++;
-		if (galaxyFrameIndex >= 100) galaxyFrameIndex = 100;
+		conditionalRendering.genGalaxy = galaxyFrameIndex > convergences? 0:1;
+		if (galaxyFrameIndex >= convergences) galaxyFrameIndex = convergences;
 		if (speed > 0) galaxyFrameIndex = 0;
 		ubo.speed = speed;
-		ubo.galaxyFrameIndex = galaxyFrameIndex;
 		conditionalRendering.fadeGalaxy = speed>0? 1:0;
+		ubo.galaxyFrameIndex = galaxyFrameIndex;
+		
+		ubo.toggleTest = toggleTest;
 
 		// Update memory
 		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
 		Buffer::CopyDataToBuffer(renderingDevice, &conditionalRendering, &conditionalRenderingBuffer);
 		
+		// Clear galaxy upon stopping
 		if (previousSpeed != speed) {
 			previousSpeed = speed;
 			if (speed == 0) {
@@ -1501,6 +1512,7 @@ public: // user-defined state variables
 	int galaxyFrameIndex = 0;
 	float speed = 0;
 	float previousSpeed = 0;
+	bool toggleTest = false;
 	glm::dvec3 camPosition = glm::dvec3(2,2,2);
 	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
 	

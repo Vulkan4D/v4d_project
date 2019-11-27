@@ -9,6 +9,7 @@ layout(set = 0, binding = 0) uniform UBO {
 	dvec3 cameraPosition;
 	float speed;
 	int galaxyFrameIndex;
+	bool toggleTest;
 } ubo;
 
 ##################################################################
@@ -43,12 +44,12 @@ In practice:
 */
 
 layout(points) in;
-layout(points, max_vertices = 92) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
+layout(points, max_vertices = 85) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
 layout(location = 0) out vec4 out_color; // takes up 4 components
 
 layout(location = 0) in uint in_seed[];
 
-const float MAX_VIEW_DISTANCE = 40;
+const float MAX_VIEW_DISTANCE = 100;
 
 void main(void) {
 	uint seed = in_seed[0];
@@ -57,64 +58,72 @@ void main(void) {
 	vec3 wpos = gl_in[0].gl_Position.xyz;
 	float radius = gl_in[0].gl_Position.w;
 	
-	for (int i = 0; i < 10; i++) {
-		// position relative to camera
-		vec4 pos = vec4(wpos + RandomInUnitSphere(seed), 1) - vec4(vec3(ubo.cameraPosition), 0);
+	// position relative to camera
+	vec4 relPos = vec4(wpos - vec3(ubo.cameraPosition), 1);
+	
+	for (int i = 0; i < 85; i++) {
+		vec4 pos = relPos + vec4(RandomInUnitSphere(seed)*4, 0);
 		
-		gl_PointSize = radius + RandomFloat(fseed) + smoothstep(MAX_VIEW_DISTANCE, 0, length(pos))*2;
+		float brightnessBasedOnDistance = pow(smoothstep(MAX_VIEW_DISTANCE, 0, length(pos)), 2);
+		
+		gl_PointSize = radius + RandomFloat(fseed) + brightnessBasedOnDistance*2;
+		
+		gl_PointSize = 2;
 		
 		vec4 starType = normalize(vec4(
-			/*red*/		(RandomFloat(fseed) * 2 - 1) * 1.3 ,
-			/*yellow*/	(RandomFloat(fseed) * 2 - 1) * 1.5 ,
-			/*blue*/	(RandomFloat(fseed) * 2 - 1) * 0.7 ,
-			/*white*/	(RandomFloat(fseed) * 2 - 1) * 1.8 
+			/*red*/		RandomFloat(fseed) * 1.0 ,
+			/*yellow*/	RandomFloat(fseed) * 1.2 ,
+			/*blue*/	RandomFloat(fseed) * 0.7 ,
+			/*white*/	RandomFloat(fseed) * 1.8 
 		));
 		
-		vec3 color =/*red*/		vec3( 1.0 , 0.8 , 0.6 ) * starType.x +
-					/*yellow*/	vec3( 1.0 , 1.0 , 0.7 ) * starType.y +
-					/*blue*/	vec3( 0.6 , 0.8 , 1.0 ) * starType.z +
+		vec3 color =/*red*/		vec3( 1.0 , 0.5 , 0.3 ) * starType.x +
+					/*yellow*/	vec3( 1.0 , 1.0 , 0.2 ) * starType.y +
+					/*blue*/	vec3( 0.2 , 0.5 , 1.0 ) * starType.z +
 					/*white*/	vec3( 1.0 , 1.0 , 1.0 ) * starType.w ;
 		
 		out_color = vec4(
 			color,
-			RandomFloat(fseed) * smoothstep(MAX_VIEW_DISTANCE, 0, length(pos))
+			(1-pow(1-RandomFloat(fseed), 2)) * brightnessBasedOnDistance
 		);
+		
+		pos = normalize(pos);
 		
 		float u = 0;
 		float v = 0;
 		
 		// Compute which side of the cube map we should render to
-		if (pos.x > 0 && abs(pos.z) < pos.x && abs(pos.y) < pos.x) {
+		if (pos.x >= 0 && abs(pos.z) <= pos.x && abs(pos.y) <= pos.x) {
 			// Right
 			u = -pos.z / pos.x;
 			v = -pos.y / pos.x;
 			gl_Layer = 0;
 		} else 
-		if (-pos.x > 0 && abs(pos.z) < -pos.x && abs(pos.y) < -pos.x) {
+		if (-pos.x > 0 && abs(pos.z) <= -pos.x && abs(pos.y) <= -pos.x) {
 			// Left
 			u = -pos.z / pos.x;
 			v = pos.y / pos.x;
 			gl_Layer = 1;
 		} else
-		if (pos.y > 0 && abs(pos.z) < pos.y && abs(pos.x) < pos.y) {
+		if (pos.y >= 0 && abs(pos.z) <= pos.y && abs(pos.x) <= pos.y) {
 			// Front
 			u = pos.x / pos.y;
 			v = pos.z / pos.y;
 			gl_Layer = 2;
 		} else 
-		if (-pos.y > 0 && abs(pos.z) < -pos.y && abs(pos.x) < -pos.y) {
+		if (-pos.y > 0 && abs(pos.z) <= -pos.y && abs(pos.x) <= -pos.y) {
 			// Back
 			u = -pos.x / pos.y;
 			v = pos.z / pos.y;
 			gl_Layer = 3;
 		} else 
-		if (pos.z > 0 && abs(pos.x) < pos.z && abs(pos.y) < pos.z) {
+		if (pos.z >= 0 && abs(pos.x) <= pos.z && abs(pos.y) <= pos.z) {
 			// Top
 			u = pos.x / pos.z;
 			v = -pos.y / pos.z;
 			gl_Layer = 4;
 		} else 
-		if (-pos.z > 0 && abs(pos.x) < -pos.z && abs(pos.y) < -pos.z) {
+		if (-pos.z > 0 && abs(pos.x) <= -pos.z && abs(pos.y) <= -pos.z) {
 			// Bottom
 			u = pos.x / pos.z;
 			v = pos.y / pos.z;
@@ -136,7 +145,8 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
 	float center = 1 - pow(length(gl_PointCoord * 2 - 1), 1.0 / max(0.7, in_color.a));
-	out_color = vec4(in_color.rgb, in_color.a) * center;
+	out_color = vec4(in_color.rgb * in_color.a, 0) * (center * (1+ubo.speed/2));
+	// out_color.a UNUSED
 }
 
 ##################################################################
@@ -182,37 +192,45 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0.003,0.003,0.003, 1);
+	out_color = vec4(0.02,0.02,0.02, 0);
 }
 
 ##################################################################
 
 #shader box.vert
 
-layout(location = 0) out vec3 out_uv;
+#include "_cube.glsl"
+
+layout(location = 0) out vec3 out_dir;
 
 void main() {
-	// Generate a cube, simply from vertex id
-	int r = int(gl_VertexIndex > 6);
-	int i = r==1 ? 13-gl_VertexIndex : gl_VertexIndex;
-	int x = int(i<3 || i==4);
-	int y = r ^ int(i>0 && i<4);
-	int z = r ^ int(i<2 || i>5);
-	// output vertex positions and coords
-	out_uv = vec3(x, y, z) * 2.0 - 1.0;
-	gl_Position = mat4(ubo.proj) * mat4(ubo.view) * vec4(out_uv, 0);
+	if (ubo.toggleTest) {
+		if (gl_VertexIndex < 4) {
+			// Full-screen Quad from 4 empty vertices
+			vec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
+			gl_Position = vec4(pos, 0, 1);
+			// output direction of vertex into world
+			out_dir = normalize(inverse(mat4(ubo.proj) * mat4(ubo.view)) * vec4(pos, 1, 1)).xyz;
+		} else {
+			gl_Position = vec4(-2);
+		}
+	} else {
+		// Cube around camera at infinite distance
+		out_dir = GetVertexPosCube();
+		gl_Position = mat4(ubo.proj) * mat4(ubo.view) * vec4(out_dir, 0);
+	}
 }
 
 ##################################################################
 
 #shader box.frag
 
-layout(location = 0) in vec3 in_uv;
+layout(location = 0) in vec3 in_dir;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 0, binding = 1) uniform samplerCube galaxyBox;
 
 void main() {
-	out_color = texture(galaxyBox, normalize(in_uv));
+	out_color = texture(galaxyBox, in_dir);
 }
 

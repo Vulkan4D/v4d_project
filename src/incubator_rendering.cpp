@@ -126,6 +126,12 @@ int main() {
 					vulkan->ReloadRenderer();
 					break;
 					
+				// Reload Renderer
+				case GLFW_KEY_T:
+					vulkan->toggleTest = !vulkan->toggleTest;
+					LOG("ToggleTest = " << (vulkan->toggleTest? "On":"Off"))
+					break;
+				
 			}
 		}
 		vulkan->UnlockUBO();
