@@ -1480,7 +1480,7 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 		
 		// Galaxy convergence
-		const int convergences = 200;
+		const int convergences = 20;
 		galaxyFrameIndex++;
 		conditionalRendering.genGalaxy = galaxyFrameIndex > convergences? 0:1;
 		if (galaxyFrameIndex >= convergences) galaxyFrameIndex = convergences;

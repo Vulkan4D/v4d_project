@@ -31,6 +31,7 @@ void main() {
 #shader gen.geom
 
 #include "_noise.glsl"
+#include "_matrices.glsl"
 
 /* 
 max_vertices <= min(limits.maxGeometryOutputVertices, floor(limits.maxGeometryTotalOutputComponents / min(limits.maxGeometryOutputComponents, 7 + NUM_OUT_COMPONENTS)))
@@ -44,12 +45,13 @@ In practice:
 */
 
 layout(points) in;
-layout(points, max_vertices = 85) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
+layout(points, max_vertices = 64) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
 layout(location = 0) out vec4 out_color; // takes up 4 components
 
 layout(location = 0) in uint in_seed[];
 
-const float MAX_VIEW_DISTANCE = 100;
+const float MIN_VIEW_DISTANCE = 0.01;
+const float MAX_VIEW_DISTANCE = 1000;
 
 void main(void) {
 	uint seed = in_seed[0];
@@ -59,16 +61,14 @@ void main(void) {
 	float radius = gl_in[0].gl_Position.w;
 	
 	// position relative to camera
-	vec4 relPos = vec4(wpos - vec3(ubo.cameraPosition), 1);
+	vec3 relPos = wpos - vec3(ubo.cameraPosition);
 	
-	for (int i = 0; i < 85; i++) {
-		vec4 pos = relPos + vec4(RandomInUnitSphere(seed)*4, 0);
+	for (int i = 0; i < 64; i++) {
+		vec3 pos = relPos + RandomInUnitSphere(seed)*4;
 		
-		float brightnessBasedOnDistance = pow(smoothstep(MAX_VIEW_DISTANCE, 0, length(pos)), 2);
+		float brightnessBasedOnDistance = pow(smoothstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, length(pos)), 2);
 		
-		gl_PointSize = radius + RandomFloat(fseed) + brightnessBasedOnDistance*2;
-		
-		gl_PointSize = 2;
+		gl_PointSize = radius*2 + RandomFloat(fseed) + brightnessBasedOnDistance*2;
 		
 		vec4 starType = normalize(vec4(
 			/*red*/		RandomFloat(fseed) * 1.0 ,
@@ -87,50 +87,64 @@ void main(void) {
 			(1-pow(1-RandomFloat(fseed), 2)) * brightnessBasedOnDistance
 		);
 		
-		pos = normalize(pos);
-		
-		float u = 0;
-		float v = 0;
-		
 		// Compute which side of the cube map we should render to
-		if (pos.x >= 0 && abs(pos.z) <= pos.x && abs(pos.y) <= pos.x) {
+		if (pos.x > 0 && abs(pos.z) <= pos.x && abs(pos.y) <= pos.x) {
 			// Right
-			u = -pos.z / pos.x;
-			v = -pos.y / pos.x;
 			gl_Layer = 0;
+			gl_Position = vec4(
+				-pos.z / pos.x,
+				-pos.y / pos.x,
+				0, 1
+			);
 		} else 
 		if (-pos.x > 0 && abs(pos.z) <= -pos.x && abs(pos.y) <= -pos.x) {
 			// Left
-			u = -pos.z / pos.x;
-			v = pos.y / pos.x;
 			gl_Layer = 1;
+			gl_Position = vec4(
+				-pos.z / pos.x,
+				 pos.y / pos.x,
+				0, 1
+			);
 		} else
-		if (pos.y >= 0 && abs(pos.z) <= pos.y && abs(pos.x) <= pos.y) {
+		if (pos.y > 0 && abs(pos.z) <= pos.y && abs(pos.x) <= pos.y) {
 			// Front
-			u = pos.x / pos.y;
-			v = pos.z / pos.y;
 			gl_Layer = 2;
+			gl_Position = vec4(
+				pos.x / pos.y,
+				pos.z / pos.y,
+				0, 1
+			);
 		} else 
 		if (-pos.y > 0 && abs(pos.z) <= -pos.y && abs(pos.x) <= -pos.y) {
 			// Back
-			u = -pos.x / pos.y;
-			v = pos.z / pos.y;
 			gl_Layer = 3;
+			gl_Position = vec4(
+				-pos.x / pos.y,
+				 pos.z / pos.y,
+				0, 1
+			);
 		} else 
-		if (pos.z >= 0 && abs(pos.x) <= pos.z && abs(pos.y) <= pos.z) {
+		if (pos.z > 0 && abs(pos.x) <= pos.z && abs(pos.y) <= pos.z) {
 			// Top
-			u = pos.x / pos.z;
-			v = -pos.y / pos.z;
 			gl_Layer = 4;
+			gl_Position = vec4(
+				 pos.x / pos.z,
+				-pos.y / pos.z,
+				0, 1
+			);
 		} else 
 		if (-pos.z > 0 && abs(pos.x) <= -pos.z && abs(pos.y) <= -pos.z) {
 			// Bottom
-			u = pos.x / pos.z;
-			v = pos.y / pos.z;
 			gl_Layer = 5;
+			gl_Position = vec4(
+				pos.x / pos.z,
+				pos.y / pos.z,
+				0, 1
+			);
 		}
 		
-		gl_Position = vec4(u, v, 0, 1);
+		// Magical formula to adjust point size for sperical cubemap... Took 3 days of intensive math to figure it out...
+		gl_PointSize *= (tan(length(gl_Position.xy)/sqrt(2))+0.5)/2;
 		
 		EmitVertex();
 	}
