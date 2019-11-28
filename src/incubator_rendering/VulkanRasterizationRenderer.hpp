@@ -735,7 +735,7 @@ public: // Scene configuration methods
 					float centerFactor = 1.0f - glm::length(glm::vec3((float)x,(float)y,(float)z))/91.0f;
 					if (centerFactor > 0.1) {
 						galaxies.push_back({
-							{x*3, y*3, z*3, glm::pow(centerFactor, 25)*30}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*64.0f)
+							{x*3, y*3, z*3, glm::pow(centerFactor, 25)*30}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*50.0f)
 						});
 					}
 				}

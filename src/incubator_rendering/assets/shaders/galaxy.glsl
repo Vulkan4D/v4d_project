@@ -48,7 +48,7 @@ In practice:
 */
 
 layout(points) in;
-layout(points, max_vertices = 64) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
+layout(points, max_vertices = 50) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
 layout(location = 0) out vec4 out_color; // takes up 4 components
 
 layout(location = 0) in uint in_seed[];
