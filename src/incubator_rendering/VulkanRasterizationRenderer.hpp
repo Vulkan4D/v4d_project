@@ -150,7 +150,7 @@ private: // Rasterization Rendering
 	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
 	const bool postProcessingEnabled = 							true;
 	const bool oitEnabled = !postProcessingEnabled?false : 		false;
-	float renderingResolutionScale = !postProcessingEnabled?1: 	2.0;
+	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
 	
 	
 	void CreateRasterizationResources() {
@@ -710,6 +710,7 @@ public: // Scene configuration methods
 	struct Galaxy {
 		glm::vec4 posr;
 		int seed;
+		int numStars;
 	};
 	
 	std::vector<Galaxy> galaxies {};
@@ -728,12 +729,15 @@ public: // Scene configuration methods
 		
 		
 		// Galaxy Gen
-		for (int x = 0; x < 32; ++x) {
-			for (int y = 0; y < 32; ++y) {
-				for (int z = 0; z < 32; ++z) {
-					galaxies.push_back({
-						{x*5, y*5, z*5, 1}, x*y*z*3+3
-					});
+		for (int x = -32; x < 31; ++x) {
+			for (int y = -32; y < 31; ++y) {
+				for (int z = -4; z < 3; ++z) {
+					float centerFactor = 1.0f - glm::length(glm::vec3((float)x,(float)y,(float)z))/91.0f;
+					if (centerFactor > 0.1) {
+						galaxies.push_back({
+							{x*3, y*3, z*3, glm::pow(centerFactor, 25)*30}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*64.0f)
+						});
+					}
 				}
 			}
 		}
@@ -750,6 +754,7 @@ public: // Scene configuration methods
 		galaxyGenShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
 			{1, offsetof(Galaxy, Galaxy::seed), VK_FORMAT_R32_UINT},
+			{2, offsetof(Galaxy, Galaxy::numStars), VK_FORMAT_R32_UINT},
 		});
 		galaxiesBuffer->AddSrcDataPtr(&galaxies);
 		galaxyGenPipeline = new VertexRasterizationPipeline(galaxyGenShader, galaxiesBuffer, galaxies.size());
@@ -1480,7 +1485,7 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 		
 		// Galaxy convergence
-		const int convergences = 20;
+		const int convergences = 100;
 		galaxyFrameIndex++;
 		conditionalRendering.genGalaxy = galaxyFrameIndex > convergences? 0:1;
 		if (galaxyFrameIndex >= convergences) galaxyFrameIndex = convergences;

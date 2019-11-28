@@ -18,12 +18,15 @@ layout(set = 0, binding = 0) uniform UBO {
 
 layout(location = 0) in vec4 posr;
 layout(location = 1) in uint seed;
+layout(location = 2) in uint numStars;
 
 layout(location = 0) out uint out_seed;
+layout(location = 1) out uint out_numStars;
 
 void main() {
 	gl_Position = posr; // passthrough
 	out_seed = seed + ubo.galaxyFrameIndex;
+	out_numStars = numStars;
 }
 
 ##################################################################
@@ -49,6 +52,7 @@ layout(points, max_vertices = 64) out; // takes up 7 components per vertex (1 fo
 layout(location = 0) out vec4 out_color; // takes up 4 components
 
 layout(location = 0) in uint in_seed[];
+layout(location = 1) in uint in_numStars[];
 
 const float MIN_VIEW_DISTANCE = 0.01;
 const float MAX_VIEW_DISTANCE = 1000;
@@ -63,12 +67,12 @@ void main(void) {
 	// position relative to camera
 	vec3 relPos = wpos - vec3(ubo.cameraPosition);
 	
-	for (int i = 0; i < 64; i++) {
+	for (int i = 0; i < in_numStars[0]; i++) {
 		vec3 pos = relPos + RandomInUnitSphere(seed)*4;
 		
 		float brightnessBasedOnDistance = pow(smoothstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, length(pos)), 2);
 		
-		gl_PointSize = radius*2 + RandomFloat(fseed) + brightnessBasedOnDistance*2;
+		gl_PointSize = radius + RandomFloat(fseed) + brightnessBasedOnDistance*2;
 		
 		vec4 starType = normalize(vec4(
 			/*red*/		RandomFloat(fseed) * 1.0 ,
