@@ -126,10 +126,16 @@ int main() {
 					vulkan->ReloadRenderer();
 					break;
 					
-				// Reload Renderer
+				// Toggle Shader Test
 				case GLFW_KEY_T:
 					vulkan->toggleTest = !vulkan->toggleTest;
 					LOG("ToggleTest = " << (vulkan->toggleTest? "On":"Off"))
+					break;
+				
+				// Toggle Continuous Galaxy Generation
+				case GLFW_KEY_G:
+					vulkan->continuousGalaxyGen = !vulkan->continuousGalaxyGen;
+					LOG("Continuous Galaxy Generation = " << (vulkan->continuousGalaxyGen? "On":"Off"))
 					break;
 				
 			}
@@ -155,8 +161,10 @@ int main() {
 
 	// Frame timer
 	v4d::Timer timer(true);
-	double currentFrameTime = 10;
-	double deltaTime = 0.01f;
+	double elapsedTime = 0;
+	int nbFrames = 0;
+	double deltaTime = 0.005f;
+	double fps = 0;
 	
 	// GameLoop
 	while (window->IsActive()) {
@@ -165,7 +173,7 @@ int main() {
 		
 		// Camera Movements
 		vulkan->speed = 0;
-		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : 1.0;
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			vulkan->camPosition += vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
 			vulkan->speed = 1;
@@ -211,12 +219,16 @@ int main() {
 		vulkan->Render();
 		
 		// Frame time
-		currentFrameTime = timer.GetElapsedMilliseconds();
-		deltaTime = (double)currentFrameTime / 1000.0f;
-		timer.Reset();
-		
-		// FPS counter
-		glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)(1000.0/currentFrameTime))+" FPS").c_str());
+		++nbFrames;
+		elapsedTime = timer.GetElapsedMilliseconds();
+		if (elapsedTime > 1000) {
+			fps = nbFrames / elapsedTime * 1000.0;
+			// deltaTime = (elapsedTime / 1000.0) / nbFrames; // This seems to already be taken into account in GLFW ???????
+			// FPS counter
+			glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)fps)+" FPS").c_str());
+			nbFrames = 0;
+			timer.Reset();
+		}
 	}
 	
 	vulkan->DeleteGraphicsFromDevice();

@@ -147,7 +147,7 @@ private: // Rasterization Rendering
 	VkFormat depthImageFormat;
 	
 	// Graphics settings
-	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
+	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_1_BIT;
 	const bool postProcessingEnabled = 							false;
 	const bool oitEnabled = !postProcessingEnabled?false : 		false;
 	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
@@ -794,7 +794,7 @@ public: // Scene configuration methods
 			{"incubator_rendering/assets/shaders/galaxy.box.vert"},
 			{"incubator_rendering/assets/shaders/galaxy.box.frag"},
 		});
-		rasterizationPipelines.emplace_back(galaxyBoxShader, 14).topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		rasterizationPipelines.emplace_back(galaxyBoxShader, 4).topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		galaxyBoxShader->LoadShaders();
 		
 		
@@ -1506,13 +1506,13 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 		
 		// Galaxy convergence
-		const int convergences = 20;
+		const int convergences = 10;
 		galaxyFrameIndex++;
-		conditionalRendering.genGalaxy = galaxyFrameIndex > convergences? 0:1;
-		if (galaxyFrameIndex >= convergences) galaxyFrameIndex = convergences;
-		if (speed > 0) galaxyFrameIndex = 0;
+		conditionalRendering.genGalaxy = (continuousGalaxyGen || galaxyFrameIndex <= convergences)? 1:0;
+		if (galaxyFrameIndex > convergences) galaxyFrameIndex = continuousGalaxyGen? 0 : convergences;
+		if (!continuousGalaxyGen && speed > 0) galaxyFrameIndex = 0;
 		ubo.speed = speed;
-		conditionalRendering.fadeGalaxy = speed>0? 1:0;
+		conditionalRendering.fadeGalaxy = (continuousGalaxyGen || speed > 0)? 1:0;
 		ubo.galaxyFrameIndex = galaxyFrameIndex;
 		
 		ubo.toggleTest = toggleTest;
@@ -1522,9 +1522,10 @@ protected: // Methods executed on every frame
 		Buffer::CopyDataToBuffer(renderingDevice, &conditionalRendering, &conditionalRenderingBuffer);
 		
 		// Clear galaxy upon stopping
-		if (previousSpeed != speed) {
+		if (previousSpeed != speed && !continuousGalaxyGen) {
 			previousSpeed = speed;
 			if (speed == 0) {
+				galaxyFrameIndex = 0;
 				VkClearColorValue clearColor {.0,.0,.0,.0};
 				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
 				auto cmdBuffer = BeginSingleTimeCommands(commandPool);
@@ -1539,6 +1540,7 @@ public: // user-defined state variables
 	float speed = 0;
 	float previousSpeed = 0;
 	bool toggleTest = false;
+	bool continuousGalaxyGen = true;
 	glm::dvec3 camPosition = glm::dvec3(2,2,2);
 	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
 	

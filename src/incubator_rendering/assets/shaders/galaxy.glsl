@@ -34,7 +34,6 @@ void main() {
 #shader gen.geom
 
 #include "_noise.glsl"
-#include "_matrices.glsl"
 
 /* 
 max_vertices <= min(limits.maxGeometryOutputVertices, floor(limits.maxGeometryTotalOutputComponents / min(limits.maxGeometryOutputComponents, 7 + NUM_OUT_COMPONENTS)))
@@ -211,7 +210,7 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0.02,0.02,0.02, 0);
+	out_color = vec4(0.004,0.004,0.004, 0);
 }
 
 ##################################################################
@@ -223,21 +222,21 @@ void main() {
 layout(location = 0) out vec3 out_dir;
 
 void main() {
-	if (ubo.toggleTest) {
-		if (gl_VertexIndex < 4) {
+	// if (ubo.toggleTest) {
+	// 	if (gl_VertexIndex < 4) {
 			// Full-screen Quad from 4 empty vertices
-			vec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
-			gl_Position = vec4(pos, 0, 1);
+			dvec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
+			gl_Position = vec4(vec2(pos), 0, 1);
 			// output direction of vertex into world
-			out_dir = normalize(inverse(mat4(ubo.proj) * mat4(ubo.view)) * vec4(pos, 1, 1)).xyz;
-		} else {
-			gl_Position = vec4(-2);
-		}
-	} else {
-		// Cube around camera at infinite distance
-		out_dir = GetVertexPosCube();
-		gl_Position = mat4(ubo.proj) * mat4(ubo.view) * vec4(out_dir, 0);
-	}
+			out_dir = vec3(normalize(inverse(ubo.proj * ubo.view) * dvec4(pos, 1, 1)).xyz);
+		// } else {
+		// 	gl_Position = vec4(-2);
+		// }
+	// } else {
+	// 	// Cube around camera at infinite distance (needs 14 vertices)
+	// 	out_dir = GetVertexPosCube();
+	// 	gl_Position = vec4(ubo.proj * ubo.view * dvec4(out_dir, 0));
+	// }
 }
 
 ##################################################################
