@@ -22,9 +22,21 @@ layout(set = 0, binding = 0) uniform sampler2D image;
 
 void main() {
 	// vec4 oit = texture(oitBuffer, uv);
-	vec4 color = texture(image, uv);
-	out_color = color;
+	vec3 color = texture(image, uv).xyz;
+	
 	// Post processing here
 	//...
+	
+	// // HDR ToneMapping (Reinhard)
+	// const float exposure = 1.0;
+	// color = vec3(1.0) - exp(-color * exposure);
+	
+	// // Gamma correction 
+	// const float gamma = 2.2;
+	// color = pow(color, vec3(1.0 / gamma));
+	
+	
+	
+	out_color = vec4(color, 1.0);
 }
 

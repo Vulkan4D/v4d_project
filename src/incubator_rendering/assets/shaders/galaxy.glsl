@@ -48,14 +48,14 @@ In practice:
 */
 
 layout(points) in;
-layout(points, max_vertices = 50) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
+layout(points, max_vertices = 80) out; // takes up 7 components per vertex (1 for gl_PointSize, 4 for gl_Position, 2 for gl_PointCoord)
 layout(location = 0) out vec4 out_color; // takes up 4 components
 
 layout(location = 0) in uint in_seed[];
 layout(location = 1) in uint in_numStars[];
 
 const float MIN_VIEW_DISTANCE = 0.01;
-const float MAX_VIEW_DISTANCE = 1000;
+const float MAX_VIEW_DISTANCE = 10000;
 
 void main(void) {
 	uint seed = in_seed[0];
@@ -68,6 +68,7 @@ void main(void) {
 	vec3 relPos = wpos - vec3(ubo.cameraPosition);
 	
 	for (int i = 0; i < in_numStars[0]; i++) {
+		if (i > 80) break;
 		vec3 pos = relPos + RandomInUnitSphere(seed)*4;
 		
 		float brightnessBasedOnDistance = pow(smoothstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, length(pos)), 2);
@@ -75,9 +76,9 @@ void main(void) {
 		gl_PointSize = radius + RandomFloat(fseed) + brightnessBasedOnDistance*2;
 		
 		vec4 starType = normalize(vec4(
-			/*red*/		RandomFloat(fseed) * 1.0 ,
+			/*red*/		RandomFloat(fseed) * 1.1 ,
 			/*yellow*/	RandomFloat(fseed) * 1.2 ,
-			/*blue*/	RandomFloat(fseed) * 0.7 ,
+			/*blue*/	RandomFloat(fseed) * 1.1 ,
 			/*white*/	RandomFloat(fseed) * 1.8 
 		));
 		

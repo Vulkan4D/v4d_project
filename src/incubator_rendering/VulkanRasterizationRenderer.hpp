@@ -148,7 +148,7 @@ private: // Rasterization Rendering
 	
 	// Graphics settings
 	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_2_BIT;
-	const bool postProcessingEnabled = 							true;
+	const bool postProcessingEnabled = 							false;
 	const bool oitEnabled = !postProcessingEnabled?false : 		false;
 	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
 	
@@ -164,6 +164,7 @@ private: // Rasterization Rendering
 		int width = (int)((float)swapChain->extent.width * renderingResolutionScale);
 		int height = (int)((float)swapChain->extent.height * renderingResolutionScale);
 		
+		// Main color attachment
 		renderingDevice->CreateImage(
 			width,
 			height,
@@ -725,17 +726,37 @@ public: // Scene configuration methods
 	VertexRasterizationPipeline* galaxyGenPipeline = nullptr;
 	VertexRasterizationPipeline* galaxyFadePipeline = nullptr;
 	
-	void LoadScene() override {
+	
 		
+	uint RandomInt(uint& seed) {
+		// LCG values from Numerical Recipes
+		return (seed = 1664525 * seed + 1013904223);
+	}
+	float RandomFloat(uint& seed) {
+		// Float version using bitmask from Numerical Recipes
+		const uint one = 0x3f800000;
+		const uint msk = 0x007fffff;
+		return glm::uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+	}
+	glm::vec3 RandomInUnitSphere(uint& seed) {
+		for (;;) {
+			glm::vec3 p = 2.0f * glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1.0f;
+			if (dot(p, p) < 1) return p;
+		}
+	}
+	
+	void LoadScene() override {
+		uint seed = 1;
 		
 		// Galaxy Gen
-		for (int x = -32; x < 31; ++x) {
-			for (int y = -32; y < 31; ++y) {
-				for (int z = -4; z < 3; ++z) {
-					float centerFactor = 1.0f - glm::length(glm::vec3((float)x,(float)y,(float)z))/91.0f;
-					if (centerFactor > 0.1) {
+		for (int x = -64; x < 63; ++x) {
+			for (int y = -64; y < 63; ++y) {
+				for (int z = -8; z < 7; ++z) {
+					float centerFactor = 1.0f - glm::length(glm::vec3((float)x,(float)y,(float)z))/180.0f;
+					if (centerFactor > 0.0) {
+						auto offset = RandomInUnitSphere(seed)*2.84f;
 						galaxies.push_back({
-							{x*3, y*3, z*3, glm::pow(centerFactor, 25)*30}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*50.0f)
+							{x*5+offset.x, y*5+offset.y, z*5+offset.z, glm::pow(centerFactor, 25)*10}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*50.0f)
 						});
 					}
 				}
@@ -1485,7 +1506,7 @@ protected: // Methods executed on every frame
 		ubo.proj[1][1] *= -1;
 		
 		// Galaxy convergence
-		const int convergences = 100;
+		const int convergences = 20;
 		galaxyFrameIndex++;
 		conditionalRendering.genGalaxy = galaxyFrameIndex > convergences? 0:1;
 		if (galaxyFrameIndex >= convergences) galaxyFrameIndex = convergences;
