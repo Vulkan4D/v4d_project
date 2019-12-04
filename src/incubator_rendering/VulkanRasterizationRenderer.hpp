@@ -124,7 +124,8 @@ private: // Rasterization Rendering
 	RenderPass* postProcessingRenderPass = nullptr;
 	RenderPass* galaxyGenRenderPass = nullptr;
 	RenderPass* galaxyFadeRenderPass = nullptr;
-	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers, galaxyGenFrameBuffers, galaxyFadeFrameBuffers;
+	std::vector<VkFramebuffer> swapChainFrameBuffers, swapChainPostProcessingFrameBuffers;
+	VkFramebuffer galaxyGenFrameBuffer, galaxyFadeFrameBuffer;
 	VkClearColorValue clearColor = {0,0,0,1};
 	// Render Target (Color Attachment)
 	VkImage colorImage = VK_NULL_HANDLE;
@@ -1147,20 +1148,17 @@ protected: // Graphics configuration
 			viewportState.pViewports = &viewport;
 			viewportState.pScissors = &scissor;
 			
-			// Frame Buffers
-			galaxyGenFrameBuffers.resize(swapChain->imageViews.size());
-			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-				VkFramebufferCreateInfo framebufferCreateInfo = {};
-				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-				framebufferCreateInfo.renderPass = galaxyGenRenderPass->handle;
-				framebufferCreateInfo.attachmentCount = 1;
-				framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-				framebufferCreateInfo.width = (uint)swapChain->extent.width;
-				framebufferCreateInfo.height = (uint)swapChain->extent.width;
-				framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
-				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyGenFrameBuffers[i]) != VK_SUCCESS) {
-					throw std::runtime_error("Failed to create galaxy gen framebuffer");
-				}
+			// Frame Buffer
+			VkFramebufferCreateInfo framebufferCreateInfo = {};
+			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferCreateInfo.renderPass = galaxyGenRenderPass->handle;
+			framebufferCreateInfo.attachmentCount = 1;
+			framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
+			framebufferCreateInfo.width = (uint)swapChain->extent.width;
+			framebufferCreateInfo.height = (uint)swapChain->extent.width;
+			framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
+			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyGenFrameBuffer) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create galaxy gen framebuffer");
 			}
 			
 			// Galaxy Gen
@@ -1284,20 +1282,17 @@ protected: // Graphics configuration
 			viewportState.pViewports = &viewport;
 			viewportState.pScissors = &scissor;
 			
-			// Frame Buffers
-			galaxyFadeFrameBuffers.resize(swapChain->imageViews.size());
-			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-				VkFramebufferCreateInfo framebufferCreateInfo = {};
-				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-				framebufferCreateInfo.renderPass = galaxyFadeRenderPass->handle;
-				framebufferCreateInfo.attachmentCount = 1;
-				framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-				framebufferCreateInfo.width = (uint)swapChain->extent.width;
-				framebufferCreateInfo.height = (uint)swapChain->extent.width;
-				framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
-				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyFadeFrameBuffers[i]) != VK_SUCCESS) {
-					throw std::runtime_error("Failed to create galaxy gen framebuffer");
-				}
+			// Frame Buffer
+			VkFramebufferCreateInfo framebufferCreateInfo = {};
+			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferCreateInfo.renderPass = galaxyFadeRenderPass->handle;
+			framebufferCreateInfo.attachmentCount = 1;
+			framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
+			framebufferCreateInfo.width = (uint)swapChain->extent.width;
+			framebufferCreateInfo.height = (uint)swapChain->extent.width;
+			framebufferCreateInfo.layers = 6; // refers to the number of layers in image arrays
+			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyFadeFrameBuffer) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to create galaxy gen framebuffer");
 			}
 			
 			// Galaxy Fade
@@ -1351,19 +1346,13 @@ protected: // Graphics configuration
 		}
 		
 		// Galaxy Gen
-		for (auto framebuffer : galaxyGenFrameBuffers) {
-			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
-		}
-		galaxyGenFrameBuffers.clear();
+		renderingDevice->DestroyFramebuffer(galaxyGenFrameBuffer, nullptr);
 		galaxyGenRenderPass->DestroyGraphicsPipelines();
 		delete galaxyGenRenderPass;
 		galaxyGenPipeline->shaderProgram->DestroyShaderStages(renderingDevice);
 		
 		// Galaxy Fade
-		for (auto framebuffer : galaxyFadeFrameBuffers) {
-			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
-		}
-		galaxyFadeFrameBuffers.clear();
+		renderingDevice->DestroyFramebuffer(galaxyFadeFrameBuffer, nullptr);
 		galaxyFadeRenderPass->DestroyGraphicsPipelines();
 		delete galaxyFadeRenderPass;
 		galaxyFadePipeline->shaderProgram->DestroyShaderStages(renderingDevice);
@@ -1395,7 +1384,7 @@ protected: // Graphics configuration
 		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::fadeGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
-		renderPassInfo.framebuffer = galaxyFadeFrameBuffers[imageIndex];
+		renderPassInfo.framebuffer = galaxyFadeFrameBuffer;
 		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyFadePipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyFadePipeline->Draw(renderingDevice, commandBuffer);
@@ -1406,7 +1395,7 @@ protected: // Graphics configuration
 		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::genGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
-		renderPassInfo.framebuffer = galaxyGenFrameBuffers[imageIndex];
+		renderPassInfo.framebuffer = galaxyGenFrameBuffer;
 		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
