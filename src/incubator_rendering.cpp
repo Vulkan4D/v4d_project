@@ -20,6 +20,8 @@ using namespace v4d::graphics;
 #endif
 Loader vulkanLoader;
 
+std::atomic<bool> appRunning = true;
+
 int main() {
 	
 	if (!vulkanLoader()) 
@@ -160,70 +162,17 @@ int main() {
 		}
 	});
 
-	// Game Loop
+	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
-		
-		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
-		
-		while (window->IsActive()) {
-			// Events
-			glfwPollEvents();
-			
-			// vulkan->LockUBO();
-			
-			// Camera Movements
-			vulkan->speed = 0;
-			double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-				vulkan->camPosition += vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-				vulkan->camPosition -= vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-				vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-				vulkan->camPosition += glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-				vulkan->camPosition += glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-				vulkan->camPosition -= glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-				vulkan->speed = 1;
-			}
-			if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
-				double x, y;
-				glfwGetCursorPos(window->GetHandle(), &x, &y);
-				glfwSetCursorPos(window->GetHandle(), 0, 0);
-				if (x != 0 || y != 0) {
-					horizontalAngle += double(x * mouseSensitivity * deltaTime);
-					verticalAngle -= double(y * mouseSensitivity * deltaTime);
-					if (verticalAngle < -1.5) verticalAngle = -1.5;
-					if (verticalAngle > 1.5) verticalAngle = 1.5;
-					vulkan->camDirection = glm::dvec3(
-						cos(verticalAngle) * sin(horizontalAngle),
-						cos(verticalAngle) * cos(horizontalAngle),
-						sin(verticalAngle)
-					);
-				}
-			}
-			
-			// vulkan->UnlockUBO();
-			
+		while (appRunning) {
+			//...
 			SLEEP(10ms)
 		}
 	});
 	
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
-		while (window->IsActive()) {
+		while (appRunning) {
 			vulkan->RenderLowPriorityGraphics();
 		}
 	});
@@ -236,7 +185,7 @@ int main() {
 		int nbFrames = 0;
 		double fps = 0;
 
-		while (window->IsActive()) {
+		while (appRunning) {
 			
 			// Rendering
 			vulkan->Render();
@@ -253,6 +202,66 @@ int main() {
 			}
 		}
 	});
+	
+	while (window->IsActive()) {
+		
+		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
+		
+		// Events
+		glfwPollEvents();
+		
+		// vulkan->LockUBO();
+		
+		// Camera Movements
+		vulkan->speed = 0;
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
+			vulkan->camPosition += vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
+			vulkan->camPosition -= vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
+			vulkan->camPosition -= glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
+			vulkan->camPosition += glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
+			vulkan->camPosition += glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
+			vulkan->camPosition -= glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			vulkan->speed = 1;
+		}
+		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
+			double x, y;
+			glfwGetCursorPos(window->GetHandle(), &x, &y);
+			glfwSetCursorPos(window->GetHandle(), 0, 0);
+			if (x != 0 || y != 0) {
+				horizontalAngle += double(x * mouseSensitivity * deltaTime);
+				verticalAngle -= double(y * mouseSensitivity * deltaTime);
+				if (verticalAngle < -1.5) verticalAngle = -1.5;
+				if (verticalAngle > 1.5) verticalAngle = 1.5;
+				vulkan->camDirection = glm::dvec3(
+					cos(verticalAngle) * sin(horizontalAngle),
+					cos(verticalAngle) * cos(horizontalAngle),
+					sin(verticalAngle)
+				);
+			}
+		}
+		
+		// vulkan->UnlockUBO();
+		
+		SLEEP(10ms)
+	}
+	
+	appRunning = false;
 	
 	gameLoopThread.join();
 	renderingThread.join();
