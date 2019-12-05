@@ -16,15 +16,15 @@ protected: // class members
 	Device* renderingDevice = nullptr;
 	
 	// Queues
-	Queue graphicsQueue;
-	Queue presentationQueue;
+	Queue graphicsQueue, lowPriorityGraphicsQueue, presentQueue, computeQueue, transferQueue;
 
 	// Pools
-	VkCommandPool commandPool;
+	VkCommandPool graphicsCommandPool, lowPriorityGraphicsCommandPool, transferCommandPool, computeCommandPool;
 	VkDescriptorPool descriptorPool;
 
 	// Command buffers
 	std::vector<VkCommandBuffer> commandBuffers;
+	VkCommandBuffer lowPriorityCommandBuffer;
 
 	// Swap Chains
 	SwapChain* swapChain = nullptr;
@@ -39,7 +39,7 @@ protected: // class members
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 	
 	// States
-	std::recursive_mutex renderingMutex;
+	std::recursive_mutex renderingMutex, lowPriorityRenderingMutex;
 	std::recursive_mutex uboMutex;
 	bool swapChainDirty = false;
 	
@@ -84,6 +84,7 @@ protected: // Pure Virtual (abstract) methods
 	virtual void DestroyResources() = 0;
 	// Update
 	virtual void FrameUpdate(uint imageIndex) = 0;
+	virtual void LowPriorityFrameUpdate() = 0;
 	// Scene
 	virtual void LoadScene() = 0;
 	virtual void UnloadScene() = 0;
@@ -93,6 +94,7 @@ protected: // Pure Virtual (abstract) methods
 	virtual void CreateGraphicsPipelines() = 0;
 	virtual void DestroyGraphicsPipelines() = 0;
 	virtual void RenderingCommandBuffer(VkCommandBuffer, int imageIndex) = 0;
+	virtual void LowPriorityRenderingCommandBuffer(VkCommandBuffer) = 0;
 
 protected: // Virtual INIT Methods
 
@@ -160,23 +162,41 @@ protected: // Virtual INIT Methods
 			{// Queues
 				{
 					"graphics",
-					VK_QUEUE_GRAPHICS_BIT, // Flags
-					1, // Count
-					{1.0f}, // Priorities (one per queue count)
-					surface // Putting a surface here forces the need for a presentation feature on that specific queue, null if no need, or get presentation queue separately with renderingDevice->GetPresentationQueue(surface)
+					VK_QUEUE_GRAPHICS_BIT,
+					2, // Count
+					{1.0f, 0.1f}, // Priorities (one per queue count)
+					surface // Putting a surface here forces the need for a presentation feature on that specific queue family
 				},
+				{
+					"compute",
+					VK_QUEUE_COMPUTE_BIT,
+				},
+				{
+					"transfer",
+					VK_QUEUE_TRANSFER_BIT,
+				},
+				// {
+				// 	"present",
+				// 	VK_QUEUE_GRAPHICS_BIT,
+				// 	1, // Count
+				// 	{1.0f}, // Priorities
+				// 	surface
+				// },
 			}
 		);
 
-		// Get Graphics Queue
-		graphicsQueue = renderingDevice->GetQueue("graphics");
-
-		// Get Presentation Queue
-		presentationQueue = graphicsQueue; // Use same as graphics (as configured above), otherwise uncomment block below to use a separate queue for presentation (apparently, using the same queue is supposed to be faster...)
-		// presentationQueue = renderingDevice->GetPresentationQueue(surface);
-		// if (presentationQueue.handle == nullptr) {
-		// 	throw std::runtime_error("Failed to get Presentation Queue for surface");
-		// }
+		// Get Queues
+		graphicsQueue = renderingDevice->GetQueue("graphics", 0);
+		lowPriorityGraphicsQueue = renderingDevice->GetQueue("graphics", 1);
+		computeQueue = renderingDevice->GetQueue("compute");
+		transferQueue = renderingDevice->GetQueue("transfer");
+		
+		presentQueue = graphicsQueue; // Performance is better when using the same queue index as the main graphics queue that renders to swap chains
+		// presentQueue = renderingDevice->GetQueue("present");
+		
+		if (presentQueue.handle == nullptr) {
+			throw std::runtime_error("Failed to get Presentation Queue for surface");
+		}
 	}
 
 	virtual void DestroyDevices() {
@@ -225,11 +245,17 @@ protected: // Virtual INIT Methods
 	}
 	
 	virtual void CreateCommandPools() {
-		renderingDevice->CreateCommandPool(graphicsQueue.index, 0, &commandPool);
+		renderingDevice->CreateCommandPool(graphicsQueue.familyIndex, 0, &graphicsCommandPool);
+		renderingDevice->CreateCommandPool(lowPriorityGraphicsQueue.familyIndex, 0, &lowPriorityGraphicsCommandPool);
+		renderingDevice->CreateCommandPool(transferQueue.familyIndex, 0, &transferCommandPool);
+		renderingDevice->CreateCommandPool(computeQueue.familyIndex, 0, &computeCommandPool);
 	}
 	
 	virtual void DestroyCommandPools() {
-		renderingDevice->DestroyCommandPool(commandPool);
+		renderingDevice->DestroyCommandPool(graphicsCommandPool);
+		renderingDevice->DestroyCommandPool(lowPriorityGraphicsCommandPool);
+		renderingDevice->DestroyCommandPool(transferCommandPool);
+		renderingDevice->DestroyCommandPool(computeCommandPool);
 	}
 	
 	virtual void CreateDescriptorSets() {
@@ -305,7 +331,7 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void CreateSwapChain() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		
 		// Put old swapchain in a temporary pointer and delete it after creating new swapchain
 		SwapChain* oldSwapChain = swapChain;
@@ -324,7 +350,7 @@ protected: // Virtual INIT Methods
 			preferredPresentModes
 		);
 		// Assign queues
-		swapChain->AssignQueues({graphicsQueue.index, presentationQueue.index});
+		swapChain->AssignQueues({presentQueue.familyIndex, graphicsQueue.familyIndex});
 		// Set custom params
 		// swapChain->createInfo.xxxx = xxxxxx...
 		// swapChain->imageViewsCreateInfo.xxxx = xxxxxx...
@@ -342,14 +368,14 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void CreateCommandBuffers() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		
 		// Because one of the drawing commands involves binding the right VkFramebuffer, we'll actually have to record a command buffer for every image in the swap chain once again.
 		// Command buffers will be automatically freed when their command pool is destroyed, so we don't need an explicit cleanup
 		commandBuffers.resize(swapChain->imageViews.size());
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = commandPool;
+		allocInfo.commandPool = graphicsCommandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 						/*	VK_COMMAND_BUFFER_LEVEL_PRIMARY = Can be submitted to a queue for execution, but cannot be called from other command buffers
 							VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
@@ -386,10 +412,47 @@ protected: // Virtual INIT Methods
 				throw std::runtime_error("Failed to record command buffer");
 			}
 		}
+		
+		
+		
+		
+		// Low Priority Graphics
+		allocInfo.commandPool = lowPriorityGraphicsCommandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = 1;
+		if (renderingDevice->AllocateCommandBuffers(&allocInfo, &lowPriorityCommandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate command buffers");
+		}
+		// Starting command buffer recording...
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; // We have used this flag because we may already be scheduling the drawing commands for the next frame while the last frame is not finished yet.
+						/*	VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT = The command buffer will be rerecorded right after executing it once
+							VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = This is a secondary command buffer that will be entirely within a single render pass.
+							VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT = The command buffer can be resubmited while it is also already pending execution
+						*/
+		beginInfo.pInheritanceInfo = nullptr; // only relevant for secondary command buffers. It specifies which state to inherit from the calling primary command buffers.
+		// If a command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it.
+		// It's not possible to append commands to a buffer at a later time.
+		if (renderingDevice->BeginCommandBuffer(lowPriorityCommandBuffer, &beginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("Faild to begin recording command buffer");
+		}
+
+		//////////////////////////////////////////////////////////
+		
+		// Commands to submit on each draw
+		LowPriorityRenderingCommandBuffer(lowPriorityCommandBuffer);
+		
+		//////////////////////////////////////////////////////////
+		
+		if (renderingDevice->EndCommandBuffer(lowPriorityCommandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to record command buffer");
+		}
 	}
 
 	virtual void DestroyCommandBuffers() {
-		renderingDevice->FreeCommandBuffers(commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		renderingDevice->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		renderingDevice->FreeCommandBuffers(lowPriorityGraphicsCommandPool, 1, &lowPriorityCommandBuffer);
 	}
 
 protected: // Helper methods
@@ -428,7 +491,12 @@ protected: // Helper methods
 		if (renderingDevice->CreateFence(&fenceInfo, nullptr, &fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to create fence");
 
-		if (renderingDevice->QueueSubmit(graphicsQueue.handle, 1, &submitInfo, fence) != VK_SUCCESS)
+		VkQueue queue = VK_NULL_HANDLE;
+		if (commandPool == graphicsCommandPool) queue = graphicsQueue.handle;
+		else if (commandPool == lowPriorityGraphicsCommandPool) queue = lowPriorityGraphicsQueue.handle;
+		else if (commandPool == transferCommandPool) queue = transferQueue.handle;
+		else if (commandPool == computeCommandPool) queue = computeQueue.handle;
+		if (renderingDevice->QueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to submit queue");
 
 		if (renderingDevice->WaitForFences(1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max() /* nanoseconds */))
@@ -488,9 +556,9 @@ protected: // Helper methods
 
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
-		auto commandBuffer = BeginSingleTimeCommands(commandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
 		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels, layerCount);
-		EndSingleTimeCommands(commandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
 	}
 	
 	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
@@ -639,9 +707,9 @@ protected: // Helper methods
 	}
 
 	void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-		auto commandBuffer = BeginSingleTimeCommands(commandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
 		CopyBufferToImage(commandBuffer, buffer, image, width, height);
-		EndSingleTimeCommands(commandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
 	}
 
 	void CopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
@@ -679,7 +747,7 @@ protected: // Helper methods
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
 
-		auto commandBuffer = BeginSingleTimeCommands(commandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
 
 		VkImageMemoryBarrier barrier = {};
 			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -762,12 +830,12 @@ protected: // Helper methods
 			1, &barrier
 		);
 
-		EndSingleTimeCommands(commandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
 	}
 
 protected: // Init/Reset Methods
 	virtual void RecreateSwapChains() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		
 		swapChainDirty = false;
 
@@ -781,7 +849,7 @@ protected: // Init/Reset Methods
 	
 public: // Init/Load/Reset Methods
 	virtual void LoadRenderer() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		
 		Init();
 		
@@ -795,14 +863,14 @@ public: // Init/Load/Reset Methods
 	}
 	
 	virtual void UnloadRenderer() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		DestroySwapChain();
 		DestroySyncObjects();
 		DestroyDevices();
 	}
 	
 	virtual void ReloadRenderer() {
-		std::lock_guard lock(renderingMutex);
+		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
 		LOG_WARN("Reloading renderer...")
 		
 		DeleteGraphicsFromDevice();
@@ -932,7 +1000,7 @@ public: // Public Methods
 
 		// Send the present info to the presentation queue !
 		// This submits the request to present an image to the swap chain.
-		result = renderingDevice->QueuePresentKHR(presentationQueue.handle, &presentInfo);
+		result = renderingDevice->QueuePresentKHR(presentQueue.handle, &presentInfo);
 
 		// Check for errors
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || swapChainDirty) {
@@ -946,6 +1014,39 @@ public: // Public Methods
 
 		// Increment currentFrameInFlight
 		currentFrameInFlight = (currentFrameInFlight + 1) % MAX_FRAMES_IN_FLIGHT;
+	}
+	
+	virtual void RenderLowPriorityGraphics() {
+		std::lock_guard lock(lowPriorityRenderingMutex);
+		
+		LockUBO();
+		LowPriorityFrameUpdate();
+		UnlockUBO();
+		
+		// Submit the command buffer
+		VkSubmitInfo submitInfo = {};
+		// first 3 params specify which semaphores to wait on before execution begins and in which stage(s) of the pipeline to wait.
+		// We want to wait with writing colors to the image until it's available, so we're specifying the stage of the graphics pipeline that writes to the color attachment.
+		// That means that theoretically the implementation can already start executing our vertex shader and such while the image is not yet available.
+		// Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.waitSemaphoreCount = 0;
+		submitInfo.pWaitSemaphores = nullptr;
+		submitInfo.pWaitDstStageMask = nullptr;
+		// specify which command buffers to actually submit for execution
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &lowPriorityCommandBuffer;
+		// specify which semaphore to signal once the command buffer(s) have finished execution.
+		submitInfo.signalSemaphoreCount = 0;
+		submitInfo.pSignalSemaphores = nullptr;
+		
+		VkResult result;
+		if ((result = renderingDevice->QueueSubmit(lowPriorityGraphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*optional fence to be signaled*/)) != VK_SUCCESS) {
+			LOG_ERROR((int)result)
+			throw std::runtime_error("Failed to submit draw command buffer");
+		}
+
+		renderingDevice->QueueWaitIdle(lowPriorityGraphicsQueue.handle);
 	}
 	
 	inline void LockUBO() {

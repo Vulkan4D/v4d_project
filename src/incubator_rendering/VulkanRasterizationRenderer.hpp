@@ -132,11 +132,6 @@ private: // Rasterization Rendering
 	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
 	VkImageView colorImageView = VK_NULL_HANDLE;
 	VkFormat colorImageFormat;
-	// Order-Independent Transparency
-	VkImage oitBufferImage = VK_NULL_HANDLE;
-	VkDeviceMemory oitBufferImageMemory = VK_NULL_HANDLE;
-	VkImageView oitBufferImageView = VK_NULL_HANDLE;
-	VkFormat oitBufferImageFormat;
 	// tmp resolve image for multisampled deferred rendering
 	VkImage ppImage = VK_NULL_HANDLE;
 	VkDeviceMemory ppImageMemory = VK_NULL_HANDLE;
@@ -149,8 +144,7 @@ private: // Rasterization Rendering
 	
 	// Graphics settings
 	VkSampleCountFlagBits msaaSamples = 		VK_SAMPLE_COUNT_1_BIT;
-	const bool postProcessingEnabled = 							false;
-	const bool oitEnabled = !postProcessingEnabled?false : 		false;
+	const bool postProcessingEnabled = 							true;
 	float renderingResolutionScale = !postProcessingEnabled?1: 	1.0;
 	
 	
@@ -194,54 +188,6 @@ private: // Rasterization Rendering
 			throw std::runtime_error("Failed to create texture image view");
 		}
 		TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
-		
-		if (oitEnabled) {
-			oitBufferImageFormat = renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
-			renderingDevice->CreateImage(
-				width,
-				height,
-				1, msaaSamples,
-				colorImageFormat,
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				oitBufferImage,
-				oitBufferImageMemory
-			);
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = oitBufferImage;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			viewInfo.format = colorImageFormat;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = 1;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &oitBufferImageView) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create texture image view");
-			}
-			TransitionImageLayout(oitBufferImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
-			
-			// Create sampler
-			VkSamplerCreateInfo sampler {};
-			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.magFilter = VK_FILTER_LINEAR;
-			sampler.minFilter = VK_FILTER_LINEAR;
-			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-			sampler.addressModeV = sampler.addressModeU;
-			sampler.addressModeW = sampler.addressModeU;
-			sampler.mipLodBias = 0.0f;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.compareOp = VK_COMPARE_OP_NEVER;
-			sampler.minLod = 0.0f;
-			sampler.maxLod = 1.0f;
-			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-			if (renderingDevice->CreateSampler(&sampler, nullptr, &oitBufferSampler.sampler) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create sampler");
-			oitBufferSampler.imageView = oitBufferImageView;
-		}
 		
 		if (postProcessingEnabled) {
 			// tmp resolve image for multisampled deferred rendering
@@ -335,13 +281,6 @@ private: // Rasterization Rendering
 			renderingDevice->FreeMemory(ppImageMemory, nullptr);
 			ppImage = VK_NULL_HANDLE;
 		}
-		if (oitEnabled && oitBufferImage != VK_NULL_HANDLE) {
-			renderingDevice->DestroySampler(oitBufferSampler.sampler, nullptr);
-			renderingDevice->DestroyImageView(oitBufferImageView, nullptr);
-			renderingDevice->DestroyImage(oitBufferImage, nullptr);
-			renderingDevice->FreeMemory(oitBufferImageMemory, nullptr);
-			oitBufferImage = VK_NULL_HANDLE;
-		}
 		if (depthImage != VK_NULL_HANDLE) {
 			renderingDevice->DestroyImageView(depthImageView, nullptr);
 			renderingDevice->DestroyImage(depthImage, nullptr);
@@ -398,24 +337,6 @@ private: // Rasterization Rendering
 		// Vulkan will automatically transition the attachment to this layout when the subpass is started.
 		// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
 
-		if (oitEnabled) {
-			// Color Attachment (Fragment shader Standard Output)
-			VkAttachmentDescription oitBufferAttachment = {}; // defines the output data from the fragment shader (o_color)
-				oitBufferAttachment.format = oitBufferImageFormat;
-				oitBufferAttachment.samples = msaaSamples; // Need more with multisampling
-				// Color and depth data
-				oitBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-				oitBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Stencil data
-				oitBufferAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				oitBufferAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				oitBufferAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				oitBufferAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			renderPass->AddAttachment(oitBufferAttachment);
-			colorAttachmentRefs[1] = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-			++colorAttachmentCount;
-		}
-		
 		
 		// Depth Attachment
 		VkAttachmentDescription depthAttachment = {};
@@ -471,21 +392,23 @@ private: // Rasterization Rendering
 		// There are two ways to deal with this problem.
 		// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
 		// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-		VkSubpassDependency dependency = {};
-			dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-			dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-			// These two specify the operations to wait on and the stages in which these operations occur. 
-			// We need to wait for the swap chain to finish reading from the image before we can access it. 
-			// This can be accomplished by waiting on the color attachment output stage itself.
-			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.srcAccessMask = 0;
-			// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-			// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		// Set dependency to the render pass info
-		renderPass->renderPassInfo.dependencyCount = 1;
-		renderPass->renderPassInfo.pDependencies = &dependency;
+		if (!postProcessingEnabled) {
+			VkSubpassDependency dependency = {};
+				dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+				dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+				// These two specify the operations to wait on and the stages in which these operations occur. 
+				// We need to wait for the swap chain to finish reading from the image before we can access it. 
+				// This can be accomplished by waiting on the color attachment output stage itself.
+				dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependency.srcAccessMask = 0;
+				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+				dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+				dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			// Set dependency to the render pass info
+			renderPass->renderPassInfo.dependencyCount = 1;
+			renderPass->renderPassInfo.pDependencies = &dependency;
+		}
 
 		// Create the render pass
 		renderPass->Create();
@@ -513,13 +436,12 @@ private: // Rasterization Rendering
 		}
 		
 		// Frame Buffers
-		swapChainFrameBuffers.resize(swapChain->imageViews.size());
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
+		swapChainFrameBuffers.resize(postProcessingEnabled? 1 : swapChain->imageViews.size());
+		for (size_t i = 0; i < (postProcessingEnabled? 1 : swapChain->imageViews.size()); i++) {
 			
 			std::vector<VkImageView> attachments {
 				(msaaSamples != VK_SAMPLE_COUNT_1_BIT || postProcessingEnabled)? colorImageView : swapChain->imageViews[i],
 			};
-			if (oitEnabled) attachments.push_back(oitBufferImageView);
 			attachments.push_back(depthImageView);
 			if (msaaSamples != VK_SAMPLE_COUNT_1_BIT) attachments.push_back(postProcessingEnabled? ppImageView : swapChain->imageViews[i]);
 			
@@ -545,28 +467,8 @@ private: // Rasterization Rendering
 			// Pipeline Create Info
 			graphicsPipeline->pipelineCreateInfo.pViewportState = &viewportState;
 			// Color Blending
-			if (oitEnabled) {
-				graphicsPipeline->AddColorBlendAttachmentState(
-					VK_TRUE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD
-				);
-				graphicsPipeline->AddColorBlendAttachmentState(
-					VK_TRUE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD
-				);
-			}
-			// else graphicsPipeline->AddColorBlendAttachmentState();
-			else graphicsPipeline->AddColorBlendAttachmentState(
+			// graphicsPipeline->AddColorBlendAttachmentState();
+			graphicsPipeline->AddColorBlendAttachmentState(
 				VK_TRUE,
 				VK_BLEND_FACTOR_ONE,
 				VK_BLEND_FACTOR_ONE,
@@ -658,7 +560,8 @@ private: // Renderer Configuration methods
 			galaxyCubeImage,
 			galaxyCubeImageMemory,
 			6,
-			VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+			VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+			{graphicsQueue.familyIndex, lowPriorityGraphicsQueue.familyIndex}
 		);
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = galaxyCubeImage;
@@ -823,7 +726,6 @@ public: // Scene configuration methods
 		if (postProcessingEnabled) {
 			auto* ppDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 			ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
-			if (oitEnabled) ppDescriptorSet->AddBinding_combinedImageSampler(1, &oitBufferSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 			postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
 		}
@@ -957,7 +859,7 @@ public: // Scene configuration methods
 protected: // Graphics configuration
 	void CreateSceneGraphics() override {
 		// Staged Buffers
-		AllocateBuffersStaged(commandPool, stagedBuffers);
+		AllocateBuffersStaged(transferCommandPool, stagedBuffers);
 		// Other buffers
 		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 		conditionalRenderingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
@@ -1007,22 +909,24 @@ protected: // Graphics configuration
 				subpass.colorAttachmentCount = 1;
 				subpass.pColorAttachments = &colorAttachmentRef;
 			postProcessingRenderPass->AddSubpass(subpass);
-			//
-			VkSubpassDependency dependency = {};
-				dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-				dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-				// These two specify the operations to wait on and the stages in which these operations occur. 
-				// We need to wait for the swap chain to finish reading from the image before we can access it. 
-				// This can be accomplished by waiting on the color attachment output stage itself.
-				dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependency.srcAccessMask = 0;
-				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-				dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			// Set dependency to the render pass info
-			postProcessingRenderPass->renderPassInfo.dependencyCount = 1;
-			postProcessingRenderPass->renderPassInfo.pDependencies = &dependency;
+			
+			// // External Dependency (NOT SURE IF REALLY NEEDED)
+			// VkSubpassDependency dependency = {};
+			// 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
+			// 	dependency.dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
+			// 	// These two specify the operations to wait on and the stages in which these operations occur. 
+			// 	// We need to wait for the swap chain to finish reading from the image before we can access it. 
+			// 	// This can be accomplished by waiting on the color attachment output stage itself.
+			// 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			// 	dependency.srcAccessMask = 0;
+			// 	// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
+			// 	// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
+			// 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			// 	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			// // Set dependency to the render pass info
+			// postProcessingRenderPass->renderPassInfo.dependencyCount = 1;
+			// postProcessingRenderPass->renderPassInfo.pDependencies = &dependency;
+			
 
 			postProcessingRenderPass->Create();
 
@@ -1084,50 +988,15 @@ protected: // Graphics configuration
 				galaxyGenRenderPass->AddAttachment(colorAttachment);
 			VkAttachmentReference colorAttachmentRefs = {
 				0, // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_GENERAL
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 			};
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.colorAttachmentCount = 1;
 				subpass.pColorAttachments = &colorAttachmentRefs;
-				subpass.pDepthStencilAttachment = nullptr;
 			galaxyGenRenderPass->AddSubpass(subpass);
-			// VkSubpassDescription subpass2 = {};
-			// 	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-			// 	subpass.colorAttachmentCount = 1;
-			// 	subpass.pColorAttachments = &colorAttachmentRefs;
-			// 	subpass.inputAttachmentCount = 1;
-			// 	subpass.pInputAttachments = &colorAttachmentRefs;
-			// galaxyGenRenderPass->AddSubpass(subpass2);
-			std::array<VkSubpassDependency, 1> dependencies {};
-				dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-				dependencies[0].dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-				// These two specify the operations to wait on and the stages in which these operations occur. 
-				// We need to wait for the swap chain to finish reading from the image before we can access it. 
-				// This can be accomplished by waiting on the color attachment output stage itself.
-				dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependencies[0].srcAccessMask = 0;
-				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-				dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-				// //
-				// dependencies[1].srcSubpass = 0; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-				// dependencies[1].dstSubpass = 1; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-				// // These two specify the operations to wait on and the stages in which these operations occur. 
-				// // We need to wait for the swap chain to finish reading from the image before we can access it. 
-				// // This can be accomplished by waiting on the color attachment output stage itself.
-				// dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				// dependencies[1].srcAccessMask = 0;
-				// // The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-				// // These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-				// dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				// dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			// Set dependency to the render pass info
-			galaxyGenRenderPass->renderPassInfo.dependencyCount = (uint)dependencies.size();
-			galaxyGenRenderPass->renderPassInfo.pDependencies = dependencies.data();
-
+			
 			// Create the render pass
 			galaxyGenRenderPass->Create();
 			
@@ -1183,42 +1052,12 @@ protected: // Graphics configuration
 			// Configure
 			galaxyGenPipeline->graphicsPipeline = graphicsPipeline;
 			galaxyGenPipeline->Configure();
-			// // Galaxy Fade
-			// auto* graphicsPipeline2 = galaxyGenRenderPass->NewGraphicsPipeline(renderingDevice, 1);
-			// // Multisampling (AntiAliasing)
-			// graphicsPipeline2->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-			// // Pipeline Create Info
-			// graphicsPipeline2->pipelineCreateInfo.pViewportState = &viewportState;
-			// // Color Blending
-			// graphicsPipeline2->AddColorBlendAttachmentState();
-			// // Shader stages
-			// galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
-			// graphicsPipeline2->SetShaderProgram(galaxyFadePipeline->shaderProgram);
-			// // Configure
-			// galaxyFadePipeline->graphicsPipeline = graphicsPipeline2;
-			// galaxyFadePipeline->Configure();
-			
 			
 			// Create Graphics Pipelines !
 			galaxyGenRenderPass->CreateGraphicsPipelines();
 		}
 		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		/////////////////////
-		
-		
-		
-		
 		{
-			
 			// Galaxy Fade
 			galaxyFadeRenderPass = new RenderPass(renderingDevice);
 
@@ -1237,7 +1076,7 @@ protected: // Graphics configuration
 				galaxyFadeRenderPass->AddAttachment(colorAttachment);
 			VkAttachmentReference colorAttachmentRefs = {
 				0, // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_GENERAL
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 			};
 			// SubPass
 			VkSubpassDescription subpass = {};
@@ -1246,22 +1085,7 @@ protected: // Graphics configuration
 				subpass.pColorAttachments = &colorAttachmentRefs;
 				subpass.pDepthStencilAttachment = nullptr;
 			galaxyFadeRenderPass->AddSubpass(subpass);
-			std::array<VkSubpassDependency, 1> dependencies {};
-				dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL; // special value to refer to the implicit subpass before or after the render pass depending on wether it is specified in srcSubpass or dstSubpass.
-				dependencies[0].dstSubpass = 0; // index 0 refers to our subpass, which is the first and only one. It must always be higher than srcSubpass to prevent cucles in the dependency graph.
-				// These two specify the operations to wait on and the stages in which these operations occur. 
-				// We need to wait for the swap chain to finish reading from the image before we can access it. 
-				// This can be accomplished by waiting on the color attachment output stage itself.
-				dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependencies[0].srcAccessMask = 0;
-				// The operations that should wait on this are in the color attachment stage and involve reading and writing of the color attachment.
-				// These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it.
-				dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-				dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			// Set dependency to the render pass info
-			galaxyFadeRenderPass->renderPassInfo.dependencyCount = (uint)dependencies.size();
-			galaxyFadeRenderPass->renderPassInfo.pDependencies = dependencies.data();
-
+			
 			// Create the render pass
 			galaxyFadeRenderPass->Create();
 			
@@ -1358,7 +1182,7 @@ protected: // Graphics configuration
 		galaxyFadePipeline->shaderProgram->DestroyShaderStages(renderingDevice);
 	}
 	
-	void RenderGalaxy(VkCommandBuffer commandBuffer, int imageIndex) {
+	void LowPriorityRenderingCommandBuffer(VkCommandBuffer commandBuffer) {
 		
 		// Begin Render Pass
 		VkRenderPassBeginInfo renderPassInfo = {};
@@ -1366,10 +1190,6 @@ protected: // Graphics configuration
 		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
 		renderPassInfo.renderArea.offset = {0, 0};
 		renderPassInfo.renderArea.extent = {(uint)swapChain->extent.width, (uint)swapChain->extent.width};
-		// std::array<VkClearValue, 1> clearValues = {};
-		// clearValues[0].color = clearColor;
-		// renderPassInfo.clearValueCount = clearValues.size();
-		// renderPassInfo.pClearValues = clearValues.data();
 		
 		// Conditional rendering
 		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {
@@ -1385,10 +1205,10 @@ protected: // Graphics configuration
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyFadeFrameBuffer;
-		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyFadePipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyFadePipeline->Draw(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndRenderPass(commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 		// Galaxy Gen
@@ -1396,17 +1216,18 @@ protected: // Graphics configuration
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyGenFrameBuffer;
-		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
 		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndRenderPass(commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
+		
+		// Other galaxy elements
+		//...
 		
 	}
 	
 	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		
-		RenderGalaxy(commandBuffer, imageIndex);
 		
 		int width = (int)((float)swapChain->extent.width * renderingResolutionScale);
 		int height = (int)((float)swapChain->extent.height * renderingResolutionScale);
@@ -1415,7 +1236,7 @@ protected: // Graphics configuration
 		VkRenderPassBeginInfo renderPassInfo = {};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassInfo.renderPass = renderPass->handle;
-		renderPassInfo.framebuffer = swapChainFrameBuffers[imageIndex]; // We create a framebuffer for each swap chain image that specifies it as color attachment
+		renderPassInfo.framebuffer = swapChainFrameBuffers[postProcessingEnabled? 0 : imageIndex]; // We create a framebuffer for each swap chain image that specifies it as color attachment
 		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
 		renderPassInfo.renderArea.offset = {0, 0};
 		renderPassInfo.renderArea.extent = {(uint)width, (uint)height};
@@ -1448,8 +1269,6 @@ protected: // Graphics configuration
 			auto resolvedImage = (msaaSamples != VK_SAMPLE_COUNT_1_BIT)? ppImage : colorImage;
 			TransitionImageLayout(commandBuffer, resolvedImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
 			
-			if (oitEnabled) TransitionImageLayout(commandBuffer, oitBufferImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
-			
 			// Begin Render Pass
 			VkRenderPassBeginInfo ppRenderPassInfo = {};
 			ppRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1477,13 +1296,13 @@ protected: // Graphics configuration
 		
 	}
 	
+	
 protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
 		UBO ubo {};
-		ConditionalRendering conditionalRendering {};
 		// Slowly rotate the test object
 		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
@@ -1494,20 +1313,24 @@ protected: // Methods executed on every frame
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		ubo.proj[1][1] *= -1;
 		
-		// Galaxy convergence
-		const int convergences = 10;
-		galaxyFrameIndex++;
-		conditionalRendering.genGalaxy = (continuousGalaxyGen || galaxyFrameIndex <= convergences)? 1:0;
-		if (galaxyFrameIndex > convergences) galaxyFrameIndex = continuousGalaxyGen? 0 : convergences;
-		if (!continuousGalaxyGen && speed > 0) galaxyFrameIndex = 0;
 		ubo.speed = speed;
-		conditionalRendering.fadeGalaxy = (continuousGalaxyGen || speed > 0)? 1:0;
 		ubo.galaxyFrameIndex = galaxyFrameIndex;
 		
 		ubo.toggleTest = toggleTest;
 
 		// Update memory
 		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+	}
+	
+	void LowPriorityFrameUpdate() override {
+		// Galaxy convergence
+		ConditionalRendering conditionalRendering {};
+		const int convergences = 10;
+		galaxyFrameIndex++;
+		conditionalRendering.genGalaxy = (continuousGalaxyGen || galaxyFrameIndex <= convergences)? 1:0;
+		if (galaxyFrameIndex > convergences) galaxyFrameIndex = continuousGalaxyGen? 0 : convergences;
+		if (!continuousGalaxyGen && speed > 0) galaxyFrameIndex = 0;
+		conditionalRendering.fadeGalaxy = (continuousGalaxyGen || speed > 0)? 1:0;
 		Buffer::CopyDataToBuffer(renderingDevice, &conditionalRendering, &conditionalRenderingBuffer);
 		
 		// Clear galaxy upon stopping
@@ -1517,9 +1340,11 @@ protected: // Methods executed on every frame
 				galaxyFrameIndex = 0;
 				VkClearColorValue clearColor {.0,.0,.0,.0};
 				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
-				auto cmdBuffer = BeginSingleTimeCommands(commandPool);
-				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, &clearColor, 1, &clearRange);
-				EndSingleTimeCommands(commandPool, cmdBuffer);
+				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityGraphicsCommandPool);
+				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 6);
+				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
+				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1, 6);
+				EndSingleTimeCommands(lowPriorityGraphicsCommandPool, cmdBuffer);
 			}
 		}
 	}

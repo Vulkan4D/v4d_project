@@ -210,7 +210,7 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0.004,0.004,0.004, 0);
+	out_color = vec4(0.005,0.005,0.005, 0);
 }
 
 ##################################################################
