@@ -1017,33 +1017,35 @@ public: // Public Methods
 	}
 	
 	virtual void RenderLowPriorityGraphics() {
-		std::lock_guard lock(lowPriorityRenderingMutex);
-		
-		LockUBO();
-		LowPriorityFrameUpdate();
-		UnlockUBO();
-		
-		// Submit the command buffer
-		VkSubmitInfo submitInfo = {};
-		// first 3 params specify which semaphores to wait on before execution begins and in which stage(s) of the pipeline to wait.
-		// We want to wait with writing colors to the image until it's available, so we're specifying the stage of the graphics pipeline that writes to the color attachment.
-		// That means that theoretically the implementation can already start executing our vertex shader and such while the image is not yet available.
-		// Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.waitSemaphoreCount = 0;
-		submitInfo.pWaitSemaphores = nullptr;
-		submitInfo.pWaitDstStageMask = nullptr;
-		// specify which command buffers to actually submit for execution
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &lowPriorityCommandBuffer;
-		// specify which semaphore to signal once the command buffer(s) have finished execution.
-		submitInfo.signalSemaphoreCount = 0;
-		submitInfo.pSignalSemaphores = nullptr;
-		
-		VkResult result;
-		if ((result = renderingDevice->QueueSubmit(lowPriorityGraphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*optional fence to be signaled*/)) != VK_SUCCESS) {
-			LOG_ERROR((int)result)
-			throw std::runtime_error("Failed to submit draw command buffer");
+		{
+			std::lock_guard lock(lowPriorityRenderingMutex);
+			
+			LockUBO();
+			LowPriorityFrameUpdate();
+			UnlockUBO();
+			
+			// Submit the command buffer
+			VkSubmitInfo submitInfo = {};
+			// first 3 params specify which semaphores to wait on before execution begins and in which stage(s) of the pipeline to wait.
+			// We want to wait with writing colors to the image until it's available, so we're specifying the stage of the graphics pipeline that writes to the color attachment.
+			// That means that theoretically the implementation can already start executing our vertex shader and such while the image is not yet available.
+			// Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores.
+			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submitInfo.waitSemaphoreCount = 0;
+			submitInfo.pWaitSemaphores = nullptr;
+			submitInfo.pWaitDstStageMask = nullptr;
+			// specify which command buffers to actually submit for execution
+			submitInfo.commandBufferCount = 1;
+			submitInfo.pCommandBuffers = &lowPriorityCommandBuffer;
+			// specify which semaphore to signal once the command buffer(s) have finished execution.
+			submitInfo.signalSemaphoreCount = 0;
+			submitInfo.pSignalSemaphores = nullptr;
+			
+			VkResult result;
+			if ((result = renderingDevice->QueueSubmit(lowPriorityGraphicsQueue.handle, 1/*count, for use of the next param*/, &submitInfo/*array, can have multiple!*/, VK_NULL_HANDLE/*optional fence to be signaled*/)) != VK_SUCCESS) {
+				LOG_ERROR((int)result)
+				throw std::runtime_error("Failed to submit draw command buffer");
+			}
 		}
 
 		renderingDevice->QueueWaitIdle(lowPriorityGraphicsQueue.handle);

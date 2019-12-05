@@ -55,7 +55,9 @@ int main() {
 	
 	// Input Events
 	window->AddKeyCallback("app", [window, vulkan](int key, int scancode, int action, int mods){
-		vulkan->LockUBO();
+		
+		// Might want to lock UBO in some cases
+		
 		// Quit application upon pressing the Escape key
 		if (action != GLFW_RELEASE) {
 			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
@@ -140,7 +142,6 @@ int main() {
 				
 			}
 		}
-		vulkan->UnlockUBO();
 	});
 	
 	// Mouse buttons
@@ -167,6 +168,8 @@ int main() {
 		while (window->IsActive()) {
 			// Events
 			glfwPollEvents();
+			
+			// vulkan->LockUBO();
 			
 			// Camera Movements
 			vulkan->speed = 0;
@@ -211,6 +214,8 @@ int main() {
 					);
 				}
 			}
+			
+			// vulkan->UnlockUBO();
 			
 			SLEEP(10ms)
 		}
