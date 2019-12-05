@@ -173,7 +173,9 @@ int main() {
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
 		while (appRunning) {
+			std::this_thread::yield();
 			vulkan->RenderLowPriorityGraphics();
+			SLEEP(10ms)
 		}
 	});
 	
