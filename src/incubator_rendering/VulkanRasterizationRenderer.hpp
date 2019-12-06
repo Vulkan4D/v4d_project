@@ -36,95 +36,13 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	std::vector<Buffer*> stagedBuffers {};
 	std::vector<Geometry*> geometries {};
 	
-	ShaderProgram* testShader;
-	ShaderProgram* ppShader;
+	RasterShaderPipeline* testShader;
+	RasterShaderPipeline* ppShader;
 	CombinedImageSampler postProcessingSampler;
 	
-	ShaderProgram* computeTestShader;
-	VkPipeline computeTestPipeline;
+	ComputeShaderPipeline* computeTestShader;
 	
 private: // Rasterization Rendering
-	struct RenderingPipeline {
-		GraphicsPipeline* graphicsPipeline = nullptr;
-		ShaderProgram* shaderProgram;
-		
-		RenderingPipeline(ShaderProgram* shaderProgram) : shaderProgram(shaderProgram) {}
-		virtual void Configure() = 0;
-		virtual void Draw(Device* device, VkCommandBuffer commandBuffer) = 0;
-		virtual ~RenderingPipeline() {}
-	};
-	struct VertexRasterizationPipeline : public RenderingPipeline {
-		Buffer* vertexBuffer = nullptr;
-		Buffer* indexBuffer = nullptr;
-		uint32_t vertexCount = 0;
-		
-		VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		
-		VertexRasterizationPipeline(ShaderProgram* shaderProgram, Buffer* vertexBuffer, Buffer* indexBuffer)
-		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
-		
-		VertexRasterizationPipeline(ShaderProgram* shaderProgram, Buffer* vertexBuffer, uint32_t vertexCount)
-		 : RenderingPipeline(shaderProgram), vertexBuffer(vertexBuffer), vertexCount(vertexCount) {}
-		
-		VertexRasterizationPipeline(ShaderProgram* shaderProgram, uint32_t vertexCount)
-		 : RenderingPipeline(shaderProgram), vertexCount(vertexCount) {}
-		
-		void Configure() {
-			graphicsPipeline->inputAssembly.topology = topology;
-			graphicsPipeline->rasterizer.cullMode = VK_CULL_MODE_NONE;
-			graphicsPipeline->depthStencilState.depthWriteEnable = VK_FALSE;
-			graphicsPipeline->depthStencilState.depthTestEnable = VK_FALSE;
-		}
-		
-		void Draw(Device* device, VkCommandBuffer commandBuffer) {
-			VkDeviceSize offsets[] = {0};
-			if (vertexBuffer == nullptr) {
-				device->CmdDraw(commandBuffer,
-					vertexCount, // vertexCount
-					1, // instanceCount
-					0, // firstVertex (defines the lowest value of gl_VertexIndex)
-					0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-				);
-			} else {
-				device->CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->buffer, offsets);
-				if (indexBuffer == nullptr) {
-					// Draw vertices
-					device->CmdDraw(commandBuffer,
-						vertexCount, // vertexCount
-						1, // instanceCount
-						0, // firstVertex (defines the lowest value of gl_VertexIndex)
-						0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-					);
-				} else {
-					// Draw indices
-					device->CmdBindIndexBuffer(commandBuffer, indexBuffer->buffer, 0, VK_INDEX_TYPE_UINT32);
-					device->CmdDrawIndexed(commandBuffer,
-						static_cast<uint32_t>(indexBuffer->size / sizeof(uint32_t)), // indexCount
-						1, // instanceCount
-						0, // firstVertex (defines the lowest value of gl_VertexIndex)
-						0, // vertexOffset
-						0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-					);
-				}
-			}
-		}
-	};
-	struct PostProcessingPipeline : public RenderingPipeline {
-
-		PostProcessingPipeline(ShaderProgram* shaderProgram)
-		 : RenderingPipeline(shaderProgram) {}
-		
-		void Configure() {
-			graphicsPipeline->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-			graphicsPipeline->rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-		}
-		
-		void Draw(Device* device, VkCommandBuffer commandBuffer) {
-			device->CmdDraw(commandBuffer, 3, 1, 0, 0);
-		}
-	};
-	std::vector<VertexRasterizationPipeline> rasterizationPipelines {};
-	std::vector<PostProcessingPipeline> postProcessingPipelines {};
 	RenderPass* renderPass = nullptr;
 	RenderPass* postProcessingRenderPass = nullptr;
 	RenderPass* galaxyGenRenderPass = nullptr;
@@ -465,7 +383,7 @@ private: // Rasterization Rendering
 		}
 		
 		// Shaders
-		for (auto& pipeline : rasterizationPipelines) {
+		for (auto& shaderPipeline : {galaxyBoxShader, testShader}) {
 			auto* graphicsPipeline = renderPass->NewGraphicsPipeline(renderingDevice, 0);
 			// Multisampling (AntiAliasing)
 			graphicsPipeline->multisampling.rasterizationSamples = msaaSamples;
@@ -483,11 +401,10 @@ private: // Rasterization Rendering
 				VK_BLEND_OP_ADD
 			);
 			// Shader stages
-			pipeline.shaderProgram->CreateShaderStages(renderingDevice);
-			graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
+			shaderPipeline->CreateShaderStages(renderingDevice);
+			graphicsPipeline->SetShaderProgram(shaderPipeline);
 			// Configure
-			pipeline.graphicsPipeline = graphicsPipeline;
-			pipeline.Configure();
+			shaderPipeline->ConfigureGraphicsPipeline(graphicsPipeline);
 		}
 		
 		// Create Graphics Pipelines !
@@ -505,8 +422,8 @@ private: // Rasterization Rendering
 		delete renderPass;
 		
 		// Shaders
-		for (auto& pipeline : rasterizationPipelines) {
-			pipeline.shaderProgram->DestroyShaderStages(renderingDevice);
+		for (auto& shaderPipeline : {galaxyBoxShader, testShader}) {
+			shaderPipeline->DestroyShaderStages(renderingDevice);
 		}
 	}
 
@@ -624,18 +541,14 @@ public: // Scene configuration methods
 	};
 	
 	std::vector<Galaxy> galaxies {};
-	ShaderProgram* galaxyGenShader = nullptr;
-	ShaderProgram* galaxyBoxShader = nullptr;
-	ShaderProgram* galaxyFadeShader = nullptr;
+	RasterShaderPipeline* galaxyGenShader = nullptr;
+	RasterShaderPipeline* galaxyBoxShader = nullptr;
+	RasterShaderPipeline* galaxyFadeShader = nullptr;
 	VkImage galaxyCubeImage = VK_NULL_HANDLE;
 	VkDeviceMemory galaxyCubeImageMemory = VK_NULL_HANDLE;
 	VkImageView galaxyCubeImageView = VK_NULL_HANDLE;
 	VkFormat galaxyCubeImageFormat;
 	CombinedImageSampler galaxyCubeSampler;
-	VertexRasterizationPipeline* galaxyGenPipeline = nullptr;
-	VertexRasterizationPipeline* galaxyFadePipeline = nullptr;
-	
-	
 		
 	uint RandomInt(uint& seed) {
 		// LCG values from Numerical Recipes
@@ -677,10 +590,10 @@ public: // Scene configuration methods
 		PipelineLayout* galaxyGenPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		galaxyGenShader = new ShaderProgram(galaxyGenPipelineLayout, {
-			{"incubator_rendering/assets/shaders/galaxy.gen.geom"},
-			{"incubator_rendering/assets/shaders/galaxy.gen.vert"},
-			{"incubator_rendering/assets/shaders/galaxy.gen.frag"},
+		galaxyGenShader = new RasterShaderPipeline(galaxyGenPipelineLayout, {
+			"incubator_rendering/assets/shaders/galaxy.gen.geom",
+			"incubator_rendering/assets/shaders/galaxy.gen.vert",
+			"incubator_rendering/assets/shaders/galaxy.gen.frag",
 		});
 		galaxyGenShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
@@ -688,10 +601,12 @@ public: // Scene configuration methods
 			{2, offsetof(Galaxy, Galaxy::numStars), VK_FORMAT_R32_UINT},
 		});
 		galaxiesBuffer->AddSrcDataPtr(&galaxies);
-		galaxyGenPipeline = new VertexRasterizationPipeline(galaxyGenShader, galaxiesBuffer, galaxies.size());
-		galaxyGenPipeline->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyGenShader->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyGenShader->cullMode = VK_CULL_MODE_NONE;
+		galaxyGenShader->depthWriteEnable = VK_FALSE;
+		galaxyGenShader->depthTestEnable = VK_FALSE;
+		galaxyGenShader->SetData(galaxiesBuffer, galaxies.size());
 		galaxyGenShader->LoadShaders();
-		
 		
 		
 		// Galaxy Box
@@ -700,23 +615,25 @@ public: // Scene configuration methods
 		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* galaxyBoxPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyBoxPipelineLayout->AddDescriptorSet(galaxyBoxDescriptorSet);
-		galaxyBoxShader = new ShaderProgram(galaxyBoxPipelineLayout, {
-			{"incubator_rendering/assets/shaders/galaxy.box.vert"},
-			{"incubator_rendering/assets/shaders/galaxy.box.frag"},
+		galaxyBoxShader = new RasterShaderPipeline(galaxyBoxPipelineLayout, {
+			"incubator_rendering/assets/shaders/galaxy.box.vert",
+			"incubator_rendering/assets/shaders/galaxy.box.frag",
 		});
-		rasterizationPipelines.emplace_back(galaxyBoxShader, 4).topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		galaxyBoxShader->topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		galaxyBoxShader->depthWriteEnable = VK_FALSE;
+		galaxyBoxShader->SetData(4);
 		galaxyBoxShader->LoadShaders();
 		
 		
 		
 		// Galaxy Fade
-		galaxyFadeShader = new ShaderProgram(galaxyBoxPipelineLayout, {
-			{"incubator_rendering/assets/shaders/galaxy.fade.vert"},
-			{"incubator_rendering/assets/shaders/galaxy.fade.geom"},
-			{"incubator_rendering/assets/shaders/galaxy.fade.frag"},
+		galaxyFadeShader = new RasterShaderPipeline(galaxyBoxPipelineLayout, {
+			"incubator_rendering/assets/shaders/galaxy.fade.vert",
+			"incubator_rendering/assets/shaders/galaxy.fade.geom",
+			"incubator_rendering/assets/shaders/galaxy.fade.frag",
 		});
-		galaxyFadePipeline = new VertexRasterizationPipeline(galaxyFadeShader, 6);
-		galaxyFadePipeline->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyFadeShader->topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyFadeShader->SetData(6);
 		galaxyFadeShader->LoadShaders();
 		
 		
@@ -784,11 +701,11 @@ public: // Scene configuration methods
 			0, 1, 2, 2, 3, 0,
 			4, 5, 6, 6, 7, 4,
 			//
-			// 8, 9, 10, 10, 11, 8,
-			// 13, 12, 14, 14, 12, 15,
-			// 16, 17, 18, 18, 17, 19,
-			// 20, 21, 22, 22, 21, 23,
-			// 25, 24, 26, 26, 27, 25,
+			8, 9, 10, 10, 11, 8,
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
 		}, vertexBuffer, 0, indexBuffer, 0);
 		geometries.push_back(trianglesGeometry1);
 		
@@ -797,9 +714,9 @@ public: // Scene configuration methods
 		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
 
 		// Shader program
-		testShader = new ShaderProgram(mainPipelineLayout, {
-			{"incubator_rendering/assets/shaders/raster.vert"},
-			{"incubator_rendering/assets/shaders/raster.frag"},
+		testShader = new RasterShaderPipeline(mainPipelineLayout, {
+			"incubator_rendering/assets/shaders/raster.vert",
+			"incubator_rendering/assets/shaders/raster.frag",
 		});
 
 		// Vertex Input structure
@@ -809,31 +726,26 @@ public: // Scene configuration methods
 			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
 			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
-		rasterizationPipelines.emplace_back(testShader, vertexBuffer, indexBuffer);
-
+		testShader->SetData(vertexBuffer, indexBuffer);
+		testShader->LoadShaders();
 		
 		// Post processing
 		if (postProcessingEnabled) {
 			// Shader program
-			ppShader = new ShaderProgram(postProcessingPipelineLayout, {
-				{"incubator_rendering/assets/shaders/postProcessing.vert"},
-				{"incubator_rendering/assets/shaders/postProcessing.frag"},
+			ppShader = new RasterShaderPipeline(postProcessingPipelineLayout, {
+				"incubator_rendering/assets/shaders/postProcessing.vert",
+				"incubator_rendering/assets/shaders/postProcessing.frag",
 			});
-			postProcessingPipelines.emplace_back(ppShader);
-
+			ppShader->SetData(3);
 			ppShader->LoadShaders();
 		}
-		
-		testShader->LoadShaders();
 		
 		
 		// Compute shader
 		auto* galaxiesComputeDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(1));
 		galaxiesComputeDescriptorSet->AddBinding_imageView(0, &galaxyCubeImageView, VK_SHADER_STAGE_COMPUTE_BIT);
 		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesComputeDescriptorSet);
-		computeTestShader = new ShaderProgram(galaxyGenPipelineLayout, {
-			{"incubator_rendering/assets/shaders/compute_test.comp"},
-		});
+		computeTestShader = new ComputeShaderPipeline(galaxyGenPipelineLayout, "incubator_rendering/assets/shaders/compute_test.comp");
 		computeTestShader->LoadShaders();
 	}
 
@@ -876,7 +788,7 @@ public: // Scene configuration methods
 protected: // Graphics configuration
 	void CreateSceneGraphics() override {
 		// Staged Buffers
-		AllocateBuffersStaged(transferCommandPool, stagedBuffers);
+		AllocateBuffersStaged(transferQueue, stagedBuffers);
 		// Other buffers
 		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 		uniformBuffer.MapMemory(renderingDevice);
@@ -973,7 +885,7 @@ protected: // Graphics configuration
 			}
 			
 			// Shaders
-			for (auto& pipeline : postProcessingPipelines) {
+			/*for (auto& pipeline : postProcessingPipelines)*/ {
 				auto* graphicsPipeline = postProcessingRenderPass->NewGraphicsPipeline(renderingDevice, 0);
 				// pipeline configuration
 				graphicsPipeline->multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -981,11 +893,10 @@ protected: // Graphics configuration
 				graphicsPipeline->pipelineCreateInfo.pVertexInputState = &emptyInputState;
 				graphicsPipeline->AddColorBlendAttachmentState();
 				// Shader stages
-				pipeline.shaderProgram->CreateShaderStages(renderingDevice);
-				graphicsPipeline->SetShaderProgram(pipeline.shaderProgram);
+				ppShader->CreateShaderStages(renderingDevice);
+				graphicsPipeline->SetShaderProgram(ppShader);
 				// Configure
-				pipeline.graphicsPipeline = graphicsPipeline;
-				pipeline.Configure();
+				ppShader->ConfigureGraphicsPipeline(graphicsPipeline);
 			}
 
 			// Create Graphics Pipelines !
@@ -1072,11 +983,10 @@ protected: // Graphics configuration
 				/*alphaBlendOp*/			VK_BLEND_OP_MAX
 			);
 			// Shader stages
-			galaxyGenPipeline->shaderProgram->CreateShaderStages(renderingDevice);
-			graphicsPipeline->SetShaderProgram(galaxyGenPipeline->shaderProgram);
+			galaxyGenShader->CreateShaderStages(renderingDevice);
+			graphicsPipeline->SetShaderProgram(galaxyGenShader);
 			// Configure
-			galaxyGenPipeline->graphicsPipeline = graphicsPipeline;
-			galaxyGenPipeline->Configure();
+			galaxyGenShader->ConfigureGraphicsPipeline(graphicsPipeline);
 			
 			// Create Graphics Pipelines !
 			galaxyGenRenderPass->CreateGraphicsPipelines();
@@ -1161,11 +1071,10 @@ protected: // Graphics configuration
 				/*alphaBlendOp*/			VK_BLEND_OP_MIN
 			);
 			// Shader stages
-			galaxyFadePipeline->shaderProgram->CreateShaderStages(renderingDevice);
-			graphicsPipeline2->SetShaderProgram(galaxyFadePipeline->shaderProgram);
+			galaxyFadeShader->CreateShaderStages(renderingDevice);
+			graphicsPipeline2->SetShaderProgram(galaxyFadeShader);
 			// Configure
-			galaxyFadePipeline->graphicsPipeline = graphicsPipeline2;
-			galaxyFadePipeline->Configure();
+			galaxyFadeShader->ConfigureGraphicsPipeline(graphicsPipeline2);
 			
 			
 			// Create Graphics Pipelines !
@@ -1173,17 +1082,7 @@ protected: // Graphics configuration
 		}
 		
 		// Compute test
-		computeTestShader->CreateShaderStages(renderingDevice);
-		VkComputePipelineCreateInfo computeCreateInfo {
-			VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,// VkStructureType sType
-			nullptr,// const void* pNext
-			0,// VkPipelineCreateFlags flags
-			computeTestShader->GetStages()->at(0),// VkPipelineShaderStageCreateInfo stage
-			computeTestShader->GetPipelineLayout()->handle,// VkPipelineLayout layout
-			VK_NULL_HANDLE,// VkPipeline basePipelineHandle
-			0// int32_t basePipelineIndex
-		};
-		renderingDevice->CreateComputePipelines(VK_NULL_HANDLE, 1, &computeCreateInfo, nullptr, &computeTestPipeline);
+		computeTestShader->CreatePipeline(renderingDevice);
 	}
 	
 	void DestroyGraphicsPipelines() override {
@@ -1202,26 +1101,23 @@ protected: // Graphics configuration
 			delete postProcessingRenderPass;
 
 			// Shaders
-			for (auto& pipeline : postProcessingPipelines) {
-				pipeline.shaderProgram->DestroyShaderStages(renderingDevice);
-			}
+			ppShader->DestroyShaderStages(renderingDevice);
 		}
 		
 		// Galaxy Gen
 		renderingDevice->DestroyFramebuffer(galaxyGenFrameBuffer, nullptr);
 		galaxyGenRenderPass->DestroyGraphicsPipelines();
 		delete galaxyGenRenderPass;
-		galaxyGenPipeline->shaderProgram->DestroyShaderStages(renderingDevice);
+		galaxyGenShader->DestroyShaderStages(renderingDevice);
 		
 		// Galaxy Fade
 		renderingDevice->DestroyFramebuffer(galaxyFadeFrameBuffer, nullptr);
 		galaxyFadeRenderPass->DestroyGraphicsPipelines();
 		delete galaxyFadeRenderPass;
-		galaxyFadePipeline->shaderProgram->DestroyShaderStages(renderingDevice);
+		galaxyFadeShader->DestroyShaderStages(renderingDevice);
 		
 		// Compute test
-		renderingDevice->DestroyPipeline(computeTestPipeline, nullptr);
-		computeTestShader->DestroyShaderStages(renderingDevice);
+		computeTestShader->DestroyPipeline(renderingDevice);
 	}
 	
 	void LowPriorityRenderingCommandBuffer(VkCommandBuffer commandBuffer) {
@@ -1242,30 +1138,28 @@ protected: // Graphics configuration
 			0,// VkConditionalRenderingFlagsEXT flags
 		};
 		
-		// Galaxy Fade
-		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::fadeGalaxy);
-		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
-		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
-		renderPassInfo.framebuffer = galaxyFadeFrameBuffer;
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		galaxyFadePipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
-		galaxyFadePipeline->Draw(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffer);
-		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
-		
 		// Galaxy Gen
 		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::genGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
 		renderPassInfo.renderPass = galaxyGenRenderPass->handle;
 		renderPassInfo.framebuffer = galaxyGenFrameBuffer;
 		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		galaxyGenPipeline->graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
-		galaxyGenPipeline->Draw(renderingDevice, commandBuffer);
+		galaxyGenShader->Execute(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndRenderPass(commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 		// Other galaxy elements
 		//...
+		
+		// Galaxy Fade
+		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::fadeGalaxy);
+		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
+		renderPassInfo.renderPass = galaxyFadeRenderPass->handle;
+		renderPassInfo.framebuffer = galaxyFadeFrameBuffer;
+		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyFadeShader->Execute(renderingDevice, commandBuffer);
+		renderingDevice->CmdEndRenderPass(commandBuffer);
+		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 	}
 	
@@ -1297,12 +1191,8 @@ protected: // Graphics configuration
 															*/
 		
 		/////////////////////////////////////////
-		
-		for (auto& pipeline : rasterizationPipelines) {
-			pipeline.graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
-			// Draw
-			pipeline.Draw(renderingDevice, commandBuffer);
-		}
+		galaxyBoxShader->Execute(renderingDevice, commandBuffer);
+		testShader->Execute(renderingDevice, commandBuffer);
 		/////////////////////////////////////////
 		
 		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
@@ -1328,10 +1218,7 @@ protected: // Graphics configuration
 			renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &ppRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 			
 			// post processing here
-			for (auto& pipeline : postProcessingPipelines) {
-				pipeline.graphicsPipeline->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS);
-				pipeline.Draw(renderingDevice, commandBuffer);
-			}
+			ppShader->Execute(renderingDevice, commandBuffer);
 			
 			renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
 		}
@@ -1384,20 +1271,19 @@ protected: // Methods executed on every frame
 				galaxyFrameIndex = 0;
 				VkClearColorValue clearColor {.0,.0,.0,.0};
 				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,6};
-				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityGraphicsCommandPool);
+				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityGraphicsQueue);
 				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 6);
 				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
 				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1, 6);
-				EndSingleTimeCommands(lowPriorityGraphicsCommandPool, cmdBuffer);
+				EndSingleTimeCommands(lowPriorityGraphicsQueue, cmdBuffer);
 			}
 		}
 		
-		// Compute
-		auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeCommandPool);
-		renderingDevice->CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeTestPipeline);
-		renderingDevice->CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeTestShader->GetPipelineLayout()->handle, 0, computeTestShader->GetPipelineLayout()->vkDescriptorSets.size(), computeTestShader->GetPipelineLayout()->vkDescriptorSets.data(), 0, nullptr);
-		renderingDevice->CmdDispatch(cmdBuffer, 10, 10, 10);
-		EndSingleTimeCommands(lowPriorityComputeCommandPool, cmdBuffer);
+		// // Compute
+		// auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
+		// computeTestShader->SetGroupCounts(swapChain->extent.width, swapChain->extent.width, 6);
+		// computeTestShader->Execute(renderingDevice, cmdBuffer);
+		// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
 	}
 	
 public: // user-defined state variables

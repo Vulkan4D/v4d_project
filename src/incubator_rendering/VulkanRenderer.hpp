@@ -1,6 +1,8 @@
 #pragma once
 #include <v4d.h>
 
+#include "ComputeShaderPipeline.hpp"
+
 using namespace v4d::graphics::vulkan;
 
 /////////////////////////////////////////////
@@ -19,7 +21,6 @@ protected: // class members
 	Queue graphicsQueue, lowPriorityGraphicsQueue, presentQueue, computeQueue, lowPriorityComputeQueue, transferQueue;
 
 	// Pools
-	VkCommandPool graphicsCommandPool, lowPriorityGraphicsCommandPool, transferCommandPool, computeCommandPool, lowPriorityComputeCommandPool;
 	VkDescriptorPool descriptorPool;
 
 	// Command buffers
@@ -247,19 +248,19 @@ protected: // Virtual INIT Methods
 	}
 	
 	virtual void CreateCommandPools() {
-		renderingDevice->CreateCommandPool(graphicsQueue.familyIndex, 0, &graphicsCommandPool);
-		renderingDevice->CreateCommandPool(lowPriorityGraphicsQueue.familyIndex, 0, &lowPriorityGraphicsCommandPool);
-		renderingDevice->CreateCommandPool(transferQueue.familyIndex, 0, &transferCommandPool);
-		renderingDevice->CreateCommandPool(computeQueue.familyIndex, 0, &computeCommandPool);
-		renderingDevice->CreateCommandPool(lowPriorityComputeQueue.familyIndex, 0, &lowPriorityComputeCommandPool);
+		renderingDevice->CreateCommandPool(graphicsQueue.familyIndex, 0, &graphicsQueue.commandPool);
+		renderingDevice->CreateCommandPool(lowPriorityGraphicsQueue.familyIndex, 0, &lowPriorityGraphicsQueue.commandPool);
+		renderingDevice->CreateCommandPool(transferQueue.familyIndex, 0, &transferQueue.commandPool);
+		renderingDevice->CreateCommandPool(computeQueue.familyIndex, 0, &computeQueue.commandPool);
+		renderingDevice->CreateCommandPool(lowPriorityComputeQueue.familyIndex, 0, &lowPriorityComputeQueue.commandPool);
 	}
 	
 	virtual void DestroyCommandPools() {
-		renderingDevice->DestroyCommandPool(graphicsCommandPool);
-		renderingDevice->DestroyCommandPool(lowPriorityGraphicsCommandPool);
-		renderingDevice->DestroyCommandPool(transferCommandPool);
-		renderingDevice->DestroyCommandPool(computeCommandPool);
-		renderingDevice->DestroyCommandPool(lowPriorityComputeCommandPool);
+		renderingDevice->DestroyCommandPool(graphicsQueue.commandPool);
+		renderingDevice->DestroyCommandPool(lowPriorityGraphicsQueue.commandPool);
+		renderingDevice->DestroyCommandPool(transferQueue.commandPool);
+		renderingDevice->DestroyCommandPool(computeQueue.commandPool);
+		renderingDevice->DestroyCommandPool(lowPriorityComputeQueue.commandPool);
 	}
 	
 	virtual void CreateDescriptorSets() {
@@ -379,7 +380,7 @@ protected: // Virtual INIT Methods
 		commandBuffers.resize(swapChain->imageViews.size());
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = graphicsCommandPool;
+		allocInfo.commandPool = graphicsQueue.commandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 						/*	VK_COMMAND_BUFFER_LEVEL_PRIMARY = Can be submitted to a queue for execution, but cannot be called from other command buffers
 							VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
@@ -421,7 +422,7 @@ protected: // Virtual INIT Methods
 		
 		
 		// Low Priority Graphics
-		allocInfo.commandPool = lowPriorityGraphicsCommandPool;
+		allocInfo.commandPool = lowPriorityGraphicsQueue.commandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
 		if (renderingDevice->AllocateCommandBuffers(&allocInfo, &lowPriorityCommandBuffer) != VK_SUCCESS) {
@@ -455,17 +456,17 @@ protected: // Virtual INIT Methods
 	}
 
 	virtual void DestroyCommandBuffers() {
-		renderingDevice->FreeCommandBuffers(graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
-		renderingDevice->FreeCommandBuffers(lowPriorityGraphicsCommandPool, 1, &lowPriorityCommandBuffer);
+		renderingDevice->FreeCommandBuffers(graphicsQueue.commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+		renderingDevice->FreeCommandBuffers(lowPriorityGraphicsQueue.commandPool, 1, &lowPriorityCommandBuffer);
 	}
 
 protected: // Helper methods
 
-	VkCommandBuffer BeginSingleTimeCommands(VkCommandPool commandPool) {
+	VkCommandBuffer BeginSingleTimeCommands(Queue queue) {
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = commandPool;
+		allocInfo.commandPool = queue.commandPool;
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
@@ -480,7 +481,7 @@ protected: // Helper methods
 		return commandBuffer;
 	}
 
-	void EndSingleTimeCommands(VkCommandPool commandPool, VkCommandBuffer commandBuffer) {
+	void EndSingleTimeCommands(Queue queue, VkCommandBuffer commandBuffer) {
 		renderingDevice->EndCommandBuffer(commandBuffer);
 
 		VkSubmitInfo submitInfo = {};
@@ -495,13 +496,7 @@ protected: // Helper methods
 		if (renderingDevice->CreateFence(&fenceInfo, nullptr, &fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to create fence");
 
-		VkQueue queue = VK_NULL_HANDLE;
-		if (commandPool == graphicsCommandPool) queue = graphicsQueue.handle;
-		else if (commandPool == lowPriorityGraphicsCommandPool) queue = lowPriorityGraphicsQueue.handle;
-		else if (commandPool == transferCommandPool) queue = transferQueue.handle;
-		else if (commandPool == computeCommandPool) queue = computeQueue.handle;
-		else if (commandPool == lowPriorityComputeCommandPool) queue = lowPriorityComputeQueue.handle;
-		if (renderingDevice->QueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS)
+		if (renderingDevice->QueueSubmit(queue.handle, 1, &submitInfo, fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to submit queue");
 
 		if (renderingDevice->WaitForFences(1, &fence, VK_TRUE, std::numeric_limits<uint64_t>::max() /* nanoseconds */))
@@ -509,23 +504,23 @@ protected: // Helper methods
 
 		renderingDevice->DestroyFence(fence, nullptr);
 		
-		renderingDevice->FreeCommandBuffers(commandPool, 1, &commandBuffer);
+		renderingDevice->FreeCommandBuffers(queue.commandPool, 1, &commandBuffer);
 	}
 
 
-	void AllocateBufferStaged(VkCommandPool commandPool, Buffer& buffer) {
-		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+	void AllocateBufferStaged(Queue queue, Buffer& buffer) {
+		auto cmdBuffer = BeginSingleTimeCommands(queue);
 		Buffer stagingBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 		stagingBuffer.srcDataPointers = std::ref(buffer.srcDataPointers);
 		stagingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, true);
 		buffer.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
 		Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
-		EndSingleTimeCommands(commandPool, cmdBuffer);
+		EndSingleTimeCommands(queue, cmdBuffer);
 		stagingBuffer.Free(renderingDevice);
 	}
-	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<Buffer>& buffers) {
-		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+	void AllocateBuffersStaged(Queue queue, std::vector<Buffer>& buffers) {
+		auto cmdBuffer = BeginSingleTimeCommands(queue);
 		std::vector<Buffer> stagingBuffers {};
 		stagingBuffers.reserve(buffers.size());
 		for (auto& buffer : buffers) {
@@ -536,13 +531,13 @@ protected: // Helper methods
 			buffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
 			Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer.buffer, buffer.size);
 		}
-		EndSingleTimeCommands(commandPool, cmdBuffer);
+		EndSingleTimeCommands(queue, cmdBuffer);
 		for (auto& stagingBuffer : stagingBuffers) {
 			stagingBuffer.Free(renderingDevice);
 		}
 	}
-	void AllocateBuffersStaged(VkCommandPool commandPool, std::vector<Buffer*>& buffers) {
-		auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+	void AllocateBuffersStaged(Queue queue, std::vector<Buffer*>& buffers) {
+		auto cmdBuffer = BeginSingleTimeCommands(queue);
 		std::vector<Buffer> stagingBuffers {};
 		stagingBuffers.reserve(buffers.size());
 		for (auto& buffer : buffers) {
@@ -553,7 +548,7 @@ protected: // Helper methods
 			buffer->Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
 			Buffer::Copy(renderingDevice, cmdBuffer, stagingBuffer.buffer, buffer->buffer, buffer->size);
 		}
-		EndSingleTimeCommands(commandPool, cmdBuffer);
+		EndSingleTimeCommands(queue, cmdBuffer);
 		for (auto& stagingBuffer : stagingBuffers) {
 			stagingBuffer.Free(renderingDevice);
 		}
@@ -561,9 +556,9 @@ protected: // Helper methods
 
 
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
-		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsQueue);
 		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels, layerCount);
-		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsQueue, commandBuffer);
 	}
 	
 	void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
@@ -712,9 +707,9 @@ protected: // Helper methods
 	}
 
 	void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsQueue);
 		CopyBufferToImage(commandBuffer, buffer, image, width, height);
-		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsQueue, commandBuffer);
 	}
 
 	void CopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
@@ -752,7 +747,7 @@ protected: // Helper methods
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
 
-		auto commandBuffer = BeginSingleTimeCommands(graphicsCommandPool);
+		auto commandBuffer = BeginSingleTimeCommands(graphicsQueue);
 
 		VkImageMemoryBarrier barrier = {};
 			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -835,7 +830,7 @@ protected: // Helper methods
 			1, &barrier
 		);
 
-		EndSingleTimeCommands(graphicsCommandPool, commandBuffer);
+		EndSingleTimeCommands(graphicsQueue, commandBuffer);
 	}
 
 protected: // Init/Reset Methods
