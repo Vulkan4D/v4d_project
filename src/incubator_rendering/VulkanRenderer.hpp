@@ -16,10 +16,10 @@ protected: // class members
 	Device* renderingDevice = nullptr;
 	
 	// Queues
-	Queue graphicsQueue, lowPriorityGraphicsQueue, presentQueue, computeQueue, transferQueue;
+	Queue graphicsQueue, lowPriorityGraphicsQueue, presentQueue, computeQueue, lowPriorityComputeQueue, transferQueue;
 
 	// Pools
-	VkCommandPool graphicsCommandPool, lowPriorityGraphicsCommandPool, transferCommandPool, computeCommandPool;
+	VkCommandPool graphicsCommandPool, lowPriorityGraphicsCommandPool, transferCommandPool, computeCommandPool, lowPriorityComputeCommandPool;
 	VkDescriptorPool descriptorPool;
 
 	// Command buffers
@@ -169,6 +169,8 @@ protected: // Virtual INIT Methods
 				{
 					"compute",
 					VK_QUEUE_COMPUTE_BIT,
+					2, // Count
+					{1.0f, 0.1f}, // Priorities (one per queue count)
 				},
 				{
 					"transfer",
@@ -187,7 +189,8 @@ protected: // Virtual INIT Methods
 		// Get Queues
 		graphicsQueue = renderingDevice->GetQueue("graphics", 0);
 		lowPriorityGraphicsQueue = renderingDevice->GetQueue("graphics", 1);
-		computeQueue = renderingDevice->GetQueue("compute");
+		computeQueue = renderingDevice->GetQueue("compute", 0);
+		lowPriorityComputeQueue = renderingDevice->GetQueue("compute", 1);
 		transferQueue = renderingDevice->GetQueue("transfer");
 		
 		presentQueue = graphicsQueue; // Performance is better when using the same queue index as the main graphics queue that renders to swap chains
@@ -248,6 +251,7 @@ protected: // Virtual INIT Methods
 		renderingDevice->CreateCommandPool(lowPriorityGraphicsQueue.familyIndex, 0, &lowPriorityGraphicsCommandPool);
 		renderingDevice->CreateCommandPool(transferQueue.familyIndex, 0, &transferCommandPool);
 		renderingDevice->CreateCommandPool(computeQueue.familyIndex, 0, &computeCommandPool);
+		renderingDevice->CreateCommandPool(lowPriorityComputeQueue.familyIndex, 0, &lowPriorityComputeCommandPool);
 	}
 	
 	virtual void DestroyCommandPools() {
@@ -255,6 +259,7 @@ protected: // Virtual INIT Methods
 		renderingDevice->DestroyCommandPool(lowPriorityGraphicsCommandPool);
 		renderingDevice->DestroyCommandPool(transferCommandPool);
 		renderingDevice->DestroyCommandPool(computeCommandPool);
+		renderingDevice->DestroyCommandPool(lowPriorityComputeCommandPool);
 	}
 	
 	virtual void CreateDescriptorSets() {
@@ -495,6 +500,7 @@ protected: // Helper methods
 		else if (commandPool == lowPriorityGraphicsCommandPool) queue = lowPriorityGraphicsQueue.handle;
 		else if (commandPool == transferCommandPool) queue = transferQueue.handle;
 		else if (commandPool == computeCommandPool) queue = computeQueue.handle;
+		else if (commandPool == lowPriorityComputeCommandPool) queue = lowPriorityComputeQueue.handle;
 		if (renderingDevice->QueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS)
 			throw std::runtime_error("Failed to submit queue");
 

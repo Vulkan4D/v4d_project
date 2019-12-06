@@ -14,10 +14,12 @@ struct UBO {
 	glm::dmat4 proj;
 	glm::dmat4 view;
 	glm::dmat4 model;
-	glm::dvec3 cameraPosition;
-	float speed;
+	glm::dvec4 velocity;
+};
+
+struct GalaxyUBO {
+	glm::dvec4 cameraPosition;
 	int galaxyFrameIndex;
-	bool toggleTest;
 };
 
 struct ConditionalRendering {
@@ -28,15 +30,18 @@ struct ConditionalRendering {
 class VulkanRasterizationRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
-	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
-	Buffer conditionalRenderingBuffer {VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT, sizeof(ConditionalRendering)};
+	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO), true};
+	Buffer galaxyUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GalaxyUBO), true};
+	Buffer conditionalRenderingBuffer {VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT, sizeof(ConditionalRendering), true};
 	std::vector<Buffer*> stagedBuffers {};
 	std::vector<Geometry*> geometries {};
 	
 	ShaderProgram* testShader;
 	ShaderProgram* ppShader;
 	CombinedImageSampler postProcessingSampler;
-	CombinedImageSampler oitBufferSampler;
+	
+	ShaderProgram* computeTestShader;
+	VkPipeline computeTestPipeline;
 	
 private: // Rasterization Rendering
 	struct RenderingPipeline {
@@ -555,7 +560,7 @@ private: // Renderer Configuration methods
 			1, VK_SAMPLE_COUNT_1_BIT,
 			galaxyCubeImageFormat,
 			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			galaxyCubeImage,
 			galaxyCubeImageMemory,
@@ -668,6 +673,7 @@ public: // Scene configuration methods
 		}
 		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		galaxiesDescriptorSet->AddBinding_uniformBuffer(1, &galaxyUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		PipelineLayout* galaxyGenPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
 		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
@@ -819,6 +825,16 @@ public: // Scene configuration methods
 		}
 		
 		testShader->LoadShaders();
+		
+		
+		// Compute shader
+		auto* galaxiesComputeDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(1));
+		galaxiesComputeDescriptorSet->AddBinding_imageView(0, &galaxyCubeImageView, VK_SHADER_STAGE_COMPUTE_BIT);
+		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesComputeDescriptorSet);
+		computeTestShader = new ShaderProgram(galaxyGenPipelineLayout, {
+			{"incubator_rendering/assets/shaders/compute_test.comp"},
+		});
+		computeTestShader->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -830,6 +846,7 @@ public: // Scene configuration methods
 		if (postProcessingEnabled) {
 			delete ppShader;
 		}
+		delete computeTestShader;
 		
 		// Geometries
 		for (auto* geometry : geometries) {
@@ -862,7 +879,11 @@ protected: // Graphics configuration
 		AllocateBuffersStaged(transferCommandPool, stagedBuffers);
 		// Other buffers
 		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		uniformBuffer.MapMemory(renderingDevice);
+		galaxyUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		galaxyUniformBuffer.MapMemory(renderingDevice);
 		conditionalRenderingBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		conditionalRenderingBuffer.MapMemory(renderingDevice);
 	}
 
 	void DestroySceneGraphics() override {
@@ -871,7 +892,11 @@ protected: // Graphics configuration
 		}
 
 		// Other buffers
+		uniformBuffer.UnmapMemory(renderingDevice);
 		uniformBuffer.Free(renderingDevice);
+		galaxyUniformBuffer.UnmapMemory(renderingDevice);
+		galaxyUniformBuffer.Free(renderingDevice);
+		conditionalRenderingBuffer.UnmapMemory(renderingDevice);
 		conditionalRenderingBuffer.Free(renderingDevice);
 	}
 	
@@ -1146,6 +1171,19 @@ protected: // Graphics configuration
 			// Create Graphics Pipelines !
 			galaxyFadeRenderPass->CreateGraphicsPipelines();
 		}
+		
+		// Compute test
+		computeTestShader->CreateShaderStages(renderingDevice);
+		VkComputePipelineCreateInfo computeCreateInfo {
+			VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,// VkStructureType sType
+			nullptr,// const void* pNext
+			0,// VkPipelineCreateFlags flags
+			computeTestShader->GetStages()->at(0),// VkPipelineShaderStageCreateInfo stage
+			computeTestShader->GetPipelineLayout()->handle,// VkPipelineLayout layout
+			VK_NULL_HANDLE,// VkPipeline basePipelineHandle
+			0// int32_t basePipelineIndex
+		};
+		renderingDevice->CreateComputePipelines(VK_NULL_HANDLE, 1, &computeCreateInfo, nullptr, &computeTestPipeline);
 	}
 	
 	void DestroyGraphicsPipelines() override {
@@ -1180,6 +1218,10 @@ protected: // Graphics configuration
 		galaxyFadeRenderPass->DestroyGraphicsPipelines();
 		delete galaxyFadeRenderPass;
 		galaxyFadePipeline->shaderProgram->DestroyShaderStages(renderingDevice);
+		
+		// Compute test
+		renderingDevice->DestroyPipeline(computeTestPipeline, nullptr);
+		computeTestShader->DestroyShaderStages(renderingDevice);
 	}
 	
 	void LowPriorityRenderingCommandBuffer(VkCommandBuffer commandBuffer) {
@@ -1307,22 +1349,19 @@ protected: // Methods executed on every frame
 		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
 		// Current camera position
-		ubo.cameraPosition = camPosition;
 		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1));
 		// Projection
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		ubo.proj[1][1] *= -1;
 		
-		ubo.speed = speed;
-		ubo.galaxyFrameIndex = galaxyFrameIndex;
+		ubo.velocity = glm::dvec4(velocity, speed);
 		
-		ubo.toggleTest = toggleTest;
-
 		// Update memory
-		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+		uniformBuffer.WriteToMappedData(renderingDevice, &ubo);
 	}
 	
 	void LowPriorityFrameUpdate() override {
+		GalaxyUBO ubo {};
 		// Galaxy convergence
 		ConditionalRendering conditionalRendering {};
 		const int convergences = 10;
@@ -1331,7 +1370,12 @@ protected: // Methods executed on every frame
 		if (galaxyFrameIndex > convergences) galaxyFrameIndex = continuousGalaxyGen? 0 : convergences;
 		if (!continuousGalaxyGen && speed > 0) galaxyFrameIndex = 0;
 		conditionalRendering.fadeGalaxy = (continuousGalaxyGen || speed > 0)? 1:0;
-		Buffer::CopyDataToBuffer(renderingDevice, &conditionalRendering, &conditionalRenderingBuffer);
+		
+		ubo.cameraPosition = glm::dvec4(camPosition, 1);
+		ubo.galaxyFrameIndex = galaxyFrameIndex;
+		
+		galaxyUniformBuffer.WriteToMappedData(renderingDevice, &ubo);
+		conditionalRenderingBuffer.WriteToMappedData(renderingDevice, &conditionalRendering);
 		
 		// Clear galaxy upon stopping
 		if (previousSpeed != speed && !continuousGalaxyGen) {
@@ -1347,6 +1391,13 @@ protected: // Methods executed on every frame
 				EndSingleTimeCommands(lowPriorityGraphicsCommandPool, cmdBuffer);
 			}
 		}
+		
+		// Compute
+		auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeCommandPool);
+		renderingDevice->CmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeTestPipeline);
+		renderingDevice->CmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeTestShader->GetPipelineLayout()->handle, 0, computeTestShader->GetPipelineLayout()->vkDescriptorSets.size(), computeTestShader->GetPipelineLayout()->vkDescriptorSets.data(), 0, nullptr);
+		renderingDevice->CmdDispatch(cmdBuffer, 10, 10, 10);
+		EndSingleTimeCommands(lowPriorityComputeCommandPool, cmdBuffer);
 	}
 	
 public: // user-defined state variables
@@ -1357,6 +1408,7 @@ public: // user-defined state variables
 	bool continuousGalaxyGen = true;
 	glm::dvec3 camPosition = glm::dvec3(2,2,2);
 	glm::dvec3 camDirection = glm::dvec3(-2,-2,-2);
+	glm::dvec3 velocity = glm::dvec3(0);
 	
 	
 };

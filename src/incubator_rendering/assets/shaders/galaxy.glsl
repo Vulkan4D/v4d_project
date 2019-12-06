@@ -6,11 +6,13 @@ layout(set = 0, binding = 0) uniform UBO {
 	dmat4 proj;
 	dmat4 view;
 	dmat4 model;
-	dvec3 cameraPosition;
-	float speed;
-	int galaxyFrameIndex;
-	bool toggleTest;
+	dvec4 velocity;
 } ubo;
+
+layout(set = 0, binding = 1) uniform GalaxyUBO {
+	dvec4 cameraPosition;
+	int galaxyFrameIndex;
+} galaxyUbo;
 
 ##################################################################
 
@@ -25,7 +27,7 @@ layout(location = 1) out uint out_numStars;
 
 void main() {
 	gl_Position = posr; // passthrough
-	out_seed = seed + ubo.galaxyFrameIndex;
+	out_seed = seed + galaxyUbo.galaxyFrameIndex;
 	out_numStars = numStars;
 }
 
@@ -60,11 +62,10 @@ void main(void) {
 	uint seed = in_seed[0];
 	uint fseed = seed + 15;
 	
-	vec3 wpos = gl_in[0].gl_Position.xyz;
-	float radius = gl_in[0].gl_Position.w;
-	
 	// position relative to camera
-	vec3 relPos = wpos - vec3(ubo.cameraPosition);
+	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyUbo.cameraPosition.xyz);
+	
+	float radius = gl_in[0].gl_Position.w;
 	
 	for (int i = 0; i < in_numStars[0]; i++) {
 		if (i > 80) break;
@@ -163,7 +164,7 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
 	float center = 1 - pow(length(gl_PointCoord * 2 - 1), 1.0 / max(0.7, in_color.a));
-	out_color = vec4(in_color.rgb * in_color.a, 0) * (center * (1+ubo.speed/2));
+	out_color = vec4(in_color.rgb * in_color.a, 0) * center;
 	// out_color.a UNUSED
 }
 
@@ -210,33 +211,21 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0.005,0.005,0.005, 0);
+	out_color = vec4(0.004,0.004,0.004, 0);
 }
 
 ##################################################################
 
 #shader box.vert
 
-#include "_cube.glsl"
-
 layout(location = 0) out vec3 out_dir;
 
 void main() {
-	// if (ubo.toggleTest) {
-	// 	if (gl_VertexIndex < 4) {
-			// Full-screen Quad from 4 empty vertices
-			dvec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
-			gl_Position = vec4(vec2(pos), 0, 1);
-			// output direction of vertex into world
-			out_dir = vec3(normalize(inverse(ubo.proj * ubo.view) * dvec4(pos, 1, 1)).xyz);
-		// } else {
-		// 	gl_Position = vec4(-2);
-		// }
-	// } else {
-	// 	// Cube around camera at infinite distance (needs 14 vertices)
-	// 	out_dir = GetVertexPosCube();
-	// 	gl_Position = vec4(ubo.proj * ubo.view * dvec4(out_dir, 0));
-	// }
+	// Full-screen Quad from 4 empty vertices
+	dvec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
+	gl_Position = vec4(vec2(pos), 0, 1);
+	// output direction of vertex into world
+	out_dir = vec3(normalize(inverse(ubo.proj * ubo.view) * dvec4(pos, 1, 1)).xyz);
 }
 
 ##################################################################
@@ -249,6 +238,9 @@ layout(location = 0) out vec4 out_color;
 layout(set = 0, binding = 1) uniform samplerCube galaxyBox;
 
 void main() {
+	// vec3 velocityDir = vec3(normalize(ubo.velocity.xyz));
+	// float dotVelocity = dot(in_dir, velocityDir);
+	// out_color = texture(galaxyBox, mix(in_dir, velocityDir*-1, dotVelocity/2 * float(ubo.velocity.w)));
 	out_color = texture(galaxyBox, in_dir);
 }
 
