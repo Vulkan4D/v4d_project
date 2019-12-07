@@ -55,7 +55,7 @@ private: // Rasterization Rendering
 	VkDeviceMemory galaxyCubeImageMemory = VK_NULL_HANDLE;
 	VkImageView galaxyCubeImageView = VK_NULL_HANDLE;
 	CombinedImageSampler galaxyCubeSampler;
-	struct {uint width; uint height; VkFormat format; uint layers = 6;} galaxyCubeImageFormat; 
+	struct {uint width; uint height; VkFormat format; uint layers = 6;} galaxyCubeImageFormat;
 	
 	// Main Render Pass
 	VkImage colorImage = VK_NULL_HANDLE;
@@ -89,7 +89,7 @@ private: // Renderer Configuration methods
 		// Preferences
 		preferredPresentModes = {
 			// VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
-			// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+			// VK_PRESENT_MODE_FIFO_KHR,	// VSync ON (No Tearing, more latency)
 			VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 		};
 		

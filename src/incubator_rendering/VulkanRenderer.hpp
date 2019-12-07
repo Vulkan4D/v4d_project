@@ -1,11 +1,7 @@
 #pragma once
 #include <v4d.h>
 
-#include "ComputeShaderPipeline.hpp"
-
 using namespace v4d::graphics::vulkan;
-
-/////////////////////////////////////////////
 
 class VulkanRenderer : public Instance {
 protected: // class members
@@ -49,9 +45,9 @@ protected: // class members
 
 	// Preferences
 	std::vector<VkPresentModeKHR> preferredPresentModes {
-		// VK_PRESENT_MODE_MAILBOX_KHR,		// TripleBuffering (No Tearing, low latency)
-		// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
-		// VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
+		// VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+		// VK_PRESENT_MODE_FIFO_KHR,	// VSync ON (No Tearing, more latency)
+		VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 	};
 
 private: // Device Extensions and features
@@ -59,7 +55,7 @@ private: // Device Extensions and features
 	std::vector<const char*> optionalDeviceExtensions {};
 	std::vector<const char*> deviceExtensions {};
 	std::unordered_map<std::string, bool> enabledDeviceExtensions {};
-public:
+public: 
 	VkPhysicalDeviceFeatures deviceFeatures {}; // This object will be modified to keep only the enabled values.
 	
 	void RequiredDeviceExtension(const char* ext) {
@@ -74,25 +70,30 @@ public:
 		return enabledDeviceExtensions.find(ext) != enabledDeviceExtensions.end();
 	}
 
-protected: // Pure Virtual (abstract) methods
+protected: // Virtual methods
 	// Init
-	virtual void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) = 0;
-	virtual void Init() = 0;
-	virtual void Info() = 0;
+	virtual void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {}
+	virtual void Init() {}
+	virtual void Info() {}
+	
 	// Resources
-	virtual void CreateResources() = 0;
-	virtual void DestroyResources() = 0;
-	// Update
-	virtual void FrameUpdate(uint imageIndex) = 0;
-	virtual void LowPriorityFrameUpdate() = 0;
+	virtual void CreateResources() {}
+	virtual void DestroyResources() {}
+	virtual void AllocateBuffers() {}
+	virtual void FreeBuffers() {}
+	
 	// Scene
-	virtual void LoadScene() = 0;
-	virtual void UnloadScene() = 0;
-	virtual void AllocateBuffers() = 0;
-	virtual void FreeBuffers() = 0;
+	virtual void LoadScene() {}
+	virtual void UnloadScene() {}
+	
 	// Pipelines
-	virtual void CreatePipelines() = 0;
-	virtual void DestroyPipelines() = 0;
+	virtual void CreatePipelines() {}
+	virtual void DestroyPipelines() {}
+	
+	// Update
+	virtual void FrameUpdate(uint imageIndex) {}
+	virtual void LowPriorityFrameUpdate() {}
+	
 	// Commands
 	virtual void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) {}
 	virtual void RecordGraphicsCommandBuffer(VkCommandBuffer, int imageIndex) {}
@@ -298,29 +299,32 @@ protected: // Virtual INIT Methods
 				}
 			}
 		}
-		renderingDevice->CreateDescriptorPool(
-			descriptorTypes,
-			descriptorPool,
-			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-		);
 		
-		// Allocate descriptor sets
-		std::vector<VkDescriptorSetLayout> setLayouts {};
-		vkDescriptorSets.resize(descriptorSets.size());
-		setLayouts.reserve(descriptorSets.size());
-		for (auto* set : descriptorSets) {
-			setLayouts.push_back(set->GetDescriptorSetLayout());
-		}
-		VkDescriptorSetAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = (uint)setLayouts.size();
-		allocInfo.pSetLayouts = setLayouts.data();
-		if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to allocate descriptor sets");
-		}
-		for (int i = 0; i < descriptorSets.size(); ++i) {
-			descriptorSets[i]->descriptorSet = vkDescriptorSets[i];
+		if (descriptorSets.size() > 0) {
+			renderingDevice->CreateDescriptorPool(
+				descriptorTypes,
+				descriptorPool,
+				VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+			);
+			
+			// Allocate descriptor sets
+			std::vector<VkDescriptorSetLayout> setLayouts {};
+			vkDescriptorSets.resize(descriptorSets.size());
+			setLayouts.reserve(descriptorSets.size());
+			for (auto* set : descriptorSets) {
+				setLayouts.push_back(set->GetDescriptorSetLayout());
+			}
+			VkDescriptorSetAllocateInfo allocInfo = {};
+			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+			allocInfo.descriptorPool = descriptorPool;
+			allocInfo.descriptorSetCount = (uint)setLayouts.size();
+			allocInfo.pSetLayouts = setLayouts.data();
+			if (renderingDevice->AllocateDescriptorSets(&allocInfo, vkDescriptorSets.data()) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to allocate descriptor sets");
+			}
+			for (int i = 0; i < descriptorSets.size(); ++i) {
+				descriptorSets[i]->descriptorSet = vkDescriptorSets[i];
+			}
 		}
 		
 		UpdateDescriptorSets();
@@ -338,20 +342,24 @@ protected: // Virtual INIT Methods
 		}
 		
 		// Descriptor Sets
-		renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
-		for (auto* set : descriptorSets) set->DestroyDescriptorSetLayout(renderingDevice);
-		// Descriptor pools
-		renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
+		if (descriptorSets.size() > 0) {
+			renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
+			for (auto* set : descriptorSets) set->DestroyDescriptorSetLayout(renderingDevice);
+			// Descriptor pools
+			renderingDevice->DestroyDescriptorPool(descriptorPool, nullptr);
+		}
 	}
 
 	virtual void UpdateDescriptorSets() {
-		std::vector<VkWriteDescriptorSet> descriptorWrites {};
-		for (auto* set : descriptorSets) {
-			for (auto&[binding, descriptor] : set->GetBindings()) {
-				descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set->descriptorSet));
+		if (descriptorSets.size() > 0) {
+			std::vector<VkWriteDescriptorSet> descriptorWrites {};
+			for (auto* set : descriptorSets) {
+				for (auto&[binding, descriptor] : set->GetBindings()) {
+					descriptorWrites.push_back(descriptor.GetWriteDescriptorSet(set->descriptorSet));
+				}
 			}
+			renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 		}
-		renderingDevice->UpdateDescriptorSets((uint)descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 	}
 
 	virtual void CreateSwapChain() {
