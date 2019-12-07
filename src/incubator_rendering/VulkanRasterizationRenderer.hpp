@@ -42,6 +42,8 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	
 	ComputeShaderPipeline* computeTestShader;
 	
+	std::recursive_mutex uboMutex;
+	
 private: // Rasterization Rendering
 	RenderPass renderPass;
 	RenderPass postProcessingRenderPass;
@@ -604,7 +606,7 @@ protected: // Graphics configuration
 		conditionalRenderingBuffer.Free(renderingDevice);
 	}
 	
-	void CreateGraphicsPipelines() override {
+	void CreatePipelines() override {
 		{// Main Render pass
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
@@ -956,7 +958,7 @@ protected: // Graphics configuration
 		computeTestShader->CreatePipeline(renderingDevice);
 	}
 	
-	void DestroyGraphicsPipelines() override {
+	void DestroyPipelines() override {
 		
 		// Main render pass
 		for (auto& shaderPipeline : {galaxyBoxShader, testShader}) {
@@ -986,7 +988,7 @@ protected: // Graphics configuration
 		computeTestShader->DestroyPipeline(renderingDevice);
 	}
 	
-	void LowPriorityRenderingCommandBuffer(VkCommandBuffer commandBuffer) {
+	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer commandBuffer) {
 		
 		// Begin Render Pass
 		VkRenderPassBeginInfo renderPassInfo = {};
@@ -1029,7 +1031,7 @@ protected: // Graphics configuration
 		
 	}
 	
-	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		// Begin Render Pass
 		VkRenderPassBeginInfo renderPassInfo = {};
@@ -1046,7 +1048,7 @@ protected: // Graphics configuration
 		renderPassInfo.clearValueCount = clearValues.size();
 		renderPassInfo.pClearValues = clearValues.data();
 		//
-		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
+		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 															/*	the last parameter controls how the drawing commands within the render pass will be provided.
 																VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
 																VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
@@ -1057,7 +1059,7 @@ protected: // Graphics configuration
 		testShader->Execute(renderingDevice, commandBuffer);
 		/////////////////////////////////////////
 		
-		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndRenderPass(commandBuffer);
 		
 		
 		// Post Processing
@@ -1077,18 +1079,19 @@ protected: // Graphics configuration
 		ppRenderPassInfo.clearValueCount = ppClearValues.size();
 		ppRenderPassInfo.pClearValues = ppClearValues.data();
 		//
-		renderingDevice->CmdBeginRenderPass(commandBuffers[imageIndex], &ppRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
+		renderingDevice->CmdBeginRenderPass(commandBuffer, &ppRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
 		
 		// post processing here
 		ppShader->Execute(renderingDevice, commandBuffer);
 		
-		renderingDevice->CmdEndRenderPass(commandBuffers[imageIndex]);
+		renderingDevice->CmdEndRenderPass(commandBuffer);
 		
 	}
 	
 	
 protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
+		LockUBO();
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
@@ -1106,9 +1109,11 @@ protected: // Methods executed on every frame
 		
 		// Update memory
 		uniformBuffer.WriteToMappedData(renderingDevice, &ubo);
+		UnlockUBO();
 	}
 	
 	void LowPriorityFrameUpdate() override {
+		LockUBO();
 		GalaxyUBO ubo {};
 		// Galaxy convergence
 		ConditionalRendering conditionalRendering {};
@@ -1145,6 +1150,8 @@ protected: // Methods executed on every frame
 		// computeTestShader->SetGroupCounts(galaxyCubeImageFormat.width, galaxyCubeImageFormat.width, galaxyCubeImageFormat.layers);
 		// computeTestShader->Execute(renderingDevice, cmdBuffer);
 		// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
+		
+		UnlockUBO();
 	}
 	
 public: // user-defined state variables
@@ -1158,4 +1165,12 @@ public: // user-defined state variables
 	glm::dvec3 velocity = glm::dvec3(0);
 	
 	
+	inline void LockUBO() {
+		uboMutex.lock();
+	}
+
+	inline void UnlockUBO() {
+		uboMutex.unlock();
+	}
+
 };
