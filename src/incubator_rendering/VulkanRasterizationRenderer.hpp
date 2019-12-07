@@ -580,7 +580,7 @@ public: // Scene configuration methods
 	}
 
 protected: // Graphics configuration
-	void CreateSceneGraphics() override {
+	void AllocateBuffers() override {
 		// Staged Buffers
 		AllocateBuffersStaged(transferQueue, stagedBuffers);
 		// Other buffers
@@ -592,7 +592,7 @@ protected: // Graphics configuration
 		conditionalRenderingBuffer.MapMemory(renderingDevice);
 	}
 
-	void DestroySceneGraphics() override {
+	void FreeBuffers() override {
 		for (auto& buffer : stagedBuffers) {
 			buffer->Free(renderingDevice);
 		}

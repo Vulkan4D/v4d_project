@@ -632,7 +632,7 @@ public: // Scene configuration methods
 	}
 
 protected: // Graphics configuration
-	void CreateSceneGraphics() override {
+	void AllocateBuffers() override {
 		// Staged Buffers
 		AllocateBuffersStaged(commandPool, stagedBuffers);
 		// Uniform buffer
@@ -641,7 +641,7 @@ protected: // Graphics configuration
 		CreateRayTracingAccelerationStructures();
 	}
 
-	void DestroySceneGraphics() override {
+	void FreeBuffers() override {
 		// Ray Tracing
 		DestroyRayTracingAccelerationStructures();
 		
