@@ -164,8 +164,7 @@ layout(location = 0) out vec4 out_color;
 
 void main() {
 	float center = 1 - pow(length(gl_PointCoord * 2 - 1), 1.0 / max(0.7, in_color.a));
-	out_color = vec4(in_color.rgb * in_color.a, 0) * center;
-	// out_color.a UNUSED
+	out_color = vec4(in_color.rgb * in_color.a, in_color.a) * center;
 }
 
 ##################################################################
@@ -211,7 +210,7 @@ void main(void) {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(0.004,0.004,0.004, 0);
+	out_color = vec4(0.004,0.004,0.004, 1);
 }
 
 ##################################################################

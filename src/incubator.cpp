@@ -22,9 +22,8 @@ int main() {
 	
 	auto* vulkan = new VeryBasicRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 	
-	vulkan->LoadRenderer();
 	vulkan->LoadScene();
-	vulkan->SendGraphicsToDevice();
+	vulkan->LoadRenderer();
 	
 	// Input Events
 	window->AddKeyCallback("app", [window, vulkan](int key, int scancode, int action, int mods){
@@ -84,9 +83,8 @@ int main() {
 	
 	renderingThread.join();
 	
-	vulkan->DeleteGraphicsFromDevice();
-	vulkan->UnloadScene();
 	vulkan->UnloadRenderer();
+	vulkan->UnloadScene();
 	
 	// Close Window and delete Vulkan
 	delete vulkan;

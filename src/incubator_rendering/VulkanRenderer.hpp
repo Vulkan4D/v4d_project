@@ -15,18 +15,18 @@ protected: // class members
 	
 	// Queues
 	Queue graphicsQueue, lowPriorityGraphicsQueue, 
-		computeQueue, lowPriorityComputeQueue, 
-		presentQueue, transferQueue;
+		  computeQueue,  lowPriorityComputeQueue, 
+		  presentQueue,
+		  transferQueue;
 
 	// Command buffers
-	std::vector<VkCommandBuffer> graphicsCommandBuffers, computeCommandBuffers, 
-								graphicsDynamicCommandBuffers, computeDynamicCommandBuffers;
+	std::vector<VkCommandBuffer> graphicsCommandBuffers, computeCommandBuffers, graphicsDynamicCommandBuffers, computeDynamicCommandBuffers;
 	VkCommandBuffer lowPriorityGraphicsCommandBuffer, lowPriorityComputeCommandBuffer;
 
 	// Swap Chains
 	SwapChain* swapChain = nullptr;
 
-	// Sync objects
+	// Synchronizations
 	std::vector<VkSemaphore> imageAvailableSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores, dynamicRenderFinishedSemaphores;
 	std::vector<VkSemaphore> computeFinishedSemaphores, dynamicComputeFinishedSemaphores;
@@ -41,7 +41,6 @@ protected: // class members
 	VkDescriptorPool descriptorPool;
 	std::vector<DescriptorSet*> descriptorSets {};
 	std::vector<VkDescriptorSet> vkDescriptorSets {};
-	std::vector<PipelineLayout*> pipelineLayouts {};
 
 	// Preferences
 	std::vector<VkPresentModeKHR> preferredPresentModes {
@@ -328,19 +327,9 @@ protected: // Virtual INIT Methods
 		}
 		
 		UpdateDescriptorSets();
-		
-		// Pipeline layouts
-		for (auto* layout : pipelineLayouts) {
-			layout->Create(renderingDevice);
-		}
 	}
 	
 	virtual void DestroyDescriptorSets() {
-		// Pipeline layouts
-		for (auto* layout : pipelineLayouts) {
-			layout->Destroy(renderingDevice);
-		}
-		
 		// Descriptor Sets
 		if (descriptorSets.size() > 0) {
 			renderingDevice->FreeDescriptorSets(descriptorPool, (uint)vkDescriptorSets.size(), vkDescriptorSets.data());
@@ -653,6 +642,16 @@ protected: // Helper methods
 	}
 
 
+	void TransitionImageLayout(Image image, VkImageLayout oldLayout, VkImageLayout newLayout) {
+		auto commandBuffer = BeginSingleTimeCommands(graphicsQueue);
+		TransitionImageLayout(commandBuffer, image.image, oldLayout, newLayout, image.mipLevels, image.arrayLayers);
+		EndSingleTimeCommands(graphicsQueue, commandBuffer);
+	}
+	
+	void TransitionImageLayout(VkCommandBuffer commandBuffer, Image image, VkImageLayout oldLayout, VkImageLayout newLayout) {
+		TransitionImageLayout(commandBuffer, image.image, oldLayout, newLayout, image.mipLevels, image.arrayLayers);
+	}
+	
 	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, uint32_t layerCount = 1) {
 		auto commandBuffer = BeginSingleTimeCommands(graphicsQueue);
 		TransitionImageLayout(commandBuffer, image, oldLayout, newLayout, mipLevels, layerCount);
@@ -955,11 +954,16 @@ public: // Init/Load/Reset Methods
 		
 		Info();
 		
+		SendGraphicsToDevice();
+		
 		LOG_SUCCESS("Vulkan Renderer is Ready !");
 	}
 	
 	virtual void UnloadRenderer() {
 		std::scoped_lock lock(renderingMutex, lowPriorityRenderingMutex);
+		
+		DeleteGraphicsFromDevice();
+		
 		DestroySwapChain();
 		DestroySyncObjects();
 		DestroyDevices();

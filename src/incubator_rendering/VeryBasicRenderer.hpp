@@ -5,20 +5,19 @@
 class VeryBasicRenderer : public VulkanRenderer {
 	using VulkanRenderer::VulkanRenderer;
 	
-	RasterShaderPipeline* testShader;
 	RenderPass renderPass;
+	PipelineLayout testLayout;
+	RasterShaderPipeline* testShader;
 	
 public: // Scene configuration methods
 
 	void LoadScene() override {
 		// Shader program
-		testShader = new RasterShaderPipeline(pipelineLayouts.emplace_back(new PipelineLayout()), {
+		testShader = new RasterShaderPipeline(testLayout, {
 			"incubator_rendering/assets/shaders/verybasic.vert",
 			"incubator_rendering/assets/shaders/verybasic.frag",
 		});
 		testShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		testShader->depthStencilState.depthTestEnable = VK_FALSE;
-		testShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		testShader->SetData(4);
 		testShader->LoadShaders();
 	}
@@ -26,17 +25,13 @@ public: // Scene configuration methods
 	void UnloadScene() override {
 		// Shaders
 		delete testShader;
-		
-		// Pipeline Layouts
-		for (auto* layout : pipelineLayouts) {
-			delete layout;
-		}
-		pipelineLayouts.clear();
 	}
 
 protected: // Graphics configuration
 
 	void CreatePipelines() override {
+		// Pipeline layouts
+		testLayout.Create(renderingDevice);
 		
 		// Color Attachment (Fragment shader Standard Output)
 		VkAttachmentDescription colorAttachment = {};
@@ -64,56 +59,25 @@ protected: // Graphics configuration
 		
 		// Create the render pass
 		renderPass.Create(renderingDevice);
-		
-		// Frame Buffers
-		renderPass.frameBuffers.resize(swapChain->imageViews.size());
-		for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-			VkFramebufferCreateInfo framebufferCreateInfo = {};
-			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = renderPass.handle;
-			framebufferCreateInfo.attachmentCount = 1;
-			framebufferCreateInfo.pAttachments = &swapChain->imageViews[i];
-			framebufferCreateInfo.width = swapChain->extent.width;
-			framebufferCreateInfo.height = swapChain->extent.height;
-			framebufferCreateInfo.layers = 1;
-			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &renderPass.GetFrameBuffer(i)) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create framebuffer");
-			}
-		}
+		renderPass.CreateFrameBuffers(renderingDevice, swapChain);
 		
 		// Shaders
-		for (auto* shaderPipeline : {testShader}) {
-			shaderPipeline->SetRenderPass(&swapChain->viewportState, renderPass.handle, 0);
-			shaderPipeline->AddColorBlendAttachmentState();
-			shaderPipeline->CreatePipeline(renderingDevice);
-		}
+		testShader->SetRenderPass(&swapChain->viewportState, renderPass.handle, 0);
+		testShader->AddColorBlendAttachmentState();
+		testShader->CreatePipeline(renderingDevice);
 	}
 	
 	void DestroyPipelines() override {
-		for (auto& shaderPipeline : {testShader}) {
-			shaderPipeline->DestroyPipeline(renderingDevice);
-		}
+		testShader->DestroyPipeline(renderingDevice);
+		renderPass.DestroyFrameBuffers(renderingDevice);
 		renderPass.Destroy(renderingDevice);
-		for (auto framebuffer : renderPass.frameBuffers) {
-			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
-		}
+		testLayout.Destroy(renderingDevice);
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		VkRenderPassBeginInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = renderPass.handle;
-		renderPassInfo.framebuffer = renderPass.GetFrameBuffer(imageIndex);
-		renderPassInfo.renderArea.offset = {0, 0};
-		renderPassInfo.renderArea.extent = swapChain->extent;
-		std::array<VkClearValue, 1> clearValues = {};
-		clearValues[0].color = {.0,.0,.0,.0};
-		renderPassInfo.clearValueCount = clearValues.size();
-		renderPassInfo.pClearValues = clearValues.data();
-		
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		renderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		testShader->Execute(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffer);
+		renderPass.End(renderingDevice, commandBuffer);
 	}
 	
 };

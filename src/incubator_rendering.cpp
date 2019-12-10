@@ -40,9 +40,8 @@ int main() {
 	auto* vulkan = new VulkanRasterizationRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
 #endif
 	
-	vulkan->LoadRenderer();
 	vulkan->LoadScene();
-	vulkan->SendGraphicsToDevice();
+	vulkan->LoadRenderer();
 	
 	double camSpeed = 2.0, mouseSensitivity = 1.0;
 	// double horizontalAngle = -2.5;
@@ -275,9 +274,8 @@ int main() {
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
-	vulkan->DeleteGraphicsFromDevice();
-	vulkan->UnloadScene();
 	vulkan->UnloadRenderer();
+	vulkan->UnloadScene();
 	
 	// Close Window and delete Vulkan
 	delete vulkan;

@@ -36,10 +36,13 @@ class VulkanRasterizationRenderer : public VulkanRenderer {
 	std::vector<Buffer*> stagedBuffers {};
 	std::vector<Geometry*> geometries {};
 	
+	PipelineLayout mainPipelineLayout,
+				postProcessingPipelineLayout,
+				galaxyGenPipelineLayout,
+				galaxyBoxPipelineLayout;
+	
 	RasterShaderPipeline* testShader;
 	RasterShaderPipeline* ppShader;
-	CombinedImageSampler postProcessingSampler;
-	
 	ComputeShaderPipeline* computeTestShader;
 	
 	std::recursive_mutex uboMutex;
@@ -50,30 +53,18 @@ private: // Rasterization Rendering
 	RenderPass galaxyGenRenderPass;
 	RenderPass galaxyFadeRenderPass;
 	
-	// Galaxy
-	VkImage galaxyCubeImage = VK_NULL_HANDLE;
-	VkDeviceMemory galaxyCubeImageMemory = VK_NULL_HANDLE;
-	VkImageView galaxyCubeImageView = VK_NULL_HANDLE;
-	CombinedImageSampler galaxyCubeSampler;
-	struct {uint width; uint height; VkFormat format; uint layers = 6;} galaxyCubeImageFormat;
-	
-	// Main Render Pass
-	VkImage colorImage = VK_NULL_HANDLE;
-	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
-	VkImageView colorImageView = VK_NULL_HANDLE;
-	struct {uint width; uint height; VkFormat format; uint layers = 1;} colorImageFormat;
-	
-	// Depth Buffer
-	VkImage depthImage = VK_NULL_HANDLE;
-	VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
-	VkImageView depthImageView = VK_NULL_HANDLE;
-	struct {uint width; uint height; VkFormat format; uint layers = 1;} depthImageFormat;
-	
-	// Post processing
-	VkImage ppImage = VK_NULL_HANDLE;
-	VkDeviceMemory ppImageMemory = VK_NULL_HANDLE;
-	VkImageView ppImageView = VK_NULL_HANDLE;
-	struct {uint width; uint height; VkFormat format; uint layers = 1;} ppImageFormat;
+	// Images
+	DepthStencilImage depthImage;
+	Image colorImage {
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+		1,1,true,true
+	};
+	Image ppImage {
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+	};
+	CubeMapImage galaxyCubeImage {
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT
+	};
 	
 	// Graphics settings
 	float renderingResolutionScale = 1.0;
@@ -117,215 +108,46 @@ private: // Renderer Configuration methods
 	}
 
 	void CreateResources() override {
-		{// Main render pass resources
-			VkImageViewCreateInfo viewInfo = {};
-			
-			// Main color attachment
-			colorImageFormat = {
-				(uint)((float)swapChain->extent.width * renderingResolutionScale),
-				(uint)((float)swapChain->extent.height * renderingResolutionScale),
-				renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
-			};
-			renderingDevice->CreateImage(
-				colorImageFormat.width,
-				colorImageFormat.height,
-				1, VK_SAMPLE_COUNT_1_BIT,
-				colorImageFormat.format,
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				colorImage,
-				colorImageMemory,
-				colorImageFormat.layers
-			);
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = colorImage;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			viewInfo.format = colorImageFormat.format;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = colorImageFormat.layers;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &colorImageView) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create texture image view");
-			}
-			TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, colorImageFormat.layers);
-			
-			// Depth Image
-			depthImageFormat = {
-				colorImageFormat.width,
-				colorImageFormat.height,
-				renderingPhysicalDevice->FindSupportedFormat({VK_FORMAT_D32_SFLOAT_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-			};
-			renderingDevice->CreateImage(
-				depthImageFormat.width,
-				depthImageFormat.height,
-				1, VK_SAMPLE_COUNT_1_BIT,
-				depthImageFormat.format, 
-				VK_IMAGE_TILING_OPTIMAL, 
-				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-				depthImage, 
-				depthImageMemory,
-				depthImageFormat.layers
-			);
-			// Depth Image View
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = depthImage;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			viewInfo.format = depthImageFormat.format;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = depthImageFormat.layers;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &depthImageView) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create texture image view");
-			}
-			// Transition Layout
-			TransitionImageLayout(depthImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, depthImageFormat.layers);
-		
-			// Post Processing
-			ppImageFormat = {
-				(uint)((float)swapChain->extent.width),
-				(uint)((float)swapChain->extent.height),
-				swapChain->format.format
-			};
-			renderingDevice->CreateImage(
-				ppImageFormat.width,
-				ppImageFormat.height,
-				1, VK_SAMPLE_COUNT_1_BIT,
-				ppImageFormat.format,
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				ppImage,
-				ppImageMemory,
-				ppImageFormat.layers
-			);
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = ppImage;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			viewInfo.format = ppImageFormat.format;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = ppImageFormat.layers;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &ppImageView) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create texture image view");
-			}
-			TransitionImageLayout(ppImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1, ppImageFormat.layers);
-			// Create sampler
-			VkSamplerCreateInfo sampler {};
-			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.magFilter = VK_FILTER_LINEAR;
-			sampler.minFilter = VK_FILTER_LINEAR;
-			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-			sampler.addressModeV = sampler.addressModeU;
-			sampler.addressModeW = sampler.addressModeU;
-			sampler.mipLodBias = 0.0f;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.compareOp = VK_COMPARE_OP_NEVER;
-			sampler.minLod = 0.0f;
-			sampler.maxLod = 1.0f;
-			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-			if (renderingDevice->CreateSampler(&sampler, nullptr, &postProcessingSampler.sampler) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create sampler");
-			postProcessingSampler.imageView = colorImageView;
-			
-		}
-	
-		{// Galaxy Cube resources
-			galaxyCubeImageFormat.width = (uint)((float)(std::max(swapChain->extent.width, swapChain->extent.height)) * galaxyResolutionScale);
-			galaxyCubeImageFormat.height = galaxyCubeImageFormat.width;
-			galaxyCubeImageFormat.format = swapChain->format.format;
-			VkImageViewCreateInfo viewInfo = {};
-			renderingDevice->CreateImage(
-				galaxyCubeImageFormat.width,
-				galaxyCubeImageFormat.width,
-				1, VK_SAMPLE_COUNT_1_BIT,
-				galaxyCubeImageFormat.format,
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				galaxyCubeImage,
-				galaxyCubeImageMemory,
-				galaxyCubeImageFormat.layers,
-				VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
-				{graphicsQueue.familyIndex, lowPriorityGraphicsQueue.familyIndex}
-			);
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = galaxyCubeImage;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-			viewInfo.format = galaxyCubeImageFormat.format;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = galaxyCubeImageFormat.layers;
-			if (renderingDevice->CreateImageView(&viewInfo, nullptr, &galaxyCubeImageView) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create texture image view for galaxy cube");
-			}
-			TransitionImageLayout(galaxyCubeImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, galaxyCubeImageFormat.layers);
-			// Sampler
-			VkSamplerCreateInfo sampler {};
-			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.magFilter = VK_FILTER_LINEAR;
-			sampler.minFilter = VK_FILTER_LINEAR;
-			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-			sampler.addressModeV = sampler.addressModeU;
-			sampler.addressModeW = sampler.addressModeU;
-			sampler.mipLodBias = 0.0f;
-			sampler.maxAnisotropy = 1.0f;
-			sampler.compareOp = VK_COMPARE_OP_NEVER;
-			sampler.minLod = 0.0f;
-			sampler.maxLod = 1.0f;
-			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-			if (renderingDevice->CreateSampler(&sampler, nullptr, &galaxyCubeSampler.sampler) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create sampler");
-			galaxyCubeSampler.imageView = galaxyCubeImageView;
-		}
+		// Main color attachment
+		colorImage.Create(
+			renderingDevice,
+			(uint)((float)swapChain->extent.width * renderingResolutionScale),
+			(uint)((float)swapChain->extent.height * renderingResolutionScale),
+			{VK_FORMAT_R32G32B32A32_SFLOAT}
+		);
+		TransitionImageLayout(colorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		// Depth Image
+		depthImage.Create(
+			renderingDevice,
+			colorImage.width,
+			colorImage.height,
+			{VK_FORMAT_D32_SFLOAT_S8_UINT}
+		);
+		TransitionImageLayout(depthImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		// Post Processing
+		ppImage.Create(
+			renderingDevice,
+			(uint)((float)swapChain->extent.width),
+			(uint)((float)swapChain->extent.height),
+			{swapChain->format.format}
+		);
+		TransitionImageLayout(ppImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		// Galaxy CubeMap
+		uint size = (uint)((float)(std::max(swapChain->extent.width, swapChain->extent.height)) * galaxyResolutionScale);
+		galaxyCubeImage.SetAccessQueues({graphicsQueue.familyIndex, lowPriorityGraphicsQueue.familyIndex});
+		galaxyCubeImage.Create(
+			renderingDevice, 
+			size, size,
+			{VK_FORMAT_R32G32B32A32_SFLOAT}
+		);
+		TransitionImageLayout(galaxyCubeImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	
 	void DestroyResources() override {
-		// Main render pass resources
-		if (colorImage != VK_NULL_HANDLE) {
-			renderingDevice->DestroyImageView(colorImageView, nullptr);
-			renderingDevice->DestroyImage(colorImage, nullptr);
-			renderingDevice->FreeMemory(colorImageMemory, nullptr);
-			colorImage = VK_NULL_HANDLE;
-		}
-		if (depthImage != VK_NULL_HANDLE) {
-			renderingDevice->DestroyImageView(depthImageView, nullptr);
-			renderingDevice->DestroyImage(depthImage, nullptr);
-			renderingDevice->FreeMemory(depthImageMemory, nullptr);
-			depthImage = VK_NULL_HANDLE;
-		}
-		
-		// Post-processing
-		if (ppImage != VK_NULL_HANDLE) {
-			renderingDevice->DestroySampler(postProcessingSampler.sampler, nullptr);
-			renderingDevice->DestroyImageView(ppImageView, nullptr);
-			renderingDevice->DestroyImage(ppImage, nullptr);
-			renderingDevice->FreeMemory(ppImageMemory, nullptr);
-			ppImage = VK_NULL_HANDLE;
-		}
-		
-		// Galaxy Cube resources
-		if (galaxyCubeImage != VK_NULL_HANDLE) {
-			renderingDevice->DestroySampler(galaxyCubeSampler.sampler, nullptr);
-			renderingDevice->DestroyImageView(galaxyCubeImageView, nullptr);
-			renderingDevice->DestroyImage(galaxyCubeImage, nullptr);
-			renderingDevice->FreeMemory(galaxyCubeImageMemory, nullptr);
-			galaxyCubeImage = VK_NULL_HANDLE;
-		}
+		colorImage.Destroy(renderingDevice);
+		depthImage.Destroy(renderingDevice);
+		ppImage.Destroy(renderingDevice);
+		galaxyCubeImage.Destroy(renderingDevice);
 	}
 	
 public: // Scene configuration methods
@@ -378,8 +200,7 @@ public: // Scene configuration methods
 		auto* galaxiesDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		galaxiesDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		galaxiesDescriptorSet->AddBinding_uniformBuffer(1, &galaxyUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		PipelineLayout* galaxyGenPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesDescriptorSet);
+		galaxyGenPipelineLayout.AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		galaxyGenShader = new RasterShaderPipeline(galaxyGenPipelineLayout, {
 			"incubator_rendering/assets/shaders/galaxy.gen.geom",
@@ -403,9 +224,8 @@ public: // Scene configuration methods
 		// Galaxy Box
 		auto* galaxyBoxDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		galaxyBoxDescriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
-		PipelineLayout* galaxyBoxPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		galaxyBoxPipelineLayout->AddDescriptorSet(galaxyBoxDescriptorSet);
+		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		galaxyBoxPipelineLayout.AddDescriptorSet(galaxyBoxDescriptorSet);
 		galaxyBoxShader = new RasterShaderPipeline(galaxyBoxPipelineLayout, {
 			"incubator_rendering/assets/shaders/galaxy.box.vert",
 			"incubator_rendering/assets/shaders/galaxy.box.frag",
@@ -439,23 +259,20 @@ public: // Scene configuration methods
 		// Descriptor sets & Pipeline Layouts
 		auto* descriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		descriptorSet->AddBinding_uniformBuffer(0, &uniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		PipelineLayout* mainPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		mainPipelineLayout->AddDescriptorSet(descriptorSet);
-		PipelineLayout* postProcessingPipelineLayout = nullptr;
+		mainPipelineLayout.AddDescriptorSet(descriptorSet);
 		auto* ppDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		ppDescriptorSet->AddBinding_combinedImageSampler(0, &postProcessingSampler, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		postProcessingPipelineLayout->AddDescriptorSet(ppDescriptorSet);
+		ppDescriptorSet->AddBinding_combinedImageSampler(0, &colorImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingPipelineLayout.AddDescriptorSet(ppDescriptorSet);
 		
 		Buffer* vertexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		Buffer* indexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
-			{/*pos*/-0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
-			{/*pos*/ 0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
-			{/*pos*/ 0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
-			{/*pos*/-0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 0.5}},
+			{/*pos*/-0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/ 0.5,-0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/ 0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
+			{/*pos*/-0.5, 0.5, 0.0, /*color*/{1.0, 0.0, 0.0, 1.0}},
 			//
 			{/*pos*/-0.5,-0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
 			{/*pos*/ 0.5,-0.5,-0.2, /*color*/{0.0, 1.0, 0.0, 1.0}},
@@ -519,7 +336,6 @@ public: // Scene configuration methods
 			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
 			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
-		testShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
 		testShader->SetData(vertexBuffer, indexBuffer);
 		testShader->LoadShaders();
 		
@@ -539,8 +355,8 @@ public: // Scene configuration methods
 		
 		// Compute shader
 		auto* galaxiesComputeDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(1));
-		galaxiesComputeDescriptorSet->AddBinding_imageView(0, &galaxyCubeImageView, VK_SHADER_STAGE_COMPUTE_BIT);
-		galaxyGenPipelineLayout->AddDescriptorSet(galaxiesComputeDescriptorSet);
+		galaxiesComputeDescriptorSet->AddBinding_imageView(0, &galaxyCubeImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
+		galaxyGenPipelineLayout.AddDescriptorSet(galaxiesComputeDescriptorSet);
 		computeTestShader = new ComputeShaderPipeline(galaxyGenPipelineLayout, "incubator_rendering/assets/shaders/compute_test.comp");
 		computeTestShader->LoadShaders();
 	}
@@ -566,17 +382,17 @@ public: // Scene configuration methods
 		}
 		stagedBuffers.clear();
 		
-		// Pipeline Layouts
-		for (auto* layout : pipelineLayouts) {
-			delete layout;
-		}
-		pipelineLayouts.clear();
-		
 		// Descriptor sets
 		for (auto* set : descriptorSets) {
 			delete set;
 		}
 		descriptorSets.clear();
+		
+		// Pipeline layouts
+		mainPipelineLayout.Reset();
+		postProcessingPipelineLayout.Reset();
+		galaxyGenPipelineLayout.Reset();
+		galaxyBoxPipelineLayout.Reset();
 	}
 
 protected: // Graphics configuration
@@ -607,10 +423,16 @@ protected: // Graphics configuration
 	}
 	
 	void CreatePipelines() override {
+		// Pipeline layouts
+		mainPipelineLayout.Create(renderingDevice);
+		postProcessingPipelineLayout.Create(renderingDevice);
+		galaxyGenPipelineLayout.Create(renderingDevice);
+		galaxyBoxPipelineLayout.Create(renderingDevice);
+		
 		{// Main Render pass
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
-				colorAttachment.format = colorImageFormat.format;
+				colorAttachment.format = colorImage.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
 				// Color and depth data
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // What to do with the attachment before rendering
@@ -655,7 +477,7 @@ protected: // Graphics configuration
 			
 			// Depth Attachment
 			VkAttachmentDescription depthAttachment = {};
-				depthAttachment.format = depthImageFormat.format;
+				depthAttachment.format = depthImage.format;
 				depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 				depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -693,54 +515,15 @@ protected: // Graphics configuration
 
 			// Create the render pass
 			renderPass.Create(renderingDevice);
-			
-			VkPipelineViewportStateCreateInfo viewportState {};
-			VkViewport viewport {};
-			VkRect2D scissor {};
-			viewport.x = 0;
-			viewport.y = 0;
-			viewport.width = (float) colorImageFormat.width;
-			viewport.height = (float) colorImageFormat.height;
-			viewport.minDepth = 0;
-			viewport.maxDepth = 1;
-			scissor.offset = {0, 0};
-			scissor.extent = {colorImageFormat.width, colorImageFormat.height};
-			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-			viewportState.pViewports = &viewport;
-			viewportState.pScissors = &scissor;
-			
-			// Frame Buffer
-			std::vector<VkImageView> attachments {
-				colorImageView,
-				depthImageView,
-			};
-			// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
-			VkFramebufferCreateInfo framebufferCreateInfo = {};
-			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = renderPass.handle;
-			framebufferCreateInfo.attachmentCount = attachments.size();
-			framebufferCreateInfo.pAttachments = attachments.data(); // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-			framebufferCreateInfo.width = colorImageFormat.width;
-			framebufferCreateInfo.height = colorImageFormat.height;
-			framebufferCreateInfo.layers = colorImageFormat.layers;
-			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &renderPass.GetFrameBuffer()) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create framebuffer");
-			}
+			renderPass.CreateFrameBuffers(renderingDevice, {
+				&colorImage,
+				&depthImage,
+			});
 			
 			// Shaders
 			for (auto* shaderPipeline : {galaxyBoxShader, testShader}) {
-				shaderPipeline->SetRenderPass(&viewportState, renderPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState(
-					VK_TRUE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_FACTOR_ONE,
-					VK_BLEND_OP_ADD
-				);
+				shaderPipeline->SetRenderPass(&colorImage, renderPass.handle, 0);
+				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
@@ -748,7 +531,7 @@ protected: // Graphics configuration
 		{// Post Processing render pass
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
-				colorAttachment.format = ppImageFormat.format;
+				colorAttachment.format = ppImage.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // What to do with the attachment before rendering
 				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // What to do with the attachment after rendering
@@ -784,27 +567,11 @@ protected: // Graphics configuration
 			
 
 			postProcessingRenderPass.Create(renderingDevice);
-
-			// Frame Buffers
-			postProcessingRenderPass.frameBuffers.resize(swapChain->imageViews.size());
-			for (size_t i = 0; i < swapChain->imageViews.size(); i++) {
-				// You can only use a framebuffer with the render passes that it is compatible with, which roughly means that they use the same number and type of attachments
-				VkFramebufferCreateInfo framebufferCreateInfo = {};
-				framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-				framebufferCreateInfo.renderPass = postProcessingRenderPass.handle;
-				framebufferCreateInfo.attachmentCount = 1;
-				framebufferCreateInfo.pAttachments = &swapChain->imageViews[i]; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-				framebufferCreateInfo.width = ppImageFormat.width;
-				framebufferCreateInfo.height = ppImageFormat.height;
-				framebufferCreateInfo.layers = ppImageFormat.layers; // refers to the number of layers in image arrays
-				if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &postProcessingRenderPass.GetFrameBuffer(i)) != VK_SUCCESS) {
-					throw std::runtime_error("Failed to create framebuffer");
-				}
-			}
+			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain);
 			
 			// Shaders
 			for (auto* shaderPipeline : {ppShader}) {
-				shaderPipeline->SetRenderPass(&swapChain->viewportState, postProcessingRenderPass.handle, 0);
+				shaderPipeline->SetRenderPass(swapChain, postProcessingRenderPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -813,7 +580,7 @@ protected: // Graphics configuration
 		{// Galaxy Gen render pass
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
-				colorAttachment.format = galaxyCubeImageFormat.format;
+				colorAttachment.format = galaxyCubeImage.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
 				// Color and depth data
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -836,39 +603,10 @@ protected: // Graphics configuration
 			
 			// Create the render pass
 			galaxyGenRenderPass.Create(renderingDevice);
-			
-			VkPipelineViewportStateCreateInfo viewportState {};
-			VkViewport viewport {};
-			VkRect2D scissor {};
-			viewport.x = 0;
-			viewport.y = 0;
-			viewport.width = (float) galaxyCubeImageFormat.width;
-			viewport.height = (float) galaxyCubeImageFormat.width;
-			viewport.minDepth = 0;
-			viewport.maxDepth = 1;
-			scissor.offset = {0, 0};
-			scissor.extent = {galaxyCubeImageFormat.width, galaxyCubeImageFormat.width};
-			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-			viewportState.pViewports = &viewport;
-			viewportState.pScissors = &scissor;
-			
-			// Frame Buffer
-			VkFramebufferCreateInfo framebufferCreateInfo = {};
-			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = galaxyGenRenderPass.handle;
-			framebufferCreateInfo.attachmentCount = 1;
-			framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-			framebufferCreateInfo.width = galaxyCubeImageFormat.width;
-			framebufferCreateInfo.height = galaxyCubeImageFormat.width;
-			framebufferCreateInfo.layers = galaxyCubeImageFormat.layers; // refers to the number of layers in image arrays
-			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyGenRenderPass.GetFrameBuffer()) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create galaxy gen framebuffer");
-			}
+			galaxyGenRenderPass.CreateFrameBuffers(renderingDevice, galaxyCubeImage);
 			
 			// Shader pipeline
-			galaxyGenShader->SetRenderPass(&viewportState, galaxyGenRenderPass.handle, 0);
+			galaxyGenShader->SetRenderPass(&galaxyCubeImage, galaxyGenRenderPass.handle, 0);
 			galaxyGenShader->AddColorBlendAttachmentState(
 				/*blendEnable*/				VK_TRUE,
 				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
@@ -884,7 +622,7 @@ protected: // Graphics configuration
 		{// Galaxy Fade render pass
 			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {}; // defines the output data from the fragment shader (o_color)
-				colorAttachment.format = galaxyCubeImageFormat.format;
+				colorAttachment.format = galaxyCubeImage.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // Need more with multisampling
 				// Color and depth data
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -908,47 +646,18 @@ protected: // Graphics configuration
 			
 			// Create the render pass
 			galaxyFadeRenderPass.Create(renderingDevice);
-			
-			VkPipelineViewportStateCreateInfo viewportState {};
-			VkViewport viewport {};
-			VkRect2D scissor {};
-			viewport.x = 0;
-			viewport.y = 0;
-			viewport.width = (float) galaxyCubeImageFormat.width;
-			viewport.height = (float) galaxyCubeImageFormat.width;
-			viewport.minDepth = 0;
-			viewport.maxDepth = 1;
-			scissor.offset = {0, 0};
-			scissor.extent = {galaxyCubeImageFormat.width, galaxyCubeImageFormat.width};
-			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-			viewportState.pViewports = &viewport;
-			viewportState.pScissors = &scissor;
-			
-			// Frame Buffer
-			VkFramebufferCreateInfo framebufferCreateInfo = {};
-			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferCreateInfo.renderPass = galaxyFadeRenderPass.handle;
-			framebufferCreateInfo.attachmentCount = 1;
-			framebufferCreateInfo.pAttachments = &galaxyCubeImageView; // Specifies the VkImageView objects that should be bound to the respective attachment descriptions in the render pass pAttachment array.
-			framebufferCreateInfo.width = galaxyCubeImageFormat.width;
-			framebufferCreateInfo.height = galaxyCubeImageFormat.width;
-			framebufferCreateInfo.layers = galaxyCubeImageFormat.layers; // refers to the number of layers in image arrays
-			if (renderingDevice->CreateFramebuffer(&framebufferCreateInfo, nullptr, &galaxyFadeRenderPass.GetFrameBuffer()) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to create galaxy gen framebuffer");
-			}
+			galaxyFadeRenderPass.CreateFrameBuffers(renderingDevice, galaxyCubeImage);
 			
 			// Shader pipeline
-			galaxyFadeShader->SetRenderPass(&viewportState, galaxyFadeRenderPass.handle, 0);
+			galaxyFadeShader->SetRenderPass(&galaxyCubeImage, galaxyFadeRenderPass.handle, 0);
 			galaxyFadeShader->AddColorBlendAttachmentState(
 				/*blendEnable*/				VK_TRUE,
 				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*colorBlendOp*/			VK_BLEND_OP_REVERSE_SUBTRACT,
-				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ZERO,
-				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ZERO,
-				/*alphaBlendOp*/			VK_BLEND_OP_MIN
+				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*alphaBlendOp*/			VK_BLEND_OP_MAX
 			);
 			// Shader stages
 			galaxyFadeShader->CreatePipeline(renderingDevice);
@@ -964,28 +673,32 @@ protected: // Graphics configuration
 		for (auto& shaderPipeline : {galaxyBoxShader, testShader}) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
+		renderPass.DestroyFrameBuffers(renderingDevice);
 		renderPass.Destroy(renderingDevice);
-		renderingDevice->DestroyFramebuffer(renderPass.GetFrameBuffer(), nullptr);
 		
 		// Post-Processing
 		ppShader->DestroyPipeline(renderingDevice);
-		for (auto framebuffer : postProcessingRenderPass.frameBuffers) {
-			renderingDevice->DestroyFramebuffer(framebuffer, nullptr);
-		}
+		postProcessingRenderPass.DestroyFrameBuffers(renderingDevice);
 		postProcessingRenderPass.Destroy(renderingDevice);
 		
 		// Galaxy Gen
 		galaxyGenShader->DestroyPipeline(renderingDevice);
-		renderingDevice->DestroyFramebuffer(galaxyGenRenderPass.GetFrameBuffer(), nullptr);
+		galaxyGenRenderPass.DestroyFrameBuffers(renderingDevice);
 		galaxyGenRenderPass.Destroy(renderingDevice);
 		
 		// Galaxy Fade
 		galaxyFadeShader->DestroyPipeline(renderingDevice);
-		renderingDevice->DestroyFramebuffer(galaxyFadeRenderPass.GetFrameBuffer(), nullptr);
+		galaxyFadeRenderPass.DestroyFrameBuffers(renderingDevice);
 		galaxyFadeRenderPass.Destroy(renderingDevice);
 		
 		// Compute test
 		computeTestShader->DestroyPipeline(renderingDevice);
+		
+		// Pipeline layouts
+		mainPipelineLayout.Destroy(renderingDevice);
+		postProcessingPipelineLayout.Destroy(renderingDevice);
+		galaxyGenPipelineLayout.Destroy(renderingDevice);
+		galaxyBoxPipelineLayout.Destroy(renderingDevice);
 	}
 	
 	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer commandBuffer) {
@@ -995,7 +708,7 @@ protected: // Graphics configuration
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
 		renderPassInfo.renderArea.offset = {0, 0};
-		renderPassInfo.renderArea.extent = {galaxyCubeImageFormat.width, galaxyCubeImageFormat.height};
+		renderPassInfo.renderArea.extent = {galaxyCubeImage.width, galaxyCubeImage.height};
 		
 		// Conditional rendering
 		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {
@@ -1009,11 +722,9 @@ protected: // Graphics configuration
 		// Galaxy Gen
 		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::genGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
-		renderPassInfo.renderPass = galaxyGenRenderPass.handle;
-		renderPassInfo.framebuffer = galaxyGenRenderPass.GetFrameBuffer();
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyGenRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeImage);
 		galaxyGenShader->Execute(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffer);
+		galaxyGenRenderPass.End(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 		// Other galaxy elements
@@ -1022,70 +733,24 @@ protected: // Graphics configuration
 		// Galaxy Fade
 		conditionalRenderingInfo.offset = offsetof(ConditionalRendering, ConditionalRendering::fadeGalaxy);
 		renderingDevice->CmdBeginConditionalRenderingEXT(commandBuffer, &conditionalRenderingInfo);
-		renderPassInfo.renderPass = galaxyFadeRenderPass.handle;
-		renderPassInfo.framebuffer = galaxyFadeRenderPass.GetFrameBuffer();
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		galaxyFadeRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeImage);
 		galaxyFadeShader->Execute(renderingDevice, commandBuffer);
-		renderingDevice->CmdEndRenderPass(commandBuffer);
+		galaxyFadeRenderPass.End(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
 		
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		
-		// Begin Render Pass
-		VkRenderPassBeginInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = renderPass.handle;
-		renderPassInfo.framebuffer = renderPass.GetFrameBuffer(); // We create a framebuffer for each swap chain image that specifies it as color attachment
-		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
-		renderPassInfo.renderArea.offset = {0, 0};
-		renderPassInfo.renderArea.extent = {colorImageFormat.width, colorImageFormat.height};
-		// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-		std::array<VkClearValue, 2> clearValues = {};
-		clearValues[0].color = {.0,.0,.0,.0};
-		clearValues[1].depthStencil = {1.0f/*depth*/, 0/*stencil*/}; // The range of depth is 0 to 1 in Vulkan, where 1 is far and 0 is near. We want to clear to the Far value.
-		renderPassInfo.clearValueCount = clearValues.size();
-		renderPassInfo.pClearValues = clearValues.data();
-		//
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
-															/*	the last parameter controls how the drawing commands within the render pass will be provided.
-																VK_SUBPASS_CONTENTS_INLINE = The render pass commands will be embedded in the primary command buffer itself and no secondary command buffers will be executed
-																VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = The render pass commands will be executed from secondary command buffers
-															*/
-		
-		/////////////////////////////////////////
+		renderPass.Begin(renderingDevice, commandBuffer, colorImage, {{.0,.0,.0,.0}, {1.0,.0}});
 		galaxyBoxShader->Execute(renderingDevice, commandBuffer);
 		testShader->Execute(renderingDevice, commandBuffer);
-		/////////////////////////////////////////
-		
-		renderingDevice->CmdEndRenderPass(commandBuffer);
-		
+		renderPass.End(renderingDevice, commandBuffer);
 		
 		// Post Processing
-		TransitionImageLayout(commandBuffer, colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1, ppImageFormat.layers);
-		
-		// Begin Render Pass
-		VkRenderPassBeginInfo ppRenderPassInfo = {};
-		ppRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		ppRenderPassInfo.renderPass = postProcessingRenderPass.handle;
-		ppRenderPassInfo.framebuffer = postProcessingRenderPass.GetFrameBuffer(imageIndex); // We create a framebuffer for each swap chain image that specifies it as color attachment
-		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
-		ppRenderPassInfo.renderArea.offset = {0, 0};
-		ppRenderPassInfo.renderArea.extent = {ppImageFormat.width, ppImageFormat.height};
-		// Related to VK_ATTACHMENT_LOAD_OP_CLEAR for the color attachment
-		std::array<VkClearValue, 1> ppClearValues = {};
-		ppClearValues[0].color = {.0,.0,.0,.0};
-		ppRenderPassInfo.clearValueCount = ppClearValues.size();
-		ppRenderPassInfo.pClearValues = ppClearValues.data();
-		//
-		renderingDevice->CmdBeginRenderPass(commandBuffer, &ppRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Returns void, so no error handling for any vkCmdXxx functions until we've finished recording.
-		
-		// post processing here
+		TransitionImageLayout(commandBuffer, colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, ppImage, {{.0,.0,.0,.0}}, imageIndex);
 		ppShader->Execute(renderingDevice, commandBuffer);
-		
-		renderingDevice->CmdEndRenderPass(commandBuffer);
-		
+		postProcessingRenderPass.End(renderingDevice, commandBuffer);
 	}
 	
 	
@@ -1136,11 +801,11 @@ protected: // Methods executed on every frame
 			if (speed == 0) {
 				galaxyFrameIndex = 0;
 				VkClearColorValue clearColor {.0,.0,.0,.0};
-				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,galaxyCubeImageFormat.layers};
+				VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,galaxyCubeImage.arrayLayers};
 				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityGraphicsQueue);
-				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, galaxyCubeImageFormat.layers);
-				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
-				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1, galaxyCubeImageFormat.layers);
+				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+				renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
+				TransitionImageLayout(cmdBuffer, galaxyCubeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 				EndSingleTimeCommands(lowPriorityGraphicsQueue, cmdBuffer);
 			}
 		}
