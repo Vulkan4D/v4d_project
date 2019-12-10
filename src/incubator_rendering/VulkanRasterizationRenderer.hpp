@@ -1,6 +1,5 @@
 #pragma once
 
-#include "VulkanRenderer.hpp"
 #include "Geometry.hpp"
 
 // Test Object Vertex Data Structure
@@ -27,8 +26,8 @@ struct ConditionalRendering {
 	int genGalaxy;
 };
 
-class VulkanRasterizationRenderer : public VulkanRenderer {
-	using VulkanRenderer::VulkanRenderer;
+class VulkanRasterizationRenderer : public v4d::graphics::Renderer {
+	using v4d::graphics::Renderer::Renderer;
 	
 	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO), true};
 	Buffer galaxyUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(GalaxyUBO), true};
@@ -701,6 +700,8 @@ protected: // Graphics configuration
 		galaxyBoxPipelineLayout.Destroy(renderingDevice);
 	}
 	
+protected: // Commands
+	
 	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer commandBuffer) {
 		
 		// Begin Render Pass
@@ -753,6 +754,12 @@ protected: // Graphics configuration
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
 	}
 	
+	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
+	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
+	void RunDynamicCompute(VkCommandBuffer) override {}
+	void RunDynamicGraphics(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
@@ -812,7 +819,7 @@ protected: // Methods executed on every frame
 		
 		// // Compute
 		// auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
-		// computeTestShader->SetGroupCounts(galaxyCubeImageFormat.width, galaxyCubeImageFormat.width, galaxyCubeImageFormat.layers);
+		// computeTestShader->SetGroupCounts(galaxyCubeImage.width, galaxyCubeImage.width, galaxyCubeImage.arrayLayers);
 		// computeTestShader->Execute(renderingDevice, cmdBuffer);
 		// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
 		

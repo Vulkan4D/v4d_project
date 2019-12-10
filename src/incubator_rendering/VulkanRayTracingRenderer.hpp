@@ -1,7 +1,5 @@
 #pragma once
 
-#include "VulkanRenderer.hpp"
-
 #include "Geometry.hpp"
 
 using namespace v4d::graphics::vulkan::rtx;
@@ -93,8 +91,10 @@ struct GeometryInstance {
 	int rayTracingGeometryInstanceIndex = -1;
 };
 
-class VulkanRayTracingRenderer : public VulkanRenderer {
-	using VulkanRenderer::VulkanRenderer;
+class VulkanRayTracingRenderer : public v4d::graphics::Renderer {
+	using v4d::graphics::Renderer::Renderer;
+	
+	PipelineLayout rayTracingPipelineLayout;
 	
 private: // Buffers	
 	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
@@ -110,13 +110,13 @@ private: // Ray Tracing stuff
 	ShaderBindingTable* shaderBindingTable = nullptr;
 	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
-	struct RayTracingStorageImage {
-		VkDeviceMemory memory = VK_NULL_HANDLE;
-		VkImage image = VK_NULL_HANDLE;
-		VkImageView view = VK_NULL_HANDLE;
-		VkFormat format;
-	} rayTracingStorageImage;
+	
+	Image rayTracingStorageImage {
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+		1,1,true,true
+	};
 	float rayTracingImageScale = 2;
+	
 	void RayTracingInit() {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
@@ -130,42 +130,16 @@ private: // Ray Tracing stuff
 		GetPhysicalDeviceProperties2(renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
 	}
 	void CreateRayTracingResources() {
-		VkFormat colorFormat = swapChain->format.format;
-		renderingDevice->CreateImage(
+		rayTracingStorageImage.Create(
+			renderingDevice,
 			(uint)((float)swapChain->extent.width * rayTracingImageScale),
 			(uint)((float)swapChain->extent.height * rayTracingImageScale),
-			1, VK_SAMPLE_COUNT_1_BIT,
-			colorFormat,
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			rayTracingStorageImage.image,
-			rayTracingStorageImage.memory
+			{VK_FORMAT_R32G32B32A32_SFLOAT}
 		);
-
-		VkImageViewCreateInfo viewInfo = {};
-			viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			viewInfo.image = rayTracingStorageImage.image;
-			viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			viewInfo.format = colorFormat;
-			viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			viewInfo.subresourceRange.baseMipLevel = 0;
-			viewInfo.subresourceRange.levelCount = 1;
-			viewInfo.subresourceRange.baseArrayLayer = 0;
-			viewInfo.subresourceRange.layerCount = 1;
-		if (renderingDevice->CreateImageView(&viewInfo, nullptr, &rayTracingStorageImage.view) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create texture image view");
-		}
-		
-		TransitionImageLayout(rayTracingStorageImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1);
+		TransitionImageLayout(rayTracingStorageImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	void DestroyRayTracingResources() {
-		if (rayTracingStorageImage.image != VK_NULL_HANDLE) {
-			renderingDevice->DestroyImageView(rayTracingStorageImage.view, nullptr);
-			renderingDevice->DestroyImage(rayTracingStorageImage.image, nullptr);
-			renderingDevice->FreeMemory(rayTracingStorageImage.memory, nullptr);
-			rayTracingStorageImage.image = VK_NULL_HANDLE;
-		}
+		rayTracingStorageImage.Destroy(renderingDevice);
 	}
 	void CreateRayTracingAccelerationStructures() {
 		
@@ -294,7 +268,7 @@ private: // Ray Tracing stuff
 			// Instance buffer
 			Buffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
 			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
-			AllocateBufferStaged(commandPool, instanceBuffer);
+			AllocateBufferStaged(graphicsQueue, instanceBuffer);
 			
 			VkDeviceSize allBlasReqSize = 0;
 			// RayTracing Scratch buffer
@@ -315,7 +289,7 @@ private: // Ray Tracing stuff
 			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
 			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			
-			auto cmdBuffer = BeginSingleTimeCommands(commandPool);
+			auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
 				
 				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
 				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
@@ -384,7 +358,7 @@ private: // Ray Tracing stuff
 					0, 0
 				);
 			
-			EndSingleTimeCommands(commandPool, cmdBuffer);
+			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 			
 			scratchBuffer.Free(renderingDevice);
 			instanceBuffer.Free(renderingDevice);
@@ -435,8 +409,8 @@ private: // Renderer Configuration methods
 		
 		// Preferences
 		preferredPresentModes = {
-			VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
-			VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+			// VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+			// VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
 			VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 		};
 	}
@@ -458,8 +432,6 @@ private: // Renderer Configuration methods
 	
 	void Info() override {
 		RayTracingInfo();
-		// // MultiSampling
-		// msaaSamples = std::min(VK_SAMPLE_COUNT_8_BIT, renderingPhysicalDevice->GetMaxUsableSampleCount());
 	}
 
 	void CreateResources() override {
@@ -488,8 +460,7 @@ public: // Scene configuration methods
 		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
 		
 		// Pipeline layouts
-		auto* rayTracingPipelineLayout = pipelineLayouts.emplace_back(new PipelineLayout());
-		rayTracingPipelineLayout->AddDescriptorSet(descriptorSet);
+		rayTracingPipelineLayout.AddDescriptorSet(descriptorSet);
 
 		// Add triangle geometries
 		auto* trianglesGeometry1 = new TriangleGeometry<Vertex>({
@@ -596,7 +567,6 @@ public: // Scene configuration methods
 			&rayTracingBottomLevelAccelerationStructures[1]
 		});
 		
-		
 		shaderBindingTable->LoadShaders();
 	}
 
@@ -619,10 +589,7 @@ public: // Scene configuration methods
 		stagedBuffers.clear();
 		
 		// Pipeline Layouts
-		for (auto* layout : pipelineLayouts) {
-			delete layout;
-		}
-		pipelineLayouts.clear();
+		rayTracingPipelineLayout.Reset();
 		
 		// Descriptor sets
 		for (auto* set : descriptorSets) {
@@ -634,9 +601,10 @@ public: // Scene configuration methods
 protected: // Graphics configuration
 	void AllocateBuffers() override {
 		// Staged Buffers
-		AllocateBuffersStaged(commandPool, stagedBuffers);
+		AllocateBuffersStaged(graphicsQueue, stagedBuffers);
 		// Uniform buffer
 		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		uniformBuffer.MapMemory(renderingDevice);
 		
 		CreateRayTracingAccelerationStructures();
 	}
@@ -650,18 +618,22 @@ protected: // Graphics configuration
 		}
 
 		// Uniform buffers
+		uniformBuffer.UnmapMemory(renderingDevice);
 		uniformBuffer.Free(renderingDevice);
 	}
 	
-	void CreateGraphicsPipelines() override {
+	void CreatePipelines() override {
+		rayTracingPipelineLayout.Create(renderingDevice);
 		CreateRayTracingPipeline();
 	}
 	
-	void DestroyGraphicsPipelines() override {
+	void DestroyPipelines() override {
 		DestroyRayTracingPipeline();
+		rayTracingPipelineLayout.Destroy(renderingDevice);
 	}
 	
-	void RenderingCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+private: // Commands
+	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipeline());
 		shaderBindingTable->GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
@@ -682,8 +654,8 @@ protected: // Graphics configuration
 			width, height, 1
 		);
 		
-		TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
-		TransitionImageLayout(commandBuffer, rayTracingStorageImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, 1);
+		TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, 1);
+		TransitionImageLayout(commandBuffer, rayTracingStorageImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 		
 	
 		VkImageBlit blit = {};
@@ -715,10 +687,17 @@ protected: // Graphics configuration
 		// copyRegion.extent = {swapChain->extent.width, swapChain->extent.height, 1};
 		// renderingDevice->CmdCopyImage(commandBuffer, rayTracingStorageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 		
-		TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1);
-		TransitionImageLayout(commandBuffer, rayTracingStorageImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, 1);
-		
+		TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 1, 1);
+		TransitionImageLayout(commandBuffer, rayTracingStorageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
+	
+	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
+	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
+	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
+	void RunDynamicCompute(VkCommandBuffer) override {}
+	void RunDynamicGraphics(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 protected: // Methods executed on every frame
 
@@ -745,8 +724,10 @@ protected: // Methods executed on every frame
 		ubo.time = time;
 		
 		// Update memory
-		Buffer::CopyDataToBuffer(renderingDevice, &ubo, &uniformBuffer);
+		uniformBuffer.WriteToMappedData(renderingDevice, &ubo);
 	}
+	
+	void LowPriorityFrameUpdate() override {}
 
 public: // user-defined state variables
 	glm::dvec3 camPosition = glm::dvec3(2,2,2);
@@ -755,5 +736,11 @@ public: // user-defined state variables
 	int samplesPerPixel = 2;
 	int rtx_reflection_max_recursion = 4;
 	bool rtx_shadows = true;
+	
+	// Just for compatibility with the other test renderer...
+	glm::dvec3 velocity = glm::dvec3(0);
+	bool toggleTest = false;
+	bool continuousGalaxyGen = true;
+	float speed = 0;
 	
 };

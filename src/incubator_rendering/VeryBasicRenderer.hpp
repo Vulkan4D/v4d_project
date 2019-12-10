@@ -1,34 +1,25 @@
 #pragma once
+#include <v4d.h>
 
-#include "VulkanRenderer.hpp"
-
-class VeryBasicRenderer : public VulkanRenderer {
-	using VulkanRenderer::VulkanRenderer;
+class VeryBasicRenderer : public v4d::graphics::Renderer {
+	using v4d::graphics::Renderer::Renderer;
 	
 	RenderPass renderPass;
 	PipelineLayout testLayout;
 	RasterShaderPipeline* testShader;
-	
-public: // Scene configuration methods
 
-	void LoadScene() override {
-		// Shader program
-		testShader = new RasterShaderPipeline(testLayout, {
-			"incubator_rendering/assets/shaders/verybasic.vert",
-			"incubator_rendering/assets/shaders/verybasic.frag",
-		});
-		testShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		testShader->SetData(4);
-		testShader->LoadShaders();
-	}
+private: // Init
+	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
+	void Init() override {}
+	void Info() override {}
 
-	void UnloadScene() override {
-		// Shaders
-		delete testShader;
-	}
+private: // Resources
+	void CreateResources() override {}
+	void DestroyResources() override {}
+	void AllocateBuffers() override {}
+	void FreeBuffers() override {}
 
-protected: // Graphics configuration
-
+private: // Graphics configuration
 	void CreatePipelines() override {
 		// Pipeline layouts
 		testLayout.Create(renderingDevice);
@@ -49,8 +40,6 @@ protected: // Graphics configuration
 			renderPass.AddAttachment(colorAttachment),
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 		};
-		
-		// SubPass
 		VkSubpassDescription subpass = {};
 			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			subpass.colorAttachmentCount = 1;
@@ -66,7 +55,6 @@ protected: // Graphics configuration
 		testShader->AddColorBlendAttachmentState();
 		testShader->CreatePipeline(renderingDevice);
 	}
-	
 	void DestroyPipelines() override {
 		testShader->DestroyPipeline(renderingDevice);
 		renderPass.DestroyFrameBuffers(renderingDevice);
@@ -74,10 +62,38 @@ protected: // Graphics configuration
 		testLayout.Destroy(renderingDevice);
 	}
 	
+private: // Commands
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		renderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		testShader->Execute(renderingDevice, commandBuffer);
 		renderPass.End(renderingDevice, commandBuffer);
 	}
 	
+	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
+	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
+	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
+	void RunDynamicCompute(VkCommandBuffer) override {}
+	void RunDynamicGraphics(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
+	
+public: // Scene configuration
+	void LoadScene() override {
+		// Shader program
+		testShader = new RasterShaderPipeline(testLayout, {
+			"incubator_rendering/assets/shaders/verybasic.vert",
+			"incubator_rendering/assets/shaders/verybasic.frag",
+		});
+		testShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		testShader->SetData(4);
+		testShader->LoadShaders();
+	}
+
+	void UnloadScene() override {
+		delete testShader;
+	}
+	
+public: // Update
+	void FrameUpdate(uint imageIndex) override {}
+	void LowPriorityFrameUpdate() override {}
 };
