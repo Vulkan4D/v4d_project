@@ -1,7 +1,9 @@
 #pragma once
 #include <v4d.h>
 
-class VeryBasicRenderer : public v4d::graphics::Renderer {
+using namespace v4d::graphics;
+
+class HelloWorldRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 	
 	RenderPass renderPass;

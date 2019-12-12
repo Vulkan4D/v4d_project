@@ -1,6 +1,4 @@
-// #define USE_RAY_TRACING
-
-#include "config.hh"
+#include "../config.hh"
 #include <v4d.h>
 
 // GLM
@@ -13,11 +11,7 @@
 using namespace v4d::graphics;
 
 // Vulkan
-#ifdef USE_RAY_TRACING
-	#include "incubator_rendering/VulkanRayTracingRenderer.hpp"
-#else
-	#include "incubator_rendering/VulkanRasterizationRenderer.hpp"
-#endif
+#include "RayTracingRenderer.hpp"
 Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
@@ -34,28 +28,22 @@ int main() {
 	Window* window = new Window("TEST", 1280, 720);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
-#ifdef USE_RAY_TRACING
-	auto* vulkan = new VulkanRayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
-#else
-	auto* vulkan = new VulkanRasterizationRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
-#endif
-	
-	vulkan->LoadScene();
-	vulkan->LoadRenderer();
+	auto* renderer = new RayTracingRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+
+	renderer->LoadScene();
+	renderer->LoadRenderer();
 	
 	double camSpeed = 2.0, mouseSensitivity = 1.0;
-	// double horizontalAngle = -2.5;
-	// double verticalAngle = -0.5;
-	double horizontalAngle = 0;
-	double verticalAngle = 0;
-	vulkan->camDirection = glm::dvec3(
+	double horizontalAngle = -2.5;
+	double verticalAngle = -0.5;
+	renderer->camDirection = glm::dvec3(
 		cos(verticalAngle) * sin(horizontalAngle),
 		cos(verticalAngle) * cos(horizontalAngle),
 		sin(verticalAngle)
 	);
 	
 	// Input Events
-	window->AddKeyCallback("app", [window, vulkan](int key, int scancode, int action, int mods){
+	window->AddKeyCallback("app", [window, renderer](int key, int scancode, int action, int mods){
 		
 		// Might want to lock UBO in some cases
 		
@@ -69,31 +57,30 @@ int main() {
 					glfwSetWindowShouldClose(window->GetHandle(), 1);
 					break;
 					
-#ifdef USE_RAY_TRACING
 				// Moving the light's position/intensity
 				case GLFW_KEY_LEFT:
-					vulkan->light.x += 0.5f;
+					renderer->light.x += 0.5f;
 					break;
 				case GLFW_KEY_RIGHT:
-					vulkan->light.x -= 0.5f;
+					renderer->light.x -= 0.5f;
 					break;
 				case GLFW_KEY_DOWN:
-					vulkan->light.y += 0.5f;
+					renderer->light.y += 0.5f;
 					break;
 				case GLFW_KEY_UP:
-					vulkan->light.y -= 0.5f;
+					renderer->light.y -= 0.5f;
 					break;
 				case GLFW_KEY_PAGE_DOWN:
-					vulkan->light.z -= 0.5f;
+					renderer->light.z -= 0.5f;
 					break;
 				case GLFW_KEY_PAGE_UP:
-					vulkan->light.z += 0.5f;
+					renderer->light.z += 0.5f;
 					break;
 				case GLFW_KEY_END:
-					vulkan->light.w -= 0.1f;
+					renderer->light.w -= 0.1f;
 					break;
 				case GLFW_KEY_HOME:
-					vulkan->light.w += 0.1f;
+					renderer->light.w += 0.1f;
 					break;
 					
 				// RTX Bounce Recursion
@@ -106,39 +93,38 @@ int main() {
 				case GLFW_KEY_7:
 				case GLFW_KEY_8:
 				case GLFW_KEY_9:
-					vulkan->rtx_reflection_max_recursion = key - 48;
+					renderer->rtx_reflection_max_recursion = key - 48;
 					break;
 				// Samples per pixel
 				case GLFW_KEY_KP_ADD:
-					vulkan->samplesPerPixel++;
+					renderer->samplesPerPixel++;
 					break;
 				case GLFW_KEY_KP_SUBTRACT:
-					vulkan->samplesPerPixel--;
-					if (vulkan->samplesPerPixel < 1) vulkan->samplesPerPixel = 1;
-					if (vulkan->samplesPerPixel > 100) vulkan->samplesPerPixel = 100;
+					renderer->samplesPerPixel--;
+					if (renderer->samplesPerPixel < 1) renderer->samplesPerPixel = 1;
+					if (renderer->samplesPerPixel > 100) renderer->samplesPerPixel = 100;
 					break;
 				
 				// RTX Shadows
 				case GLFW_KEY_KP_ENTER:
-					vulkan->rtx_shadows = !vulkan->rtx_shadows;
+					renderer->rtx_shadows = !renderer->rtx_shadows;
 					break;
-#endif
 				
 				// Reload Renderer
 				case GLFW_KEY_R:
-					vulkan->ReloadRenderer();
+					renderer->ReloadRenderer();
 					break;
 					
 				// Toggle Shader Test
 				case GLFW_KEY_T:
-					vulkan->toggleTest = !vulkan->toggleTest;
-					LOG("ToggleTest = " << (vulkan->toggleTest? "On":"Off"))
+					renderer->toggleTest = !renderer->toggleTest;
+					LOG("ToggleTest = " << (renderer->toggleTest? "On":"Off"))
 					break;
 				
 				// Toggle Continuous Galaxy Generation
 				case GLFW_KEY_G:
-					vulkan->continuousGalaxyGen = !vulkan->continuousGalaxyGen;
-					LOG("Continuous Galaxy Generation = " << (vulkan->continuousGalaxyGen? "On":"Off"))
+					renderer->continuousGalaxyGen = !renderer->continuousGalaxyGen;
+					LOG("Continuous Galaxy Generation = " << (renderer->continuousGalaxyGen? "On":"Off"))
 					break;
 				
 			}
@@ -146,7 +132,7 @@ int main() {
 	});
 	
 	// Mouse buttons
-	window->AddMouseButtonCallback("app", [window, vulkan](int button, int action, int mods){
+	window->AddMouseButtonCallback("app", [window, renderer](int button, int action, int mods){
 		if (action == GLFW_RELEASE) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
@@ -161,23 +147,6 @@ int main() {
 		}
 	});
 
-	// Game Loop (stuff unrelated to rendering)
-	std::thread gameLoopThread([&]{
-		while (appRunning) {
-			//...
-			SLEEP(10ms)
-		}
-	});
-	
-	// Low-Priority Rendering Loop
-	std::thread lowPriorityRenderingThread([&]{
-		while (appRunning) {
-			std::this_thread::yield();
-			vulkan->RenderLowPriority();
-			SLEEP(10ms)
-		}
-	});
-	
 	// Rendering Loop
 	std::thread renderingThread([&]{
 		// Frame timer
@@ -189,7 +158,7 @@ int main() {
 		while (appRunning) {
 			
 			// Rendering
-			vulkan->Render();
+			renderer->Render();
 			
 			// Frame time
 			++nbFrames;
@@ -211,40 +180,38 @@ int main() {
 		// Events
 		glfwPollEvents();
 		
-		// vulkan->LockUBO();
-		
 		// Camera Movements
-		vulkan->speed = 0;
+		renderer->speed = 0;
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			vulkan->velocity = vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = renderer->camDirection * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			vulkan->velocity = -vulkan->camDirection * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = -renderer->camDirection * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			vulkan->velocity = -glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = -glm::cross(renderer->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			vulkan->velocity = +glm::cross(vulkan->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = +glm::cross(renderer->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			vulkan->velocity = +glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = +glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			vulkan->velocity = -glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-			vulkan->camPosition += vulkan->velocity;
-			vulkan->speed = 1;
+			renderer->velocity = -glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
+			renderer->camPosition += renderer->velocity;
+			renderer->speed = 1;
 		}
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
 			double x, y;
@@ -255,7 +222,7 @@ int main() {
 				verticalAngle -= double(y * mouseSensitivity * deltaTime);
 				if (verticalAngle < -1.5) verticalAngle = -1.5;
 				if (verticalAngle > 1.5) verticalAngle = 1.5;
-				vulkan->camDirection = glm::dvec3(
+				renderer->camDirection = glm::dvec3(
 					cos(verticalAngle) * sin(horizontalAngle),
 					cos(verticalAngle) * cos(horizontalAngle),
 					sin(verticalAngle)
@@ -263,22 +230,18 @@ int main() {
 			}
 		}
 		
-		// vulkan->UnlockUBO();
-		
 		SLEEP(10ms)
 	}
 	
 	appRunning = false;
 	
-	gameLoopThread.join();
 	renderingThread.join();
-	lowPriorityRenderingThread.join();
 	
-	vulkan->UnloadRenderer();
-	vulkan->UnloadScene();
+	renderer->UnloadRenderer();
+	renderer->UnloadScene();
 	
 	// Close Window and delete Vulkan
-	delete vulkan;
+	delete renderer;
 	delete window;
 
 	LOG("\n\nApplication terminated\n\n");

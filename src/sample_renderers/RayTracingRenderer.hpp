@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Geometry.hpp"
+#include "../incubator_rendering/helpers/Geometry.hpp"
 
 using namespace v4d::graphics::vulkan::rtx;
 
@@ -91,7 +91,7 @@ struct GeometryInstance {
 	int rayTracingGeometryInstanceIndex = -1;
 };
 
-class VulkanRayTracingRenderer : public v4d::graphics::Renderer {
+class RayTracingRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 	
 	PipelineLayout rayTracingPipelineLayout;

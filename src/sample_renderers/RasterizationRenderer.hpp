@@ -1,6 +1,6 @@
 #pragma once
-
-#include "Geometry.hpp"
+#include <v4d.h>
+#include "../incubator_rendering/helpers/Geometry.hpp"
 
 // Test Object Vertex Data Structure
 struct Vertex {
@@ -26,7 +26,7 @@ struct ConditionalRendering {
 	int genGalaxy;
 };
 
-class VulkanRasterizationRenderer : public v4d::graphics::Renderer {
+class RasterizationRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 	
 	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO), true};
