@@ -8,8 +8,6 @@ struct V2F {
 layout(set = 0, binding = 0) uniform UBO {
 	dmat4 proj;
 	dmat4 view;
-	dmat4 model;
-	dvec3 cameraPosition;
 } ubo;
 
 ##################################################################
@@ -24,7 +22,7 @@ layout(location = 3) in vec4 in_color;
 layout(location = 0) out V2F v;
 
 void main() {
-	gl_Position = vec4(ubo.proj * ubo.view * ubo.model * dvec4(posX, posY, posZ, 1));
+	gl_Position = vec4(ubo.proj * ubo.view * dvec4(posX, posY, posZ, 1));
 	v.color = in_color;
 }
 

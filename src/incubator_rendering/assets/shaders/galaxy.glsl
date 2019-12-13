@@ -5,9 +5,8 @@
 layout(set = 0, binding = 0) uniform UBO {
 	dmat4 proj;
 	dmat4 view;
-	dmat4 model;
-	dvec4 velocity;
-} ubo;
+	// dvec4 velocity;
+} viewUbo;
 
 layout(set = 0, binding = 1) uniform GalaxyUBO {
 	dvec4 cameraPosition;
@@ -224,7 +223,7 @@ void main() {
 	dvec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
 	gl_Position = vec4(vec2(pos), 0, 1);
 	// output direction of vertex into world
-	out_dir = vec3(normalize(inverse(ubo.proj * ubo.view) * dvec4(pos, 1, 1)).xyz);
+	out_dir = vec3(normalize(inverse(viewUbo.proj * viewUbo.view) * dvec4(pos, 1, 1)).xyz);
 }
 
 ##################################################################
@@ -237,9 +236,9 @@ layout(location = 0) out vec4 out_color;
 layout(set = 0, binding = 1) uniform samplerCube galaxyBox;
 
 void main() {
-	// vec3 velocityDir = vec3(normalize(ubo.velocity.xyz));
+	// vec3 velocityDir = vec3(normalize(viewUbo.velocity.xyz));
 	// float dotVelocity = dot(in_dir, velocityDir);
-	// out_color = texture(galaxyBox, mix(in_dir, velocityDir*-1, dotVelocity/2 * float(ubo.velocity.w)));
+	// out_color = texture(galaxyBox, mix(in_dir, velocityDir*-1, dotVelocity/2 * float(viewUbo.velocity.w)));
 	out_color = texture(galaxyBox, in_dir);
 }
 

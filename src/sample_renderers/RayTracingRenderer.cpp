@@ -1,13 +1,6 @@
 #include "../config.hh"
 #include <v4d.h>
 
-// GLM
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
-
 using namespace v4d::graphics;
 
 // Vulkan

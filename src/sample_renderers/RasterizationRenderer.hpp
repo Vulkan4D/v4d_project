@@ -12,8 +12,7 @@ struct Vertex {
 struct UBO {
 	glm::dmat4 proj;
 	glm::dmat4 view;
-	glm::dmat4 model;
-	glm::dvec4 velocity;
+	// glm::dvec4 velocity;
 };
 
 struct GalaxyUBO {
@@ -55,8 +54,7 @@ private: // Rasterization Rendering
 	// Images
 	DepthStencilImage depthImage;
 	Image colorImage {
-		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-		1,1,true,true
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT
 	};
 	Image ppImage {
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
@@ -764,12 +762,7 @@ protected: // Commands
 protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {
 		LockUBO();
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
 		UBO ubo {};
-		// Slowly rotate the test object
-		ubo.model = glm::rotate(glm::dmat4(1.0), time * glm::radians(10.0), glm::dvec3(0.0,0.0,1.0));
 		
 		// Current camera position
 		ubo.view = glm::lookAt(camPosition, camPosition + camDirection, glm::dvec3(0,0,1));
@@ -777,7 +770,7 @@ protected: // Methods executed on every frame
 		ubo.proj = glm::perspective(glm::radians(80.0), (double) swapChain->extent.width / (double) swapChain->extent.height, 0.01, 1.5e17); // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		ubo.proj[1][1] *= -1;
 		
-		ubo.velocity = glm::dvec4(velocity, speed);
+		// ubo.velocity = glm::dvec4(velocity, speed);
 		
 		// Update memory
 		uniformBuffer.WriteToMappedData(renderingDevice, &ubo);

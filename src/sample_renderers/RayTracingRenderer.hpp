@@ -1,5 +1,5 @@
 #pragma once
-
+#include <v4d.h>
 #include "../incubator_rendering/helpers/Geometry.hpp"
 
 using namespace v4d::graphics::vulkan::rtx;

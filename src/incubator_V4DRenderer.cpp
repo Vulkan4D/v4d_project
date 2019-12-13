@@ -1,13 +1,6 @@
 #include "config.hh"
 #include <v4d.h>
 
-// GLM
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
-
 using namespace v4d::graphics;
 
 #include "incubator_rendering/V4DRenderer.hpp"
@@ -32,14 +25,15 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	// double camSpeed = 2.0, mouseSensitivity = 1.0;
-	// double horizontalAngle = 0;
-	// double verticalAngle = 0;
-	// renderer->camDirection = glm::dvec3(
-	// 	cos(verticalAngle) * sin(horizontalAngle),
-	// 	cos(verticalAngle) * cos(horizontalAngle),
-	// 	sin(verticalAngle)
-	// );
+	double camSpeed = 2.0, mouseSensitivity = 1.0;
+	double horizontalAngle = 0;
+	double verticalAngle = 0;
+	renderer->mainCamera.SetWorldPosition(0, 0, 0);
+	renderer->mainCamera.SetViewDirection(
+		cos(verticalAngle) * sin(horizontalAngle),
+		cos(verticalAngle) * cos(horizontalAngle),
+		sin(verticalAngle)
+	);
 	
 	// Input Events
 	window->AddKeyCallback("app", [window, renderer](int key, int scancode, int action, int mods){
@@ -71,21 +65,21 @@ int main() {
 		}
 	});
 	
-	// // Mouse buttons
-	// window->AddMouseButtonCallback("app", [window, renderer](int button, int action, int mods){
-	// 	if (action == GLFW_RELEASE) {
-	// 		switch (button) {
-	// 			case GLFW_MOUSE_BUTTON_1:
-	// 				glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	// 				glfwSetCursorPos(window->GetHandle(), 0, 0);
-	// 				break;
-	// 			case GLFW_MOUSE_BUTTON_2:
-	// 				glfwSetCursorPos(window->GetHandle(), 0, 0);
-	// 				glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-	// 				break;
-	// 		}
-	// 	}
-	// });
+	// Mouse buttons
+	window->AddMouseButtonCallback("app", [window, renderer](int button, int action, int mods){
+		if (action == GLFW_RELEASE) {
+			switch (button) {
+				case GLFW_MOUSE_BUTTON_1:
+					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+					glfwSetCursorPos(window->GetHandle(), 0, 0);
+					break;
+				case GLFW_MOUSE_BUTTON_2:
+					glfwSetCursorPos(window->GetHandle(), 0, 0);
+					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+					break;
+			}
+		}
+	});
 
 	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
@@ -132,60 +126,53 @@ int main() {
 	
 	while (window->IsActive()) {
 		
-		// double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
+		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
 		
 		// Events
 		glfwPollEvents();
 		
-		// // Camera Movements
-		// renderer->speed = 0;
-		// double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-		// 	renderer->velocity = renderer->camDirection * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-		// 	renderer->velocity = -renderer->camDirection * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-		// 	renderer->velocity = -glm::cross(renderer->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-		// 	renderer->velocity = +glm::cross(renderer->camDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-		// 	renderer->velocity = +glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-		// 	renderer->velocity = -glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime;
-		// 	renderer->camPosition += renderer->velocity;
-		// 	renderer->speed = 1;
-		// }
-		// if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
-		// 	double x, y;
-		// 	glfwGetCursorPos(window->GetHandle(), &x, &y);
-		// 	glfwSetCursorPos(window->GetHandle(), 0, 0);
-		// 	if (x != 0 || y != 0) {
-		// 		horizontalAngle += double(x * mouseSensitivity * deltaTime);
-		// 		verticalAngle -= double(y * mouseSensitivity * deltaTime);
-		// 		if (verticalAngle < -1.5) verticalAngle = -1.5;
-		// 		if (verticalAngle > 1.5) verticalAngle = 1.5;
-		// 		renderer->camDirection = glm::dvec3(
-		// 			cos(verticalAngle) * sin(horizontalAngle),
-		// 			cos(verticalAngle) * cos(horizontalAngle),
-		// 			sin(verticalAngle)
-		// 		);
-		// 	}
-		// }
+		// Camera Movements
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
+			renderer->mainCamera.SetVelocity(+renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
+			renderer->mainCamera.SetVelocity(-renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
+			renderer->mainCamera.SetVelocity(-glm::cross(renderer->mainCamera.GetViewDirection(), glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
+			renderer->mainCamera.SetVelocity(+glm::cross(renderer->mainCamera.GetViewDirection(), glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
+			renderer->mainCamera.SetVelocity(+glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
+			renderer->mainCamera.SetVelocity(-glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime);
+			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
+		}
+		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
+			double x, y;
+			glfwGetCursorPos(window->GetHandle(), &x, &y);
+			glfwSetCursorPos(window->GetHandle(), 0, 0);
+			if (x != 0 || y != 0) {
+				horizontalAngle += double(x * mouseSensitivity * deltaTime);
+				verticalAngle -= double(y * mouseSensitivity * deltaTime);
+				if (verticalAngle < -1.5) verticalAngle = -1.5;
+				if (verticalAngle > 1.5) verticalAngle = 1.5;
+				renderer->mainCamera.SetViewDirection(
+					cos(verticalAngle) * sin(horizontalAngle),
+					cos(verticalAngle) * cos(horizontalAngle),
+					sin(verticalAngle)
+				);
+			}
+		}
 		
 		SLEEP(10ms)
 	}
