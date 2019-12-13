@@ -26,8 +26,8 @@ namespace v4d::graphics {
 		glm::dvec3 viewDirection {};
 		glm::dvec3 worldPosition {};
 		glm::dvec3 velocity {};
-		glm::mat4 view {};
-		glm::mat4 projection {};
+		glm::dmat4 view {};
+		glm::dmat4 projection {};
 		
 		// Images
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
@@ -121,6 +121,18 @@ namespace v4d::graphics {
 		}
 		glm::dvec3 GetVelocity() const {
 			return velocity;
+		}
+		
+		Image* GetTmpImage() {
+			return &tmpImage;
+		}
+		
+		glm::dmat4& GetProjectionMatrix() {
+			return projection;
+		}
+		
+		glm::dmat4 GetViewMatrix() {
+			return view;
 		}
 		
 		#pragma endregion

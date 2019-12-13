@@ -21,7 +21,8 @@ int main() {
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
 	auto* renderer = new V4DRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
-	
+	renderer->InitRenderer();
+	renderer->ReadShaders();
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	

@@ -104,6 +104,9 @@ private: // Renderer Configuration methods
 		
 	}
 
+	void InitLayouts() override {}
+	void ConfigureShaders() override {}
+	
 	void CreateResources() override {
 		// Main color attachment
 		colorImage.Create(
@@ -215,7 +218,6 @@ public: // Scene configuration methods
 		galaxyGenShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		galaxyGenShader->depthStencilState.depthTestEnable = VK_FALSE;
 		galaxyGenShader->SetData(galaxiesBuffer, galaxies.size());
-		galaxyGenShader->LoadShaders();
 
 		
 		// Galaxy Box
@@ -232,7 +234,6 @@ public: // Scene configuration methods
 		galaxyBoxShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		galaxyBoxShader->depthStencilState.depthTestEnable = VK_FALSE;
 		galaxyBoxShader->SetData(4);
-		galaxyBoxShader->LoadShaders();
 		
 		
 		
@@ -247,7 +248,6 @@ public: // Scene configuration methods
 		galaxyFadeShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		galaxyFadeShader->depthStencilState.depthTestEnable = VK_FALSE;
 		galaxyFadeShader->SetData(6);
-		galaxyFadeShader->LoadShaders();
 		
 		
 		
@@ -334,7 +334,6 @@ public: // Scene configuration methods
 			{3, offsetof(Vertex, Vertex::color), VK_FORMAT_R32G32B32A32_SFLOAT},
 		});
 		testShader->SetData(vertexBuffer, indexBuffer);
-		testShader->LoadShaders();
 		
 		// Post processing
 		// Shader program
@@ -347,7 +346,6 @@ public: // Scene configuration methods
 		ppShader->depthStencilState.depthTestEnable = VK_FALSE;
 		ppShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		ppShader->SetData(3);
-		ppShader->LoadShaders();
 		
 		
 		// Compute shader
@@ -355,7 +353,6 @@ public: // Scene configuration methods
 		galaxiesComputeDescriptorSet->AddBinding_imageView(0, &galaxyCubeImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
 		galaxyGenPipelineLayout.AddDescriptorSet(galaxiesComputeDescriptorSet);
 		computeTestShader = new ComputeShaderPipeline(galaxyGenPipelineLayout, "incubator_rendering/assets/shaders/compute_test.comp");
-		computeTestShader->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -390,6 +387,15 @@ public: // Scene configuration methods
 		postProcessingPipelineLayout.Reset();
 		galaxyGenPipelineLayout.Reset();
 		galaxyBoxPipelineLayout.Reset();
+	}
+
+	void ReadShaders() override {
+		galaxyGenShader->ReadShaders();
+		galaxyBoxShader->ReadShaders();
+		galaxyFadeShader->ReadShaders();
+		testShader->ReadShaders();
+		ppShader->ReadShaders();
+		computeTestShader->ReadShaders();
 	}
 
 protected: // Graphics configuration
@@ -701,13 +707,6 @@ protected: // Graphics configuration
 protected: // Commands
 	
 	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer commandBuffer) {
-		
-		// Begin Render Pass
-		VkRenderPassBeginInfo renderPassInfo = {};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		// Defines the size of the render area, which defines where shader loads and stores will take place. The pixels outside this region will have undefined values. It should match the size of the attachments for best performance.
-		renderPassInfo.renderArea.offset = {0, 0};
-		renderPassInfo.renderArea.extent = {galaxyCubeImage.width, galaxyCubeImage.height};
 		
 		// Conditional rendering
 		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {

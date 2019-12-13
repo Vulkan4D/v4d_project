@@ -16,6 +16,7 @@ int main() {
 	
 	// Instanciate Renderer (this is also a Vulkan instance wrapper)
 	auto* renderer = new MinimalRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+	renderer->InitRenderer();
 	renderer->LoadRenderer();
 	
 	// Render loop

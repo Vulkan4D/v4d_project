@@ -8,12 +8,20 @@ class HelloWorldRenderer : public v4d::graphics::Renderer {
 	
 	RenderPass renderPass;
 	PipelineLayout testLayout;
-	RasterShaderPipeline* testShader;
+	RasterShaderPipeline testShader {testLayout, {
+		"incubator_rendering/assets/shaders/verybasic.vert",
+		"incubator_rendering/assets/shaders/verybasic.frag",
+	}};
 
 private: // Init
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
 	void Init() override {}
 	void Info() override {}
+	void InitLayouts() override {}
+	void ConfigureShaders() override {
+		testShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		testShader.SetData(4);
+	}
 
 private: // Resources
 	void CreateResources() override {}
@@ -25,7 +33,6 @@ private: // Graphics configuration
 	void CreatePipelines() override {
 		// Pipeline layouts
 		testLayout.Create(renderingDevice);
-		
 		// Color Attachment (Fragment shader Standard Output)
 		VkAttachmentDescription colorAttachment = {};
 			colorAttachment.format = swapChain->format.format;
@@ -53,25 +60,24 @@ private: // Graphics configuration
 		renderPass.CreateFrameBuffers(renderingDevice, swapChain);
 		
 		// Shaders
-		testShader->SetRenderPass(&swapChain->viewportState, renderPass.handle, 0);
-		testShader->AddColorBlendAttachmentState();
-		testShader->CreatePipeline(renderingDevice);
+		testShader.SetRenderPass(&swapChain->viewportState, renderPass.handle, 0);
+		testShader.AddColorBlendAttachmentState();
+		testShader.CreatePipeline(renderingDevice);
 	}
 	void DestroyPipelines() override {
-		testShader->DestroyPipeline(renderingDevice);
+		testShader.DestroyPipeline(renderingDevice);
 		renderPass.DestroyFrameBuffers(renderingDevice);
 		renderPass.Destroy(renderingDevice);
 		testLayout.Destroy(renderingDevice);
 	}
 	
 private: // Commands
+	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		renderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
-		testShader->Execute(renderingDevice, commandBuffer);
+		testShader.Execute(renderingDevice, commandBuffer);
 		renderPass.End(renderingDevice, commandBuffer);
 	}
-	
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
 	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
 	void RunDynamicCompute(VkCommandBuffer) override {}
@@ -80,21 +86,12 @@ private: // Commands
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 public: // Scene configuration
-	void LoadScene() override {
-		// Shader program
-		testShader = new RasterShaderPipeline(testLayout, {
-			"incubator_rendering/assets/shaders/verybasic.vert",
-			"incubator_rendering/assets/shaders/verybasic.frag",
-		});
-		testShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		testShader->SetData(4);
-		testShader->LoadShaders();
+	void LoadScene() override {}
+	void UnloadScene() override {}
+	void ReadShaders() override {
+		testShader.ReadShaders();
 	}
 
-	void UnloadScene() override {
-		delete testShader;
-	}
-	
 public: // Update
 	void FrameUpdate(uint imageIndex) override {}
 	void LowPriorityFrameUpdate() override {}

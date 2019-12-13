@@ -112,8 +112,7 @@ private: // Ray Tracing stuff
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
 	
 	Image rayTracingStorageImage {
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-		1,1,true,true
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 	};
 	float rayTracingImageScale = 2;
 	
@@ -433,6 +432,9 @@ private: // Renderer Configuration methods
 	void Info() override {
 		RayTracingInfo();
 	}
+	
+	void InitLayouts() override {}
+	void ConfigureShaders() override {}
 
 	void CreateResources() override {
 		CreateRayTracingResources();
@@ -567,7 +569,6 @@ public: // Scene configuration methods
 			&rayTracingBottomLevelAccelerationStructures[1]
 		});
 		
-		shaderBindingTable->LoadShaders();
 	}
 
 	void UnloadScene() override {
@@ -596,6 +597,10 @@ public: // Scene configuration methods
 			delete set;
 		}
 		descriptorSets.clear();
+	}
+	
+	void ReadShaders() override {
+		shaderBindingTable->ReadShaders();
 	}
 
 protected: // Graphics configuration

@@ -10,6 +10,8 @@ private: // Init
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
 	void Init() override {}
 	void Info() override {}
+	void InitLayouts() override {}
+	void ConfigureShaders() override {}
 
 private: // Resources
 	void CreateResources() override {}
@@ -37,6 +39,7 @@ private: // Commands
 public: // Scene configuration
 	void LoadScene() override {}
 	void UnloadScene() override {}
+	void ReadShaders() override {}
 	
 public: // Update
 	void FrameUpdate(uint imageIndex) override {}
