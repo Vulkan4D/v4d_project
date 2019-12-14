@@ -12,10 +12,14 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	float uiImageScale = 1.0;
 	
 	// Buffers
-	// Buffer viewUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(ViewUBO), true};
+	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
 	std::vector<Buffer*> stagedBuffers {};
 	
-	// Galaxy rendering
+	// UI
+	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM }};
+	
+	#pragma region Galaxy rendering
+	
 	CubeMapImage galaxyCubeMapImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 	CubeMapImage galaxyDepthStencilCubeMapImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT , { VK_FORMAT_D32_SFLOAT_S8_UINT }};
 	RenderPass galaxyGenRenderPass, galaxyFadeRenderPass;
@@ -37,21 +41,34 @@ class V4DRenderer : public v4d::graphics::Renderer {
 		"incubator_rendering/assets/shaders/v4d_galaxy.fade.frag",
 	}};
 	
-	PipelineLayout postProcessingPipelineLayout;
+	#pragma endregion
+	
+	// Main render passes
+	RenderPass	opaqueRasterPass,
+				opaqueLightingPass,
+				transparentRasterPass,
+				transparentLightingPass,
+				postProcessingRenderPass;
+	
+	#pragma region Shaders
+	
+	std::vector<RasterShaderPipeline*> opaqueRasterizationShaders {};
+	std::vector<RasterShaderPipeline*> transparentRasterizationShaders {};
+	PipelineLayout lightingPipelineLayout, postProcessingPipelineLayout;
+	RasterShaderPipeline opaqueLightingShader {lightingPipelineLayout, {
+		"incubator_rendering/assets/shaders/v4d_lighting.vert",
+		"incubator_rendering/assets/shaders/v4d_lighting.opaque.frag",
+	}};
+	RasterShaderPipeline transparentLightingShader {lightingPipelineLayout, {
+		"incubator_rendering/assets/shaders/v4d_lighting.vert",
+		"incubator_rendering/assets/shaders/v4d_lighting.transparent.frag",
+	}};
 	RasterShaderPipeline postProcessingShader {postProcessingPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
 		"incubator_rendering/assets/shaders/v4d_postProcessing.frag",
 	}};
-	RenderPass postProcessingRenderPass;
 	
-	// UI
-	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM }};
-	
-	// temporary render pass
-	RenderPass	opaqueRasterPass,
-				opaqueLightingPass,
-				transparentRasterPass,
-				transparentLightingPass;
+	#pragma endregion
 	
 	#pragma region Temporary galaxy stuff
 	
@@ -98,22 +115,29 @@ private: // Init
 			{2, offsetof(Galaxy, Galaxy::numStars), VK_FORMAT_R32_UINT},
 		});
 		
-		/////////
-		
+		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
+		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
+		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		// Galaxy Box
-		auto* galaxyBoxDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(0, &galaxyCubeMapImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		galaxyBoxPipelineLayout.AddDescriptorSet(galaxyBoxDescriptorSet);
+		auto* galaxyBoxDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		galaxyBoxDescriptorSet_1->AddBinding_combinedImageSampler(0, &galaxyCubeMapImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		galaxyBoxPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
+		galaxyBoxPipelineLayout.AddDescriptorSet(galaxyBoxDescriptorSet_1);
 		galaxyBoxPipelineLayout.AddPushConstant<GalaxyBoxPushConstant>(VK_SHADER_STAGE_VERTEX_BIT);
 		
-		
-		/////////
+		// Lighting pass
+		auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+			gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &mainCamera.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		lightingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
+		lightingPipelineLayout.AddDescriptorSet(gBuffersDescriptorSet_1);
 		
 		// Post-Processing
-		auto* postProcessingDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
-		postProcessingDescriptorSet->AddBinding_combinedImageSampler(0, mainCamera.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet);
+		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &mainCamera.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
+		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
 	}
 	
@@ -180,8 +204,8 @@ private: // Resources
 		// Staged Buffers
 		AllocateBuffersStaged(transferQueue, stagedBuffers);
 		// Other buffers
-		// viewUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		// viewUniformBuffer.MapMemory(renderingDevice);
+		cameraUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		cameraUniformBuffer.MapMemory(renderingDevice);
 	}
 	
 	void FreeBuffers() override {
@@ -190,8 +214,8 @@ private: // Resources
 		}
 
 		// Other buffers
-		// viewUniformBuffer.UnmapMemory(renderingDevice);
-		// viewUniformBuffer.Free(renderingDevice);
+		cameraUniformBuffer.UnmapMemory(renderingDevice);
+		cameraUniformBuffer.Free(renderingDevice);
 	}
 
 private: // Graphics configuration
@@ -200,6 +224,7 @@ private: // Graphics configuration
 		galaxyGenPipelineLayout.Create(renderingDevice);
 		galaxyBoxPipelineLayout.Create(renderingDevice);
 		postProcessingPipelineLayout.Create(renderingDevice);
+		lightingPipelineLayout.Create(renderingDevice);
 		
 		{// Galaxy Gen render pass
 			// Color Attachment (Fragment shader Standard Output)
@@ -288,331 +313,174 @@ private: // Graphics configuration
 		}
 		
 		{// Opaque Raster pass
-			// Color Attachment (Fragment shader Standard Output)
-			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = mainCamera.GetTmpImage()->format;
-				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				// Color and depth data
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-									/*	VK_ATTACHMENT_LOAD_OP_LOAD = Preserve the existing contents of the attachment
-										VK_ATTACHMENT_LOAD_OP_CLEAR = Clear the values to a constant at the start
-										VK_ATTACHMENT_LOAD_OP_DONT_CARE = Existing contents are undefined, we dont care about them (faster but may cause glitches if not set properly I guess)
-									*/
-				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-									/*	VK_ATTACHMENT_STORE_OP_STORE = Rendered contents contents will be stored in memory and can be renad later (Need this to see something on the screen in the case of o_color)
-										VK_ATTACHMENT_STORE_OP_DONT_CARE = Contents of the framebuffer will be undefined after rendering operation (Ignore this data ??)
-									*/
-				// Stencil data
-				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				// Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format, however the layout of the pixels in memory can change based on what you're trying to do with an image.
-				// The InitialLayout specifies wich layout the image will have before the render pass begins. 
-				// The finalLayout specifies the layout to automatically transition to when the render pass finishes. 
-				// Using VK_IMAGE_LAYOUT_UNDEFINED for initialLayout means that we dont care what previous layout the image was in. 
-				// The caveat of this special value is that the contents of the image are not guaranteed to be preserved, but that doesnt matter since were going to clear it anyway. 
-				// We want the image to be ready for presentation using the swap chain after rendering, which is why we use VK_IMAGE_LAYOUT_PRESENT_SRC_KHR as finalLayout.
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-										/*	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = Images used as color attachment (use this for color attachment with multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = Images to be presented in the swap chain (use this for color attachment when no multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = Images to be used as destination for a memory copy operation
-										*/
-				// A single render pass can consist of multiple subpasses.
-				// Subpasses are subsequent rendering operations that depend on the contents of framebuffers in previous passes, for example a sequence of post-processing effects that are applied one after another. 
-				// If you group these rendering operations into one render pass, then vulkan is able to reorder the operations and conserve memory bandwidth for possibly better preformance. 
-				// Every subpass references one or more of the attachments that we've described using the structure in the previous sections. 
-				// These references are themselves VkAttachmentReference structs that look like this:
-			VkAttachmentReference colorAttachmentRef = {
-				opaqueRasterPass.AddAttachment(colorAttachment), // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
-			// The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array.
-			// Our array consists of a single VkAttachmentDescription, so its index is 0. 
-			// The layout specifies which layout we would like the attachment to have during a subpass that uses this reference.
-			// Vulkan will automatically transition the attachment to this layout when the subpass is started.
-			// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
-
-			
+			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> colorAttachments {};
+			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
+			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i) {
+				// Format
+				colorAttachments[i].format = mainCamera.GetGBuffer(i).format;
+				colorAttachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+				// Color
+				colorAttachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				colorAttachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil
+				colorAttachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				colorAttachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				// Layout
+				colorAttachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				colorAttachments[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				colorAttachmentRefs[i] = {
+					opaqueRasterPass.AddAttachment(colorAttachments[i]),
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				};
+			}
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
 			opaqueRasterPass.AddSubpass(subpass);
-			// The following other types of attachments can be referenced by a subpass :
-				// pInputAttachments : attachments that are read from a shader
-				// pResolveAttachments : attachments used for multisampling color attachments
-				// pDepthStencilAttachments : attachments for depth and stencil data
-				// pPreserveAttachments : attachments that are not used by this subpass, but for which the data must be preserved
-			// Render pass
-			// Now that the attachment and a basic subpass refencing it have been described, we can create the render pass itself.
-			// The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments and subpasses. 
-			// The VkAttachmentReference objects reference attachments using the indices of this array.
-
-			// Render Pass Dependencies
-			// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
-			// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
-			// There are two ways to deal with this problem.
-			// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
-			// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-
+			
 			// Create the render pass
 			opaqueRasterPass.Create(renderingDevice);
-			opaqueRasterPass.CreateFrameBuffers(renderingDevice, *mainCamera.GetTmpImage());
+			opaqueRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
 			
 			// Shaders
-			for (auto* shaderPipeline : {&galaxyBoxShader}) {
-				shaderPipeline->SetRenderPass(mainCamera.GetTmpImage(), opaqueRasterPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState();
+			for (auto* shaderPipeline : opaqueRasterizationShaders) {
+				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), opaqueRasterPass.handle, 0);
+				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
 		
-		if (false) {// Opaque Lighting pass
-			// Color Attachment (Fragment shader Standard Output)
+		{// Opaque Lighting pass
 			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = mainCamera.GetTmpImage()->format;
+				colorAttachment.format = mainCamera.GetTmpImage().format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 				// Color and depth data
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-									/*	VK_ATTACHMENT_LOAD_OP_LOAD = Preserve the existing contents of the attachment
-										VK_ATTACHMENT_LOAD_OP_CLEAR = Clear the values to a constant at the start
-										VK_ATTACHMENT_LOAD_OP_DONT_CARE = Existing contents are undefined, we dont care about them (faster but may cause glitches if not set properly I guess)
-									*/
 				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-									/*	VK_ATTACHMENT_STORE_OP_STORE = Rendered contents contents will be stored in memory and can be renad later (Need this to see something on the screen in the case of o_color)
-										VK_ATTACHMENT_STORE_OP_DONT_CARE = Contents of the framebuffer will be undefined after rendering operation (Ignore this data ??)
-									*/
 				// Stencil data
 				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				// Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format, however the layout of the pixels in memory can change based on what you're trying to do with an image.
-				// The InitialLayout specifies wich layout the image will have before the render pass begins. 
-				// The finalLayout specifies the layout to automatically transition to when the render pass finishes. 
-				// Using VK_IMAGE_LAYOUT_UNDEFINED for initialLayout means that we dont care what previous layout the image was in. 
-				// The caveat of this special value is that the contents of the image are not guaranteed to be preserved, but that doesnt matter since were going to clear it anyway. 
-				// We want the image to be ready for presentation using the swap chain after rendering, which is why we use VK_IMAGE_LAYOUT_PRESENT_SRC_KHR as finalLayout.
 				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-										/*	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = Images used as color attachment (use this for color attachment with multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = Images to be presented in the swap chain (use this for color attachment when no multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = Images to be used as destination for a memory copy operation
-										*/
-				// A single render pass can consist of multiple subpasses.
-				// Subpasses are subsequent rendering operations that depend on the contents of framebuffers in previous passes, for example a sequence of post-processing effects that are applied one after another. 
-				// If you group these rendering operations into one render pass, then vulkan is able to reorder the operations and conserve memory bandwidth for possibly better preformance. 
-				// Every subpass references one or more of the attachments that we've described using the structure in the previous sections. 
-				// These references are themselves VkAttachmentReference structs that look like this:
-			VkAttachmentReference colorAttachmentRef = {
-				opaqueLightingPass.AddAttachment(colorAttachment), // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			std::array<VkAttachmentReference, 1> colorAttachmentRefs {
+				{
+					opaqueLightingPass.AddAttachment(colorAttachment),
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				}
 			};
-			// The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array.
-			// Our array consists of a single VkAttachmentDescription, so its index is 0. 
-			// The layout specifies which layout we would like the attachment to have during a subpass that uses this reference.
-			// Vulkan will automatically transition the attachment to this layout when the subpass is started.
-			// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
-
+			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> inputAttachmentRefs {};
+			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+				inputAttachmentRefs[i] = {(uint)i, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 			
 			// SubPass
-			VkSubpassDescription subpass = {};
+			VkSubpassDescription subpass {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.inputAttachmentCount = inputAttachmentRefs.size();
+				subpass.pInputAttachments = inputAttachmentRefs.data();
 			opaqueLightingPass.AddSubpass(subpass);
-			// The following other types of attachments can be referenced by a subpass :
-				// pInputAttachments : attachments that are read from a shader
-				// pResolveAttachments : attachments used for multisampling color attachments
-				// pDepthStencilAttachments : attachments for depth and stencil data
-				// pPreserveAttachments : attachments that are not used by this subpass, but for which the data must be preserved
-			// Render pass
-			// Now that the attachment and a basic subpass refencing it have been described, we can create the render pass itself.
-			// The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments and subpasses. 
-			// The VkAttachmentReference objects reference attachments using the indices of this array.
-
-			// Render Pass Dependencies
-			// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
-			// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
-			// There are two ways to deal with this problem.
-			// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
-			// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-
+			
 			// Create the render pass
 			opaqueLightingPass.Create(renderingDevice);
-			opaqueLightingPass.CreateFrameBuffers(renderingDevice, *mainCamera.GetTmpImage());
+			opaqueLightingPass.CreateFrameBuffers(renderingDevice, mainCamera.GetTmpImage());
 			
 			// Shaders
-			for (auto* shaderPipeline : {&galaxyBoxShader}) {
-				shaderPipeline->SetRenderPass(mainCamera.GetTmpImage(), opaqueLightingPass.handle, 0);
+			for (auto* shaderPipeline : {&galaxyBoxShader, &opaqueLightingShader}) {
+				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), opaqueLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
 		
-		if (false) {// Transparent Raster pass
-			// Color Attachment (Fragment shader Standard Output)
-			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = mainCamera.GetTmpImage()->format;
-				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				// Color and depth data
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-									/*	VK_ATTACHMENT_LOAD_OP_LOAD = Preserve the existing contents of the attachment
-										VK_ATTACHMENT_LOAD_OP_CLEAR = Clear the values to a constant at the start
-										VK_ATTACHMENT_LOAD_OP_DONT_CARE = Existing contents are undefined, we dont care about them (faster but may cause glitches if not set properly I guess)
-									*/
-				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-									/*	VK_ATTACHMENT_STORE_OP_STORE = Rendered contents contents will be stored in memory and can be renad later (Need this to see something on the screen in the case of o_color)
-										VK_ATTACHMENT_STORE_OP_DONT_CARE = Contents of the framebuffer will be undefined after rendering operation (Ignore this data ??)
-									*/
-				// Stencil data
-				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				// Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format, however the layout of the pixels in memory can change based on what you're trying to do with an image.
-				// The InitialLayout specifies wich layout the image will have before the render pass begins. 
-				// The finalLayout specifies the layout to automatically transition to when the render pass finishes. 
-				// Using VK_IMAGE_LAYOUT_UNDEFINED for initialLayout means that we dont care what previous layout the image was in. 
-				// The caveat of this special value is that the contents of the image are not guaranteed to be preserved, but that doesnt matter since were going to clear it anyway. 
-				// We want the image to be ready for presentation using the swap chain after rendering, which is why we use VK_IMAGE_LAYOUT_PRESENT_SRC_KHR as finalLayout.
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-										/*	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = Images used as color attachment (use this for color attachment with multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = Images to be presented in the swap chain (use this for color attachment when no multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = Images to be used as destination for a memory copy operation
-										*/
-				// A single render pass can consist of multiple subpasses.
-				// Subpasses are subsequent rendering operations that depend on the contents of framebuffers in previous passes, for example a sequence of post-processing effects that are applied one after another. 
-				// If you group these rendering operations into one render pass, then vulkan is able to reorder the operations and conserve memory bandwidth for possibly better preformance. 
-				// Every subpass references one or more of the attachments that we've described using the structure in the previous sections. 
-				// These references are themselves VkAttachmentReference structs that look like this:
-			VkAttachmentReference colorAttachmentRef = {
-				transparentRasterPass.AddAttachment(colorAttachment), // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
-			// The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array.
-			// Our array consists of a single VkAttachmentDescription, so its index is 0. 
-			// The layout specifies which layout we would like the attachment to have during a subpass that uses this reference.
-			// Vulkan will automatically transition the attachment to this layout when the subpass is started.
-			// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
-
-			
+		{// Transparent Raster pass
+			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> colorAttachments {};
+			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
+			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i) {
+				// Format
+				colorAttachments[i].format = mainCamera.GetGBuffer(i).format;
+				colorAttachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+				// Color
+				colorAttachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				colorAttachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil
+				colorAttachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				colorAttachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				// Layout
+				colorAttachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				colorAttachments[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				colorAttachmentRefs[i] = {
+					transparentRasterPass.AddAttachment(colorAttachments[i]),
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				};
+			}
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
 			transparentRasterPass.AddSubpass(subpass);
-			// The following other types of attachments can be referenced by a subpass :
-				// pInputAttachments : attachments that are read from a shader
-				// pResolveAttachments : attachments used for multisampling color attachments
-				// pDepthStencilAttachments : attachments for depth and stencil data
-				// pPreserveAttachments : attachments that are not used by this subpass, but for which the data must be preserved
-			// Render pass
-			// Now that the attachment and a basic subpass refencing it have been described, we can create the render pass itself.
-			// The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments and subpasses. 
-			// The VkAttachmentReference objects reference attachments using the indices of this array.
-
-			// Render Pass Dependencies
-			// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
-			// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
-			// There are two ways to deal with this problem.
-			// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
-			// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-
+			
 			// Create the render pass
 			transparentRasterPass.Create(renderingDevice);
-			transparentRasterPass.CreateFrameBuffers(renderingDevice, *mainCamera.GetTmpImage());
+			transparentRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
 			
 			// Shaders
-			for (auto* shaderPipeline : {&galaxyBoxShader}) {
-				shaderPipeline->SetRenderPass(mainCamera.GetTmpImage(), transparentRasterPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState();
+			for (auto* shaderPipeline : transparentRasterizationShaders) {
+				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), transparentRasterPass.handle, 0);
+				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
 		
-		if (false) {// Transparent Lighting pass
-			// Color Attachment (Fragment shader Standard Output)
+		{// Transparent Lighting pass
 			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = mainCamera.GetTmpImage()->format;
+				colorAttachment.format = mainCamera.GetTmpImage().format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 				// Color and depth data
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-									/*	VK_ATTACHMENT_LOAD_OP_LOAD = Preserve the existing contents of the attachment
-										VK_ATTACHMENT_LOAD_OP_CLEAR = Clear the values to a constant at the start
-										VK_ATTACHMENT_LOAD_OP_DONT_CARE = Existing contents are undefined, we dont care about them (faster but may cause glitches if not set properly I guess)
-									*/
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-									/*	VK_ATTACHMENT_STORE_OP_STORE = Rendered contents contents will be stored in memory and can be renad later (Need this to see something on the screen in the case of o_color)
-										VK_ATTACHMENT_STORE_OP_DONT_CARE = Contents of the framebuffer will be undefined after rendering operation (Ignore this data ??)
-									*/
 				// Stencil data
 				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				// Textures and framebuffers in Vulkan are represented by VkImage objects with a certain pixel format, however the layout of the pixels in memory can change based on what you're trying to do with an image.
-				// The InitialLayout specifies wich layout the image will have before the render pass begins. 
-				// The finalLayout specifies the layout to automatically transition to when the render pass finishes. 
-				// Using VK_IMAGE_LAYOUT_UNDEFINED for initialLayout means that we dont care what previous layout the image was in. 
-				// The caveat of this special value is that the contents of the image are not guaranteed to be preserved, but that doesnt matter since were going to clear it anyway. 
-				// We want the image to be ready for presentation using the swap chain after rendering, which is why we use VK_IMAGE_LAYOUT_PRESENT_SRC_KHR as finalLayout.
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-										/*	VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = Images used as color attachment (use this for color attachment with multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = Images to be presented in the swap chain (use this for color attachment when no multisampling, adapt rendering pipeline)
-											VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = Images to be used as destination for a memory copy operation
-										*/
-				// A single render pass can consist of multiple subpasses.
-				// Subpasses are subsequent rendering operations that depend on the contents of framebuffers in previous passes, for example a sequence of post-processing effects that are applied one after another. 
-				// If you group these rendering operations into one render pass, then vulkan is able to reorder the operations and conserve memory bandwidth for possibly better preformance. 
-				// Every subpass references one or more of the attachments that we've described using the structure in the previous sections. 
-				// These references are themselves VkAttachmentReference structs that look like this:
-			VkAttachmentReference colorAttachmentRef = {
-				transparentLightingPass.AddAttachment(colorAttachment), // layout(location = 0) for output data in the fragment shader
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			std::array<VkAttachmentReference, 1> colorAttachmentRefs {
+				{
+					transparentLightingPass.AddAttachment(colorAttachment),
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				}
 			};
-			// The attachment parameter specifies which attachment to reference by its index in the attachment descriptions array.
-			// Our array consists of a single VkAttachmentDescription, so its index is 0. 
-			// The layout specifies which layout we would like the attachment to have during a subpass that uses this reference.
-			// Vulkan will automatically transition the attachment to this layout when the subpass is started.
-			// We intend to use the attachment to function as a color buffer and the VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL layout will give us the best performance, as its name implies.
-
+			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> inputAttachmentRefs {};
+			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+				inputAttachmentRefs[i] = {(uint)i, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 			
 			// SubPass
-			VkSubpassDescription subpass = {};
+			VkSubpassDescription subpass {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.inputAttachmentCount = inputAttachmentRefs.size();
+				subpass.pInputAttachments = inputAttachmentRefs.data();
 			transparentLightingPass.AddSubpass(subpass);
-			// The following other types of attachments can be referenced by a subpass :
-				// pInputAttachments : attachments that are read from a shader
-				// pResolveAttachments : attachments used for multisampling color attachments
-				// pDepthStencilAttachments : attachments for depth and stencil data
-				// pPreserveAttachments : attachments that are not used by this subpass, but for which the data must be preserved
-			// Render pass
-			// Now that the attachment and a basic subpass refencing it have been described, we can create the render pass itself.
-			// The render pass object can then be created by filling in the VkRenderPassCreateInfo structure with an array of attachments and subpasses. 
-			// The VkAttachmentReference objects reference attachments using the indices of this array.
-
-			// Render Pass Dependencies
-			// There are two built-in dependencies that take care of the transition at the start of the render pass and at the end of the render pass, 
-			// but the former does not occur at the right time. It assumes that the transition occurs at the start of the pipeline, but we haven't aquired the image yet at that point.
-			// There are two ways to deal with this problem.
-			// We could change the waitStage for the imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT to ensure that the render passes dont begin until the image is available, 
-			// or we can make the render pass wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage, which is the option that we are using here.
-
+			
 			// Create the render pass
 			transparentLightingPass.Create(renderingDevice);
-			transparentLightingPass.CreateFrameBuffers(renderingDevice, *mainCamera.GetTmpImage());
+			transparentLightingPass.CreateFrameBuffers(renderingDevice, mainCamera.GetTmpImage());
 			
 			// Shaders
-			for (auto* shaderPipeline : {&galaxyBoxShader}) {
-				shaderPipeline->SetRenderPass(mainCamera.GetTmpImage(), transparentLightingPass.handle, 0);
+			for (auto* shaderPipeline : {&transparentLightingShader}) {
+				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), transparentLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
 		
 		{// Post Processing render pass
-			// Color Attachment (Fragment shader Standard Output)
 			VkAttachmentDescription colorAttachment = {};
 				colorAttachment.format = swapChain->format.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -646,23 +514,23 @@ private: // Graphics configuration
 	}
 	
 	void DestroyPipelines() override {
-		for (auto* shaderPipeline : {&galaxyBoxShader}) {
+		for (ShaderPipeline* shaderPipeline : {&galaxyBoxShader, &opaqueLightingShader, &transparentLightingShader}) {
+			shaderPipeline->DestroyPipeline(renderingDevice);
+		}
+		for (ShaderPipeline* shaderPipeline : opaqueRasterizationShaders) {
+			shaderPipeline->DestroyPipeline(renderingDevice);
+		}
+		for (ShaderPipeline* shaderPipeline : transparentRasterizationShaders) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		opaqueRasterPass.DestroyFrameBuffers(renderingDevice);
 		opaqueRasterPass.Destroy(renderingDevice);
-		if (false) {
-			opaqueLightingPass.DestroyFrameBuffers(renderingDevice);
-			opaqueLightingPass.Destroy(renderingDevice);
-		}
-		if (false) {
-			transparentRasterPass.DestroyFrameBuffers(renderingDevice);
-			transparentRasterPass.Destroy(renderingDevice);
-		}
-		if (false) {
-			transparentLightingPass.DestroyFrameBuffers(renderingDevice);
-			transparentLightingPass.Destroy(renderingDevice);
-		}
+		opaqueLightingPass.DestroyFrameBuffers(renderingDevice);
+		opaqueLightingPass.Destroy(renderingDevice);
+		transparentRasterPass.DestroyFrameBuffers(renderingDevice);
+		transparentRasterPass.Destroy(renderingDevice);
+		transparentLightingPass.DestroyFrameBuffers(renderingDevice);
+		transparentLightingPass.Destroy(renderingDevice);
 		
 		// Galaxy Gen
 		galaxyGenShader.DestroyPipeline(renderingDevice);
@@ -686,14 +554,14 @@ private: // Graphics configuration
 		galaxyGenPipelineLayout.Destroy(renderingDevice);
 		galaxyBoxPipelineLayout.Destroy(renderingDevice);
 		postProcessingPipelineLayout.Destroy(renderingDevice);
+		lightingPipelineLayout.Destroy(renderingDevice);
 	}
 	
 private: // Commands
 	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		
 		// Post Processing
-		TransitionImageLayout(commandBuffer, *mainCamera.GetTmpImage(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(commandBuffer, mainCamera.GetTmpImage(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		postProcessingShader.Execute(renderingDevice, commandBuffer);
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
@@ -705,24 +573,29 @@ private: // Commands
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
 		// Opaque Raster pass
-		opaqueRasterPass.Begin(renderingDevice, commandBuffer, *mainCamera.GetTmpImage(), {{.0,.0,.0,.0}, {1.0,.0}});
-		galaxyBoxShader.Execute(renderingDevice, commandBuffer, &galaxyBoxPushConstant);
+		opaqueRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
+			for (auto* shaderPipeline : opaqueRasterizationShaders) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		opaqueRasterPass.End(renderingDevice, commandBuffer);
+	
+		// Opaque Lighting pass
+		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
+			galaxyBoxShader.Execute(renderingDevice, commandBuffer, &galaxyBoxPushConstant);
+			opaqueLightingShader.Execute(renderingDevice, commandBuffer);
+		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
-		// // Opaque Lighting pass
-		// opaqueLightingPass.Begin(renderingDevice, commandBuffer, ******, {{.0,.0,.0,.0}, {1.0,.0}});
-		// ***.Execute(renderingDevice, commandBuffer);
-		// opaqueLightingPass.End(renderingDevice, commandBuffer);
+		// Transparent Raster pass
+		transparentRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
+			for (auto* shaderPipeline : transparentRasterizationShaders) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
+		transparentRasterPass.End(renderingDevice, commandBuffer);
 		
-		// // Transparent Raster pass
-		// transparentRasterPass.Begin(renderingDevice, commandBuffer, ******, {{.0,.0,.0,.0}, {1.0,.0}});
-		// ***.Execute(renderingDevice, commandBuffer);
-		// transparentRasterPass.End(renderingDevice, commandBuffer);
-		
-		// // Transparent Lighting pass
-		// transparentLightingPass.Begin(renderingDevice, commandBuffer, ******, {{.0,.0,.0,.0}, {1.0,.0}});
-		// ***.Execute(renderingDevice, commandBuffer);
-		// transparentLightingPass.End(renderingDevice, commandBuffer);
+		// Transparent Lighting pass
+		transparentLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage());
+			transparentLightingShader.Execute(renderingDevice, commandBuffer);
+		transparentLightingPass.End(renderingDevice, commandBuffer);
 		
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
@@ -790,12 +663,11 @@ public: // Update
 		mainCamera.RefreshProjectionMatrix();
 		mainCamera.RefreshViewMatrix();
 		
-		// // Update UBO
-		// ViewUBO ubo {
-		// 	mainCamera.GetProjectionMatrix(),
-		// 	mainCamera.GetViewMatrix()
-		// };
-		// viewUniformBuffer.WriteToMappedData(renderingDevice, &ubo);
+		// Update and Write UBO
+		mainCamera.RefreshProjectionMatrix();
+		mainCamera.RefreshViewMatrix();
+		mainCamera.RefreshUBO();
+		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
 		
 		// Update Push Constants
 		galaxyBoxPushConstant.inverseProjectionView = glm::inverse(mainCamera.GetProjectionViewMatrix());

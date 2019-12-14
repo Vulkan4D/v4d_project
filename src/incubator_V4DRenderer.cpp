@@ -94,8 +94,9 @@ int main() {
 	std::thread lowPriorityRenderingThread([&]{
 		while (appRunning) {
 			std::this_thread::yield();
+			if (!appRunning) break;
 			renderer->RenderLowPriority();
-			SLEEP(10ms)
+			// SLEEP(10ms)
 		}
 	});
 	

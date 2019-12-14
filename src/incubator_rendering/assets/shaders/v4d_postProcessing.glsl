@@ -4,6 +4,8 @@ precision highp int;
 precision highp float;
 precision highp sampler2D;
 
+#include "_v4d_baseDescriptorSet.glsl"
+
 ##################################################################
 #shader vert
 
@@ -20,7 +22,7 @@ void main()
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
-layout(set = 0, binding = 0) uniform sampler2D image;
+layout(set = 1, binding = 0) uniform sampler2D image;
 
 void main() {
 	vec3 color = texture(image, uv).xyz;

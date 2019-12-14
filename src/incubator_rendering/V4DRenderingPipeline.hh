@@ -2,10 +2,11 @@
 
 namespace v4d::graphics {
 
-	// struct ViewUBO {
-	// 	glm::dmat4 proj;
-	// 	glm::dmat4 view;
-	// };
+	struct CameraUBO {
+		glm::dmat4 origin;
+		glm::mat4 projection;
+		glm::mat4 relativeView;
+	};
 	
 	struct GalaxyGenPushConstant {
 		glm::dvec3 cameraPosition; // 24

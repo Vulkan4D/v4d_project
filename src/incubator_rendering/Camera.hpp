@@ -4,6 +4,9 @@
 
 namespace v4d::graphics {
 	class Camera {
+	public:
+		static const int GBUFFER_NB_IMAGES = 8;
+		
 	protected:
 		
 		// Configuration
@@ -23,11 +26,14 @@ namespace v4d::graphics {
 		VkExtent2D extent {0,0};
 		
 		// Dynamic variables
-		glm::dvec3 viewDirection {};
-		glm::dvec3 worldPosition {};
-		glm::dvec3 velocity {};
-		glm::dmat4 view {};
-		glm::dmat4 projection {};
+		glm::dvec3 viewDirection {0,1,0};
+		glm::dvec3 worldPosition {0};
+		glm::dvec3 viewUp = {0,0,1};
+		glm::dvec3 velocity {0};
+		glm::dmat4 view {1};
+		glm::dmat4 projection {1};
+		glm::dmat4 origin = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
+		CameraUBO ubo {};
 		
 		// Images
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
@@ -44,15 +50,15 @@ namespace v4d::graphics {
 			EMISSION = 6, 	// rgb32_sfloat
 			POSITION = 7 	// rgb32_sfloat
 		};
-		std::array<Image, 8> gBuffers {
-			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
-			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM }},
-			/* ROUGHNESS */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* METALLIC */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* SCATTER */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* OCCLUSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
-			/* POSITION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
+		std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
+			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
+			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM }},
+			/* ROUGHNESS */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
+			/* METALLIC */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
+			/* SCATTER */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
+			/* OCCLUSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
+			/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
+			/* POSITION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
 		};
 		
 	public:
@@ -123,8 +129,16 @@ namespace v4d::graphics {
 			return velocity;
 		}
 		
-		Image* GetTmpImage() {
-			return &tmpImage;
+		Image& GetTmpImage() {
+			return tmpImage;
+		}
+		
+		Image& GetGBuffer(int index) {
+			return gBuffers[index];
+		}
+		
+		std::array<Image, GBUFFER_NB_IMAGES>& GetGBuffers() {
+			return gBuffers;
 		}
 		
 		glm::dmat4& GetProjectionMatrix() {
@@ -139,15 +153,36 @@ namespace v4d::graphics {
 			return projection * view;
 		}
 		
+		CameraUBO& GetUBO() {
+			return ubo;
+		}
+		
+		std::vector<VkClearValue> GetGBuffersClearValues() {
+			std::vector<VkClearValue> clearValues(GBUFFER_NB_IMAGES);
+			for (int i = 0; i < GBUFFER_NB_IMAGES; ++i)
+				clearValues[i] = {.0,.0,.0,.0};
+			return clearValues;
+		}
+		
+		void SetOrigin(glm::dvec3 worldPosition, glm::dvec3 lookDirection = {0,1,0}, glm::dvec3 up = {0,0,1}) {
+			origin = glm::lookAt(worldPosition, worldPosition + lookDirection, up);
+		}
+		
 		#pragma endregion
 		
 		void RefreshViewMatrix() {
-			view = glm::lookAt(worldPosition, worldPosition + viewDirection, glm::dvec3(0,0,1));
+			view = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
 		}
 		
 		void RefreshProjectionMatrix() {
 			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, near, far);
 			projection[1][1] *= -1;
+		}
+		
+		void RefreshUBO() {
+			ubo.origin = origin;
+			ubo.projection = projection;
+			ubo.relativeView = glm::inverse(origin) * view;
 		}
 		
 		void CreateResources(Device* device) {
