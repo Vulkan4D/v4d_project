@@ -2,14 +2,18 @@
 
 namespace v4d::graphics {
 
-	struct ViewUBO {
-		glm::dmat4 proj;
-		glm::dmat4 view;
+	// struct ViewUBO {
+	// 	glm::dmat4 proj;
+	// 	glm::dmat4 view;
+	// };
+	
+	struct GalaxyGenPushConstant {
+		glm::dvec3 cameraPosition; // 24
+		int frameIndex; // 4
 	};
 	
-	struct GalaxyUBO {
-		glm::dvec4 cameraPosition;
-		int galaxyFrameIndex;
+	struct GalaxyBoxPushConstant {
+		glm::dmat4 inverseProjectionView {1}; // 128
 	};
 
 	// enum RENDER_PIPELINE_TYPE {

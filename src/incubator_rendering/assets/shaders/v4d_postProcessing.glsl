@@ -1,6 +1,10 @@
 #version 460 core
-#extension GL_ARB_separate_shader_objects : enable
 
+precision highp int;
+precision highp float;
+precision highp sampler2D;
+
+##################################################################
 #shader vert
 
 layout (location = 0) out vec2 outUV;
@@ -12,16 +16,13 @@ void main()
 }
 
 ##################################################################
-
 #shader frag
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 0, binding = 0) uniform sampler2D image;
-// layout(set = 0, binding = 1) uniform sampler2D oitBuffer;
 
 void main() {
-	// vec4 oit = texture(oitBuffer, uv);
 	vec3 color = texture(image, uv).xyz;
 	
 	// Post processing here
@@ -34,7 +35,6 @@ void main() {
 	// // Gamma correction 
 	// const float gamma = 2.2;
 	// color = pow(color, vec3(1.0 / gamma));
-	
 	
 	
 	out_color = vec4(color, 1.0);

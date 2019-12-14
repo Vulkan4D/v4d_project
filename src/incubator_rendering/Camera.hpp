@@ -131,8 +131,12 @@ namespace v4d::graphics {
 			return projection;
 		}
 		
-		glm::dmat4 GetViewMatrix() {
+		glm::dmat4& GetViewMatrix() {
 			return view;
+		}
+		
+		glm::dmat4 GetProjectionViewMatrix() {
+			return projection * view;
 		}
 		
 		#pragma endregion

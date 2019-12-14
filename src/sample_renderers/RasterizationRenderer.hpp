@@ -203,9 +203,9 @@ public: // Scene configuration methods
 		galaxyGenPipelineLayout.AddDescriptorSet(galaxiesDescriptorSet);
 		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		galaxyGenShader = new RasterShaderPipeline(galaxyGenPipelineLayout, {
-			"incubator_rendering/assets/shaders/galaxy.gen.geom",
-			"incubator_rendering/assets/shaders/galaxy.gen.vert",
-			"incubator_rendering/assets/shaders/galaxy.gen.frag",
+			"incubator_rendering/assets/shaders/v4d_galaxy.gen.geom",
+			"incubator_rendering/assets/shaders/v4d_galaxy.gen.vert",
+			"incubator_rendering/assets/shaders/v4d_galaxy.gen.frag",
 		});
 		galaxyGenShader->AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX /*VK_VERTEX_INPUT_RATE_INSTANCE*/, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
@@ -226,8 +226,8 @@ public: // Scene configuration methods
 		galaxyBoxDescriptorSet->AddBinding_combinedImageSampler(1, &galaxyCubeImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		galaxyBoxPipelineLayout.AddDescriptorSet(galaxyBoxDescriptorSet);
 		galaxyBoxShader = new RasterShaderPipeline(galaxyBoxPipelineLayout, {
-			"incubator_rendering/assets/shaders/galaxy.box.vert",
-			"incubator_rendering/assets/shaders/galaxy.box.frag",
+			"incubator_rendering/assets/shaders/v4d_galaxy.box.vert",
+			"incubator_rendering/assets/shaders/v4d_galaxy.box.frag",
 		});
 		galaxyBoxShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		galaxyBoxShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
@@ -239,9 +239,9 @@ public: // Scene configuration methods
 		
 		// Galaxy Fade
 		galaxyFadeShader = new RasterShaderPipeline(galaxyBoxPipelineLayout, {
-			"incubator_rendering/assets/shaders/galaxy.fade.vert",
-			"incubator_rendering/assets/shaders/galaxy.fade.geom",
-			"incubator_rendering/assets/shaders/galaxy.fade.frag",
+			"incubator_rendering/assets/shaders/v4d_galaxy.fade.vert",
+			"incubator_rendering/assets/shaders/v4d_galaxy.fade.geom",
+			"incubator_rendering/assets/shaders/v4d_galaxy.fade.frag",
 		});
 		galaxyFadeShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 		galaxyFadeShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
@@ -338,8 +338,8 @@ public: // Scene configuration methods
 		// Post processing
 		// Shader program
 		ppShader = new RasterShaderPipeline(postProcessingPipelineLayout, {
-			"incubator_rendering/assets/shaders/postProcessing.vert",
-			"incubator_rendering/assets/shaders/postProcessing.frag",
+			"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
+			"incubator_rendering/assets/shaders/v4d_postProcessing.frag",
 		});
 		ppShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		ppShader->rasterizer.cullMode = VK_CULL_MODE_NONE;

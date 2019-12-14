@@ -1,20 +1,18 @@
 #version 460 core
-#extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shader_viewport_layer_array : enable
 
-layout(set = 0, binding = 0) uniform UBO {
-	dmat4 proj;
-	dmat4 view;
-	// dvec4 velocity;
-} viewUbo;
+precision highp int;
+precision highp float;
+precision highp sampler2D;
 
-layout(set = 0, binding = 1) uniform GalaxyUBO {
-	dvec4 cameraPosition;
-	int galaxyFrameIndex;
-} galaxyUbo;
+#common gen.*
+
+layout(std430, push_constant) uniform GalaxyGenPushConstant {
+	dvec3 cameraPosition;
+	int frameIndex;
+} galaxyGen;
 
 ##################################################################
-
 #shader gen.vert
 
 layout(location = 0) in vec4 posr;
@@ -26,12 +24,11 @@ layout(location = 1) out uint out_numStars;
 
 void main() {
 	gl_Position = posr; // passthrough
-	out_seed = seed + galaxyUbo.galaxyFrameIndex;
+	out_seed = seed + galaxyGen.frameIndex;
 	out_numStars = numStars;
 }
 
 ##################################################################
-
 #shader gen.geom
 
 #include "_noise.glsl"
@@ -62,7 +59,7 @@ void main(void) {
 	uint fseed = seed + 15;
 	
 	// position relative to camera
-	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyUbo.cameraPosition.xyz);
+	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyGen.cameraPosition.xyz);
 	
 	float radius = gl_in[0].gl_Position.w;
 	
@@ -155,7 +152,6 @@ void main(void) {
 }
 
 ##################################################################
-
 #shader gen.frag
 
 layout(location = 0) in vec4 in_color;
@@ -167,7 +163,6 @@ void main() {
 }
 
 ##################################################################
-
 #shader fade.vert
 
 layout(location = 0) out int index;
@@ -177,7 +172,6 @@ void main() {
 }
 
 ##################################################################
-
 #shader fade.geom
 
 layout(points) in;
@@ -203,7 +197,6 @@ void main(void) {
 }
 
 ##################################################################
-
 #shader fade.frag
 
 layout(location = 0) out vec4 out_color;
@@ -213,8 +206,11 @@ void main() {
 }
 
 ##################################################################
-
 #shader box.vert
+
+layout(push_constant) uniform GalaxyBoxPushConstant {
+	dmat4 inverseProjectionView;
+} galaxyBox;
 
 layout(location = 0) out vec3 out_dir;
 
@@ -223,22 +219,17 @@ void main() {
 	dvec2 pos = vec2((gl_VertexIndex & 2)>>1, 1-(gl_VertexIndex & 1)) * 2.0 - 1.0;
 	gl_Position = vec4(vec2(pos), 0, 1);
 	// output direction of vertex into world
-	out_dir = vec3(normalize(inverse(viewUbo.proj * viewUbo.view) * dvec4(pos, 1, 1)).xyz);
+	out_dir = vec3(normalize(galaxyBox.inverseProjectionView * dvec4(pos, 1, 1)).xyz);
 }
 
 ##################################################################
-
 #shader box.frag
 
 layout(location = 0) in vec3 in_dir;
 layout(location = 0) out vec4 out_color;
 
-layout(set = 0, binding = 1) uniform samplerCube galaxyBox;
+layout(set = 0, binding = 0) uniform samplerCube galaxyBox;
 
 void main() {
-	// vec3 velocityDir = vec3(normalize(viewUbo.velocity.xyz));
-	// float dotVelocity = dot(in_dir, velocityDir);
-	// out_color = texture(galaxyBox, mix(in_dir, velocityDir*-1, dotVelocity/2 * float(viewUbo.velocity.w)));
 	out_color = texture(galaxyBox, in_dir);
 }
-
