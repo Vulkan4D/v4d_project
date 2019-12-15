@@ -23,25 +23,8 @@ void main()
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 1, binding = 0) uniform sampler2D tmpImage;
-layout(set = 1, binding = 1) uniform sampler2D uiImage;
 
 void main() {
-	vec3 color = texture(tmpImage, uv).rgb;
-	vec4 ui = texture(uiImage, uv);
-	
-	// Post processing here
-	//...
-	
-	// // HDR ToneMapping (Reinhard)
-	// const float exposure = 1.0;
-	// color = vec3(1.0) - exp(-color * exposure);
-	
-	// // Gamma correction 
-	// const float gamma = 2.2;
-	// color = pow(color, vec3(1.0 / gamma));
-	
-	
-	// Output final color
-	out_color = vec4(mix(color.rgb, ui.rgb, ui.a), 1.0);
+	out_color = vec4(texture(tmpImage, uv).rgb, 1.0);
 }
 

@@ -9,7 +9,7 @@ precision highp sampler2D;
 #common .*surface\.frag
 
 // G-Buffers
-layout(location = 0) out highp vec3 gBuffer_albedo;
+layout(location = 0) out highp vec4 gBuffer_albedo;
 layout(location = 1) out lowp  vec3 gBuffer_normal;
 layout(location = 2) out lowp float gBuffer_roughness;
 layout(location = 3) out lowp float gBuffer_metallic;
@@ -31,10 +31,10 @@ void main()
 
 #shader opaque.surface.frag
 void main() {
-	gBuffer_albedo = vec3(0,1,0);
+	gBuffer_albedo = vec4(0,1,0, 1);
 }
 
 #shader transparent.surface.frag
 void main() {
-	gBuffer_albedo = vec3(0,1,0);
+	gBuffer_albedo = vec4(0,1,0, 1);
 }

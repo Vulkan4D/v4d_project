@@ -152,7 +152,6 @@ target_include_directories(incubator
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk"
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw/include"
 		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/Vulkan-Headers/include"
-		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glm"
 )
 target_compile_definitions(incubator
 	PRIVATE -D_V4D_PROJECT

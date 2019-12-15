@@ -11,8 +11,8 @@ namespace v4d::graphics {
 		
 		// Configuration
 		double fov = 70;
-		double near = 0.01;
-		double far = 1.5e17; // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
+		double znear = 0.01;
+		double zfar = 1.5e17; // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		
 		// Resolution scaling
 		float rasterizationResolutionScale = 1.0;
@@ -37,7 +37,7 @@ namespace v4d::graphics {
 		
 		// Images
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		Image thumbnailImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
+		Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT };
 		Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		DepthStencilImage depthStencilImage {};
 		enum GBUFFER : int {
@@ -51,7 +51,7 @@ namespace v4d::graphics {
 			POSITION = 7 	// rgb32_sfloat
 		};
 		std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
-			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT }},
+			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }},
 			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM }},
 			/* ROUGHNESS */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
 			/* METALLIC */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
@@ -69,10 +69,10 @@ namespace v4d::graphics {
 			fov = angle;
 		}
 		void SetNearField(double nearField) {
-			near = nearField;
+			znear = nearField;
 		}
 		void SetFarField(double farField) {
-			far = farField;
+			zfar = farField;
 		}
 		
 		void SetRenderTarget(SwapChain* target, VkOffset2D offset = {0,0}, VkExtent2D extent = {0,0}) {
@@ -133,6 +133,10 @@ namespace v4d::graphics {
 			return tmpImage;
 		}
 		
+		Image& GetThumbnailImage() {
+			return thumbnailImage;
+		}
+		
 		Image& GetGBuffer(int index) {
 			return gBuffers[index];
 		}
@@ -175,7 +179,7 @@ namespace v4d::graphics {
 		}
 		
 		void RefreshProjectionMatrix() {
-			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, near, far);
+			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
 			projection[1][1] *= -1;
 		}
 		

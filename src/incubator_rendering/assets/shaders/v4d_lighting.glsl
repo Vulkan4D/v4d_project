@@ -12,17 +12,17 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 
 // G-Buffers
-layout(set = 1, input_attachment_index = 0, binding = 0) uniform highp subpassInput gBuffer_albedo;
-layout(set = 1, input_attachment_index = 1, binding = 1) uniform lowp  subpassInput gBuffer_normal;
-layout(set = 1, input_attachment_index = 2, binding = 2) uniform lowp  subpassInput gBuffer_roughness;
-layout(set = 1, input_attachment_index = 3, binding = 3) uniform lowp  subpassInput gBuffer_metallic;
-layout(set = 1, input_attachment_index = 4, binding = 4) uniform lowp  subpassInput gBuffer_scatter;
-layout(set = 1, input_attachment_index = 5, binding = 5) uniform lowp  subpassInput gBuffer_occlusion;
-layout(set = 1, input_attachment_index = 6, binding = 6) uniform highp subpassInput gBuffer_emission;
-layout(set = 1, input_attachment_index = 7, binding = 7) uniform highp subpassInput gBuffer_position;
+layout(set = 1, input_attachment_index = 1, binding = 0) uniform highp subpassInput gBuffer_albedo;
+layout(set = 1, input_attachment_index = 2, binding = 1) uniform lowp  subpassInput gBuffer_normal;
+layout(set = 1, input_attachment_index = 3, binding = 2) uniform lowp  subpassInput gBuffer_roughness;
+layout(set = 1, input_attachment_index = 4, binding = 3) uniform lowp  subpassInput gBuffer_metallic;
+layout(set = 1, input_attachment_index = 5, binding = 4) uniform lowp  subpassInput gBuffer_scatter;
+layout(set = 1, input_attachment_index = 6, binding = 5) uniform lowp  subpassInput gBuffer_occlusion;
+layout(set = 1, input_attachment_index = 7, binding = 6) uniform highp subpassInput gBuffer_emission;
+layout(set = 1, input_attachment_index = 8, binding = 7) uniform highp subpassInput gBuffer_position;
 
 struct GBuffer {
-	highp vec3 albedo;
+	highp vec4 albedo;
 	lowp  vec3 normal;
 	lowp float roughness;
 	lowp float metallic;
@@ -34,7 +34,7 @@ struct GBuffer {
 
 GBuffer LoadGBuffer() {
 	return GBuffer(
-		subpassLoad(gBuffer_albedo).rgb,
+		subpassLoad(gBuffer_albedo).rgba,
 		subpassLoad(gBuffer_normal).xyz,
 		subpassLoad(gBuffer_roughness).s,
 		subpassLoad(gBuffer_metallic).s,
@@ -61,13 +61,15 @@ void main()
 #shader opaque.frag
 void main() {
 	GBuffer gBuffer = LoadGBuffer();
-	vec3 color = gBuffer.albedo;
-	out_color = vec4(color, 1.0);
+	vec3 color = gBuffer.albedo.rgb;
+	float alpha = gBuffer.albedo.a;
+	out_color = vec4(color, alpha);
 }
 
 #shader transparent.frag
 void main() {
 	GBuffer gBuffer = LoadGBuffer();
-	vec3 color = gBuffer.albedo;
-	out_color = vec4(color, 1.0);
+	vec3 color = gBuffer.albedo.rgb;
+	float alpha = gBuffer.albedo.a;
+	out_color = vec4(color, alpha);
 }
