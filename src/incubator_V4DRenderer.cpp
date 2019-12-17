@@ -21,6 +21,11 @@ int main() {
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
 	auto* renderer = new V4DRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+	renderer->preferredPresentModes = {
+		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
+		VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
+		VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
+	};
 	renderer->InitRenderer();
 	renderer->ReadShaders();
 	renderer->LoadScene();

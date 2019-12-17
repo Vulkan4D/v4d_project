@@ -733,7 +733,6 @@ private: // Graphics configuration
 	}
 	
 private: // Commands
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		// Gen Thumbnail
 		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, mainCamera.GetThumbnailImage(), {{.0,.0,.0,.0}});
@@ -743,10 +742,10 @@ private: // Commands
 		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		postProcessingShader.Execute(renderingDevice, commandBuffer);
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
+		
+		// After swapchain recreation, we need to reset this
+		galaxyFrameIndex = 0;
 	}
-	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
-	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
-	void RunDynamicCompute(VkCommandBuffer) override {}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
 		// Opaque Raster pass
@@ -783,7 +782,7 @@ private: // Commands
 		}
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
-		if (continuousGalaxyGen) {
+		if (continuousGalaxyGen || galaxyFrameIndex < galaxyConvergences) {
 			// Galaxy Gen
 			galaxyGenRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeMapImage);
 			galaxyGenShader.Execute(renderingDevice, commandBuffer, &galaxyGenPushConstant);
@@ -865,9 +864,8 @@ public: // Update
 	}
 	void LowPriorityFrameUpdate() override {
 		// Galaxy convergence
-		const int convergences = 10;
 		galaxyFrameIndex++;
-		if (galaxyFrameIndex > convergences) galaxyFrameIndex = continuousGalaxyGen? 0 : convergences;
+		if (galaxyFrameIndex > galaxyConvergences) galaxyFrameIndex = continuousGalaxyGen? 0 : galaxyConvergences;
 		
 		// Update Push Constants
 		galaxyGenPushConstant.cameraPosition = mainCamera.GetWorldPosition();
@@ -875,6 +873,7 @@ public: // Update
 	}
 	
 public: // ubo/conditional member variables
+	int galaxyConvergences = 10;
 	bool continuousGalaxyGen = true;
 	int galaxyFrameIndex = 0;
 	

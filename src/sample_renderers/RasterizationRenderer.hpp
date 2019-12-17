@@ -706,8 +706,22 @@ protected: // Graphics configuration
 	
 protected: // Commands
 	
-	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer commandBuffer) {
+	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+		renderPass.Begin(renderingDevice, commandBuffer, colorImage, {{.0,.0,.0,.0}, {1.0,.0}});
+		galaxyBoxShader->Execute(renderingDevice, commandBuffer);
+		testShader->Execute(renderingDevice, commandBuffer);
+		renderPass.End(renderingDevice, commandBuffer);
 		
+		// Post Processing
+		TransitionImageLayout(commandBuffer, colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, ppImage, {{.0,.0,.0,.0}}, imageIndex);
+		ppShader->Execute(renderingDevice, commandBuffer);
+		postProcessingRenderPass.End(renderingDevice, commandBuffer);
+	}
+	
+	void RunDynamicGraphics(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
 		// Conditional rendering
 		VkConditionalRenderingBeginInfoEXT conditionalRenderingInfo {
 			VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT,// VkStructureType sType
@@ -735,28 +749,7 @@ protected: // Commands
 		galaxyFadeShader->Execute(renderingDevice, commandBuffer);
 		galaxyFadeRenderPass.End(renderingDevice, commandBuffer);
 		renderingDevice->CmdEndConditionalRenderingEXT(commandBuffer);
-		
 	}
-	
-	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		renderPass.Begin(renderingDevice, commandBuffer, colorImage, {{.0,.0,.0,.0}, {1.0,.0}});
-		galaxyBoxShader->Execute(renderingDevice, commandBuffer);
-		testShader->Execute(renderingDevice, commandBuffer);
-		renderPass.End(renderingDevice, commandBuffer);
-		
-		// Post Processing
-		TransitionImageLayout(commandBuffer, colorImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, ppImage, {{.0,.0,.0,.0}}, imageIndex);
-		ppShader->Execute(renderingDevice, commandBuffer);
-		postProcessingRenderPass.End(renderingDevice, commandBuffer);
-	}
-	
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
-	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
-	void RunDynamicCompute(VkCommandBuffer) override {}
-	void RunDynamicGraphics(VkCommandBuffer) override {}
-	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
-	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 protected: // Methods executed on every frame
 	void FrameUpdate(uint imageIndex) override {

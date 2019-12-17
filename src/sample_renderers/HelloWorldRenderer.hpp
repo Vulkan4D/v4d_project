@@ -72,15 +72,11 @@ private: // Graphics configuration
 	}
 	
 private: // Commands
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		renderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		testShader.Execute(renderingDevice, commandBuffer);
 		renderPass.End(renderingDevice, commandBuffer);
 	}
-	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
-	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
-	void RunDynamicCompute(VkCommandBuffer) override {}
 	void RunDynamicGraphics(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}

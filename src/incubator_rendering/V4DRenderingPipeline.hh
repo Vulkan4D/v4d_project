@@ -16,6 +16,10 @@ namespace v4d::graphics {
 	struct GalaxyBoxPushConstant {
 		glm::dmat4 inverseProjectionView {1}; // 128
 	};
+	
+	// struct StandardPushConstant {
+	// 	glm::
+	// };
 
 	// enum RENDER_PIPELINE_TYPE {
 	// 	RECORDED,

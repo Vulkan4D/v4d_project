@@ -696,10 +696,6 @@ private: // Commands
 		TransitionImageLayout(commandBuffer, rayTracingStorageImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
-	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
-	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
-	void RunDynamicCompute(VkCommandBuffer) override {}
 	void RunDynamicGraphics(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}

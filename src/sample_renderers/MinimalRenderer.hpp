@@ -24,14 +24,10 @@ private: // Graphics configuration
 	void DestroyPipelines() override {}
 	
 private: // Commands
-	void RecordComputeCommandBuffer(VkCommandBuffer, int imageIndex) override {}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		// Current SwapChain Image must be in the correct layout before presenting, this is the minimum requirement for the renderer to work
 		TransitionImageLayout(commandBuffer, swapChain->images[imageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
-	void RecordLowPriorityComputeCommandBuffer(VkCommandBuffer) override {}
-	void RecordLowPriorityGraphicsCommandBuffer(VkCommandBuffer) override {}
-	void RunDynamicCompute(VkCommandBuffer) override {}
 	void RunDynamicGraphics(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
