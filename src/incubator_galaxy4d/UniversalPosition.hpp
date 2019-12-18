@@ -14,6 +14,8 @@
 #define LY2M(n)		(n * 9.461E+15)
 #define M2LY(n)		(n * 1.056970721911E-16)
 
+//TODO UniverseGridSizeAt(gridX, gridY, gridZ) using QuickNoiseIntegral(vec3, 3)
+
 struct GalaxyID {
 	union {
 		long id = 0;
