@@ -14,8 +14,6 @@
 #define LY2M(n)		(n * 9.461E+15)
 #define M2LY(n)		(n * 1.056970721911E-16)
 
-//TODO UniverseGridSizeAt(gridX, gridY, gridZ) using QuickNoiseIntegral(vec3, 3)
-
 struct GalaxyID {
 	union {
 		long id = 0;
@@ -24,8 +22,8 @@ struct GalaxyID {
 			int gridX : 16;
 			int gridY : 16;
 			int gridZ : 16;
-			// Based on UniverseGridSizeAt(gridX, gridY, gridZ)
-			// 	(0) or (-2,-1,+0,+1) or (-16 to +15)
+			// Based on UniverseSubGridSize({gridX, gridY, gridZ})
+			// 	from 1(0) to 32(-16 to +15)
 			int subGridX : 5;
 			int subGridY : 5;
 			int subGridZ : 5;
@@ -69,7 +67,7 @@ struct CelestialID {
 };
 
 struct UniversalPosition {
-	enum : byte {
+	enum TYPE : byte {
 		INVALID = 0,
 		UNIVERSE_GRID_AU = 1,
 		RELATIVE_TO_CELESTIAL = 2,
@@ -87,10 +85,10 @@ struct UniversalPosition {
 		CelestialID celestialID;
 	};
 	
-	UniversalPosition(byte t = INVALID)
+	UniversalPosition(TYPE t = INVALID)
 	 : type(t) {}
-	UniversalPosition(long x, long y, long z, byte t = UNIVERSE_GRID_AU)
+	UniversalPosition(long x, long y, long z, TYPE t = UNIVERSE_GRID_AU)
 	 : type(t), universeX(x), universeY(y), universeZ(z) {}
-	UniversalPosition(GalaxyID galaxy, CelestialSystemID celestialSystem = 0, CelestialID celestial = 0)
-	 : type(RELATIVE_TO_CELESTIAL), galaxyID(galaxy.id), celestialSystemID(celestialSystem.id), celestialID(celestial.id) {}
+	// UniversalPosition(GalaxyID galaxy, CelestialSystemID celestialSystem = 0, CelestialID celestial = 0)
+	//  : type(RELATIVE_TO_CELESTIAL), galaxyID(galaxy.id), celestialSystemID(celestialSystem.id), celestialID(celestial.id) {}
 };

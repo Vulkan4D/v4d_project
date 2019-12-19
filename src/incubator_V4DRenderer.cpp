@@ -8,7 +8,17 @@ Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
 
+#define SET_CPU_AFFINITY(n) \
+	cpu_set_t cpuset;\
+	CPU_ZERO(&cpuset);\
+	CPU_SET(std::min((int)std::thread::hardware_concurrency()-1, n), &cpuset);\
+	int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);\
+	if (rc != 0) {\
+		LOG_ERROR("Error calling pthread_setaffinity_np: " << rc)\
+	}
+	
 int main() {
+	SET_CPU_AFFINITY(0)
 	
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
@@ -89,6 +99,7 @@ int main() {
 
 	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
+		SET_CPU_AFFINITY(1)
 		while (appRunning) {
 			//...
 			SLEEP(10ms)
@@ -97,6 +108,7 @@ int main() {
 	
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
+		SET_CPU_AFFINITY(2)
 		while (appRunning) {
 			std::this_thread::yield();
 			if (!appRunning) break;
@@ -107,6 +119,7 @@ int main() {
 	
 	// Rendering Loop
 	std::thread renderingThread([&]{
+		SET_CPU_AFFINITY(3)
 		// Frame timer
 		v4d::Timer timer(true);
 		double elapsedTime = 0;
@@ -132,6 +145,7 @@ int main() {
 	});
 	
 	while (window->IsActive()) {
+		SET_CPU_AFFINITY(1)
 		
 		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
 		

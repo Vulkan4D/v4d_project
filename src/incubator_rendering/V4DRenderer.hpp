@@ -3,6 +3,9 @@
 #include "V4DRenderingPipeline.hh"
 #include "Camera.hpp"
 
+#include "../incubator_galaxy4d/Noise.hpp"
+// #include "../incubator_galaxy4d/UniversalPosition.hpp"
+
 using namespace v4d::graphics;
 
 class V4DRenderer : public v4d::graphics::Renderer {
@@ -89,22 +92,8 @@ class V4DRenderer : public v4d::graphics::Renderer {
 		int numStars;
 	};
 	std::vector<Galaxy> galaxies {};
-	uint RandomInt(uint& seed) {
-		// LCG values from Numerical Recipes
-		return (seed = 1664525 * seed + 1013904223);
-	}
-	float RandomFloat(uint& seed) {
-		// Float version using bitmask from Numerical Recipes
-		const uint one = 0x3f800000;
-		const uint msk = 0x007fffff;
-		return glm::uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
-	}
-	glm::vec3 RandomInUnitSphere(uint& seed) {
-		for (;;) {
-			glm::vec3 p = 2.0f * glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1.0f;
-			if (dot(p, p) < 1) return p;
-		}
-	}
+	Buffer galaxiesBuffer { VK_BUFFER_USAGE_VERTEX_BUFFER_BIT };
+	bool galaxiesGenerated = false;
 	
 	#pragma endregion
 	
@@ -256,6 +245,11 @@ private: // Resources
 		for (auto& buffer : stagedBuffers) {
 			buffer->Free(renderingDevice);
 		}
+		
+		// Galaxies
+		galaxiesBuffer.Free(renderingDevice);
+		galaxies.clear();
+		galaxiesGenerated = false;
 
 		// Other buffers
 		cameraUniformBuffer.UnmapMemory(renderingDevice);
@@ -797,27 +791,6 @@ private: // Commands
 public: // Scene configuration
 	void LoadScene() override {
 		
-		// Galaxy Gen (temporary stuff)
-		uint seed = 1;
-		for (int x = -64; x < 63; ++x) {
-			for (int y = -64; y < 63; ++y) {
-				for (int z = -8; z < 7; ++z) {
-					float centerFactor = 1.0f - glm::length(glm::vec3((float)x,(float)y,(float)z))/180.0f;
-					if (centerFactor > 0.0) {
-						auto offset = RandomInUnitSphere(seed)*2.84f;
-						galaxies.push_back({
-							{x*5+offset.x, y*5+offset.y, z*5+offset.z, glm::pow(centerFactor, 25)*10}, x*y*z*3+5, (int)(glm::pow(centerFactor, 8)*50.0f)
-						});
-					}
-				}
-			}
-		}
-		
-		// Galaxy Gen
-		Buffer* galaxiesBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		galaxiesBuffer->AddSrcDataPtr(&galaxies);
-		galaxyGenShader.SetData(galaxiesBuffer, galaxies.size());
-		
 	}
 	
 	void ReadShaders() override {
@@ -842,9 +815,6 @@ public: // Scene configuration
 			delete buffer;
 		}
 		stagedBuffers.clear();
-		
-		// Galaxies
-		galaxies.clear();
 	}
 	
 public: // Update
@@ -863,6 +833,48 @@ public: // Update
 		galaxyBoxPushConstant.inverseProjectionView = glm::inverse(mainCamera.GetProjectionViewMatrix());
 	}
 	void LowPriorityFrameUpdate() override {
+		
+		// Generate galaxies
+		if (!galaxiesGenerated && galaxies.size() == 0) {
+			const int neighborGridsToLoadPerAxis = 1;
+			galaxies.reserve((size_t)(pow(1+neighborGridsToLoadPerAxis*2, 3)*pow(32, 3)/10));
+			// Galaxy Gen (temporary stuff)
+			for (int gridX = -neighborGridsToLoadPerAxis; gridX <= neighborGridsToLoadPerAxis; ++gridX) {
+				for (int gridY = -neighborGridsToLoadPerAxis; gridY <= neighborGridsToLoadPerAxis; ++gridY) {
+					for (int gridZ = -neighborGridsToLoadPerAxis; gridZ <= neighborGridsToLoadPerAxis; ++gridZ) {
+						int subGridSize = v4d::noise::UniverseSubGridSize({gridX,gridY,gridZ});
+						for (int x = 0; x < subGridSize; ++x) {
+							for (int y = 0; y < subGridSize; ++y) {
+								for (int z = 0; z < subGridSize; ++z) {
+									glm::vec3 galaxyPositionInGrid = {
+										float(gridX) + float(x)/float(subGridSize),
+										float(gridY) + float(y)/float(subGridSize),
+										float(gridZ) + float(z)/float(subGridSize)
+									};
+									float galaxySizeFactor = v4d::noise::GalaxySizeFactorInUniverseGrid(galaxyPositionInGrid);
+									if (galaxySizeFactor > 0.0f) {
+										// For each existing galaxy
+										galaxies.push_back({
+											glm::vec4(galaxyPositionInGrid + v4d::noise::Noise3(galaxyPositionInGrid)/float(subGridSize), galaxySizeFactor/subGridSize/2.0f),
+											x*y*z*3+5,
+											80
+										});
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			LOG("Number of Galaxies generated : " << galaxies.size())
+			galaxiesBuffer.Free(renderingDevice);
+			galaxiesBuffer.ResetSrcData();
+			galaxiesBuffer.AddSrcDataPtr(&galaxies);
+			galaxyGenShader.SetData(&galaxiesBuffer, galaxies.size());
+			AllocateBufferStaged(lowPriorityGraphicsQueue, galaxiesBuffer);
+			galaxiesGenerated = true;
+		}
+		
 		// Galaxy convergence
 		galaxyFrameIndex++;
 		if (galaxyFrameIndex > galaxyConvergences) galaxyFrameIndex = continuousGalaxyGen? 0 : galaxyConvergences;

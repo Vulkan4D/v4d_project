@@ -1,6 +1,6 @@
 // helpers functions
 vec4 _permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} // used for Simplex
-vec3 _random3(vec3 pos) { // used for FastSimplex
+vec3 Noise3(vec3 pos) { // used for FastSimplex
 	float j = 4096.0*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
 	vec3 r;
 	r.z = fract(512.0*j);
@@ -10,7 +10,7 @@ vec3 _random3(vec3 pos) { // used for FastSimplex
 	r.y = fract(512.0*j);
 	return r-0.5;
 }
-dvec3 _random3(dvec3 pos) { // used for FastSimplex
+dvec3 Noise3(dvec3 pos) { // used for FastSimplex
 	double j = 4096.0*sin(dot(pos,dvec3(17.0, 59.4, 15.0)));
 	dvec3 r;
 	r.z = fract(512.0*j);
@@ -72,7 +72,7 @@ double Noise(dvec2 pos) {
 
 
 // simple-precision Simplex noise, suitable for pos range (-1M, +1M) with a step of 0.001 and gradient of 1.0
-// Returns a float value between 0.000 and 1.000 with a distribution that strongly tends towards the center (0.5)
+// Returns a float value between -1.000 and +1.000 with a distribution that strongly tends towards the center (0.5)
 float Simplex(vec3 pos){
 	const vec2 C = vec2(1.0/6.0, 1.0/3.0);
 	const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
@@ -126,7 +126,7 @@ float Simplex(vec3 pos){
 	p3 *= norm.w;
 
 	vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-	return (42.0 * dot(m*m*m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)))) / 2. + .5;
+	return 42.0 * dot(m*m*m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 }
 double Simplex(dvec3 pos){
 	const dvec2 C = dvec2(1.0/6.0, 1.0/3.0);
@@ -181,12 +181,12 @@ double Simplex(dvec3 pos){
 	p3 *= norm.w;
 
 	dvec4 m = max(0.6 - dvec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-	return (42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)))) / 2. + .5;
+	return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 }
 
 
 // Faster Simplex noise, less precise and not well tested, seems suitable for pos ranges (-10k, +10k) with a step of 0.01 and gradient of 0.5
-// Returns a float value between 0.00 and 1.00 with a distribution that strongly tends towards the center (0.5)
+// Returns a float value between -1.00 and +1.00 with a distribution that strongly tends towards the center (0.5)
 float FastSimplex(vec3 pos) {
 	const float F3 = 0.3333333;
 	const float G3 = 0.1666667;
@@ -211,16 +211,16 @@ float FastSimplex(vec3 pos) {
 
 	w = max(0.6 - w, 0.0);
 
-	d.x = dot(_random3(s), x);
-	d.y = dot(_random3(s + i1), x1);
-	d.z = dot(_random3(s + i2), x2);
-	d.w = dot(_random3(s + 1.0), x3);
+	d.x = dot(Noise3(s), x);
+	d.y = dot(Noise3(s + i1), x1);
+	d.z = dot(Noise3(s + i2), x2);
+	d.w = dot(Noise3(s + 1.0), x3);
 
 	w *= w;
 	w *= w;
 	d *= w;
 
-	return dot(d, vec4(52.0)) / 2.0 + 0.5;
+	return dot(d, vec4(52.0));
 }
 double FastSimplex(dvec3 pos) {
 	const double F3 = 0.33333333333333333;
@@ -246,16 +246,16 @@ double FastSimplex(dvec3 pos) {
 
 	w = max(0.6 - w, 0.0);
 
-	d.x = dot(_random3(s), x);
-	d.y = dot(_random3(s + i1), x1);
-	d.z = dot(_random3(s + i2), x2);
-	d.w = dot(_random3(s + 1.0), x3);
+	d.x = dot(Noise3(s), x);
+	d.y = dot(Noise3(s + i1), x1);
+	d.z = dot(Noise3(s + i2), x2);
+	d.w = dot(Noise3(s + 1.0), x3);
 
 	w *= w;
 	w *= w;
 	d *= w;
 
-	return dot(d, dvec4(52.0)) / 2.0 + 0.5;
+	return dot(d, dvec4(52.0));
 }
 
 

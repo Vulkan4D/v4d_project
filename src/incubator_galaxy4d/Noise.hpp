@@ -6,21 +6,22 @@ namespace v4d::noise {
 	using namespace glm;
 	
 	#pragma region helpers functions
-	dvec4 mod(dvec4 x, double f) {return x % f;}
-	vec4 mod(vec4 x, float f) {return x % f;}
+	dvec4 mod(dvec4 x, double f) {return x - f * floor(x/f);}
+	vec4 mod(vec4 x, float f) {return x - f * floor(x/f);}
 	vec4 _permute(vec4 x){return mod(((x*34.0f)+1.0f)*x, 289.0f);} // used for Simplex noise
 	dvec4 _permute(dvec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
-	vec3 _random3(vec3 pos) { // used for FastSimplex
-		float j = 4096.0*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
+	// Returns a well-distributed range between -0.5 and +0.5
+	vec3 Noise3(vec3 pos) { // used for FastSimplex
+		float j = 4096.0f*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
 		vec3 r;
-		r.z = fract(512.0*j);
+		r.z = fract(512.0f*j);
 		j *= .125f;
-		r.x = fract(512.0*j);
+		r.x = fract(512.0f*j);
 		j *= .125f;
-		r.y = fract(512.0*j);
+		r.y = fract(512.0f*j);
 		return r-0.5f;
 	}
-	dvec3 _random3(dvec3 pos) { // used for FastSimplex
+	dvec3 Noise3(dvec3 pos) { // used for FastSimplex
 		double j = 4096.0*sin(dot(pos,dvec3(17.0, 59.4, 15.0)));
 		dvec3 r;
 		r.z = fract(512.0*j);
@@ -47,16 +48,16 @@ namespace v4d::noise {
 	// Very quick pseudo-random generator, suitable for pos range (-100k, +100k) with a step of at least 0.01
 	// Returns a uniformly distributed float value between 0.00 and 1.00
 	float QuickNoise(float pos){
-		return fract(sin(pos) * 13159.52714);
+		return fract(sin(pos) * 13159.52714f);
 	}
 	double QuickNoise(double pos){
 		return fract(sin(pos) * 13159.527140783267);
 	}
 	float QuickNoise(vec2 pos) {
-		return fract(sin(dot(pos, vec2(13.657,9.558))) * 24097.524);
+		return fract(sin(dot(pos, vec2(13.657f,9.558f))) * 24097.524f);
 	}
 	float QuickNoise(vec3 pos) {
-		return fract(sin(dot(pos, vec3(13.657,9.558,11.606))) * 24097.524);
+		return fract(sin(dot(pos, vec3(13.657f,9.558f,11.606f))) * 24097.524f);
 	}
 	double QuickNoise(dvec3 pos) {
 		return fract(sin(dot(pos, dvec3(13.657023817,9.5580981772,11.606065918))) * 24097.5240569198);
@@ -108,7 +109,7 @@ namespace v4d::noise {
 
 
 	// simple-precision Simplex noise, suitable for pos range (-1M, +1M) with a step of 0.001 and gradient of 1.0
-	// Returns a float value between 0.000 and 1.000 with a distribution that strongly tends towards the center (0.5)
+	// Returns a float value between -1.000 and +1.000 with a distribution that strongly tends towards the center (0.5)
 	float Simplex(vec3 pos){
 		const vec2 C = vec2(1.0/6.0, 1.0/3.0);
 		const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
@@ -128,7 +129,7 @@ namespace v4d::noise {
 		i = mod(i, 289.0f); 
 		vec4 p = _permute(_permute(_permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
 
-		float n_ = 1.0/7.0;
+		float n_ = 1.0f/7.0f;
 		vec3  ns = n_ * vec3(D.w, D.y, D.z) - vec3(D.x, D.z, D.x);
 
 		vec4 j = p - 49.0f * floor(p * ns.z *ns.z);
@@ -162,7 +163,7 @@ namespace v4d::noise {
 		p3 *= norm.w;
 
 		vec4 m = max(0.6f - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0f);
-		return (42.0f * dot(m*m*m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)))) / 2.0f + 0.5f;
+		return 42.0f * dot(m*m*m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 	}
 	double Simplex(dvec3 pos){
 		const dvec2 C = dvec2(1.0/6.0, 1.0/3.0);
@@ -217,16 +218,16 @@ namespace v4d::noise {
 		p3 *= norm.w;
 
 		dvec4 m = max(0.6 - dvec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
-		return (42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)))) / 2.0 + 0.5;
+		return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 	}
 	
 	
 
 	// Faster Simplex noise, less precise and not well tested, seems suitable for pos ranges (-10k, +10k) with a step of 0.01 and gradient of 0.5
-	// Returns a float value between 0.00 and 1.00 with a distribution that strongly tends towards the center (0.5)
+	// Returns a float value between -1.00 and +1.00 with a distribution that strongly tends towards the center (0.5)
 	float FastSimplex(vec3 pos) {
-		const float F3 = 0.3333333;
-		const float G3 = 0.1666667;
+		const float F3 = 0.3333333f;
+		const float G3 = 0.1666667f;
 
 		vec3 s = floor(pos + dot(pos, vec3(F3)));
 		vec3 x = pos - s + dot(s, vec3(G3));
@@ -248,16 +249,16 @@ namespace v4d::noise {
 
 		w = max(0.6f - w, 0.0f);
 
-		d.x = dot(_random3(s), x);
-		d.y = dot(_random3(s + i1), x1);
-		d.z = dot(_random3(s + i2), x2);
-		d.w = dot(_random3(s + 1.0f), x3);
+		d.x = dot(Noise3(s), x);
+		d.y = dot(Noise3(s + i1), x1);
+		d.z = dot(Noise3(s + i2), x2);
+		d.w = dot(Noise3(s + 1.0f), x3);
 
 		w *= w;
 		w *= w;
 		d *= w;
 
-		return dot(d, vec4(52.0f)) / 2.0f + 0.5f;
+		return dot(d, vec4(52.0f));
 	}
 	double FastSimplex(dvec3 pos) {
 		const double F3 = 0.33333333333333333;
@@ -283,22 +284,22 @@ namespace v4d::noise {
 
 		w = max(0.6 - w, 0.0);
 
-		d.x = dot(_random3(s), x);
-		d.y = dot(_random3(s + i1), x1);
-		d.z = dot(_random3(s + i2), x2);
-		d.w = dot(_random3(s + 1.0), x3);
+		d.x = dot(Noise3(s), x);
+		d.y = dot(Noise3(s + i1), x1);
+		d.z = dot(Noise3(s + i2), x2);
+		d.w = dot(Noise3(s + 1.0), x3);
 
 		w *= w;
 		w *= w;
 		d *= w;
 
-		return dot(d, dvec4(52.0)) / 2.0 + 0.5;
+		return dot(d, dvec4(52.0));
 	}
 	float FastSimplexFractal(vec3 m) {
-		return 0.5333333* FastSimplex(m)
-				+0.2666667* FastSimplex(2.0f*m)
-				+0.1333333* FastSimplex(4.0f*m)
-				+0.0666667* FastSimplex(8.0f*m);
+		return 0.5333333f * FastSimplex(m)
+				+0.2666667f * FastSimplex(2.0f*m)
+				+0.1333333f * FastSimplex(4.0f*m)
+				+0.0666667f * FastSimplex(8.0f*m);
 	}
 	double FastSimplexFractal(dvec3 m) {
 		return 0.5333333* FastSimplex(m)
@@ -308,5 +309,33 @@ namespace v4d::noise {
 	}
 
 
-
+	////////////////////////////////////////////////////
+	// Universe density map
+	
+	// Get galaxy size factor from position in universe grid where 1.0 = 10MLY. 
+	// Returns 0.0 (most likely) or somewhere between 0.01 and 0.999 inclusively (distributed a little more towards 0.1)
+	float GalaxySizeFactorInUniverseGrid(vec3 pos) {
+		float t = pow(1.0f - (
+			  0.533333333333333f * abs(FastSimplex(pos * 0.5f))
+			+ 0.266666666666667f * abs(FastSimplex(pos * 1.0f))
+			+ 0.133333333333333f * abs(FastSimplex(pos * 2.0f))
+			+ 0.066666666666667f * abs(FastSimplex(pos * 4.0f))
+			+ 0.033333333333333f * abs(FastSimplex(pos * 8.0f))
+		) * 3.8f, 2.0f);
+		// Adjust distribution
+		return max(0.0f, min(0.999f, (max(0.01f, pow(t, 1.2f)) * step(0.3f, t) - 0.3f - step(0.9f, t)) * 1.1f));
+	}
+	// Get universe subgrid size (number of divisions). 
+	// Returns a value between 1 and 32 inclusively, distributed more towards the median (14 to 18 are the most likely, 1 and 32 are the least likely)
+	int UniverseSubGridSize(vec3 pos) {
+		return max(1, min(32, (int)floor((FastSimplex(pos * 0.5f) / 2.0f + 0.5f) * 43.0f - 5.0f)));
+	}
+	float UniverseSubGridWidthLY(int subGridSize) {
+		return 10000000.0f / float(subGridSize);
+	}
+	float UniverseSubGridWidthLY(vec3 pos) {
+		return UniverseSubGridWidthLY(UniverseSubGridSize(pos));
+	}
+	
+	
 }
