@@ -11,6 +11,7 @@ namespace v4d::graphics {
 	struct GalaxyGenPushConstant {
 		glm::dvec3 cameraPosition; // 24
 		int frameIndex; // 4
+		int resolution; // 4
 	};
 	
 	struct GalaxyBoxPushConstant {

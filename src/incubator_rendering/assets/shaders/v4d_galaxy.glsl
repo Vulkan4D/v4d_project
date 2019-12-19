@@ -10,6 +10,7 @@ precision highp sampler2D;
 layout(std430, push_constant) uniform GalaxyGenPushConstant {
 	dvec3 cameraPosition;
 	int frameIndex;
+	int resolution;
 } galaxyGen;
 
 #common box.*
@@ -55,7 +56,7 @@ layout(location = 0) in uint in_seed[];
 layout(location = 1) in uint in_numStars[];
 
 const float MIN_VIEW_DISTANCE = 0.0;
-const float MAX_VIEW_DISTANCE = 1.0;
+const float MAX_VIEW_DISTANCE = 2.0;
 
 float linearstep(float a, float b, float x) {
 	return (x - a) / (b - a);
@@ -64,23 +65,21 @@ float linearstep(float a, float b, float x) {
 void main(void) {
 	uint seed = in_seed[0];
 	uint fseed = seed + 15;
-	
-	// position relative to camera
-	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyGen.cameraPosition.xyz);
-	float dist = length(relPos);
+	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyGen.cameraPosition.xyz); // position relative to camera
 	float radius = gl_in[0].gl_Position.w;
 	
-	float sizeInScreen = radius / dist * 1280.0; //TODO add uniform for image resolution
-
+	float dist = length(relPos);
+	float sizeInScreen = radius / dist * float(galaxyGen.resolution);
+	int nbStarsToDraw = int(min(sizeInScreen*sizeInScreen/10.0, in_numStars[0]));
 	float brightnessBasedOnDistance = pow(linearstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, dist), 0.5);
 	
 	if (brightnessBasedOnDistance < 0.001) return;
 	
-	for (int i = 0; i < min(floor(sizeInScreen/2.0), in_numStars[0]); i++) {
+	for (int i = 0; i < nbStarsToDraw; i++) {
 		if (i > 80) break;
 		vec3 pos = relPos + RandomInUnitSphere(seed)*radius;
 		
-		gl_PointSize = 2.0 + brightnessBasedOnDistance*8;
+		gl_PointSize = 1.0 + brightnessBasedOnDistance*5;
 		
 		vec4 starType = normalize(vec4(
 			/*red*/		RandomFloat(fseed) * 1.1 ,

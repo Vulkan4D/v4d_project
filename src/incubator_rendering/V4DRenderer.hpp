@@ -11,18 +11,18 @@ using namespace v4d::graphics;
 class V4DRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 	
-	// Graphics configuration
-	float uiImageScale = 1.0;
-	
-	// Buffers
+	#pragma region Buffers
 	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
 	std::vector<Buffer*> stagedBuffers {};
+	#pragma endregion
 	
-	// UI
+	#pragma region UI
+	float uiImageScale = 1.0;
 	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	RenderPass uiRenderPass;
 	PipelineLayout uiPipelineLayout;
 	std::vector<RasterShaderPipeline*> uiShaders {};
+	#pragma endregion
 	
 	#pragma region Galaxy rendering
 	
@@ -49,16 +49,18 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	
 	#pragma endregion
 	
-	// Standard Pipeline
+	#pragma region Standard Pipelines
 	PipelineLayout standardPipelineLayout;
+	#pragma endregion
 	
-	// Main render passes
+	#pragma region Render passes
 	RenderPass	opaqueRasterPass,
 				opaqueLightingPass,
 				transparentRasterPass,
 				transparentLightingPass,
 				thumbnailRenderPass,
 				postProcessingRenderPass;
+	#pragma endregion
 	
 	#pragma region Shaders
 	
@@ -85,7 +87,6 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	#pragma endregion
 	
 	#pragma region Temporary galaxy stuff
-	
 	struct Galaxy {
 		glm::vec4 posr;
 		int seed;
@@ -94,7 +95,6 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	std::vector<Galaxy> galaxies {};
 	Buffer galaxiesBuffer { VK_BUFFER_USAGE_VERTEX_BUFFER_BIT };
 	bool galaxiesGenerated = false;
-	
 	#pragma endregion
 	
 public: // Camera
@@ -882,6 +882,7 @@ public: // Update
 		// Update Push Constants
 		galaxyGenPushConstant.cameraPosition = mainCamera.GetWorldPosition();
 		galaxyGenPushConstant.frameIndex = galaxyFrameIndex;
+		galaxyGenPushConstant.resolution = galaxyCubeMapImage.width;
 	}
 	
 public: // ubo/conditional member variables
