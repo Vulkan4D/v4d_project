@@ -8,15 +8,20 @@ Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
 
-#define SET_CPU_AFFINITY(n) \
-	cpu_set_t cpuset;\
-	CPU_ZERO(&cpuset);\
-	CPU_SET(std::min((int)std::thread::hardware_concurrency()-1, n), &cpuset);\
-	int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);\
-	if (rc != 0) {\
-		LOG_ERROR("Error calling pthread_setaffinity_np: " << rc)\
-	}
-	
+#ifdef _WINDOWS
+	//TODO find windows equivalent, and put it in v4d helper macros
+	#define SET_CPU_AFFINITY(n)
+#else
+	#define SET_CPU_AFFINITY(n) \
+		cpu_set_t cpuset;\
+		CPU_ZERO(&cpuset);\
+		CPU_SET(std::min((int)std::thread::hardware_concurrency()-1, n), &cpuset);\
+		int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);\
+		if (rc != 0) {\
+			LOG_ERROR("Error calling pthread_setaffinity_np: " << rc)\
+		}
+#endif
+
 int main() {
 	SET_CPU_AFFINITY(0)
 	

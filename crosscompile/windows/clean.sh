@@ -14,6 +14,6 @@ ssh WINDOWS_PC "mkdir \v4d_build\debug"
 ssh WINDOWS_PC "mkdir \v4d_build\release"
 
 # Copy global DLLs to Remote Windows PC
-scp -rq dll/* WINDOWS_PC:/v4d_build/debug/
-scp -rq dll/* WINDOWS_PC:/v4d_build/release/
+scp -rq dll/*.dll WINDOWS_PC:/v4d_build/debug/
+scp -rq dll/*.dll WINDOWS_PC:/v4d_build/release/
 

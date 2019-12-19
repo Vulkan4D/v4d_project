@@ -70,7 +70,7 @@ void main(void) {
 	
 	float dist = length(relPos);
 	float sizeInScreen = radius / dist * float(galaxyGen.resolution);
-	int nbStarsToDraw = int(min(sizeInScreen*sizeInScreen/10.0, in_numStars[0]));
+	int nbStarsToDraw = int(max(1, min(sizeInScreen*sizeInScreen/10.0, in_numStars[0])));
 	float brightnessBasedOnDistance = pow(linearstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, dist), 0.5);
 	
 	if (brightnessBasedOnDistance < 0.001) return;
