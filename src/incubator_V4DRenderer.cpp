@@ -159,6 +159,7 @@ int main() {
 		
 		// Camera Movements
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
+		renderer->mainCamera.SetVelocity(glm::dvec3{0});
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			renderer->mainCamera.SetVelocity(+renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);
 			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());

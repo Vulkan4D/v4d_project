@@ -26,7 +26,7 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	
 	#pragma region Galaxy rendering
 	
-	CubeMapImage galaxyCubeMapImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	CubeMapImage galaxyCubeMapImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT };
 	CubeMapImage galaxyDepthStencilCubeMapImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT , { VK_FORMAT_D32_SFLOAT_S8_UINT }};
 	RenderPass galaxyGenRenderPass, galaxyFadeRenderPass;
 	PipelineLayout galaxyGenPipelineLayout, galaxyBoxPipelineLayout;
@@ -775,15 +775,15 @@ private: // Commands
 		}
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
-		if (continuousGalaxyGen || galaxyFrameIndex < galaxyConvergences) {
+		if (continuousGalaxyGen/* || galaxyFrameIndex < galaxyConvergences*/) {
 			// Galaxy Gen
 			galaxyGenRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeMapImage);
 			galaxyGenShader.Execute(renderingDevice, commandBuffer, &galaxyGenPushConstant);
 			galaxyGenRenderPass.End(renderingDevice, commandBuffer);
-			// Galaxy Fade
-			galaxyFadeRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeMapImage);
-			galaxyFadeShader.Execute(renderingDevice, commandBuffer);
-			galaxyFadeRenderPass.End(renderingDevice, commandBuffer);
+			// // Galaxy Fade
+			// galaxyFadeRenderPass.Begin(renderingDevice, commandBuffer, galaxyCubeMapImage);
+			// galaxyFadeShader.Execute(renderingDevice, commandBuffer);
+			// galaxyFadeRenderPass.End(renderingDevice, commandBuffer);
 		}
 	}
 	
@@ -835,6 +835,7 @@ public: // Update
 		
 		// Generate galaxies
 		if (!galaxiesGenerated) {
+			galaxyFrameIndex = 0;
 			if (galaxies.size() == 0) {
 				const int neighborGridsToLoadPerAxis = 1;
 				galaxies.reserve((size_t)(pow(1+neighborGridsToLoadPerAxis*2, 3)*pow(32, 3)/10));
@@ -878,7 +879,18 @@ public: // Update
 		
 		// Galaxy convergence
 		galaxyFrameIndex++;
-		if (galaxyFrameIndex > galaxyConvergences) galaxyFrameIndex = continuousGalaxyGen? 0 : galaxyConvergences;
+		// if (galaxyFrameIndex > galaxyConvergences) galaxyFrameIndex = continuousGalaxyGen? 0 : galaxyConvergences;
+		
+		if (glm::length(mainCamera.GetVelocity()) > 0.0) {
+			galaxyFrameIndex = 0;
+			VkClearColorValue clearColor {.0,.0,.0,.0};
+			VkImageSubresourceRange clearRange {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,galaxyCubeMapImage.arrayLayers};
+			auto cmdBuffer = BeginSingleTimeCommands(lowPriorityGraphicsQueue);
+			TransitionImageLayout(cmdBuffer, galaxyCubeMapImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			renderingDevice->CmdClearColorImage(cmdBuffer, galaxyCubeMapImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
+			TransitionImageLayout(cmdBuffer, galaxyCubeMapImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			EndSingleTimeCommands(lowPriorityGraphicsQueue, cmdBuffer);
+		}
 		
 		// Update Push Constants
 		galaxyGenPushConstant.cameraPosition = mainCamera.GetWorldPosition();
@@ -887,7 +899,7 @@ public: // Update
 	}
 	
 public: // ubo/conditional member variables
-	int galaxyConvergences = 800000;
+	// int galaxyConvergences = 100;
 	bool continuousGalaxyGen = true;
 	int galaxyFrameIndex = 0;
 	

@@ -50,7 +50,7 @@ float clamp01(float v) {
 	return max(0.0, min(1.0, v));
 }
 
-const int octaves = 5;
+const int octaves = 2;
 float FastSimplexFractal(vec3 pos) {
 	float amplitude = 0.5333333333;
 	float frequency = 1.0;
@@ -62,7 +62,6 @@ float FastSimplexFractal(vec3 pos) {
 	}
 	return f;
 }
-
 
 struct GalaxyInfo {
 	float spiralCloudsFactor;
@@ -112,7 +111,7 @@ GalaxyInfo GetGalaxyInfo(vec3 galaxyPosition) {
 	}
 	if (info.spiralCloudsFactor > 0.0 || info.squish > 0.2) {
 		vec3 axis = normalize(Noise3(galaxyPosition+vec3(-0.212,0.864,0.892)));
-		float angle = QuickNoise(galaxyPosition+vec3(0.176,0.917,1.337));
+		float angle = QuickNoise(galaxyPosition+vec3(0.176,0.917,1.337)) * 3.14159265459;
 		float s = sin(angle);
 		float c = cos(angle);
 		float oc = 1.0 - c;
@@ -176,23 +175,25 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info) {
 		pos.x * cos(swirl / 2.5) - pos.z * sin(swirl / 2.5),
 		pos.y * (squish * 2.0 + 1.0),
 		pos.z * cos(swirl / 2.5) + pos.x * sin(swirl / 2.5)
-	)+noiseOffset)*info.attenuationCloudsFrequency*20.0))-core*3.0) * easeIn(radiusGradient), (3.0-info.attenuationCloudsFactor*2.0)) * info.attenuationCloudsFactor;
+	)+noiseOffset)*info.attenuationCloudsFrequency*20.0))-core*3.0) * easeIn(radiusGradient), (3.0-info.attenuationCloudsFactor*2.0)) * info.attenuationCloudsFactor * 1.5;
 	if (info.attenuationCloudsFactor > 0.0) finalDensity -= attenClouds * clamp01((FastSimplex((pos+info.noiseOffset)*info.attenuationCloudsFrequency*9.0)/2.0+0.5) * radiusGradient - (abs(pos.y)*squish*3.0));
 
-	return finalDensity;
+	return finalDensity * (FastSimplexFractal(pos * 272.31)/2.0+.5);
 }
 
 vec3 GalaxyStarColor(in vec3 pos, in GalaxyInfo info) {
 	vec4 starType = normalize(vec4(
-		/*red*/		QuickNoise(pos+info.noiseOffset+vec3(1.337,0.612,1.065)) * 0.5+pow(1.0-length(pos), 5.0)*3.0,
+		/*red*/		QuickNoise(pos+info.noiseOffset+vec3(1.337,0.612,1.065)) * 0.5+pow(1.0-length(pos), 4.0)*2.0,
 		/*yellow*/	QuickNoise(pos+info.noiseOffset+vec3(0.176,1.337,0.099)) * 1.4,
-		/*blue*/	QuickNoise(pos+info.noiseOffset+vec3(1.337,0.420,1.099)) * 0.7+pow(length(pos), 3.0)*3.0,
+		/*blue*/	QuickNoise(pos+info.noiseOffset+vec3(1.337,0.420,1.099)) * 0.8+pow(length(pos), 2.0)*5.0,
 		/*white*/	QuickNoise(pos+info.noiseOffset+vec3(1.337,1.185,0.474)) * 1.0 
 	));
-	return		/*red*/		vec3( 1.0 , 0.4 , 0.2 ) * starType.x +
-				/*yellow*/	vec3( 1.0 , 1.0 , 0.3 ) * starType.y +
-				/*blue*/	vec3( 0.2 , 0.4 , 1.0 ) * starType.z +
-				/*white*/	vec3( 1.0 , 1.0 , 1.0 ) * starType.w ;
+	return normalize((normalize(
+		/*red*/		vec3( 1.0 , 0.4 , 0.2 ) * starType.x +
+		/*yellow*/	vec3( 1.0 , 1.0 , 0.3 ) * starType.y +
+		/*blue*/	vec3( 0.2 , 0.4 , 1.0 ) * starType.z +
+		/*white*/	vec3( 1.0 , 1.0 , 1.0 ) * starType.w ))
+		+ Noise3(pos * 64.31)/2.0);
 }
 
 
@@ -217,7 +218,7 @@ layout(location = 0) in uint in_seed[];
 layout(location = 1) in uint in_numStars[];
 
 const float MIN_VIEW_DISTANCE = 0.0;
-const float MAX_VIEW_DISTANCE = 2.0;
+const float MAX_VIEW_DISTANCE = 1.0;
 
 float linearstep(float a, float b, float x) {
 	return (x - a) / (b - a);
@@ -232,7 +233,7 @@ void main(void) {
 	float dist = length(relPos);
 	float sizeInScreen = radius / dist * float(galaxyGen.resolution);
 	int nbStarsToDraw = int(max(1, min(sizeInScreen*sizeInScreen, in_numStars[0])));
-	float brightnessBasedOnDistance = pow(linearstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, dist), 0.5);
+	float brightnessBasedOnDistance = 1.0 - pow(1.0-linearstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, dist), 2.0);
 	
 	if (brightnessBasedOnDistance < 0.001) return;
 	
@@ -240,7 +241,7 @@ void main(void) {
 	
 	for (int i = 0; i < nbStarsToDraw; i++) {
 		if (i > 80) break;
-		gl_PointSize = max(3, brightnessBasedOnDistance * 4);
+		gl_PointSize = brightnessBasedOnDistance * 8.0 + 0.5;
 		
 		vec3 starPos = RandomInUnitSphere(seed);
 		
@@ -248,15 +249,13 @@ void main(void) {
 		
 		if (starDensity == 0.0) continue;
 		
-		gl_PointSize *= starDensity/2.0+1.0;
-		
 		vec3 pos = relPos + starPos*radius;
 		
 		vec3 color = GalaxyStarColor(starPos, info);
 		
 		out_color = vec4(
-			color,
-			/*(1-pow(1-RandomFloat(fseed), 2)) * */ brightnessBasedOnDistance * starDensity
+			color * starDensity * brightnessBasedOnDistance,
+			starDensity * brightnessBasedOnDistance
 		);
 		
 		// Compute which side of the cube map we should render to
@@ -329,7 +328,7 @@ layout(location = 0) in vec4 in_color;
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	float center = 1 - pow(length(gl_PointCoord * 2 - 1), 1.0 / max(0.7, in_color.a));
+	float center = 1.0 - length(gl_PointCoord * 2 - 1);
 	out_color = vec4(in_color.rgb, in_color.a) * center;
 }
 
