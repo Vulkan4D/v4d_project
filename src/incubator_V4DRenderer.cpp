@@ -200,6 +200,20 @@ int main() {
 			}
 		}
 		
+		// Watch shader modifications to automatically reload the renderer
+		static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
+			{"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
+		};
+		for (auto&[f, t] : shaderFilesToWatch) {
+			if (t == 0) {
+				t = f.GetLastWriteTime();
+			} else if (f.GetLastWriteTime() > t) {
+				t = 0;
+				renderer->ReloadRenderer();
+				break;
+			}
+		}
+		
 		SLEEP(10ms)
 	}
 	

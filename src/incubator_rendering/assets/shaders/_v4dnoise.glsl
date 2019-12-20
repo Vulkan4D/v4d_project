@@ -1,5 +1,6 @@
 // helpers functions
 vec4 _permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} // used for Simplex
+dvec4 _permute(dvec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} // used for Simplex
 vec3 Noise3(vec3 pos) { // used for FastSimplex
 	float j = 4096.0*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
 	vec3 r;

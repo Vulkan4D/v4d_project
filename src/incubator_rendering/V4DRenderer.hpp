@@ -248,7 +248,6 @@ private: // Resources
 		
 		// Galaxies
 		galaxiesBuffer.Free(renderingDevice);
-		galaxies.clear();
 		galaxiesGenerated = false;
 
 		// Other buffers
@@ -835,38 +834,40 @@ public: // Update
 	void LowPriorityFrameUpdate() override {
 		
 		// Generate galaxies
-		if (!galaxiesGenerated && galaxies.size() == 0) {
-			const int neighborGridsToLoadPerAxis = 1;
-			galaxies.reserve((size_t)(pow(1+neighborGridsToLoadPerAxis*2, 3)*pow(32, 3)/10));
-			// Galaxy Gen (temporary stuff)
-			for (int gridX = -neighborGridsToLoadPerAxis; gridX <= neighborGridsToLoadPerAxis; ++gridX) {
-				for (int gridY = -neighborGridsToLoadPerAxis; gridY <= neighborGridsToLoadPerAxis; ++gridY) {
-					for (int gridZ = -neighborGridsToLoadPerAxis; gridZ <= neighborGridsToLoadPerAxis; ++gridZ) {
-						int subGridSize = v4d::noise::UniverseSubGridSize({gridX,gridY,gridZ});
-						for (int x = 0; x < subGridSize; ++x) {
-							for (int y = 0; y < subGridSize; ++y) {
-								for (int z = 0; z < subGridSize; ++z) {
-									glm::vec3 galaxyPositionInGrid = {
-										float(gridX) + float(x)/float(subGridSize),
-										float(gridY) + float(y)/float(subGridSize),
-										float(gridZ) + float(z)/float(subGridSize)
-									};
-									float galaxySizeFactor = v4d::noise::GalaxySizeFactorInUniverseGrid(galaxyPositionInGrid);
-									if (galaxySizeFactor > 0.0f) {
-										// For each existing galaxy
-										galaxies.push_back({
-											glm::vec4(galaxyPositionInGrid + v4d::noise::Noise3(galaxyPositionInGrid)/float(subGridSize), galaxySizeFactor/subGridSize/2.0f),
-											x*y*z*3+5,
-											80
-										});
+		if (!galaxiesGenerated) {
+			if (galaxies.size() == 0) {
+				const int neighborGridsToLoadPerAxis = 1;
+				galaxies.reserve((size_t)(pow(1+neighborGridsToLoadPerAxis*2, 3)*pow(32, 3)/10));
+				// Galaxy Gen (temporary stuff)
+				for (int gridX = -neighborGridsToLoadPerAxis; gridX <= neighborGridsToLoadPerAxis; ++gridX) {
+					for (int gridY = -neighborGridsToLoadPerAxis; gridY <= neighborGridsToLoadPerAxis; ++gridY) {
+						for (int gridZ = -neighborGridsToLoadPerAxis; gridZ <= neighborGridsToLoadPerAxis; ++gridZ) {
+							int subGridSize = v4d::noise::UniverseSubGridSize({gridX,gridY,gridZ});
+							for (int x = 0; x < subGridSize; ++x) {
+								for (int y = 0; y < subGridSize; ++y) {
+									for (int z = 0; z < subGridSize; ++z) {
+										glm::vec3 galaxyPositionInGrid = {
+											float(gridX) + float(x)/float(subGridSize),
+											float(gridY) + float(y)/float(subGridSize),
+											float(gridZ) + float(z)/float(subGridSize)
+										};
+										float galaxySizeFactor = v4d::noise::GalaxySizeFactorInUniverseGrid(galaxyPositionInGrid);
+										if (galaxySizeFactor > 0.0f) {
+											// For each existing galaxy
+											galaxies.push_back({
+												glm::vec4(galaxyPositionInGrid + v4d::noise::Noise3(galaxyPositionInGrid)/float(subGridSize), galaxySizeFactor/subGridSize/2.0f),
+												x*y*z*3+5,
+												80
+											});
+										}
 									}
 								}
 							}
 						}
 					}
 				}
+				LOG("Number of Galaxies generated : " << galaxies.size())
 			}
-			LOG("Number of Galaxies generated : " << galaxies.size())
 			galaxiesBuffer.Free(renderingDevice);
 			galaxiesBuffer.ResetSrcData();
 			galaxiesBuffer.AddSrcDataPtr(&galaxies);
@@ -886,7 +887,7 @@ public: // Update
 	}
 	
 public: // ubo/conditional member variables
-	int galaxyConvergences = 10;
+	int galaxyConvergences = 800000;
 	bool continuousGalaxyGen = true;
 	int galaxyFrameIndex = 0;
 	
