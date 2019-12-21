@@ -90,7 +90,7 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	struct Galaxy {
 		glm::vec4 posr;
 		int seed;
-		int numStars;
+		// v4d::noise::GalaxyInfo galaxyInfo;
 	};
 	std::vector<Galaxy> galaxies {};
 	Buffer galaxiesBuffer { VK_BUFFER_USAGE_VERTEX_BUFFER_BIT };
@@ -112,7 +112,22 @@ private: // Init
 		galaxyGenShader.AddVertexInputBinding(sizeof(Galaxy), VK_VERTEX_INPUT_RATE_VERTEX, {
 			{0, offsetof(Galaxy, Galaxy::posr), VK_FORMAT_R32G32B32A32_SFLOAT},
 			{1, offsetof(Galaxy, Galaxy::seed), VK_FORMAT_R32_UINT},
-			{2, offsetof(Galaxy, Galaxy::numStars), VK_FORMAT_R32_UINT},
+			// {2, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::spiralCloudsFactor), VK_FORMAT_R32_SFLOAT}, // float
+			// {3, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::swirlTwist), VK_FORMAT_R32_SFLOAT}, // float
+			// {4, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::swirlDetail), VK_FORMAT_R32_SFLOAT}, // float
+			// {5, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::coreSize), VK_FORMAT_R32_SFLOAT}, // float
+			// {6, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::cloudsSize), VK_FORMAT_R32_SFLOAT}, // float
+			// {7, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::cloudsFrequency), VK_FORMAT_R32_SFLOAT}, // float
+			// {8, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::squish), VK_FORMAT_R32_SFLOAT}, // float
+			// {9, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::attenuationCloudsFrequency), VK_FORMAT_R32_SFLOAT}, // float
+			// {10, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::attenuationCloudsFactor), VK_FORMAT_R32_SFLOAT}, // float
+			// {11, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::position), VK_FORMAT_R32G32B32_SFLOAT}, // vec3
+			// {12, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::noiseOffset), VK_FORMAT_R32G32B32_SFLOAT}, // vec3
+			// {13, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::irregularities), VK_FORMAT_R32_SFLOAT}, // float
+			// {14, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::rotation) + 0, VK_FORMAT_R32G32B32A32_SFLOAT}, // mat4
+			// {15, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::rotation) + 16, VK_FORMAT_R32G32B32A32_SFLOAT}, // mat4
+			// {16, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::rotation) + 32, VK_FORMAT_R32G32B32A32_SFLOAT}, // mat4
+			// {17, offsetof(Galaxy, Galaxy::galaxyInfo) + offsetof(v4d::noise::GalaxyInfo, v4d::noise::GalaxyInfo::rotation) + 48, VK_FORMAT_R32G32B32A32_SFLOAT}, // mat4
 		});
 		
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
@@ -298,8 +313,8 @@ private: // Graphics configuration
 			galaxyGenShader.SetRenderPass(&galaxyCubeMapImage, galaxyGenRenderPass.handle, 0);
 			galaxyGenShader.AddColorBlendAttachmentState(
 				/*blendEnable*/				VK_TRUE,
-				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_SRC_ALPHA,
+				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 				/*colorBlendOp*/			VK_BLEND_OP_MAX,
 				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
 				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
@@ -308,49 +323,49 @@ private: // Graphics configuration
 			galaxyGenShader.CreatePipeline(renderingDevice);
 		}
 		
-		{// Galaxy Fade render pass
-			// Color Attachment (Fragment shader Standard Output)
-			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = galaxyCubeMapImage.format;
-				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				// Color and depth data
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Stencil data
-				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			VkAttachmentReference colorAttachmentRef = {
-				galaxyFadeRenderPass.AddAttachment(colorAttachment),
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
-			// SubPass
-			VkSubpassDescription subpass = {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
-				subpass.pDepthStencilAttachment = nullptr;
-			galaxyFadeRenderPass.AddSubpass(subpass);
+		// {// Galaxy Fade render pass
+		// 	// Color Attachment (Fragment shader Standard Output)
+		// 	VkAttachmentDescription colorAttachment = {};
+		// 		colorAttachment.format = galaxyCubeMapImage.format;
+		// 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		// 		// Color and depth data
+		// 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		// 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		// 		// Stencil data
+		// 		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		// 		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		// 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 	VkAttachmentReference colorAttachmentRef = {
+		// 		galaxyFadeRenderPass.AddAttachment(colorAttachment),
+		// 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		// 	};
+		// 	// SubPass
+		// 	VkSubpassDescription subpass = {};
+		// 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		// 		subpass.colorAttachmentCount = 1;
+		// 		subpass.pColorAttachments = &colorAttachmentRef;
+		// 		subpass.pDepthStencilAttachment = nullptr;
+		// 	galaxyFadeRenderPass.AddSubpass(subpass);
 			
-			// Create the render pass
-			galaxyFadeRenderPass.Create(renderingDevice);
-			galaxyFadeRenderPass.CreateFrameBuffers(renderingDevice, galaxyCubeMapImage);
+		// 	// Create the render pass
+		// 	galaxyFadeRenderPass.Create(renderingDevice);
+		// 	galaxyFadeRenderPass.CreateFrameBuffers(renderingDevice, galaxyCubeMapImage);
 			
-			// Shader pipeline
-			galaxyFadeShader.SetRenderPass(&galaxyCubeMapImage, galaxyFadeRenderPass.handle, 0);
-			galaxyFadeShader.AddColorBlendAttachmentState(
-				/*blendEnable*/				VK_TRUE,
-				/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*colorBlendOp*/			VK_BLEND_OP_REVERSE_SUBTRACT,
-				/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
-				/*alphaBlendOp*/			VK_BLEND_OP_MAX
-			);
-			// Shader stages
-			galaxyFadeShader.CreatePipeline(renderingDevice);
-		}
+		// 	// Shader pipeline
+		// 	galaxyFadeShader.SetRenderPass(&galaxyCubeMapImage, galaxyFadeRenderPass.handle, 0);
+		// 	galaxyFadeShader.AddColorBlendAttachmentState(
+		// 		/*blendEnable*/				VK_TRUE,
+		// 		/*srcColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+		// 		/*dstColorBlendFactor*/		VK_BLEND_FACTOR_ONE,
+		// 		/*colorBlendOp*/			VK_BLEND_OP_REVERSE_SUBTRACT,
+		// 		/*srcAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+		// 		/*dstAlphaBlendFactor*/		VK_BLEND_FACTOR_ONE,
+		// 		/*alphaBlendOp*/			VK_BLEND_OP_MAX
+		// 	);
+		// 	// Shader stages
+		// 	galaxyFadeShader.CreatePipeline(renderingDevice);
+		// }
 		
 		{// Opaque Raster pass
 			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> attachments {};
@@ -667,10 +682,10 @@ private: // Graphics configuration
 		galaxyGenRenderPass.DestroyFrameBuffers(renderingDevice);
 		galaxyGenRenderPass.Destroy(renderingDevice);
 		
-		// Galaxy Fade
-		galaxyFadeShader.DestroyPipeline(renderingDevice);
-		galaxyFadeRenderPass.DestroyFrameBuffers(renderingDevice);
-		galaxyFadeRenderPass.Destroy(renderingDevice);
+		// // Galaxy Fade
+		// galaxyFadeShader.DestroyPipeline(renderingDevice);
+		// galaxyFadeRenderPass.DestroyFrameBuffers(renderingDevice);
+		// galaxyFadeRenderPass.Destroy(renderingDevice);
 		
 		// Rasterization pipelines
 		for (ShaderPipeline* shaderPipeline : opaqueRasterizationShaders) {
@@ -855,10 +870,11 @@ public: // Update
 										float galaxySizeFactor = v4d::noise::GalaxySizeFactorInUniverseGrid(galaxyPositionInGrid);
 										if (galaxySizeFactor > 0.0f) {
 											// For each existing galaxy
+											glm::vec3 pos = galaxyPositionInGrid + v4d::noise::Noise3(galaxyPositionInGrid)/float(subGridSize);
 											galaxies.push_back({
-												glm::vec4(galaxyPositionInGrid + v4d::noise::Noise3(galaxyPositionInGrid)/float(subGridSize), galaxySizeFactor/subGridSize/2.0f),
+												glm::vec4(pos, galaxySizeFactor/subGridSize/2.0f),
 												x*y*z*3+5,
-												80
+												// v4d::noise::GetGalaxyInfo(pos)
 											});
 										}
 									}

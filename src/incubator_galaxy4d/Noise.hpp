@@ -337,4 +337,68 @@ namespace v4d::noise {
 	}
 	
 	
+	
+	struct GalaxyInfo {
+		float spiralCloudsFactor;
+		float swirlTwist;
+		float swirlDetail;
+		float coreSize;
+		float cloudsSize;
+		float cloudsFrequency;
+		float squish;
+		float attenuationCloudsFrequency;
+		float attenuationCloudsFactor;
+		vec3 position;
+		vec3 noiseOffset;
+		float irregularities;
+		mat4 rotation;
+	};
+
+	GalaxyInfo GetGalaxyInfo(vec3 galaxyPosition) {
+		GalaxyInfo info;
+		float type = QuickNoise(galaxyPosition / 10.0f);
+		if (type < 0.2) {
+			// Elliptical galaxy (20% probability)
+			info.spiralCloudsFactor = 0.0;
+			info.coreSize = QuickNoise(galaxyPosition);
+			info.squish = QuickNoise(galaxyPosition+vec3(-0.33,-0.17,-0.51)) / 2.0f;
+		} else {
+			if (type > 0.3) {
+				// Irregular galaxy (70% probability, within spiral)
+				info.irregularities = QuickNoise(galaxyPosition+vec3(-0.65,0.69,-0.71));
+			} else {
+				info.irregularities = 0.0f;
+			}
+			// Spiral galaxy (80% probability, including irregular, only 10% will be regular)
+			vec3 n1 = Noise3(galaxyPosition+vec3(0.01,0.43,-0.55)) / 2.0f + 0.5f;
+			vec3 n2 = Noise3(galaxyPosition+vec3(-0.130,0.590,-0.550)) / 2.0f + 0.5f;
+			vec3 n3 = Noise3(galaxyPosition+vec3(0.510,-0.310,0.512)) / 2.0f + 0.5f;
+			info.spiralCloudsFactor = n1.x;
+			info.swirlTwist = n1.y;
+			info.swirlDetail = n1.z;
+			info.coreSize = n2.x;
+			info.cloudsSize = n2.y;
+			info.cloudsFrequency = n2.z;
+			info.squish = n3.x;
+			info.attenuationCloudsFrequency = n3.y;
+			info.attenuationCloudsFactor = n3.z;
+			info.noiseOffset = Noise3(galaxyPosition);
+		}
+		if (info.spiralCloudsFactor > 0.0f || info.squish > 0.2f) {
+			vec3 axis = normalize(Noise3(galaxyPosition+vec3(-0.212,0.864,0.892)));
+			float angle = QuickNoise(galaxyPosition+vec3(0.176,0.917,1.337)) * 3.14159265459f;
+			float s = sin(angle);
+			float c = cos(angle);
+			float oc = 1.0f - c;
+			info.rotation = mat4(
+				oc * axis.x * axis.x + c, oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s, 0.0,
+				oc * axis.x * axis.y + axis.z * s, oc * axis.y * axis.y + c, oc * axis.y * axis.z - axis.x * s, 0.0,
+				oc * axis.z * axis.x - axis.y * s, oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c, 0.0,
+				0.0, 0.0, 0.0, 1.0
+			);
+		}
+		return info;
+	}
+
+	
 }
