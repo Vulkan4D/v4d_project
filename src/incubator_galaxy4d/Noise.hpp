@@ -320,8 +320,7 @@ namespace v4d::noise {
 			+ 0.266666666666667f * abs(FastSimplex(pos * 1.0f))
 			+ 0.133333333333333f * abs(FastSimplex(pos * 2.0f))
 			+ 0.066666666666667f * abs(FastSimplex(pos * 4.0f))
-			+ 0.033333333333333f * abs(FastSimplex(pos * 8.0f))
-		) * 3.8f, 2.0f);
+		) * 3.8f, 2.0f) * min(1.0f, FastSimplex(pos * 13.65f)/2.0f+0.8f);
 		// Adjust distribution
 		return max(0.0f, min(0.999f, (max(0.01f, pow(t, 1.2f)) * step(0.3f, t) - 0.3f - step(0.9f, t)) * 1.1f));
 	}

@@ -115,7 +115,7 @@ int main() {
 	std::thread lowPriorityRenderingThread([&]{
 		SET_CPU_AFFINITY(2)
 		while (appRunning) {
-			std::this_thread::yield();
+			// std::this_thread::yield();
 			if (!appRunning) break;
 			renderer->RenderLowPriority();
 			// SLEEP(10ms)

@@ -28,7 +28,7 @@ layout(location = 1) out uint out_numStars;
 
 void main() {
 	gl_Position = posr; // passthrough
-	out_seed = seed + galaxyGen.frameIndex;
+	out_seed = seed - 1565165 + galaxyGen.frameIndex*3;
 	out_numStars = numStars;
 }
 
@@ -136,15 +136,15 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info) {
 	float lenSquished = length(pos*vec3(1.0, squish + 1.0, 1.0));
 	float radiusGradient = 1.0 - pow(clamp01(len + abs(pos.y)*squish), 5.0);
 
-	float core = clamp01(pow(1.0-lenSquished/info.coreSize, 4.0) + pow(1.0-lenSquished/info.coreSize, 10.0));
+	float core = clamp01(pow(1.0-lenSquished/info.coreSize, 5.0) + pow(1.0-lenSquished/info.coreSize, 10.0));
 	if (core + radiusGradient <= 0.0) return 0.0;
-	float finalDensity = core + pow(max(0.0, radiusGradient - 0.2), 8.0);
+	float finalDensity = core + pow(max(0.0, radiusGradient - 0.2), 10.0);
 
 	if (info.spiralCloudsFactor == 0.0) {
 		return finalDensity;
 	}
 
-	vec3 noiseOffset = info.noiseOffset * 6544.415;
+	vec3 noiseOffset = info.noiseOffset * 65.4105;
 
 	// Irregular
 	if (info.irregularities > 0.0) {
@@ -166,19 +166,21 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info) {
 		pos.y * (squish * 10.0 + 1.0),
 		pos.z * cos(swirl) + pos.x * sin(swirl)
 	)+noiseOffset)*info.cloudsFrequency*5.0)/2.0+0.5;
-	float spirale = clamp01(pow(spiralNoise, (1.1-info.swirlDetail)*10.0) + (info.cloudsSize*1.5) - len*1.5 - (abs(pos.y)*squish*10.0)) * radiusGradient;
-	finalDensity += 1.0-pow(1.0-spirale, info.spiralCloudsFactor*2.0);
+	float spirale = clamp01(pow(spiralNoise, (1.1-info.swirlDetail)*5.0) + (info.cloudsSize*1.5) - len*1.5 - (abs(pos.y)*squish*10.0)) * radiusGradient;
+	finalDensity += 1.0-pow(1.0-spirale, info.spiralCloudsFactor*4.0);
 	if (finalDensity <= 0.0) return 0.0;
+
+	finalDensity *= min(1.0, FastSimplexFractal(pos * 234.31)/2.0+0.8);
 
 	// Attenuation Clouds
 	float attenClouds = pow(clamp01(1.0-abs(FastSimplexFractal((vec3(
 		pos.x * cos(swirl / 2.5) - pos.z * sin(swirl / 2.5),
 		pos.y * (squish * 2.0 + 1.0),
 		pos.z * cos(swirl / 2.5) + pos.x * sin(swirl / 2.5)
-	)+noiseOffset)*info.attenuationCloudsFrequency*20.0))-core*3.0) * easeIn(radiusGradient), (3.0-info.attenuationCloudsFactor*2.0)) * info.attenuationCloudsFactor * 1.5;
+	)+noiseOffset)*info.attenuationCloudsFrequency*20.0))-core*3.0) * easeIn(radiusGradient), (3.0-info.attenuationCloudsFactor*2.0)) * info.attenuationCloudsFactor * 2.0;
 	if (info.attenuationCloudsFactor > 0.0) finalDensity -= attenClouds * clamp01((FastSimplex((pos+info.noiseOffset)*info.attenuationCloudsFrequency*9.0)/2.0+0.5) * radiusGradient - (abs(pos.y)*squish*3.0));
 
-	return finalDensity * (FastSimplexFractal(pos * 272.31)/2.0+.5);
+	return finalDensity;
 }
 
 vec3 GalaxyStarColor(in vec3 pos, in GalaxyInfo info) {
@@ -226,7 +228,6 @@ float linearstep(float a, float b, float x) {
 
 void main(void) {
 	uint seed = in_seed[0];
-	uint fseed = seed + 15;
 	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyGen.cameraPosition.xyz); // position relative to camera
 	float radius = gl_in[0].gl_Position.w;
 	
@@ -235,13 +236,16 @@ void main(void) {
 	int nbStarsToDraw = int(max(1, min(sizeInScreen*sizeInScreen, in_numStars[0])));
 	float brightnessBasedOnDistance = 1.0 - pow(1.0-linearstep(MAX_VIEW_DISTANCE, MIN_VIEW_DISTANCE, dist), 2.0);
 	
-	if (brightnessBasedOnDistance < 0.001) return;
+	if (brightnessBasedOnDistance < 0.01) return;
 	
 	GalaxyInfo info = GetGalaxyInfo(gl_in[0].gl_Position.xyz);
 	
-	for (int i = 0; i < nbStarsToDraw; i++) {
-		if (i > 80) break;
-		gl_PointSize = brightnessBasedOnDistance * 8.0 + 0.5;
+	int nbStarsDrawn = 0;
+	
+	for (int i = 0; true; i++) {
+		if (nbStarsDrawn > 80) break;
+		if (i > 500) break;
+		gl_PointSize = brightnessBasedOnDistance * 10.0 + 0.5;
 		
 		vec3 starPos = RandomInUnitSphere(seed);
 		
@@ -254,7 +258,7 @@ void main(void) {
 		vec3 color = GalaxyStarColor(starPos, info);
 		
 		out_color = vec4(
-			color * starDensity * brightnessBasedOnDistance,
+			mix(color, color * starDensity, 0.5) * brightnessBasedOnDistance,
 			starDensity * brightnessBasedOnDistance
 		);
 		
@@ -318,6 +322,7 @@ void main(void) {
 		gl_PointSize *= (tan(length(gl_Position.xy)/sqrt(2))+0.5)/2;
 		
 		EmitVertex();
+		nbStarsDrawn++;
 	}
 }
 
