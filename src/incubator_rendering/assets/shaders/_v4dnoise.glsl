@@ -383,8 +383,8 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info, int octaves) {
 		info.cloudsSize = mix(info.cloudsSize, irregular.y, info.irregularities);
 		info.attenuationCloudsFrequency = mix(info.attenuationCloudsFrequency, irregular.z, info.irregularities);
 		info.attenuationCloudsFactor = mix(info.attenuationCloudsFactor, irregular.x, info.irregularities);
-		core += clamp01(pow(1.0-length(pos+info.noiseOffset)/info.coreSize*irregular.x, (sin(irregular.x)+1.0)*3.0));
-		finalDensity += core * pow(max(0.0, radiusGradient), 1.5*irregular.x+1.0);
+		// core += clamp01(pow(1.0-length(pos+info.noiseOffset)/info.coreSize*irregular.x, (sin(irregular.x)+1.0)*3.0));
+		// finalDensity += core * pow(max(0.0, radiusGradient), 1.5*irregular.x+1.0);
 	}
 
 	// Spiral

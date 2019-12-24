@@ -26,21 +26,20 @@ layout(std430, push_constant) uniform GalaxyGenPushConstant {
 #shader gen.vert
 
 layout(location = 0) in vec4 posr;
-layout(location = 1) in uint seed;
 #ifdef GALAXY_INFO_USE_VERTEX_BINDINGS
-	layout(location = 2) in float spiralCloudsFactor;
-	layout(location = 3) in float swirlTwist;
-	layout(location = 4) in float swirlDetail;
-	layout(location = 5) in float coreSize;
-	layout(location = 6) in float cloudsSize;
-	layout(location = 7) in float cloudsFrequency;
-	layout(location = 8) in float squish;
-	layout(location = 9) in float attenuationCloudsFrequency;
-	layout(location = 10) in float attenuationCloudsFactor;
-	layout(location = 11) in vec3 position;
-	layout(location = 12) in vec3 noiseOffset;
-	layout(location = 13) in float irregularities;
-	layout(location = 14) in mat4 rotation;
+	layout(location = 1) in float spiralCloudsFactor;
+	layout(location = 2) in float swirlTwist;
+	layout(location = 3) in float swirlDetail;
+	layout(location = 4) in float coreSize;
+	layout(location = 5) in float cloudsSize;
+	layout(location = 6) in float cloudsFrequency;
+	layout(location = 7) in float squish;
+	layout(location = 8) in float attenuationCloudsFrequency;
+	layout(location = 9) in float attenuationCloudsFactor;
+	layout(location = 10) in vec3 position;
+	layout(location = 11) in vec3 noiseOffset;
+	layout(location = 12) in float irregularities;
+	layout(location = 13) in mat4 rotation;
 #endif
 
 layout(location = 0) out uint out_seed;
@@ -50,7 +49,7 @@ layout(location = 0) out uint out_seed;
 
 void main() {
 	gl_Position = posr; // passthrough
-	out_seed = seed - 1565165 + galaxyGen.frameIndex*3;
+	out_seed = galaxyGen.frameIndex;
 	#ifdef GALAXY_INFO_USE_VERTEX_BINDINGS
 		out_galaxyInfo.spiralCloudsFactor = spiralCloudsFactor;
 		out_galaxyInfo.swirlTwist = swirlTwist;
@@ -97,7 +96,7 @@ layout(location = 0) in uint in_seed[];
 #endif
 
 const float MIN_VIEW_DISTANCE = 0.0;
-const float MAX_VIEW_DISTANCE = 2.0;
+const float MAX_VIEW_DISTANCE = 200.0;
 
 float linearstep(float a, float b, float x) {
 	return (x - a) / (b - a);

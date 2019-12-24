@@ -130,4 +130,10 @@ public:
 		this->aabbOffset = aabbOffset;
 		this->aabbCount = aabbData.size();
 	}
+	ProceduralGeometry(std::vector<V>& aabbData, Buffer* aabbBuffer, VkDeviceSize aabbOffset = 0)
+	 : aabbData(std::forward<std::vector<V>>(aabbData)) {
+		this->aabbBuffer = aabbBuffer;
+		this->aabbOffset = aabbOffset;
+		this->aabbCount = aabbData.size();
+	}
 };
