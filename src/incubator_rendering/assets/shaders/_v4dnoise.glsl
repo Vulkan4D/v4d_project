@@ -301,6 +301,8 @@ struct GalaxyInfo {
 	float squish;
 	float attenuationCloudsFrequency;
 	float attenuationCloudsFactor;
+	float clustersFrequency;
+	float clustersFactor;
 	vec3 position;
 	vec3 noiseOffset;
 	float irregularities;
@@ -326,6 +328,7 @@ GalaxyInfo GetGalaxyInfo(vec3 galaxyPosition) {
 		vec3 n1 = Noise3(galaxyPosition+vec3(0.01,0.43,-0.55)) / 2.0 + 0.5;
 		vec3 n2 = Noise3(galaxyPosition+vec3(-0.130,0.590,-0.550)) / 2.0 + 0.5;
 		vec3 n3 = Noise3(galaxyPosition+vec3(0.510,-0.310,0.512)) / 2.0 + 0.5;
+		vec3 n4 = Noise3(galaxyPosition+vec3(1.176,0.798,0.320)) / 2.0 + 0.5;
 		info.spiralCloudsFactor = n1.x;
 		info.swirlTwist = n1.y;
 		info.swirlDetail = n1.z;
@@ -335,6 +338,8 @@ GalaxyInfo GetGalaxyInfo(vec3 galaxyPosition) {
 		info.squish = n3.x;
 		info.attenuationCloudsFrequency = n3.y;
 		info.attenuationCloudsFactor = n3.z;
+		info.clustersFrequency = n4.y;
+		info.clustersFactor = n4.z;
 		info.noiseOffset = Noise3(galaxyPosition);
 	}
 	if (info.spiralCloudsFactor > 0.0 || info.squish > 0.2) {
@@ -364,7 +369,7 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info, int octaves) {
 	float lenSquished = length(pos*vec3(1.0, squish + 1.0, 1.0));
 	float radiusGradient = 1.0 - pow(clamp01(len + abs(pos.y)*squish), 5.0);
 
-	float core = clamp01(pow(1.0-lenSquished/info.coreSize, 5.0) + pow(1.0-lenSquished/info.coreSize, 10.0));
+	float core = clamp01(pow(1.0-lenSquished/info.coreSize, 6.0) + pow(1.0-lenSquished/info.coreSize, 14.0));
 	if (core + radiusGradient <= 0.0) return 0.0;
 	float finalDensity = core + pow(max(0.0, radiusGradient - 0.2), 10.0);
 
@@ -388,7 +393,7 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info, int octaves) {
 	}
 
 	// Spiral
-	float swirl = len * info.swirlTwist * 10.0;
+	float swirl = len * info.swirlTwist * 6.0;
 	float spiralNoise = FastSimplexFractal((vec3(
 		pos.x * cos(swirl) - pos.z * sin(swirl),
 		pos.y * (squish * 10.0 + 1.0),
@@ -400,15 +405,25 @@ float GalaxyStarDensity(in vec3 pos, in GalaxyInfo info, int octaves) {
 
 	finalDensity *= min(1.0, FastSimplexFractal(pos * 234.31, octaves)/2.0+0.8);
 
+	// Clusters
+	float clusterNoise = FastSimplexFractal((vec3(
+		pos.x * cos(swirl) - pos.z * sin(swirl),
+		pos.y,
+		pos.z * cos(swirl) + pos.x * sin(swirl)
+	)+noiseOffset)*info.clustersFrequency*50.0, octaves + 1);
+	float clusters = pow((clusterNoise/2.0+0.5) * radiusGradient * info.clustersFactor * 1.7 * pow(1.0 - abs(pos.y*squish*2.0), 2.0), 15.0);
+	finalDensity += clusters;
+	if (finalDensity <= 0.0) return 0.0;
+
 	// Attenuation Clouds
 	float attenClouds = pow(clamp01(1.0-abs(FastSimplexFractal((vec3(
-		pos.x * cos(swirl / 2.5) - pos.z * sin(swirl / 2.5),
+		pos.x * cos(swirl / 1.5) - pos.z * sin(swirl / 1.5),
 		pos.y * (squish * 2.0 + 1.0),
-		pos.z * cos(swirl / 2.5) + pos.x * sin(swirl / 2.5)
+		pos.z * cos(swirl / 1.5) + pos.x * sin(swirl / 1.5)
 	)+noiseOffset)*info.attenuationCloudsFrequency*20.0, octaves + 1))-core*3.0) * easeIn(radiusGradient), (3.0-info.attenuationCloudsFactor*2.0)) * info.attenuationCloudsFactor * 2.0;
 	if (info.attenuationCloudsFactor > 0.0) finalDensity -= attenClouds * clamp01((FastSimplex((pos+info.noiseOffset)*info.attenuationCloudsFrequency*9.0)/2.0+0.5) * radiusGradient - (abs(pos.y)*squish*3.0));
 
-	return finalDensity;
+	return min(1.0, finalDensity);
 }
 
 vec3 GalaxyStarColor(in vec3 pos, in GalaxyInfo info) {
@@ -420,10 +435,11 @@ vec3 GalaxyStarColor(in vec3 pos, in GalaxyInfo info) {
 	));
 	return normalize((normalize(
 		/*red*/		vec3( 1.0 , 0.4 , 0.2 ) * starType.x +
-		/*yellow*/	vec3( 1.0 , 1.0 , 0.3 ) * starType.y +
+		/*yellow*/	vec3( 1.0 , 0.9 , 0.3 ) * starType.y +
 		/*blue*/	vec3( 0.2 , 0.4 , 1.0 ) * starType.z +
 		/*white*/	vec3( 1.0 , 1.0 , 1.0 ) * starType.w ))
-		+ Noise3(pos * 64.31)/2.0);
+		+ Noise3(pos * 64.31)*vec3(0.5,0.0,0.5)
+	);
 }
 
 

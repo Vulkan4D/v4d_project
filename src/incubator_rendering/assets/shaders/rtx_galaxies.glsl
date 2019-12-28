@@ -27,7 +27,7 @@ layout(std430, push_constant) uniform GalaxyGenPushConstant {
 } galaxyGen;
 
 const float MIN_VIEW_DISTANCE = 0.0;
-const float MAX_VIEW_DISTANCE = 200.0;
+const float MAX_VIEW_DISTANCE = 2000.0;
 
 // Layout Bindings
 layout(set = 0, binding = 0) uniform accelerationStructureNV topLevelAS;
@@ -81,7 +81,7 @@ void main() {
 		origin = ray.endPoint;
 	}
 	
-	imageStore(galaxyCubeMap, ivec3(gl_LaunchIDNV.xyz), vec4(color, 1));
+	imageStore(galaxyCubeMap, ivec3(gl_LaunchIDNV.xyz), vec4(color / 2, 1));
 }
 
 
@@ -128,7 +128,8 @@ float linearstep(float a, float b, float x) {
 void main() {
 	const float distCenter = distance(vec3(galaxyGen.cameraPosition), attribs.posr.xyz);
 	const float sizeInScreen = attribs.posr.w / distCenter * float(galaxyGen.resolution);
-	const float maxSteps = max(1, min(100, sizeInScreen / 10.0));
+	// const float maxSteps = max(1, min(100, sizeInScreen / 10.0));
+	const float maxSteps = 500;
 	
 	vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
 	
@@ -152,18 +153,18 @@ void main() {
 	vec3 end = (endPoint - attribs.posr.xyz) / attribs.posr.w;
 	
 	for (int i = 1; i <= maxSteps; i++) {
-		vec3 starPos = mix(start, end, float(i)/(maxSteps+1.0) + QuickNoise(start + i)/maxSteps);
-		float starDensity = GalaxyStarDensity(starPos, info, int(max(1.0, min(8.0, sizeInScreen/100.0))));
+		vec3 starPos = mix(start, end, float(i)/(maxSteps+1.0));
+		float starDensity = GalaxyStarDensity(starPos, info, int(max(1.0, min(3.0, sizeInScreen/100.0))));
 		if (starDensity == 0.0) continue;
 		vec3 color = GalaxyStarColor(starPos, info);
-		ray.color += color * starDensity;
+		ray.color = max(ray.color, color * starDensity);
 		// ray.density = max(ray.density, abs(brightnessBasedOnDistance * starDensity));
-		ray.density += brightnessBasedOnDistance * abs(starDensity);
+		ray.density += abs(starDensity) / maxSteps * 10.0;
 		if (ray.density >= 1.0) break;
 	}
 	
 	// ray.density = 1;
-	// ray.color = vec3(distance(start, end)/2.0);
+	// ray.color = vec3(0.1);
 }
 
 

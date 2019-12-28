@@ -96,7 +96,7 @@ layout(location = 0) in uint in_seed[];
 #endif
 
 const float MIN_VIEW_DISTANCE = 0.0;
-const float MAX_VIEW_DISTANCE = 200.0;
+const float MAX_VIEW_DISTANCE = 2000.0;
 
 float linearstep(float a, float b, float x) {
 	return (x - a) / (b - a);
@@ -124,9 +124,10 @@ void main(void) {
 	#endif
 	
 	for (int i = 0; i < nbStarsToDraw; i++) {
-		gl_PointSize = brightnessBasedOnDistance * 8.0 + 1.0;
-		
+		// gl_PointSize = brightnessBasedOnDistance * 8.0 + 1.0;
+		gl_PointSize = 5;
 		vec3 starPos = RandomInUnitSphere(seed);
+		starPos = mix(starPos, starPos * length(starPos), 0.5);
 		
 		float starDensity = GalaxyStarDensity(starPos, info, int(max(1.0, min(8.0, sizeInScreen/100.0))));
 		
@@ -136,7 +137,7 @@ void main(void) {
 		
 		out_color = vec4(
 			color * starDensity,
-			brightnessBasedOnDistance
+			brightnessBasedOnDistance * starDensity
 		);
 		
 		vec3 pos = relPos + starPos*radius;
@@ -198,7 +199,7 @@ void main(void) {
 		}
 		
 		// Magical formula to adjust point size for sperical cubemap... Took 3 days of intensive math to figure it out...
-		gl_PointSize *= (tan(length(gl_Position.xy)/sqrt(2))+0.5)/2;
+		// gl_PointSize *= (tan(length(gl_Position.xy)/sqrt(2))+0.5)/2;
 		
 		EmitVertex();
 	}
@@ -214,6 +215,105 @@ void main() {
 	float center = 1.0 - length(gl_PointCoord * 2 - 1);
 	out_color = vec4(in_color.rgb, in_color.a) * center;
 }
+
+
+
+
+
+
+
+
+// layout(points) in;
+// layout(points, max_vertices = 80) out;
+
+// void main(void) {
+// 	vec3 relPos = vec3(dvec3(gl_in[0].gl_Position.xyz) - galaxyGen.cameraPosition.xyz); // position relative to camera
+// 	float radius = gl_in[0].gl_Position.w;
+	
+// 	float dist = length(relPos);
+// 	float sizeInScreen = radius / dist * float(galaxyGen.resolution);
+	
+// 	gl_PointSize = sizeInScreen;
+	
+// 	vec3 pos = relPos;
+	
+// 	// Compute which side of the cube map we should render to
+// 	if (pos.x > 0 && abs(pos.z) <= pos.x && abs(pos.y) <= pos.x) {
+// 		// Right
+// 		gl_Layer = 0;
+// 		gl_Position = vec4(
+// 			-pos.z / pos.x,
+// 			-pos.y / pos.x,
+// 			0, 1
+// 		);
+// 	} else 
+// 	if (-pos.x > 0 && abs(pos.z) <= -pos.x && abs(pos.y) <= -pos.x) {
+// 		// Left
+// 		gl_Layer = 1;
+// 		gl_Position = vec4(
+// 			-pos.z / pos.x,
+// 				pos.y / pos.x,
+// 			0, 1
+// 		);
+// 	} else
+// 	if (pos.y > 0 && abs(pos.z) <= pos.y && abs(pos.x) <= pos.y) {
+// 		// Front
+// 		gl_Layer = 2;
+// 		gl_Position = vec4(
+// 			pos.x / pos.y,
+// 			pos.z / pos.y,
+// 			0, 1
+// 		);
+// 	} else 
+// 	if (-pos.y > 0 && abs(pos.z) <= -pos.y && abs(pos.x) <= -pos.y) {
+// 		// Back
+// 		gl_Layer = 3;
+// 		gl_Position = vec4(
+// 			-pos.x / pos.y,
+// 			pos.z / pos.y,
+// 			0, 1
+// 		);
+// 	} else 
+// 	if (pos.z > 0 && abs(pos.x) <= pos.z && abs(pos.y) <= pos.z) {
+// 		// Top
+// 		gl_Layer = 4;
+// 		gl_Position = vec4(
+// 			pos.x / pos.z,
+// 			-pos.y / pos.z,
+// 			0, 1
+// 		);
+// 	} else 
+// 	if (-pos.z > 0 && abs(pos.x) <= -pos.z && abs(pos.y) <= -pos.z) {
+// 		// Bottom
+// 		gl_Layer = 5;
+// 		gl_Position = vec4(
+// 			pos.x / pos.z,
+// 			pos.y / pos.z,
+// 			0, 1
+// 		);
+// 	}
+	
+// 	// Magical formula to adjust point size for sperical cubemap... Took 3 days of intensive math to figure it out...
+// 	// gl_PointSize *= (tan(length(gl_Position.xy)/sqrt(2))+0.5)/2;
+	
+// 	EmitVertex();
+// }
+
+
+// ##################################################################
+// #shader gen.frag
+
+// layout(location = 0) out vec4 o_color;
+// void main() {
+// 	o_color = vec4(1,1,1,1);
+// }
+
+
+
+
+
+
+
 
 ##################################################################
 #shader fade.vert

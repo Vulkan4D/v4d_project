@@ -75,12 +75,6 @@ int main() {
 				case GLFW_KEY_R:
 					renderer->ReloadRenderer();
 					break;
-					
-				// Toggle Continuous Galaxy Generation
-				case GLFW_KEY_G:
-					renderer->continuousGalaxyGen = !renderer->continuousGalaxyGen;
-					LOG("Continuous Galaxy Generation = " << (renderer->continuousGalaxyGen? "On":"Off"))
-					break;
 				
 			}
 		}
