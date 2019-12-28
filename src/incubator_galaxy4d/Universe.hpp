@@ -132,18 +132,6 @@ public:
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
 	float rayTracingImageScale = 1;
 	
-	void Init(Renderer* renderer) {
-		renderer->RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
-		renderer->RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
-	}
-	void Info(Renderer* renderer, Device* renderingDevice) {
-		// Query the ray tracing properties of the current implementation
-		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
-		VkPhysicalDeviceProperties2 deviceProps2{};
-		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-		deviceProps2.pNext = &rayTracingProperties;
-		renderer->GetPhysicalDeviceProperties2(renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
-	}
 	void CreateRayTracingAccelerationStructures(Renderer* renderer, Device* renderingDevice, Queue& lowPriorityGraphicsQueue) {
 		
 		// Bottom level Acceleration structures
@@ -402,6 +390,18 @@ public:
 	
 #pragma endregion
 	
+	void Init(Renderer* renderer) {
+		renderer->RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
+		renderer->RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
+	}
+	void Info(Renderer* renderer, Device* renderingDevice) {
+		// Query the ray tracing properties of the current implementation
+		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+		VkPhysicalDeviceProperties2 deviceProps2{};
+		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		deviceProps2.pNext = &rayTracingProperties;
+		renderer->GetPhysicalDeviceProperties2(renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
+	}
 	
 	void InitLayouts(Renderer* renderer, std::vector<DescriptorSet*>& descriptorSets, DescriptorSet* baseDescriptorSet_0) {
 		

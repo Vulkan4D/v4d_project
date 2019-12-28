@@ -5,7 +5,8 @@
 #include "../incubator_rendering/helpers/Geometry.hpp"
 
 #include "../incubator_galaxy4d/Noise.hpp"
-#include "../incubator_galaxy4d/Universe.hpp"
+// #include "../incubator_galaxy4d/Universe.hpp"
+#include "../incubator_galaxy4d/PlanetTests.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
@@ -14,6 +15,7 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 
 	// Universe universe;
+	Planet planet;
 	
 	#pragma region Buffers
 	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
@@ -73,9 +75,11 @@ private: // Init
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
 	void Init() override {
 		// universe.Init(this);
+		planet.Init(this);
 	}
 	void Info() override {
 		// universe.Info(this, renderingDevice);
+		planet.Info(this, renderingDevice);
 	}
 
 	void InitLayouts() override {
@@ -85,6 +89,7 @@ private: // Init
 		
 		// Universe
 		// universe.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
+		planet.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
 		
 		// Standard pipeline
 		//TODO standardPipelineLayout
@@ -117,6 +122,7 @@ private: // Init
 	void ConfigureShaders() override {
 		
 		// universe.ConfigureShaders();
+		planet.ConfigureShaders();
 		
 		// Standard pipeline
 		//TODO opaqueRasterizationShaders, transparentRasterizationShaders
@@ -157,6 +163,7 @@ private: // Resources
 		uint uiHeight = (uint)(screenHeight * uiImageScale);
 		
 		// universe.CreateResources(this, renderingDevice, screenWidth, screenHeight);
+		planet.CreateResources(this, renderingDevice, screenWidth, screenHeight);
 		
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
@@ -170,6 +177,7 @@ private: // Resources
 	
 	void DestroyResources() override {
 		// universe.DestroyResources(renderingDevice);
+		planet.DestroyResources(renderingDevice);
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
 		mainCamera.DestroyResources(renderingDevice);
@@ -184,6 +192,7 @@ private: // Resources
 		cameraUniformBuffer.MapMemory(renderingDevice);
 		
 		// universe.AllocateBuffers(renderingDevice);
+		planet.AllocateBuffers(renderingDevice);
 	}
 	
 	void FreeBuffers() override {
@@ -197,6 +206,7 @@ private: // Resources
 		cameraUniformBuffer.Free(renderingDevice);
 		
 		// universe.FreeBuffers(this, renderingDevice);
+		planet.FreeBuffers(this, renderingDevice);
 	}
 
 private: // Graphics configuration
@@ -207,6 +217,7 @@ private: // Graphics configuration
 		};
 		
 		// universe.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
+		planet.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
 		
 		standardPipelineLayout.Create(renderingDevice);
 		lightingPipelineLayout.Create(renderingDevice);
@@ -525,6 +536,7 @@ private: // Graphics configuration
 	
 	void DestroyPipelines() override {
 		// universe.DestroyPipelines(this, renderingDevice);
+		planet.DestroyPipelines(this, renderingDevice);
 		
 		// Rasterization pipelines
 		for (ShaderPipeline* shaderPipeline : opaqueRasterizationShaders) {
@@ -589,6 +601,7 @@ private: // Commands
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
 		
 		// universe.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
+		planet.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
 	}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
@@ -602,6 +615,7 @@ private: // Commands
 		// Opaque Lighting pass
 		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
 			// universe.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
+			planet.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
 			opaqueLightingShader.Execute(renderingDevice, commandBuffer);
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
@@ -627,6 +641,7 @@ private: // Commands
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
 		// universe.RunLowPriorityGraphics(renderingDevice, commandBuffer);
+		planet.RunLowPriorityGraphics(renderingDevice, commandBuffer);
 	}
 	
 public: // Scene configuration
@@ -647,6 +662,7 @@ public: // Scene configuration
 			shader->ReadShaders();
 			
 		// universe.ReadShaders();
+		planet.ReadShaders();
 	}
 	
 	void UnloadScene() override {
@@ -670,9 +686,11 @@ public: // Update
 		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
 		
 		// universe.FrameUpdate(this, renderingDevice, mainCamera);
+		planet.FrameUpdate(this, renderingDevice, mainCamera);
 	}
 	void LowPriorityFrameUpdate() override {
 		// universe.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
+		planet.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
 	}
 	
 };
