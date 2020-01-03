@@ -55,7 +55,7 @@ void main()
 
 layout(location = 0) in vec3 posOnChunk;
 layout(location = 1) in vec3 posRelativeToCamera;
-layout(location = 2) in flat int inside;
+layout(location = 2) in flat int insideBox;
 
 layout(location = 0) out vec4 out_color;
 
@@ -66,9 +66,7 @@ const float stepFactor = 0.01;
 const float insidePlanetSphereThreshold = 0.001;
 
 double GetHeightMap(PlanetInfo planet, dvec3 pos) {
-	// return -0.2;
 	return double((FastSimplexFractal(vec3(pos/1.5), 12)/2) - 5);
-	// return Simplex(pos)/10 - 3 + Simplex(pos*10)/20 + Simplex(pos*25)/50;
 }
 
 float GetAtmosphereDensity(PlanetInfo planet, dvec3 pos) {
@@ -86,20 +84,21 @@ void main() {
 	const float maxDistanceFromCamera = distanceFromCamera + chunk.chunkSize;
 	vec3 rayDirection = normalize(posRelativeToCamera);
 	
-	// "Cull" face depending on inside or outside
+	// "Cull" face depending on inside or outside of box
 	if (dot(rayDirection, normalize(posOnChunk)) > 0) {
-		if (inside > 0) {
+		if (insideBox > 0) {
 			posOnPlanet -= rayDirection * distanceFromCamera;
 			distanceFromCamera = 0;
 		} else {
 			out_color = vec4(0);
 			return;
 		}
-	} else if (inside > 0) {
+	} else if (insideBox > 0) {
 		out_color = vec4(0);
 		return;
 	}
 	
+	// int steps = 0;
 	
 	// Inside Planet Sphere
 	bool insideSphere = false;
@@ -112,6 +111,7 @@ void main() {
 		}
 		distanceFromCamera += stepSize;
 		posOnPlanet += rayDirection * stepSize;
+		// steps++;
 	}
 	if (!insideSphere) {
 		out_color = vec4(0);
@@ -146,8 +146,15 @@ void main() {
 		}
 		distanceFromCamera += stepSize;
 		posOnPlanet += rayDirection * stepSize;
+		// steps++;
 	}
 	
 	out_color = vec4(color + pow(min(vec3(1), atmosphereColor), vec3(2)), 1);
+	// out_color = vec4(
+	// 	step(20, float(steps)),
+	// 	step(100, float(steps)),
+	// 	step(500, float(steps)),
+	// 	1
+	// );
 }
 
