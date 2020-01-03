@@ -198,8 +198,9 @@ int main() {
 		#if defined(_DEBUG) && defined(_LINUX)
 			// Watch shader modifications to automatically reload the renderer
 			static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
-				{"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
-				{"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
+				// {"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
+				// {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
+				{"incubator_galaxy4d/assets/shaders/planet.meta", 0},
 			};
 			for (auto&[f, t] : shaderFilesToWatch) {
 				if (t == 0) {

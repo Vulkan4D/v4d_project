@@ -192,7 +192,7 @@ private: // Resources
 		cameraUniformBuffer.MapMemory(renderingDevice);
 		
 		// universe.AllocateBuffers(renderingDevice);
-		planet.AllocateBuffers(renderingDevice);
+		planet.AllocateBuffers(this, renderingDevice, transferQueue);
 	}
 	
 	void FreeBuffers() override {
@@ -646,7 +646,7 @@ private: // Commands
 	
 public: // Scene configuration
 	void LoadScene() override {
-		
+		planet.LoadScene();
 	}
 	
 	void ReadShaders() override {

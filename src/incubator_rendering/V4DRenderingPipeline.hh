@@ -6,6 +6,7 @@ namespace v4d::graphics {
 		glm::dmat4 origin;
 		glm::mat4 projection;
 		glm::mat4 relativeView;
+		glm::dvec4 absolutePosition;
 	};
 	
 	struct GalaxyGenPushConstant {
