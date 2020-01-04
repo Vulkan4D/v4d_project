@@ -188,6 +188,8 @@ namespace v4d::graphics {
 			ubo.projection = projection;
 			ubo.relativeView = glm::inverse(origin) * view;
 			ubo.absolutePosition = glm::dvec4(worldPosition, 1);
+			ubo.screenWidth = extent.width;
+			ubo.screenHeight = extent.height;
 		}
 		
 		void CreateResources(Device* device) {

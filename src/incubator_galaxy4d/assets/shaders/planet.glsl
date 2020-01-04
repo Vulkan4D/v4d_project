@@ -21,6 +21,31 @@ layout(std430, push_constant) uniform Planet {
 #include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
 
 ##################################################################
+
+#common .*frag
+
+#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+
+layout(location = 0) in V2F {
+	flat dvec3 posOnPlanet;
+	smooth vec3 posOnTriangle;
+};
+
+layout(location = 0) out vec4 out_color;
+
+double GetHeightMap(dvec3 pos) {
+	return double((FastSimplexFractal(vec3(pos/4000), 12)*5000) - 40000);
+}
+
+float GetAtmosphereDensity(dvec3 pos) {
+	return float(smoothstep(planet.radius, planet.radius*.7, length(pos))) * 0.1;
+}
+
+vec3 GetTerrainColor(dvec3 pos) {
+	return vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .998, planet.radius * .999, length(pos)));
+}
+
+##################################################################
 #shader vert
 
 // #include "incubator_rendering/assets/shaders/_cube.glsl"
@@ -50,59 +75,38 @@ void main() {
 
 // ##################################################################
 
-#shader geom
+// #shader geom
 
-layout(triangles) in;
-layout(line_strip, max_vertices = 6) out;
+// layout(triangles) in;
+// layout(line_strip, max_vertices = 6) out;
 
-void main() {
-	gl_Position = gl_in[0].gl_Position;
-	EmitVertex();
-	gl_Position = gl_in[1].gl_Position;
-	EmitVertex();
-	EndPrimitive();
+// void main() {
+// 	gl_Position = gl_in[0].gl_Position;
+// 	EmitVertex();
+// 	gl_Position = gl_in[1].gl_Position;
+// 	EmitVertex();
+// 	EndPrimitive();
 	
-	gl_Position = gl_in[1].gl_Position;
-	EmitVertex();
-	gl_Position = gl_in[2].gl_Position;
-	EmitVertex();
-	EndPrimitive();
+// 	gl_Position = gl_in[1].gl_Position;
+// 	EmitVertex();
+// 	gl_Position = gl_in[2].gl_Position;
+// 	EmitVertex();
+// 	EndPrimitive();
 	
-	gl_Position = gl_in[2].gl_Position;
-	EmitVertex();
-	gl_Position = gl_in[0].gl_Position;
-	EmitVertex();
-	EndPrimitive();
-}
+// 	gl_Position = gl_in[2].gl_Position;
+// 	EmitVertex();
+// 	gl_Position = gl_in[0].gl_Position;
+// 	EmitVertex();
+// 	EndPrimitive();
+// }
 
 ##################################################################
 
-#shader frag
+#shader distancefield.frag
 
-#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
-
-layout(location = 0) in V2F {
-	flat dvec3 posOnPlanet;
-	smooth vec3 posOnTriangle;
-};
-
-layout(location = 0) out vec4 out_color;
-
-const int MAX_STEPS = 1000;
+const int MAX_STEPS = 4000;
 const float stepFactor = 0.01;
-const float insidePlanetSphereThreshold = 0.01;
-
-double GetHeightMap(dvec3 pos) {
-	return double((FastSimplexFractal(vec3(pos/4000), 12)*5000) - 40000);
-}
-
-float GetAtmosphereDensity(dvec3 pos) {
-	return float(smoothstep(planet.radius, planet.radius*.7, length(pos))) * 0.1;
-}
-
-vec3 GetTerrainColor(dvec3 pos) {
-	return vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .998, planet.radius * .999, length(pos)));
-}
+const float insidePlanetSphereThreshold = 0.001;
 
 void main() {
 	//TODO consider planet rotation
@@ -121,7 +125,7 @@ void main() {
 	double distanceFromCamera = 0.01;
 	
 	if (cameraIsOutsideOfRadius) {
-		rayStart = mix(rayStart, rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir), 0.9);
+		rayStart = rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir);
 		distanceFromCamera = distance(rayStart+s, c);
 		rayMaxDistance = distance(rayStart, rayEnd);
 	}
@@ -137,9 +141,9 @@ void main() {
 	for (int i = 0; i < MAX_STEPS; i++) {
 		nbSteps++;
 		
-		double stepSize = max(10, distanceFromCamera * stepFactor);
+		double stepSize = max(0.1, distanceFromCamera * stepFactor);
 		currentDistance += stepSize;
-		// if (currentDistance > rayMaxDistance) break;
+		if (currentDistance > rayMaxDistance) break;
 		distanceFromCamera += stepSize;
 		
 		dvec3 pos = rayStart + dir*currentDistance;
@@ -150,24 +154,91 @@ void main() {
 		
 		double threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
 		
-		atmosphereColor += GetAtmosphereDensity(pos) * normalize(vec3(.1,.1,.13)) * stepSize;
-		// if (length(atmosphereColor) > 1.9) break;
+		if (dist < threshold) {
+			break;
+		}
+	}
+	
+	out_color = vec4(currentDistance);
+}
+
+
+##################################################################
+
+#shader frag
+
+const int MAX_STEPS = 100;
+const float stepFactor = 0.01;
+const float insidePlanetSphereThreshold = 0.001;
+
+layout(set = 1, binding = 0) uniform sampler2D distanceField;
+
+void main() {
+	//TODO consider planet rotation
+	
+	const dvec3 hitPosOnPlanet = posOnPlanet + dvec3(posOnTriangle);
+
+	const dvec3 c = cameraUBO.absolutePosition.xyz;
+	const double r = planet.radius;
+	const dvec3 s = planet.absolutePosition;
+	const dvec3 dir = normalize(s + hitPosOnPlanet - c);
+	const bool cameraIsOutsideOfRadius = distance(s, c) > r;
+	
+	dvec3 rayStart = c - s;
+	dvec3 rayEnd = hitPosOnPlanet;
+	double rayMaxDistance = distance(rayStart, rayEnd);
+	double distanceFromCamera = 0.01;
+	
+	if (cameraIsOutsideOfRadius) {
+		rayStart = rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir);
+		distanceFromCamera = distance(rayStart+s, c);
+		rayMaxDistance = distance(rayStart, rayEnd);
+	}
+
+	vec3 color = vec3(0);
+	dvec3 atmosphereColor = vec3(0);
+	
+	vec2 uv = vec2(
+		gl_FragCoord.s / cameraUBO.screenWidth,
+		gl_FragCoord.t / cameraUBO.screenHeight
+	);
+	double currentDistance = max(0.01, texture(distanceField, uv).a - 1.0);
+	distanceFromCamera += currentDistance;
+	
+	// out_color = vec4(currentDistance/40000);
+	// return;
+	
+	int nbSteps = 0;
+	
+	// Terrain/Atmosphere
+	for (int i = 0; i < MAX_STEPS; i++) {
+		nbSteps++;
+		
+		double stepSize = max(0.01, distanceFromCamera * stepFactor - 0.01);
+		currentDistance += stepSize;
+		if (currentDistance > rayMaxDistance) break;
+		distanceFromCamera += stepSize;
+		
+		dvec3 pos = rayStart + dir*currentDistance;
+		
+		double heightMap = GetHeightMap(pos);
+		
+		double dist = length(pos) - (r + heightMap);
+		
+		double threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
+		
+		// atmosphereColor += GetAtmosphereDensity(pos) * normalize(vec3(.1,.1,.13)) * stepSize;
 		
 		if (dist < threshold) {
-			// for (int j = 0; j < 10 && dist < -threshold; j++) {
-			// 	distanceFromCamera -= stepSize / 10;
-			// 	pos -= dir * stepSize / 10;
-			// 	heightMap = GetHeightMap(pos);
-			// 	dist = length(pos) - (planet.radius + heightMap);
-			// }
 			color = GetTerrainColor(pos);
 			break;
 		}
 	}
 	
 	out_color = vec4(color + pow(min(vec3(1), vec3(atmosphereColor)), vec3(2)), 1);
+	// out_color = vec4(1);
 	
 	// out_color = mix(vec4(0,1,0,1), vec4(1,0,0,1), float(nbSteps)/MAX_STEPS);
-	// out_color = mix(vec4(0,1,0,1), vec4(1,0,0,1), float(distanceFromCamera/100000));
+	// out_color = vec4(currentDistance/100000);
 }
 

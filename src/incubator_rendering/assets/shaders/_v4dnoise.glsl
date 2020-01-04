@@ -283,7 +283,7 @@ float FastSimplexFractal(vec3 pos, int octaves) {
 	float amplitude = 0.5333333333;
 	float frequency = 1.0;
 	float f = FastSimplex(pos * frequency);
-	if (octaves > 1) for (int i = 1; i < octaves; ++i) {
+	for (int i = 1; i < octaves; ++i) {
 		amplitude /= 2.0;
 		frequency *= 2.0;
 		f += amplitude * FastSimplex(pos * frequency);

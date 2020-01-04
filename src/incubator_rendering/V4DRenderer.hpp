@@ -605,6 +605,9 @@ private: // Commands
 	}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
+		// Prepass
+		planet.RunDynamic(renderingDevice, commandBuffer);
+		
 		// Opaque Raster pass
 		opaqueRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
 			for (auto* shaderPipeline : opaqueRasterizationShaders) {

@@ -16,6 +16,15 @@ class Planet {
 		"incubator_galaxy4d/assets/shaders/planet.frag",
 	}};
 	
+	RenderPass distanceFieldRenderPass;
+	RasterShaderPipeline distanceFieldShader {planetPipelineLayout, {
+		"incubator_galaxy4d/assets/shaders/planet.vert",
+		// "incubator_galaxy4d/assets/shaders/planet.geom",
+		"incubator_galaxy4d/assets/shaders/planet.distancefield.frag",
+	}};
+	float distanceFieldScale = 1./8;
+	Image distanceFieldImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1,1, { VK_FORMAT_R32G32B32A32_SFLOAT } };
+	
 	// struct PlanetInfo {
 	// 	double radius;
 	// };
@@ -55,6 +64,7 @@ public:
 	void InitLayouts(Renderer* renderer, std::vector<DescriptorSet*>& descriptorSets, DescriptorSet* baseDescriptorSet_0) {
 		auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		// planetDescriptorSet_1->AddBinding_uniformBuffer(0, &planetsBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		planetDescriptorSet_1->AddBinding_combinedImageSampler(0, &distanceFieldImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		planetPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		planetPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
@@ -67,6 +77,17 @@ public:
 		planetShader.depthStencilState.depthWriteEnable = VK_FALSE;
 		planetShader.depthStencilState.depthTestEnable = VK_FALSE;
 		planetShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, {
+			{0, offsetof(Vertex, Vertex::posX), VK_FORMAT_R64_SFLOAT},
+			{1, offsetof(Vertex, Vertex::posY), VK_FORMAT_R64_SFLOAT},
+			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
+			{3, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32A32_SFLOAT},
+		});
+		
+		distanceFieldShader.rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+		distanceFieldShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		distanceFieldShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		distanceFieldShader.depthStencilState.depthTestEnable = VK_FALSE;
+		distanceFieldShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, {
 			{0, offsetof(Vertex, Vertex::posX), VK_FORMAT_R64_SFLOAT},
 			{1, offsetof(Vertex, Vertex::posY), VK_FORMAT_R64_SFLOAT},
 			{2, offsetof(Vertex, Vertex::posZ), VK_FORMAT_R64_SFLOAT},
@@ -204,18 +225,23 @@ public:
 		
 		vertexBuffer.AddSrcDataPtr(&vertices);
 		planetShader.SetData(&vertexBuffer, vertices.size());
+		distanceFieldShader.SetData(&vertexBuffer, vertices.size());
 	}
 	
 	void ReadShaders() {
 		planetShader.ReadShaders();
+		distanceFieldShader.ReadShaders();
 	}
 	
 	void CreateResources(Renderer* renderer, Device* renderingDevice, float screenWidth, float screenHeight) {
-		
+		uint distanceFieldWidth = (uint)(screenWidth * distanceFieldScale);
+		uint distanceFieldHeight = (uint)(screenHeight * distanceFieldScale);
+		distanceFieldImage.Create(renderingDevice, distanceFieldWidth, distanceFieldHeight);
+		renderer->TransitionImageLayout(distanceFieldImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	}
 	
 	void DestroyResources(Device* renderingDevice) {
-		
+		distanceFieldImage.Destroy(renderingDevice);
 	}
 	
 	void AllocateBuffers(Renderer* renderer, Device* renderingDevice, Queue& transferQueue) {
@@ -233,21 +259,72 @@ public:
 	void CreatePipelines(Renderer* renderer, Device* renderingDevice, std::vector<RasterShaderPipeline*>& opaqueLightingShaders) {
 		planetPipelineLayout.Create(renderingDevice);
 		opaqueLightingShaders.push_back(&planetShader);
+		
+		// Distance Field
+		{
+			VkAttachmentDescription colorAttachment = {};
+				colorAttachment.format = distanceFieldImage.format;
+				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+				// Color and depth data
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				// Stencil data
+				colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			VkAttachmentReference colorAttachmentRef = {
+				distanceFieldRenderPass.AddAttachment(colorAttachment),
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.pDepthStencilAttachment = nullptr;
+			distanceFieldRenderPass.AddSubpass(subpass);
+			
+			// Create the render pass
+			distanceFieldRenderPass.Create(renderingDevice);
+			distanceFieldRenderPass.CreateFrameBuffers(renderingDevice, distanceFieldImage);
+			
+			// Shader pipeline
+			distanceFieldShader.SetRenderPass(&distanceFieldImage, distanceFieldRenderPass.handle, 0);
+			distanceFieldShader.AddColorBlendAttachmentState();
+			distanceFieldShader.CreatePipeline(renderingDevice);
+		}
 	}
 	
 	void DestroyPipelines(Renderer* renderer, Device* renderingDevice) {
 		planetShader.DestroyPipeline(renderingDevice);
+		distanceFieldShader.DestroyPipeline(renderingDevice);
 		planetPipelineLayout.Destroy(renderingDevice);
+		distanceFieldRenderPass.DestroyFrameBuffers(renderingDevice);
+		distanceFieldRenderPass.Destroy(renderingDevice);
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 		
 	}
 	
-	void RunInOpaqueLightingPass(Device* renderingDevice, VkCommandBuffer commandBuffer) {
-		// For each planet
+	void RunDynamic(Device* renderingDevice, VkCommandBuffer commandBuffer) {
+		//TODO For each planet
+		
 		planetPushConstant.planetRadius = 24000000;
-		planetPushConstant.planetAbsolutePosition = glm::dvec3(0, 25000000, -15000000);
+		planetPushConstant.planetAbsolutePosition = glm::dvec3(0, 21800000, -10000000);
+		
+		distanceFieldRenderPass.Begin(renderingDevice, commandBuffer, distanceFieldImage, {{.0,.0,.0,.0}});
+		distanceFieldShader.Execute(renderingDevice, commandBuffer, &planetPushConstant);
+		distanceFieldRenderPass.End(renderingDevice, commandBuffer);
+	}
+	
+	void RunInOpaqueLightingPass(Device* renderingDevice, VkCommandBuffer commandBuffer) {
+		//TODO For each planet
+		
+		planetPushConstant.planetRadius = 24000000;
+		planetPushConstant.planetAbsolutePosition = glm::dvec3(0, 21800000, -10000000);
+		
 		planetShader.Execute(renderingDevice, commandBuffer, &planetPushConstant);
 	}
 	

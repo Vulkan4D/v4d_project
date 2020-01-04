@@ -7,6 +7,8 @@ namespace v4d::graphics {
 		glm::mat4 projection;
 		glm::mat4 relativeView;
 		glm::dvec4 absolutePosition;
+		int screenWidth;
+		int screenHeight;
 	};
 	
 	struct GalaxyGenPushConstant {
