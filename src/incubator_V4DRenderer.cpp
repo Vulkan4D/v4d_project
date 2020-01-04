@@ -46,7 +46,7 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	double camSpeed = 2.0, mouseSensitivity = 1.0;
+	double camSpeed = 2000.0, mouseSensitivity = 1.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
 	renderer->mainCamera.SetWorldPosition(0, 0, 0);
@@ -152,7 +152,7 @@ int main() {
 		glfwPollEvents();
 		
 		// Camera Movements
-		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 10.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.1 : 1.0);
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.01 : 1.0);
 		renderer->mainCamera.SetVelocity(glm::dvec3{0});
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			renderer->mainCamera.SetVelocity(+renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);

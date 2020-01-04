@@ -1,160 +1,173 @@
 #version 460 core
+#extension GL_ARB_enhanced_layouts : enable
 
 precision highp int;
 precision highp float;
 precision highp sampler2D;
 
-struct PlanetInfo {
-	double radius;
-};
+// struct PlanetInfo {
+// 	double radius;
+// };
 
-layout(set = 1, binding = 0) uniform Planets {
-	PlanetInfo planets[255];
-};
+// layout(set = 1, binding = 0) uniform Planets {
+// 	PlanetInfo planets[255];
+// };
 
-layout(std430, push_constant) uniform PlanetChunk {
-	dvec3 planetPosition;
-	int planetIndex;
-	int chunkIndex;
-	dvec3 chunkPosOnPlanet;
-	float chunkSize;
-} chunk;
+layout(std430, push_constant) uniform Planet {
+	dvec3 absolutePosition;
+	float radius;
+} planet;
+
+#include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
 
 ##################################################################
 #shader vert
 
-#include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
-#include "incubator_rendering/assets/shaders/_cube.glsl"
+// #include "incubator_rendering/assets/shaders/_cube.glsl"
 
-layout(location = 0) out vec3 posOnChunk;
-layout(location = 1) out vec3 posRelativeToCamera;
-layout(location = 2) out flat int inside;
+layout(location = 0) in double posX;
+layout(location = 1) in double posY;
+layout(location = 2) in double posZ;
+layout(location = 3) in vec4 pos;
 
-void main() 
-{
-	// PlanetInfo planet = planets[chunk.planetIndex];
-	posOnChunk = GetVertexPosOnCube() * chunk.chunkSize;
-	dvec3 chunkAbsolutePosition = chunk.planetPosition + chunk.chunkPosOnPlanet;
-	dvec3 absolutePos = chunkAbsolutePosition + dvec3(posOnChunk);
-	posRelativeToCamera = vec3(absolutePos - cameraUBO.absolutePosition.xyz);
-	gl_Position = cameraUBO.projection * vec4(cameraUBO.origin * dmat4(cameraUBO.relativeView) * dvec4(absolutePos, 1));
+layout(location = 0) out V2F {
+	flat dvec3 posOnPlanet;
+	smooth vec3 posOnTriangle;
+};
+
+void main() {
+	// // PlanetInfo planet = planets[chunk.planetIndex];
+	// posOnChunk = dvec3(GetVertexPosOnCube() * chunk.chunkSize);
+	// dvec3 chunkAbsolutePosition = chunk.planetPosition + chunk.chunkPosOnPlanet;
+	// dvec3 absolutePos = chunkAbsolutePosition + posOnChunk;
+	// posRelativeToCamera = vec3(absolutePos - cameraUBO.absolutePosition.xyz);
+	// gl_Position = cameraUBO.projection * vec4(cameraUBO.origin * dmat4(cameraUBO.relativeView) * dvec4(absolutePos, 1));
 	
-	inside = (
-		cameraUBO.absolutePosition.x >= (chunkAbsolutePosition.x - chunk.chunkSize/1.99) && 
-		cameraUBO.absolutePosition.x <= (chunkAbsolutePosition.x + chunk.chunkSize/1.99) && 
-		cameraUBO.absolutePosition.y >= (chunkAbsolutePosition.y - chunk.chunkSize/1.99) && 
-		cameraUBO.absolutePosition.y <= (chunkAbsolutePosition.y + chunk.chunkSize/1.99) && 
-		cameraUBO.absolutePosition.z >= (chunkAbsolutePosition.z - chunk.chunkSize/1.99) && 
-		cameraUBO.absolutePosition.z <= (chunkAbsolutePosition.z + chunk.chunkSize/1.99) 
-	)? 1:0;
+	gl_Position = cameraUBO.projection * vec4(cameraUBO.origin * dmat4(cameraUBO.relativeView) * (dvec4(planet.absolutePosition, 1) + dvec4(posX+pos.x, posY+pos.y, posZ+pos.z, 0)));
+	posOnPlanet = dvec3(posX, posY, posZ);
+	posOnTriangle = pos.xyz;
+}
+
+// ##################################################################
+
+#shader geom
+
+layout(triangles) in;
+layout(line_strip, max_vertices = 6) out;
+
+void main() {
+	gl_Position = gl_in[0].gl_Position;
+	EmitVertex();
+	gl_Position = gl_in[1].gl_Position;
+	EmitVertex();
+	EndPrimitive();
+	
+	gl_Position = gl_in[1].gl_Position;
+	EmitVertex();
+	gl_Position = gl_in[2].gl_Position;
+	EmitVertex();
+	EndPrimitive();
+	
+	gl_Position = gl_in[2].gl_Position;
+	EmitVertex();
+	gl_Position = gl_in[0].gl_Position;
+	EmitVertex();
+	EndPrimitive();
 }
 
 ##################################################################
 
 #shader frag
 
-layout(location = 0) in vec3 posOnChunk;
-layout(location = 1) in vec3 posRelativeToCamera;
-layout(location = 2) in flat int insideBox;
+#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+
+layout(location = 0) in V2F {
+	flat dvec3 posOnPlanet;
+	smooth vec3 posOnTriangle;
+};
 
 layout(location = 0) out vec4 out_color;
 
-#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
-
 const int MAX_STEPS = 1000;
 const float stepFactor = 0.01;
-const float insidePlanetSphereThreshold = 0.001;
+const float insidePlanetSphereThreshold = 0.01;
 
-double GetHeightMap(PlanetInfo planet, dvec3 pos) {
-	return double((FastSimplexFractal(vec3(pos/1.5), 12)/2) - 5);
+double GetHeightMap(dvec3 pos) {
+	return double((FastSimplexFractal(vec3(pos/4000), 12)*5000) - 40000);
 }
 
-float GetAtmosphereDensity(PlanetInfo planet, dvec3 pos) {
-	return float(smoothstep(planet.radius, 0, length(pos))) * 30;
+float GetAtmosphereDensity(dvec3 pos) {
+	return float(smoothstep(planet.radius, planet.radius*.7, length(pos))) * 0.1;
 }
 
-vec3 GetTerrainColor(PlanetInfo planet, dvec3 pos) {
-	return vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .94, planet.radius * .96, length(pos)));
+vec3 GetTerrainColor(dvec3 pos) {
+	return vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .998, planet.radius * .999, length(pos)));
 }
 
 void main() {
-	const PlanetInfo planet = planets[chunk.planetIndex];
-	dvec3 posOnPlanet = chunk.chunkPosOnPlanet + dvec3(posOnChunk);
-	float distanceFromCamera = length(posRelativeToCamera);
-	const float maxDistanceFromCamera = distanceFromCamera + chunk.chunkSize;
-	vec3 rayDirection = normalize(posRelativeToCamera);
+	//TODO consider planet rotation
 	
-	// "Cull" face depending on inside or outside of box
-	if (dot(rayDirection, normalize(posOnChunk)) > 0) {
-		if (insideBox > 0) {
-			posOnPlanet -= rayDirection * distanceFromCamera;
-			distanceFromCamera = 0;
-		} else {
-			out_color = vec4(0);
-			return;
-		}
-	} else if (insideBox > 0) {
-		out_color = vec4(0);
-		return;
+	const dvec3 hitPosOnPlanet = posOnPlanet + dvec3(posOnTriangle);
+
+	const dvec3 c = cameraUBO.absolutePosition.xyz;
+	const double r = planet.radius;
+	const dvec3 s = planet.absolutePosition;
+	const dvec3 dir = normalize(s + hitPosOnPlanet - c);
+	const bool cameraIsOutsideOfRadius = distance(s, c) > r;
+	
+	dvec3 rayStart = c - s;
+	dvec3 rayEnd = hitPosOnPlanet;
+	double rayMaxDistance = distance(rayStart, rayEnd);
+	double distanceFromCamera = 0.01;
+	
+	if (cameraIsOutsideOfRadius) {
+		rayStart = mix(rayStart, rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir), 0.9);
+		distanceFromCamera = distance(rayStart+s, c);
+		rayMaxDistance = distance(rayStart, rayEnd);
 	}
-	
-	// int steps = 0;
-	
-	// Inside Planet Sphere
-	bool insideSphere = false;
-	for (int i = 0; i < MAX_STEPS; i++) {
-		float stepSize = max(0.01, distanceFromCamera * stepFactor);
-		if (distanceFromCamera > maxDistanceFromCamera) break;
-		if (length(posOnPlanet) < planet.radius) {
-			insideSphere = true;
-			break;
-		}
-		distanceFromCamera += stepSize;
-		posOnPlanet += rayDirection * stepSize;
-		// steps++;
-	}
-	if (!insideSphere) {
-		out_color = vec4(0);
-		return;
-	}
-	
+
 	vec3 color = vec3(0);
-	vec3 atmosphereColor = vec3(0);
+	dvec3 atmosphereColor = vec3(0);
+	
+	double currentDistance = 0.01;
+	
+	int nbSteps = 0;
 	
 	// Terrain/Atmosphere
 	for (int i = 0; i < MAX_STEPS; i++) {
-		if (distanceFromCamera > maxDistanceFromCamera) break;
-		if (length(posOnPlanet) > planet.radius) break;
-		double heightMap = GetHeightMap(planet, posOnPlanet);
-		double dist = length(posOnPlanet) - (planet.radius + heightMap);
-		float stepSize = max(0.001, distanceFromCamera * stepFactor);
-		float threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
+		nbSteps++;
 		
-		if (length(posOnPlanet) < planet.radius) {
-			atmosphereColor += GetAtmosphereDensity(planet, posOnPlanet) * normalize(vec3(.1,.1,.13)) * stepSize;
-			if (length(atmosphereColor) > 1.9) break;
-		}
+		double stepSize = max(10, distanceFromCamera * stepFactor);
+		currentDistance += stepSize;
+		// if (currentDistance > rayMaxDistance) break;
+		distanceFromCamera += stepSize;
+		
+		dvec3 pos = rayStart + dir*currentDistance;
+		
+		double heightMap = GetHeightMap(pos);
+		
+		double dist = length(pos) - (r + heightMap);
+		
+		double threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
+		
+		atmosphereColor += GetAtmosphereDensity(pos) * normalize(vec3(.1,.1,.13)) * stepSize;
+		// if (length(atmosphereColor) > 1.9) break;
+		
 		if (dist < threshold) {
 			// for (int j = 0; j < 10 && dist < -threshold; j++) {
 			// 	distanceFromCamera -= stepSize / 10;
-			// 	posOnPlanet -= rayDirection * stepSize / 10;
-			// 	heightMap = GetHeightMap(planet, posOnPlanet);
-			// 	dist = length(posOnPlanet) - (planet.radius + heightMap);
+			// 	pos -= dir * stepSize / 10;
+			// 	heightMap = GetHeightMap(pos);
+			// 	dist = length(pos) - (planet.radius + heightMap);
 			// }
-			color = GetTerrainColor(planet, posOnPlanet);
+			color = GetTerrainColor(pos);
 			break;
 		}
-		distanceFromCamera += stepSize;
-		posOnPlanet += rayDirection * stepSize;
-		// steps++;
 	}
 	
-	out_color = vec4(color + pow(min(vec3(1), atmosphereColor), vec3(2)), 1);
-	// out_color = vec4(
-	// 	step(20, float(steps)),
-	// 	step(100, float(steps)),
-	// 	step(500, float(steps)),
-	// 	1
-	// );
+	out_color = vec4(color + pow(min(vec3(1), vec3(atmosphereColor)), vec3(2)), 1);
+	
+	// out_color = mix(vec4(0,1,0,1), vec4(1,0,0,1), float(nbSteps)/MAX_STEPS);
+	// out_color = mix(vec4(0,1,0,1), vec4(1,0,0,1), float(distanceFromCamera/100000));
 }
 
