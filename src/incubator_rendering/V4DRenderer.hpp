@@ -6,7 +6,8 @@
 
 #include "../incubator_galaxy4d/Noise.hpp"
 // #include "../incubator_galaxy4d/Universe.hpp"
-#include "../incubator_galaxy4d/PlanetTests.hpp"
+// #include "../incubator_galaxy4d/PlanetRayMarchingTests.hpp"
+#include "../incubator_galaxy4d/PlanetRaster.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;

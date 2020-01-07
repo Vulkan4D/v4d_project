@@ -34,15 +34,16 @@ layout(location = 0) in V2F {
 layout(location = 0) out vec4 out_color;
 
 double GetHeightMap(dvec3 pos) {
-	return double((FastSimplexFractal(vec3(pos/4000), 12)*5000) - 40000);
+	// return -40000;
+	return double((FastSimplexFractal(vec3(pos/4000), 12)*5000) - 100000);
 }
 
 float GetAtmosphereDensity(dvec3 pos) {
-	return float(smoothstep(planet.radius, planet.radius*.7, length(pos))) * 0.1;
+	return float(smoothstep(planet.radius, planet.radius*.5, length(pos))) * 0.1;
 }
 
 vec3 GetTerrainColor(dvec3 pos) {
-	return vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .998, planet.radius * .999, length(pos)));
+	return vec3(0.03) + vec3(0.5,0.35,0.1) * float(smoothstep(planet.radius * .9957, planet.radius * .996, length(pos)));
 }
 
 ##################################################################
@@ -104,9 +105,8 @@ void main() {
 
 #shader distancefield.frag
 
-const int MAX_STEPS = 4000;
+const int MAX_STEPS = 1000;
 const float stepFactor = 0.01;
-const float insidePlanetSphereThreshold = 0.001;
 
 void main() {
 	//TODO consider planet rotation
@@ -124,11 +124,11 @@ void main() {
 	double rayMaxDistance = distance(rayStart, rayEnd);
 	double distanceFromCamera = 0.01;
 	
-	if (cameraIsOutsideOfRadius) {
-		rayStart = rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir);
-		distanceFromCamera = distance(rayStart+s, c);
-		rayMaxDistance = distance(rayStart, rayEnd);
-	}
+	// if (cameraIsOutsideOfRadius) {
+	// 	rayStart = rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir);
+	// 	distanceFromCamera = distance(rayStart+s, c);
+	// 	rayMaxDistance = distance(rayStart, rayEnd);
+	// }
 
 	vec3 color = vec3(0);
 	dvec3 atmosphereColor = vec3(0);
@@ -137,11 +137,13 @@ void main() {
 	
 	int nbSteps = 0;
 	
+	double stepSize = 0.1;
+	
 	// Terrain/Atmosphere
 	for (int i = 0; i < MAX_STEPS; i++) {
 		nbSteps++;
 		
-		double stepSize = max(0.1, distanceFromCamera * stepFactor);
+		stepSize = max(stepSize, distanceFromCamera * stepFactor);
 		currentDistance += stepSize;
 		if (currentDistance > rayMaxDistance) break;
 		distanceFromCamera += stepSize;
@@ -152,14 +154,12 @@ void main() {
 		
 		double dist = length(pos) - (r + heightMap);
 		
-		double threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
-		
-		if (dist < threshold) {
+		if (dist < stepSize*0.5) {
 			break;
 		}
 	}
 	
-	out_color = vec4(currentDistance);
+	out_color = vec4(stepSize, 0, rayMaxDistance, currentDistance);
 }
 
 
@@ -167,9 +167,8 @@ void main() {
 
 #shader frag
 
-const int MAX_STEPS = 100;
+const int MAX_STEPS = 1000;
 const float stepFactor = 0.01;
-const float insidePlanetSphereThreshold = 0.001;
 
 layout(set = 1, binding = 0) uniform sampler2D distanceField;
 
@@ -177,38 +176,37 @@ void main() {
 	//TODO consider planet rotation
 	
 	const dvec3 hitPosOnPlanet = posOnPlanet + dvec3(posOnTriangle);
-
 	const dvec3 c = cameraUBO.absolutePosition.xyz;
 	const double r = planet.radius;
 	const dvec3 s = planet.absolutePosition;
 	const dvec3 dir = normalize(s + hitPosOnPlanet - c);
-	const bool cameraIsOutsideOfRadius = distance(s, c) > r;
-	
-	dvec3 rayStart = c - s;
+	const dvec3 rayStart = c - s;
 	dvec3 rayEnd = hitPosOnPlanet;
 	double rayMaxDistance = distance(rayStart, rayEnd);
-	double distanceFromCamera = 0.01;
-	
-	if (cameraIsOutsideOfRadius) {
-		rayStart = rayEnd - dir * r * 2.0 * dot(normalize(rayEnd), dir);
-		distanceFromCamera = distance(rayStart+s, c);
-		rayMaxDistance = distance(rayStart, rayEnd);
-	}
-
-	vec3 color = vec3(0);
-	dvec3 atmosphereColor = vec3(0);
 	
 	vec2 uv = vec2(
 		gl_FragCoord.s / cameraUBO.screenWidth,
 		gl_FragCoord.t / cameraUBO.screenHeight
 	);
-	double currentDistance = max(0.01, texture(distanceField, uv).a - 1.0);
-	distanceFromCamera += currentDistance;
+	ivec2 texSize = textureSize(distanceField, 0);
+	vec4 tex = vec4(0,0,0,1e100);
+	for (int i = -1; i <= 1; i++) {
+		for (int j = -1; j <= 1; j++) {
+			vec4 texTmp = texture(distanceField, uv + vec2(1./texSize.s * i, 1./texSize.t * j));
+			if (tex.a >= texTmp.a) tex = texTmp;
+		}
+	}
+	double currentDistance = max(0.01, tex.a);
+	double distanceFromCamera = currentDistance + 0.01;
 	
 	// out_color = vec4(currentDistance/40000);
+	// out_color = vec4(tex.r/10000000);
 	// return;
 	
 	int nbSteps = 0;
+	
+	vec3 color = vec3(0);
+	dvec3 atmosphereColor = vec3(0);
 	
 	// Terrain/Atmosphere
 	for (int i = 0; i < MAX_STEPS; i++) {
@@ -225,18 +223,15 @@ void main() {
 		
 		double dist = length(pos) - (r + heightMap);
 		
-		double threshold = max(insidePlanetSphereThreshold, insidePlanetSphereThreshold * distanceFromCamera);
+		atmosphereColor += GetAtmosphereDensity(pos) * normalize(vec3(.1,.1,.13)) * stepSize;
 		
-		// atmosphereColor += GetAtmosphereDensity(pos) * normalize(vec3(.1,.1,.13)) * stepSize;
-		
-		if (dist < threshold) {
+		if (dist < stepSize) {
 			color = GetTerrainColor(pos);
 			break;
 		}
 	}
 	
 	out_color = vec4(color + pow(min(vec3(1), vec3(atmosphereColor)), vec3(2)), 1);
-	// out_color = vec4(1);
 	
 	// out_color = mix(vec4(0,1,0,1), vec4(1,0,0,1), float(nbSteps)/MAX_STEPS);
 	// out_color = vec4(currentDistance/100000);

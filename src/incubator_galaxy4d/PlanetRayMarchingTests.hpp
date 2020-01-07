@@ -11,16 +11,16 @@ class Planet {
 	
 	PipelineLayout planetPipelineLayout;
 	RasterShaderPipeline planetShader {planetPipelineLayout, {
-		"incubator_galaxy4d/assets/shaders/planet.vert",
-		// "incubator_galaxy4d/assets/shaders/planet.geom",
-		"incubator_galaxy4d/assets/shaders/planet.frag",
+		"incubator_galaxy4d/assets/shaders/planetRayMarching.vert",
+		// "incubator_galaxy4d/assets/shaders/planetRayMarching.geom",
+		"incubator_galaxy4d/assets/shaders/planetRayMarching.frag",
 	}};
 	
 	RenderPass distanceFieldRenderPass;
 	RasterShaderPipeline distanceFieldShader {planetPipelineLayout, {
-		"incubator_galaxy4d/assets/shaders/planet.vert",
-		// "incubator_galaxy4d/assets/shaders/planet.geom",
-		"incubator_galaxy4d/assets/shaders/planet.distancefield.frag",
+		"incubator_galaxy4d/assets/shaders/planetRayMarching.vert",
+		// "incubator_galaxy4d/assets/shaders/planetRayMarching.geom",
+		"incubator_galaxy4d/assets/shaders/planetRayMarching.distancefield.frag",
 	}};
 	float distanceFieldScale = 1./8;
 	Image distanceFieldImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1,1, { VK_FORMAT_R32G32B32A32_SFLOAT } };
@@ -236,6 +236,11 @@ public:
 	void CreateResources(Renderer* renderer, Device* renderingDevice, float screenWidth, float screenHeight) {
 		uint distanceFieldWidth = (uint)(screenWidth * distanceFieldScale);
 		uint distanceFieldHeight = (uint)(screenHeight * distanceFieldScale);
+		distanceFieldImage.samplerInfo.minFilter = VK_FILTER_NEAREST;
+		distanceFieldImage.samplerInfo.magFilter = VK_FILTER_NEAREST;
+		distanceFieldImage.samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		distanceFieldImage.samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		distanceFieldImage.samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		distanceFieldImage.Create(renderingDevice, distanceFieldWidth, distanceFieldHeight);
 		renderer->TransitionImageLayout(distanceFieldImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 	}
