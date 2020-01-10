@@ -10,8 +10,10 @@ precision highp sampler2D;
 // };
 
 layout(std430, push_constant) uniform PlanetChunk {
-	dvec3 absolutePosition;
-	double radius;
+	// dvec3 absolutePosition;
+	mat4 mvp;
+	vec4 testColor;
+	// double radius;
 } planetChunk;
 
 #include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
@@ -23,7 +25,9 @@ layout(location = 0) in vec4 pos;
 layout(location = 1) in vec4 normal;
 
 void main() {
-	gl_Position = cameraUBO.projection * vec4(cameraUBO.origin * dmat4(cameraUBO.relativeView) * (dvec4(planetChunk.absolutePosition, 1) + dvec4(pos.xyz, 0)));
+	//TODO take planet rotation into consideration
+	// gl_Position = cameraUBO.projection * vec4(cameraUBO.origin * dmat4(cameraUBO.relativeView) * (dvec4(planetChunk.absolutePosition, 1) + dvec4(pos.xyz, 0)));
+	gl_Position = planetChunk.mvp * vec4(pos.xyz, 1);
 }
 
 ##################################################################
@@ -61,6 +65,6 @@ void main() {
 layout(location = 0) out vec4 out_color;
 
 void main() {
-	out_color = vec4(1);
+	out_color = planetChunk.testColor;
 }
 

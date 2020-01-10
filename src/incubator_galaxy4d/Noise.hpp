@@ -220,7 +220,19 @@ namespace v4d::noise {
 		dvec4 m = max(0.6 - dvec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
 		return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 	}
-	
+		
+	double SimplexFractal(dvec3 pos, int octaves) {
+		double amplitude = 0.5333333333;
+		double frequency = 1.0;
+		double f = Simplex(pos * frequency);
+		for (int i = 1; i < octaves; ++i) {
+			amplitude /= 2.0;
+			frequency *= 2.0;
+			f += amplitude * Simplex(pos * frequency);
+		}
+		return f;
+	}
+
 	
 
 	// Faster Simplex noise, less precise and not well tested, seems suitable for pos ranges (-10k, +10k) with a step of 0.01 and gradient of 0.5

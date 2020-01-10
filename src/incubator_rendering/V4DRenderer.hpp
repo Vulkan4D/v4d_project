@@ -619,7 +619,7 @@ private: // Commands
 		// Opaque Lighting pass
 		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
 			// universe.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
-			planet.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
+			planet.RunInOpaqueLightingPass(this, renderingDevice, commandBuffer, mainCamera);
 			opaqueLightingShader.Execute(renderingDevice, commandBuffer);
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		

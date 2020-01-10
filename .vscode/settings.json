@@ -97,7 +97,8 @@
         "forward_list": "cpp",
         "*.include": "cpp",
         "__functional_base_03": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "parentbad": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

@@ -3,32 +3,37 @@
 #include <v4d.h>
 #include "../incubator_rendering/V4DRenderingPipeline.hh"
 #include "../incubator_rendering/Camera.hpp"
+#include "Noise.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 
+// #define SPHERIFY_CUBE_BY_NORMALIZE // otherwise use technique shown here : http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
+
 class Planet {
 	
+	#pragma region Graphics
 	PipelineLayout planetPipelineLayout;
 	RasterShaderPipeline planetShader {planetPipelineLayout, {
 		"incubator_galaxy4d/assets/shaders/planetRaster.vert",
 		"incubator_galaxy4d/assets/shaders/planetRaster.geom",
 		"incubator_galaxy4d/assets/shaders/planetRaster.frag",
 	}};
+	#pragma endregion
 	
-	
-	// Static graphics configuration
+	#pragma region Static graphics configuration
 	static const int chunkSubdivisionsPerFace = 8;
 	static const int vertexSubdivisionsPerChunk = 32;
-	// static const int chunkLodSizeInPixels = 100;
-	// static constexpr float minVertexSeparationInMeters = 0.5f;
+	static constexpr float targetVertexSeparationInMeters = 1.0; // approximative vertex separation in meters for the most precise level of detail
+	// static constexpr float chunkLodMaxSizeInScreen = 0.04f; // level of detail ratio of screen size
+	#pragma endregion
 	
-	// calculated constants
+	#pragma region Calculated constants
 	static const int nbChunksPerFace = chunkSubdivisionsPerFace * chunkSubdivisionsPerFace;
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
 	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1);
 	static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6;
-	
+	#pragma endregion
 	
 	struct Vertex {
 		glm::vec4 pos;
@@ -51,106 +56,396 @@ class Planet {
 		glm::dvec3 absolutePosition; // position of planet relative to world (star system center)
 		
 		struct Chunk {
+			
+			#pragma region Constructor arguments
 			PlanetInfo* planet;
 			FACE face;
-			
+			int level;
 			// Cube positions (-1.0 to +1.0)
 			glm::dvec3 topLeft;
 			glm::dvec3 topRight;
 			glm::dvec3 bottomLeft;
 			glm::dvec3 bottomRight;
-			glm::dvec3 center {0};
-			// non-normalized (true rounded central position of chunk on planet)
-			glm::dvec3 posOnPlanet {0};
+			#pragma endregion
 			
+			#pragma region Caching
+			// Cube positions (-1.0 to +1.0)
+			glm::dvec3 top {0};
+			glm::dvec3 left {0};
+			glm::dvec3 right {0};
+			glm::dvec3 bottom {0};
+			glm::dvec3 center {0};
+			// true positions on planet
+			glm::dvec3 centerPos {0};
+			glm::dvec3 topLeftPos {0};
+			glm::dvec3 topRightPos {0};
+			glm::dvec3 bottomLeftPos {0};
+			glm::dvec3 bottomRightPos {0};
+			glm::dvec3 centerPosLowestPoint {0};
+			glm::dvec3 topLeftPosLowestPoint {0};
+			glm::dvec3 topRightPosLowestPoint {0};
+			glm::dvec3 bottomLeftPosLowestPoint {0};
+			glm::dvec3 bottomRightPosLowestPoint {0};
+			double chunkSize = 0;
+			double heightAtCenter = 0;
+			double distanceFromCamera = 0;
+			#pragma endregion
+			
+			#pragma region Data
 			std::array<Vertex, nbVerticesPerChunk> vertices;
 			std::array<uint32_t, nbIndicesPerChunk> indices;
-			std::vector<Chunk> subChunks {};
-			bool generated = false;
-			bool visible = true;
+			std::vector<Chunk*> subChunks {};
 			Buffer vertexBuffer { VK_BUFFER_USAGE_VERTEX_BUFFER_BIT };
 			Buffer indexBuffer { VK_BUFFER_USAGE_INDEX_BUFFER_BIT };
-				
+			std::recursive_mutex chunkMutex;
 			struct PlanetChunkPushConstant { // max 128 bytes
-				glm::dvec3 absolutePosition; // 24
-				double radius; // 8
+				// glm::dvec3 absolutePosition; // 24
+				glm::mat4 mvp; // 16
+				glm::vec4 testColor; // 16
+				// double radius; // 8
 			} planetChunkPushConstant {};
+			#pragma endregion
 			
-			Chunk(PlanetInfo* planet, int face, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
-			: planet(planet), face((FACE)face), topLeft(topLeft), topRight(topRight), bottomLeft(bottomLeft), bottomRight(bottomRight) {
+			#pragma region States
+			std::atomic<bool> meshActive = false;
+			std::atomic<bool> meshGenerated = false;
+			std::atomic<bool> meshAllocated = false;
+			std::atomic<bool> chunkVisibleByAngle = false;
+			std::atomic<bool> hasSubChunks = false;
+			std::atomic<bool> subChunksReadyToRender = false;
+			std::atomic<bool> destroyOnNextFrame = false;
+			#pragma endregion
+			
+			Chunk(PlanetInfo* planet, int face, int level, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
+			: planet(planet), face((FACE)face), level(level), topLeft(topLeft), topRight(topRight), bottomLeft(bottomLeft), bottomRight(bottomRight) {
+				
+				chunkSize = planet->GetSolidCirconference() / 4.0 / chunkSubdivisionsPerFace / glm::pow(2, level);
 				center = (topLeft + topRight + bottomLeft + bottomRight) / 4.0;
-				posOnPlanet = glm::round(glm::normalize(center) * planet->solidRadius);
+				top = (topLeft + topRight) / 2.0;
+				left = (topLeft + bottomLeft) / 2.0;
+				right = (topRight + bottomRight) / 2.0;
+				bottom = (bottomLeft + bottomRight) / 2.0;
+				centerPos = Spherify(center);
+				heightAtCenter = planet->GetHeightMap(centerPos);
+				centerPos = glm::round(centerPos * heightAtCenter);
+				topLeftPos = Spherify(topLeft);
+				topLeftPos *= planet->GetHeightMap(topLeftPos);
+				topRightPos = Spherify(topRight);
+				topRightPos *= planet->GetHeightMap(topRightPos);
+				bottomLeftPos = Spherify(bottomLeft);
+				bottomLeftPos *= planet->GetHeightMap(bottomLeftPos);
+				bottomRightPos = Spherify(bottomRight);
+				bottomRightPos *= planet->GetHeightMap(bottomRightPos);
+				centerPosLowestPoint = Spherify(center) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+				topLeftPosLowestPoint = Spherify(topLeft) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+				topRightPosLowestPoint = Spherify(topRight) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+				bottomLeftPosLowestPoint = Spherify(bottomLeft) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+				bottomRightPosLowestPoint = Spherify(bottomRight) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+				RefreshDistanceFromCamera();
+			
+				// planetChunkPushConstant.radius = planet->radius;
+				
 			}
 			
-			void Create(Renderer* renderer, Device* renderingDevice) {
-				auto [dir, top, right] = GetFaceVectors(face);
+			~Chunk() {
+				meshActive = false;
+				std::lock_guard lock(chunkMutex);
+			}
+			
+			static glm::dvec3 Spherify(glm::dvec3 point) {
+				#ifdef SPHERIFY_CUBE_BY_NORMALIZE
+					point = glm::normalize(point);
+				#else
+					// http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
+					double	x2 = point.x * point.x,
+							y2 = point.y * point.y,
+							z2 = point.z * point.z;
+					point.x *= glm::sqrt(1.0 - y2 / 2.0 - z2 / 2.0 + y2 * z2 / 3.0);
+					point.y *= glm::sqrt(1.0 - z2 / 2.0 - x2 / 2.0 + z2 * x2 / 3.0);
+					point.z *= glm::sqrt(1.0 - x2 / 2.0 - y2 / 2.0 + x2 * y2 / 3.0);
+				#endif
+				return point;
+			}
+			
+			void GenerateAsync() {
+				static v4d::processing::ThreadPool chunkGenerator {4};
+				chunkGenerator.Enqueue([this]{
+					Generate();
+				});
+			}
+			
+			int genRow = 0;
+			int genCol = 0;
+			int genIndexIndex = 0;
+			void Generate() {
+				std::lock_guard lock(chunkMutex);
 				
-				int indexIndex = 0;
-				for (int row = 0; row <= vertexSubdivisionsPerChunk; ++row) {
-					for (int col = 0; col <= vertexSubdivisionsPerChunk; ++col) {
-						uint32_t topLeftIndex = (vertexSubdivisionsPerChunk+1) * row + col;
+				if (!chunkVisibleByAngle || !meshActive) return;
+				
+				auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+				
+				for (; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
+					for (; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+						uint32_t topLeftIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
 						
-						glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(row)/vertexSubdivisionsPerChunk);
-						glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(col)/vertexSubdivisionsPerChunk);
+						glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+						glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 						
-						glm::dvec3 pos = glm::normalize(center + top*topOffset + right*leftOffset);
+						glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
 						
-						vertices[topLeftIndex].pos = glm::vec4(pos * planet->GetHeightMap(pos) - posOnPlanet, 0);
-						vertices[topLeftIndex].normal = glm::vec4(glm::normalize(pos), 0);
+						vertices[topLeftIndex].pos = glm::vec4(pos * planet->GetHeightMap(pos) - centerPos, 0);
+						vertices[topLeftIndex].normal = glm::vec4(Spherify(pos), 0);
 						
-						if (row < vertexSubdivisionsPerChunk && col < vertexSubdivisionsPerChunk) {
+						if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
 							uint32_t topRightIndex = topLeftIndex+1;
-							uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (row+1) + col;
+							uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 							uint32_t bottomRightIndex = bottomLeftIndex+1;
-							indices[indexIndex++] = topLeftIndex;
-							indices[indexIndex++] = bottomLeftIndex;
-							indices[indexIndex++] = bottomRightIndex;
-							indices[indexIndex++] = topLeftIndex;
-							indices[indexIndex++] = bottomRightIndex;
-							indices[indexIndex++] = topRightIndex;
+							switch (face) {
+								case FRONT:
+								case LEFT:
+								case BOTTOM:
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = topRightIndex;
+									break;
+								case BACK:
+								case RIGHT:
+								case TOP:
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = bottomLeftIndex;
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = topRightIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									break;
+							}
 						}
+						
+						if (!chunkVisibleByAngle || !meshActive) return;
 					}
+					genCol = 0;
 				}
-				
-				vertexBuffer.AddSrcDataPtr<Vertex, nbVerticesPerChunk>(&vertices);
-				indexBuffer.AddSrcDataPtr<uint32_t, nbIndicesPerChunk>(&indices);
-				
-				renderer->AllocateBufferStaged(vertexBuffer);
-				renderer->AllocateBufferStaged(indexBuffer);
-				
-				generated = true;
+				meshGenerated = true;
 			}
 			
-			void Destroy(Device* renderingDevice) {
-				if (generated) {
-					generated = false;
+			void Allocate(Renderer* renderer, Device* renderingDevice) {
+				if (meshGenerated && !meshAllocated) {
+					
+					vertexBuffer.AddSrcDataPtr<Vertex, nbVerticesPerChunk>(&vertices);
+					indexBuffer.AddSrcDataPtr<uint32_t, nbIndicesPerChunk>(&indices);
+					
+					renderer->AllocateBufferStaged(vertexBuffer);
+					renderer->AllocateBufferStaged(indexBuffer);
+					
+					meshAllocated = true;
+				}
+			}
+			
+			void AutoAddSubChunks() {
+				if (!hasSubChunks) {
+					subChunks.reserve(4);
+					
+					subChunks.push_back(new Chunk{
+						planet,
+						face,
+						level+1,
+						topLeft,
+						top,
+						left,
+						center,
+					});
+					
+					subChunks.push_back(new Chunk{
+						planet,
+						face,
+						level+1,
+						top,
+						topRight,
+						center,
+						right,
+					});
+					
+					subChunks.push_back(new Chunk{
+						planet,
+						face,
+						level+1,
+						left,
+						center,
+						bottomLeft,
+						bottom,
+					});
+					
+					subChunks.push_back(new Chunk{
+						planet,
+						face,
+						level+1,
+						center,
+						right,
+						bottom,
+						bottomRight,
+					});
+					
+					Sort();
+					
+					hasSubChunks = true;
+				}
+			}
+			
+			void AutoRemoveSubChunks(Device* renderingDevice) {
+				if (hasSubChunks) {
+					subChunksReadyToRender = false;
+					hasSubChunks = false;
+					for (auto* subChunk : subChunks) {
+						subChunk->meshActive = false;
+						subChunk->AutoRemoveSubChunks(renderingDevice);
+						subChunk->Free(renderingDevice);
+						delete subChunk;
+					}
+					subChunks.clear();
+				}
+			}
+			
+			void Free(Device* renderingDevice) {
+				if (meshAllocated) {
+					meshAllocated = false;
 					
 					vertexBuffer.ResetSrcData();
 					indexBuffer.ResetSrcData();
 					
-					// for (auto& subChunk : subChunks) {
-					// 	subChunk.Free(renderingDevice);
-					// }
 					vertexBuffer.Free(renderingDevice);
 					indexBuffer.Free(renderingDevice);
 				}
 			}
 			
-			void Render(Device* renderingDevice, VkCommandBuffer commandBuffer, RasterShaderPipeline* shader) {
-				if (generated && visible) {
-					planetChunkPushConstant.absolutePosition = planet->absolutePosition + posOnPlanet;
-					planetChunkPushConstant.radius = planet->radius;
-					shader->SetData(&vertexBuffer, &indexBuffer);
-					shader->Execute(renderingDevice, commandBuffer, &planetChunkPushConstant);
+			void Render(Renderer* renderer, Device* renderingDevice, VkCommandBuffer commandBuffer, RasterShaderPipeline* shader, Camera& camera) {
+				// if (!meshActive && meshAllocated) {
+				// 	if (destroyOnNextFrame) {
+				// 		AutoRemoveSubChunks(renderingDevice);
+				// 		Free(renderingDevice);
+				// 		destroyOnNextFrame = false;
+				// 	} else {
+				// 		destroyOnNextFrame = true;
+				// 	}
+				// }
+				if (hasSubChunks && subChunksReadyToRender) {
+					for (auto* subChunk : subChunks) {
+						subChunk->Render(renderer, renderingDevice, commandBuffer, shader, camera);
+					}
+				} else {
+					if (chunkVisibleByAngle && meshActive && meshGenerated && meshAllocated && !destroyOnNextFrame) {
+						planetChunkPushConstant.mvp = camera.GetProjectionViewMatrix() * glm::translate(glm::dmat4(1), planet->absolutePosition + centerPos);
+						shader->SetData(&vertexBuffer, &indexBuffer);
+						shader->Execute(renderingDevice, commandBuffer, &planetChunkPushConstant);
+					}
 				}
 			}
+			
+			void RefreshDistanceFromCamera() {
+				distanceFromCamera = glm::distance(planet->cameraPos, centerPos);
+				if (distanceFromCamera > chunkSize/2.0)
+					distanceFromCamera = glm::min(distanceFromCamera, glm::distance(planet->cameraPos, topLeftPos));
+				if (distanceFromCamera > chunkSize/2.0)
+					distanceFromCamera = glm::min(distanceFromCamera, glm::distance(planet->cameraPos, topRightPos));
+				if (distanceFromCamera > chunkSize/2.0)
+					distanceFromCamera = glm::min(distanceFromCamera, glm::distance(planet->cameraPos, bottomLeftPos));
+				if (distanceFromCamera > chunkSize/2.0)
+					distanceFromCamera = glm::min(distanceFromCamera, glm::distance(planet->cameraPos, bottomRightPos));
+				if (distanceFromCamera < chunkSize/2.0)
+					distanceFromCamera = glm::max(distanceFromCamera, chunkSize/2.0);
+			}
+			
+			bool IsLastLevel() {
+				return (chunkSize/vertexSubdivisionsPerChunk < targetVertexSeparationInMeters*1.9);
+			}
+			
+			bool ShouldAddSubChunks() {
+				if (IsLastLevel()) return false;
+				return chunkSize / distanceFromCamera > 1.0;
+			}
+			
+			bool ShouldRemoveSubChunks() {
+				if (IsLastLevel()) return false;
+				return chunkSize / distanceFromCamera < 0.5;
+			}
+			
+			void ProcessVisibility(Renderer* renderer, Device* renderingDevice) {
+				RefreshDistanceFromCamera();
+				
+				// Angle Culling
+				chunkVisibleByAngle = 
+						glm::dot(planet->cameraPos - centerPosLowestPoint, centerPos) > 0.0 ||
+						glm::dot(planet->cameraPos - topLeftPosLowestPoint, topLeftPos) > 0.0 ||
+						glm::dot(planet->cameraPos - topRightPosLowestPoint, topRightPos) > 0.0 ||
+						glm::dot(planet->cameraPos - bottomLeftPosLowestPoint, bottomLeftPos) > 0.0 ||
+						glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
+				
+				// Green = last level (most precise)
+				if (IsLastLevel())
+					planetChunkPushConstant.testColor = glm::vec4{0,1,0,1};
+				else
+					planetChunkPushConstant.testColor = glm::vec4{1,1,1,1};
+				
+				if (chunkVisibleByAngle) {
+					if (ShouldAddSubChunks()) {
+						meshActive = false;
+						AutoAddSubChunks();
+					} else {
+						if (ShouldRemoveSubChunks()) {
+							for (auto* subChunk : subChunks) {
+								subChunk->meshActive = false;
+							}
+						}
+						// Should generate current chunk
+						if (!meshGenerated && !meshActive) {
+							meshActive = true;
+							GenerateAsync();
+						}
+					}
+					
+					if (hasSubChunks) {
+						bool subChunksReadyToRender = true;
+						for (auto* subChunk : subChunks) {
+							subChunk->ProcessVisibility(renderer, renderingDevice);
+							// if (subChunk->chunkVisibleByAngle && subChunk->meshActive) {
+							// 	if (!subChunk->hasSubChunks && (!subChunk->meshGenerated || !subChunk->meshAllocated)) {
+							// 		subChunksReadyToRender = false;
+							// 	} else if (subChunk->hasSubChunks && !subChunk->subChunksReadyToRender) {
+							// 		subChunksReadyToRender = false;
+							// 	}
+							// }
+						}
+						this->subChunksReadyToRender = subChunksReadyToRender;
+					}
+					
+					if (meshActive && meshGenerated && !meshAllocated) {
+						Allocate(renderer, renderingDevice);
+					}
+				}
+			}
+			
+			void Sort() {
+				std::sort(subChunks.begin(), subChunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+				if (hasSubChunks) for (auto* chunk : subChunks) {
+					chunk->Sort();
+				}
+			}
+			
 		};
 		
-		std::vector<Chunk> chunks {};
+		std::vector<Chunk*> chunks {};
+		glm::dvec3 cameraPos {};
+		bool created = false;
 		
 		double GetHeightMap(glm::dvec3 normalizedPos) {
-			double height = 0;
-			return solidRadius + height * heightVariation;
+			double height = v4d::noise::SimplexFractal(normalizedPos*200.0, 16);
+			return solidRadius + height*heightVariation;
+		}
+		
+		double GetSolidCirconference() {
+			return solidRadius * 2.0 * 3.14159265359;
 		}
 		
 		static constexpr std::tuple<glm::dvec3, glm::dvec3, glm::dvec3> GetFaceVectors(int face) {
@@ -192,50 +487,75 @@ class Planet {
 			return {dir, top, right};
 		}
 		
-		void Create(Renderer* renderer, Device* renderingDevice) {
-			chunks.reserve(nbBaseChunksPerPlanet);
-			for (int face = 0; face < 6; ++face) {
-				auto [dir, top, right] = GetFaceVectors(face);
-				
-				top /= chunkSubdivisionsPerFace;
-				right /= chunkSubdivisionsPerFace;
-				
-				for (int row = 0; row < chunkSubdivisionsPerFace; ++row) {
-					for (int col = 0; col < chunkSubdivisionsPerFace; ++col) {
-						double bottomOffset =	row*2 - chunkSubdivisionsPerFace;
-						double topOffset =		row*2 - chunkSubdivisionsPerFace + 2;
-						double leftOffset =		col*2 - chunkSubdivisionsPerFace;
-						double rightOffset =	col*2 - chunkSubdivisionsPerFace + 2;
-						chunks.push_back({
-							this,
-							face,
-							dir + top*topOffset 	+ right*leftOffset,
-							dir + top*topOffset 	+ right*rightOffset,
-							dir + top*bottomOffset 	+ right*leftOffset,
-							dir + top*bottomOffset 	+ right*rightOffset
-						});
+		void AutoCreate(Renderer* renderer, Device* renderingDevice) {
+			if (!created) {
+				chunks.reserve(nbBaseChunksPerPlanet);
+				for (int face = 0; face < 6; ++face) {
+					auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+					
+					topDir /= chunkSubdivisionsPerFace;
+					rightDir /= chunkSubdivisionsPerFace;
+					
+					for (int row = 0; row < chunkSubdivisionsPerFace; ++row) {
+						for (int col = 0; col < chunkSubdivisionsPerFace; ++col) {
+							double bottomOffset =	row*2 - chunkSubdivisionsPerFace;
+							double topOffset =		row*2 - chunkSubdivisionsPerFace + 2;
+							double leftOffset =		col*2 - chunkSubdivisionsPerFace;
+							double rightOffset =	col*2 - chunkSubdivisionsPerFace + 2;
+							chunks.push_back(new Chunk{
+								this,
+								face,
+								0,
+								faceDir + topDir*topOffset 		+ rightDir*leftOffset,
+								faceDir + topDir*topOffset 		+ rightDir*rightOffset,
+								faceDir + topDir*bottomOffset 	+ rightDir*leftOffset,
+								faceDir + topDir*bottomOffset 	+ rightDir*rightOffset
+							});
+						}
 					}
 				}
-			}
-			
-			// Generate chunks
-			for (auto& chunk : chunks) {
-				chunk.Create(renderer, renderingDevice);
+				Sort();
+				created = true;
 			}
 		}
 		
-		void Destroy(Device* renderingDevice) {
-			for (auto& chunk : chunks) {
-				chunk.Destroy(renderingDevice);
+		void AutoDestroy(Device* renderingDevice) {
+			if (created) {
+				created = false;
+				for (auto* chunk : chunks) {
+					chunk->meshActive = false;
+					chunk->AutoRemoveSubChunks(renderingDevice);
+					chunk->Free(renderingDevice);
+					delete chunk;
+				}
+				chunks.clear();
 			}
-			chunks.clear();
 		}
 		
-		void Render(Device* renderingDevice, VkCommandBuffer commandBuffer, RasterShaderPipeline* shader) {
-			for (auto& chunk : chunks) {
-				chunk.Render(renderingDevice, commandBuffer, shader);
+		void Render(Renderer* renderer, Device* renderingDevice, VkCommandBuffer commandBuffer, RasterShaderPipeline* shader, Camera& camera) {
+			for (auto* chunk : chunks) {
+				chunk->Render(renderer, renderingDevice, commandBuffer, shader, camera);
 			}
 		}
+		
+		void RefreshCameraPos(Camera& mainCamera) {
+			//TODO take planet rotation into consideration
+			cameraPos = (mainCamera.GetWorldPosition() - absolutePosition);
+		}
+		
+		void ProcessVisibility(Renderer* renderer, Device* renderingDevice) {
+			for (auto* chunk : chunks) {
+				chunk->ProcessVisibility(renderer, renderingDevice);
+			}
+		}
+		
+		void Sort() {
+			std::sort(chunks.begin(), chunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+			for (auto* chunk : chunks) {
+				chunk->Sort();
+			}
+		}
+		
 	};
 	
 	// std::array<PlanetInfo, 255> planets {};
@@ -245,7 +565,9 @@ class Planet {
 		24000000,
 		23900000,
 		10000,
-		{0, 21800000, -10000000}
+		// {0, 21740000, -10000000}
+		{0, 28000000, -10000000}
+		// {20000000, 20000000, -20000000}
 	};
 	
 public:
@@ -270,10 +592,10 @@ public:
 	}
 	
 	void ConfigureShaders() {
-		planetShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		planetShader.rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		planetShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		planetShader.depthStencilState.depthTestEnable = VK_FALSE;
+		planetShader.depthStencilState.depthWriteEnable = VK_TRUE;
+		planetShader.depthStencilState.depthTestEnable = VK_TRUE;
 		planetShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, {
 			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32A32_SFLOAT},
 			{1, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32A32_SFLOAT},
@@ -298,16 +620,13 @@ public:
 	
 	void AllocateBuffers(Renderer* renderer, Device* renderingDevice, Queue& transferQueue) {
 		// renderer->AllocateBufferStaged(transferQueue, planetsBuffer);
-		
-		//TODO For each planet, and put it in dynamic update
-		planetInfo.Create(renderer, renderingDevice);
 	}
 	
 	void FreeBuffers(Renderer* renderer, Device* renderingDevice) {
 		// planetsBuffer.Free(renderingDevice);
 		
 		//TODO For each planet, and put it in dynamic update
-		planetInfo.Destroy(renderingDevice);
+		planetInfo.AutoDestroy(renderingDevice);
 	}
 	
 	void CreatePipelines(Renderer* renderer, Device* renderingDevice, std::vector<RasterShaderPipeline*>& opaqueLightingShaders) {
@@ -328,9 +647,9 @@ public:
 		
 	}
 	
-	void RunInOpaqueLightingPass(Device* renderingDevice, VkCommandBuffer commandBuffer) {
+	void RunInOpaqueLightingPass(Renderer* renderer, Device* renderingDevice, VkCommandBuffer commandBuffer, Camera& mainCamera) {
 		//TODO For each planet
-		planetInfo.Render(renderingDevice, commandBuffer, &planetShader);
+		planetInfo.Render(renderer, renderingDevice, commandBuffer, &planetShader, mainCamera);
 	}
 	
 	void RunLowPriorityGraphics(Device* renderingDevice, VkCommandBuffer commandBuffer) {
@@ -342,7 +661,12 @@ public:
 	}
 	
 	void LowPriorityFrameUpdate(Renderer* renderer, Device* renderingDevice, Camera& mainCamera, Queue& lowPriorityGraphicsQueue) {
+		//TODO For each planet
+		planetInfo.RefreshCameraPos(mainCamera);
+		planetInfo.AutoCreate(renderer, renderingDevice);
+		planetInfo.ProcessVisibility(renderer, renderingDevice);
 		
+		// LOG(glm::distance(planetInfo.absolutePosition, mainCamera.GetWorldPosition()) - planetInfo.solidRadius + planetInfo.heightVariation);
 	}
 	
 	

@@ -97,9 +97,10 @@ namespace v4d::graphics {
 			viewDirection.x = x;
 			viewDirection.y = y;
 			viewDirection.z = z;
+			viewDirection = glm::normalize(viewDirection);
 		}
 		void SetViewDirection(glm::dvec3 dir) {
-			viewDirection = dir;
+			viewDirection = glm::normalize(dir);
 		}
 		glm::dvec3 GetViewDirection() const {
 			return viewDirection;
@@ -181,6 +182,29 @@ namespace v4d::graphics {
 		void RefreshProjectionMatrix() {
 			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
 			projection[1][1] *= -1;
+		}
+		
+		glm::dvec3 GetPositionInScreen(glm::dvec3 a) {
+			auto pos = projection * view * glm::dvec4(a, 1);
+			return glm::dvec3{pos.x, pos.y, pos.z} / pos.w;
+		}
+		
+		double GetApproximateBoundingSizeInScreen(glm::dvec3 a, glm::dvec3 b) {
+			return glm::distance(GetPositionInScreen(a) / 2.0, GetPositionInScreen(b) / 2.0);
+		}
+		
+		double GetFixedBoundingSizeInScreen(glm::dvec3 a, glm::dvec3 b) {
+			auto v = glm::lookAt(worldPosition, (a + b)/2.0, viewUp);
+			auto posA = projection * v * glm::dvec4(a, 1);
+			posA /= posA.w;
+			auto posB = projection * v * glm::dvec4(b, 1);
+			posB /= posB.w;
+			return glm::distance(glm::dvec2(posA.x, posA.y) / 2.0, glm::dvec2(posB.x, posB.y) / 2.0);
+		}
+		
+		bool IsVisibleInScreen(glm::dvec3 a) {
+			auto pp = GetPositionInScreen(a);
+			return (pp.z < 1.0 && glm::abs(pp.x) < 1.0 && glm::abs(pp.y) < 1.0);
 		}
 		
 		void RefreshUBO() {
