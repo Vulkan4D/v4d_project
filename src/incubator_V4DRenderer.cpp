@@ -46,6 +46,7 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
+	// Normal: 10 km/s, Shift: 1000 km/s, Alt: 10 m/s
 	double camSpeed = 10000.0, mouseSensitivity = 1.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
@@ -152,7 +153,7 @@ int main() {
 		glfwPollEvents();
 		
 		// Camera Movements
-		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.0001 : 1.0);
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.001 : 1.0);
 		renderer->mainCamera.SetVelocity(glm::dvec3{0});
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
 			renderer->mainCamera.SetVelocity(+renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);

@@ -8,7 +8,7 @@
 
 // Other tests
 #include "v4d/core/tests.cxx"
-#include "v4d/modules/sample/tests.cxx"
+#include "v4d/modules/test/tests.cxx"
 
 namespace MyProject {
 	int MyUnitTest1(v4d_core) {
@@ -23,7 +23,7 @@ START_UNIT_TESTS
 	LOGGER_INSTANCE->SetVerbose(false);
 
 	RUN_UNIT_TESTS( V4D_CORE )
-	RUN_UNIT_TESTS( MODULES_SAMPLE_1 , v4dCore )
+	RUN_UNIT_TESTS( MODULES_TEST_1 , v4dCore )
 	RUN_UNIT_TESTS( MyProject::MyUnitTest1 , v4dCore )
 
 

@@ -57,6 +57,11 @@ class Planet {
 		
 		struct Chunk {
 			
+			// static std::mutex chunkGeneratorMutex;
+			// static std::thread chunkGeneratorThreads;
+			// static std::priority_queue<Chunk*> chunksToGenerate;
+			// static std::queue<Chunk*> chunksToUnload;
+			
 			#pragma region Constructor arguments
 			PlanetInfo* planet;
 			FACE face;
@@ -97,7 +102,7 @@ class Planet {
 			std::vector<Chunk*> subChunks {};
 			Buffer vertexBuffer { VK_BUFFER_USAGE_VERTEX_BUFFER_BIT };
 			Buffer indexBuffer { VK_BUFFER_USAGE_INDEX_BUFFER_BIT };
-			std::recursive_mutex chunkMutex;
+			// std::recursive_mutex chunkMutex;
 			struct PlanetChunkPushConstant { // max 128 bytes
 				// glm::dvec3 absolutePosition; // 24
 				glm::mat4 mvp; // 16
@@ -107,13 +112,13 @@ class Planet {
 			#pragma endregion
 			
 			#pragma region States
-			std::atomic<bool> meshActive = false;
-			std::atomic<bool> meshGenerated = false;
-			std::atomic<bool> meshAllocated = false;
-			std::atomic<bool> chunkVisibleByAngle = false;
-			std::atomic<bool> hasSubChunks = false;
-			std::atomic<bool> subChunksReadyToRender = false;
-			std::atomic<bool> destroyOnNextFrame = false;
+			volatile bool meshActive = false;
+			volatile bool meshGenerated = false;
+			volatile bool meshAllocated = false;
+			volatile bool chunkVisibleByAngle = false;
+			volatile bool hasSubChunks = false;
+			volatile bool subChunksReadyToRender = false;
+			volatile bool destroyOnNextFrame = false;
 			#pragma endregion
 			
 			Chunk(PlanetInfo* planet, int face, int level, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
@@ -149,7 +154,7 @@ class Planet {
 			
 			~Chunk() {
 				meshActive = false;
-				std::lock_guard lock(chunkMutex);
+				// std::lock_guard lock(chunkMutex);
 			}
 			
 			static glm::dvec3 Spherify(glm::dvec3 point) {
@@ -168,17 +173,24 @@ class Planet {
 			}
 			
 			void GenerateAsync() {
-				static v4d::processing::ThreadPool chunkGenerator {4};
-				chunkGenerator.Enqueue([this]{
-					Generate();
+				static bool chunkGeneratorInitialized = false;
+				static v4d::processing::ThreadPoolPriorityQueue<Chunk*> chunkGenerator ([](Chunk* chunk){
+					chunk->Generate();
+				}, [](Chunk* a, Chunk* b) {
+					return a->distanceFromCamera > b->distanceFromCamera;
 				});
+				if (!chunkGeneratorInitialized) {
+					chunkGeneratorInitialized = true;
+					chunkGenerator.RunThreads(3);
+				}
+				chunkGenerator.Enqueue(this);
 			}
 			
 			int genRow = 0;
 			int genCol = 0;
 			int genIndexIndex = 0;
 			void Generate() {
-				std::lock_guard lock(chunkMutex);
+				// std::lock_guard lock(chunkMutex);
 				
 				if (!chunkVisibleByAngle || !meshActive) return;
 				
@@ -245,6 +257,7 @@ class Planet {
 			}
 			
 			void AutoAddSubChunks() {
+				// std::lock_guard lock(chunkMutex);
 				if (!hasSubChunks) {
 					subChunks.reserve(4);
 					
@@ -288,13 +301,14 @@ class Planet {
 						bottomRight,
 					});
 					
-					Sort();
+					// Sort();
 					
 					hasSubChunks = true;
 				}
 			}
 			
 			void AutoRemoveSubChunks(Device* renderingDevice) {
+				// std::lock_guard lock(chunkMutex);
 				if (hasSubChunks) {
 					subChunksReadyToRender = false;
 					hasSubChunks = false;
@@ -331,7 +345,7 @@ class Planet {
 				// 	}
 				// }
 				if (hasSubChunks && subChunksReadyToRender) {
-					for (auto* subChunk : subChunks) {
+					for (auto* subChunk : subChunks) if (subChunk) {
 						subChunk->Render(renderer, renderingDevice, commandBuffer, shader, camera);
 					}
 				} else {
@@ -426,12 +440,12 @@ class Planet {
 				}
 			}
 			
-			void Sort() {
-				std::sort(subChunks.begin(), subChunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
-				if (hasSubChunks) for (auto* chunk : subChunks) {
-					chunk->Sort();
-				}
-			}
+			// void Sort() {
+			// 	std::sort(subChunks.begin(), subChunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+			// 	if (hasSubChunks) for (auto* chunk : subChunks) {
+			// 		chunk->Sort();
+			// 	}
+			// }
 			
 		};
 		
@@ -514,7 +528,7 @@ class Planet {
 						}
 					}
 				}
-				Sort();
+				// Sort();
 				created = true;
 			}
 		}
@@ -549,12 +563,12 @@ class Planet {
 			}
 		}
 		
-		void Sort() {
-			std::sort(chunks.begin(), chunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
-			for (auto* chunk : chunks) {
-				chunk->Sort();
-			}
-		}
+		// void Sort() {
+		// 	std::sort(chunks.begin(), chunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+		// 	for (auto* chunk : chunks) {
+		// 		chunk->Sort();
+		// 	}
+		// }
 		
 	};
 	
@@ -673,3 +687,9 @@ public:
 	
 	
 };
+
+
+// std::mutex Planet::PlanetInfo::Chunk::chunkGeneratorMutex {};
+// std::priority_queue<Planet::PlanetInfo::Chunk*> Planet::PlanetInfo::Chunk::chunksToGenerate {};
+// std::queue<Planet::PlanetInfo::Chunk*> Planet::PlanetInfo::Chunk::chunksToUnload {};
+
