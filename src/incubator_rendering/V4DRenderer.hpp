@@ -1,26 +1,18 @@
 #pragma once
 #include <v4d.h>
-#include "V4DRenderingPipeline.hh"
 #include "Camera.hpp"
-#include "../incubator_rendering/helpers/Geometry.hpp"
-
-#include "../incubator_galaxy4d/Noise.hpp"
-// #include "../incubator_galaxy4d/Universe.hpp"
-// #include "../incubator_galaxy4d/PlanetRayMarchingTests.hpp"
-#include "../incubator_galaxy4d/PlanetRenderer.hpp"
 
 using namespace v4d::graphics;
-using namespace v4d::graphics::vulkan::rtx;
+// using namespace v4d::graphics::vulkan::rtx;
 
 class V4DRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 
-	// Universe universe;
-	PlanetRenderer planetRenderer;
+	std::vector<v4d::modules::Rendering*> renderingSubmodules {};
 	
 	#pragma region Buffers
 	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
-	std::vector<Buffer*> stagedBuffers {};
+	// std::vector<Buffer*> stagedBuffers {};
 	#pragma endregion
 	
 	#pragma region UI
@@ -28,7 +20,6 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	RenderPass uiRenderPass;
 	PipelineLayout uiPipelineLayout;
-	std::vector<RasterShaderPipeline*> uiShaders {};
 	#pragma endregion
 	
 	#pragma region Standard Pipelines
@@ -46,8 +37,6 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	
 	#pragma region Shaders
 	
-	std::vector<RasterShaderPipeline*> opaqueRasterizationShaders {};
-	std::vector<RasterShaderPipeline*> transparentRasterizationShaders {};
 	PipelineLayout lightingPipelineLayout, postProcessingPipelineLayout, thumbnailPipelineLayout;
 	RasterShaderPipeline opaqueLightingShader {lightingPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_lighting.vert",
@@ -66,6 +55,16 @@ class V4DRenderer : public v4d::graphics::Renderer {
 		"incubator_rendering/assets/shaders/v4d_thumbnail.frag",
 	}};
 	
+	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaders {
+		{"opaqueRasterization", {}},
+		{"transparentRasterization", {}},
+		{"opaqueLighting", {&opaqueLightingShader}},
+		{"transparentLighting", {&transparentLightingShader}},
+		{"postProcessing", {&postProcessingShader}},
+		{"thumbnail", {&thumbnailShader}},
+		{"ui", {}},
+	};
+	
 	#pragma endregion
 	
 private: 
@@ -73,24 +72,38 @@ public: // Camera
 	Camera mainCamera;
 	
 private: // Init
-	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
 	void Init() override {
-		// universe.Init(this);
-		planetRenderer.Init(this);
+		// Submodules
+		for (auto[id, module] : v4d::modules::ModuleInstance::GetLoadedModules()) {
+			module->ForEachSubmodule<v4d::modules::Rendering>([this](auto* submodule){
+				renderingSubmodules.push_back(submodule);
+				submodule->SetRenderer(this);
+				submodule->Init();
+			});
+		}
+	}
+	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->ScorePhysicalDeviceSelection(score, physicalDevice);
+		}
 	}
 	void Info() override {
-		// universe.Info(this, renderingDevice);
-		planetRenderer.Info(this, renderingDevice);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->SetRenderingDevice(renderingDevice);
+			submodule->SetGraphicsQueue(&graphicsQueue);
+			submodule->SetLowPriorityGraphicsQueue(&lowPriorityGraphicsQueue);
+			submodule->SetLowPriorityComputeQueue(&lowPriorityComputeQueue);
+			submodule->SetTransferQueue(&transferQueue);
+			submodule->Info();
+		}
 	}
 
 	void InitLayouts() override {
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
 		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		
-		// Universe
-		// universe.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
-		planetRenderer.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
 		
 		// Standard pipeline
 		//TODO standardPipelineLayout
@@ -118,12 +131,13 @@ private: // Init
 		// UI
 		//TODO uiPipelineLayout
 		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->InitLayouts(descriptorSets);
+		}
 	}
 	
 	void ConfigureShaders() override {
-		
-		// universe.ConfigureShaders();
-		planetRenderer.ConfigureShaders();
 		
 		// Standard pipeline
 		//TODO opaqueRasterizationShaders, transparentRasterizationShaders
@@ -138,21 +152,25 @@ private: // Init
 		transparentLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
 		transparentLightingShader.SetData(3);
 		
-		// Thumbnail Gen
-		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		thumbnailShader.depthStencilState.depthTestEnable = VK_FALSE;
-		thumbnailShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		thumbnailShader.SetData(3);
-		
 		// Post-Processing
 		postProcessingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		postProcessingShader.depthStencilState.depthTestEnable = VK_FALSE;
 		postProcessingShader.depthStencilState.depthWriteEnable = VK_FALSE;
 		postProcessingShader.SetData(3);
 		
+		// Thumbnail Gen
+		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		thumbnailShader.depthStencilState.depthTestEnable = VK_FALSE;
+		thumbnailShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		thumbnailShader.SetData(3);
+		
 		// UI
 		//TODO uiShaders
 		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->ConfigureShaders(shaders);
+		}
 	}
 	
 private: // Resources
@@ -163,9 +181,6 @@ private: // Resources
 		uint uiWidth = (uint)(screenWidth * uiImageScale);
 		uint uiHeight = (uint)(screenHeight * uiImageScale);
 		
-		// universe.CreateResources(this, renderingDevice, screenWidth, screenHeight);
-		planetRenderer.CreateResources(this, renderingDevice, screenWidth, screenHeight);
-		
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		mainCamera.SetRenderTarget(swapChain);
@@ -174,57 +189,69 @@ private: // Resources
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(mainCamera.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->SetSwapChain(swapChain);
+			submodule->CreateResources();
+		}
 	}
 	
 	void DestroyResources() override {
-		// universe.DestroyResources(renderingDevice);
-		planetRenderer.DestroyResources(renderingDevice);
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
 		mainCamera.DestroyResources(renderingDevice);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->DestroyResources();
+		}
 	}
 	
 	void AllocateBuffers() override {
-		// Staged Buffers
-		AllocateBuffersStaged(transferQueue, stagedBuffers);
+		// // Staged Buffers
+		// AllocateBuffersStaged(transferQueue, stagedBuffers);
 		
 		// Other buffers
 		cameraUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 		cameraUniformBuffer.MapMemory(renderingDevice);
 		
-		// universe.AllocateBuffers(renderingDevice);
-		planetRenderer.AllocateBuffers(this, renderingDevice, transferQueue);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->AllocateBuffers();
+		}
 	}
 	
 	void FreeBuffers() override {
-		// Staged Buffers
-		for (auto& buffer : stagedBuffers) {
-			buffer->Free(renderingDevice);
-		}
+		// // Staged Buffers
+		// for (auto& buffer : stagedBuffers) {
+		// 	buffer->Free(renderingDevice);
+		// }
 		
 		// Other buffers
 		cameraUniformBuffer.UnmapMemory(renderingDevice);
 		cameraUniformBuffer.Free(renderingDevice);
 		
-		// universe.FreeBuffers(this, renderingDevice);
-		planetRenderer.FreeBuffers(this, renderingDevice);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->FreeBuffers();
+		}
 	}
 
 private: // Graphics configuration
 
 	void CreatePipelines() override {
-		std::vector<RasterShaderPipeline*> opaqueLightingShaders {
-			&opaqueLightingShader
-		};
-		
-		// universe.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
-		planetRenderer.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
 		
 		standardPipelineLayout.Create(renderingDevice);
 		lightingPipelineLayout.Create(renderingDevice);
 		thumbnailPipelineLayout.Create(renderingDevice);
 		postProcessingPipelineLayout.Create(renderingDevice);
 		uiPipelineLayout.Create(renderingDevice);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->CreatePipelines();
+		}
 		
 		{// Opaque Raster pass
 			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> attachments {};
@@ -260,7 +287,7 @@ private: // Graphics configuration
 			opaqueRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
 			
 			// Shaders
-			for (auto* shaderPipeline : opaqueRasterizationShaders) {
+			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
 				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), opaqueRasterPass.handle, 0);
 				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
 					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
@@ -322,7 +349,7 @@ private: // Graphics configuration
 			opaqueLightingPass.CreateFrameBuffers(renderingDevice, images);
 			
 			// Shaders
-			for (auto* shaderPipeline : opaqueLightingShaders) {
+			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
 				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), opaqueLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
@@ -363,7 +390,7 @@ private: // Graphics configuration
 			transparentRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
 			
 			// Shaders
-			for (auto* shaderPipeline : transparentRasterizationShaders) {
+			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
 				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), transparentRasterPass.handle, 0);
 				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
 					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
@@ -425,7 +452,7 @@ private: // Graphics configuration
 			transparentLightingPass.CreateFrameBuffers(renderingDevice, images);
 			
 			// Shaders
-			for (auto* shaderPipeline : {&transparentLightingShader}) {
+			for (auto* shaderPipeline : shaders["transparentLighting"]) {
 				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), transparentLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
@@ -457,7 +484,7 @@ private: // Graphics configuration
 			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain);
 			
 			// Shaders
-			for (auto* shaderPipeline : {&postProcessingShader}) {
+			for (auto* shaderPipeline : shaders["postProcessing"]) {
 				shaderPipeline->SetRenderPass(swapChain, postProcessingRenderPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
@@ -489,7 +516,7 @@ private: // Graphics configuration
 			thumbnailRenderPass.CreateFrameBuffers(renderingDevice, mainCamera.GetThumbnailImage());
 			
 			// Shaders
-			for (auto* shaderPipeline : {&thumbnailShader}) {
+			for (auto* shaderPipeline : shaders["thumbnail"]) {
 				shaderPipeline->SetRenderPass(&mainCamera.GetThumbnailImage(), thumbnailRenderPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
@@ -526,7 +553,7 @@ private: // Graphics configuration
 			uiRenderPass.CreateFrameBuffers(renderingDevice, uiImage);
 			
 			// Shader pipeline
-			for (auto* shader : uiShaders) {
+			for (auto* shader : shaders["ui"]) {
 				shader->SetRenderPass(&uiImage, uiRenderPass.handle, 0);
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(renderingDevice);
@@ -536,14 +563,12 @@ private: // Graphics configuration
 	}
 	
 	void DestroyPipelines() override {
-		// universe.DestroyPipelines(this, renderingDevice);
-		planetRenderer.DestroyPipelines(this, renderingDevice);
 		
 		// Rasterization pipelines
-		for (ShaderPipeline* shaderPipeline : opaqueRasterizationShaders) {
+		for (ShaderPipeline* shaderPipeline : shaders["opaqueRasterization"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
-		for (ShaderPipeline* shaderPipeline : transparentRasterizationShaders) {
+		for (ShaderPipeline* shaderPipeline : shaders["transparentRasterization"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		opaqueRasterPass.DestroyFrameBuffers(renderingDevice);
@@ -552,7 +577,10 @@ private: // Graphics configuration
 		transparentRasterPass.Destroy(renderingDevice);
 		
 		// Lighting pipelines
-		for (ShaderPipeline* shaderPipeline : {&opaqueLightingShader, &transparentLightingShader}) {
+		for (ShaderPipeline* shaderPipeline : shaders["opaqueLighting"]) {
+			shaderPipeline->DestroyPipeline(renderingDevice);
+		}
+		for (ShaderPipeline* shaderPipeline : shaders["transparentLighting"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		opaqueLightingPass.DestroyFrameBuffers(renderingDevice);
@@ -561,21 +589,21 @@ private: // Graphics configuration
 		transparentLightingPass.Destroy(renderingDevice);
 		
 		// Thumbnail Gen
-		for (auto* shaderPipeline : {&thumbnailShader}) {
+		for (auto* shaderPipeline : shaders["thumbnail"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		thumbnailRenderPass.DestroyFrameBuffers(renderingDevice);
 		thumbnailRenderPass.Destroy(renderingDevice);
 		
 		// Post-processing
-		for (auto* shaderPipeline : {&postProcessingShader}) {
+		for (auto* shaderPipeline : shaders["postProcessing"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		postProcessingRenderPass.DestroyFrameBuffers(renderingDevice);
 		postProcessingRenderPass.Destroy(renderingDevice);
 		
 		// UI
-		for (auto* shaderPipeline : uiShaders) {
+		for (auto* shaderPipeline : shaders["ui"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
 		}
 		uiRenderPass.DestroyFrameBuffers(renderingDevice);
@@ -588,6 +616,11 @@ private: // Graphics configuration
 		thumbnailPipelineLayout.Destroy(renderingDevice);
 		postProcessingPipelineLayout.Destroy(renderingDevice);
 		uiPipelineLayout.Destroy(renderingDevice);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->DestroyPipelines();
+		}
 	}
 	
 private: // Commands
@@ -600,81 +633,109 @@ private: // Commands
 		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
 		postProcessingShader.Execute(renderingDevice, commandBuffer);
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
-		
-		// universe.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
-		planetRenderer.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
 	}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
-		// Prepass
-		planetRenderer.RunDynamic(renderingDevice, commandBuffer);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsTop(commandBuffer);
+		}
 		
 		// Opaque Raster pass
 		opaqueRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
-			for (auto* shaderPipeline : opaqueRasterizationShaders) {
+			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
 		opaqueRasterPass.End(renderingDevice, commandBuffer);
 	
 		// Opaque Lighting pass
 		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
-			// universe.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
-			planetRenderer.RunInOpaqueLightingPass(this, renderingDevice, commandBuffer, mainCamera);
-			opaqueLightingShader.Execute(renderingDevice, commandBuffer);
+			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
 		// Transparent Raster pass
 		transparentRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
-			for (auto* shaderPipeline : transparentRasterizationShaders) {
+			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
 		transparentRasterPass.End(renderingDevice, commandBuffer);
 		
 		// Transparent Lighting pass
 		transparentLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage());
-			transparentLightingShader.Execute(renderingDevice, commandBuffer);
+			for (auto* shaderPipeline : shaders["transparentLighting"]) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		transparentLightingPass.End(renderingDevice, commandBuffer);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsBottom(commandBuffer);
+		}
 	}
-	void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
+	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicLowPriorityCompute(commandBuffer);
+		}
+	}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
 		// UI
 		uiRenderPass.Begin(renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
-		for (auto* shaderPipeline : uiShaders) {
+		for (auto* shaderPipeline : shaders["ui"]) {
 			shaderPipeline->Execute(renderingDevice, commandBuffer);
 		}
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
-		// universe.RunLowPriorityGraphics(renderingDevice, commandBuffer);
-		planetRenderer.RunLowPriorityGraphics(renderingDevice, commandBuffer);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicLowPriorityGraphics(commandBuffer);
+		}
 	}
 	
 public: // Scene configuration
-	void LoadScene() override {
-		planetRenderer.LoadScene();
-	}
 	
 	void ReadShaders() override {
-		thumbnailShader.ReadShaders();
-		postProcessingShader.ReadShaders();
-		opaqueLightingShader.ReadShaders();
-		transparentLightingShader.ReadShaders();
-		for (auto* shader : opaqueRasterizationShaders)
+		for (auto* shader : shaders["opaqueRasterization"])
 			shader->ReadShaders();
-		for (auto* shader : transparentRasterizationShaders)
+		for (auto* shader : shaders["transparentRasterization"])
 			shader->ReadShaders();
-		for (auto* shader : uiShaders)
+		for (auto* shader : shaders["opaqueLighting"])
 			shader->ReadShaders();
-			
-		// universe.ReadShaders();
-		planetRenderer.ReadShaders();
+		for (auto* shader : shaders["transparentLighting"])
+			shader->ReadShaders();
+		for (auto* shader : shaders["thumbnail"])
+			shader->ReadShaders();
+		for (auto* shader : shaders["postProcessing"])
+			shader->ReadShaders();
+		for (auto* shader : shaders["ui"])
+			shader->ReadShaders();
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->ReadShaders();
+		}
+	}
+	
+	void LoadScene() override {
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->LoadScene();
+		}
 	}
 	
 	void UnloadScene() override {
-		// Staged buffers
-		for (auto* buffer : stagedBuffers) {
-			delete buffer;
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->UnloadScene();
 		}
-		stagedBuffers.clear();
+		
+		// // Staged buffers
+		// for (auto* buffer : stagedBuffers) {
+		// 	delete buffer;
+		// }
+		// stagedBuffers.clear();
 	}
 	
 public: // Update
@@ -689,12 +750,16 @@ public: // Update
 		mainCamera.RefreshUBO();
 		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
 		
-		// universe.FrameUpdate(this, renderingDevice, mainCamera);
-		planetRenderer.FrameUpdate(this, renderingDevice, mainCamera);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->FrameUpdate(imageIndex);
+		}
 	}
 	void LowPriorityFrameUpdate() override {
-		// universe.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
-		planetRenderer.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->LowPriorityFrameUpdate();
+		}
 	}
 	
 };

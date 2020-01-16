@@ -3,6 +3,16 @@
 #include <v4d.h>
 
 namespace v4d::graphics {
+	
+	struct CameraUBO {
+		glm::dmat4 origin;
+		glm::mat4 projection;
+		glm::mat4 relativeView;
+		glm::dvec4 absolutePosition;
+		int screenWidth;
+		int screenHeight;
+	};
+	
 	class Camera {
 	public:
 		static const int GBUFFER_NB_IMAGES = 8;

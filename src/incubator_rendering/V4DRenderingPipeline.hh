@@ -2,15 +2,6 @@
 
 namespace v4d::graphics {
 
-	struct CameraUBO {
-		glm::dmat4 origin;
-		glm::mat4 projection;
-		glm::mat4 relativeView;
-		glm::dvec4 absolutePosition;
-		int screenWidth;
-		int screenHeight;
-	};
-	
 	struct GalaxyGenPushConstant {
 		glm::dvec3 cameraPosition; // 24
 		int frameIndex; // 4
