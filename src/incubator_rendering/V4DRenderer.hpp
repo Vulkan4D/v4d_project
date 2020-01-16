@@ -7,7 +7,7 @@
 #include "../incubator_galaxy4d/Noise.hpp"
 // #include "../incubator_galaxy4d/Universe.hpp"
 // #include "../incubator_galaxy4d/PlanetRayMarchingTests.hpp"
-#include "../incubator_galaxy4d/PlanetRaster.hpp"
+#include "../incubator_galaxy4d/PlanetRenderer.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
@@ -16,7 +16,7 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 
 	// Universe universe;
-	Planet planet;
+	PlanetRenderer planetRenderer;
 	
 	#pragma region Buffers
 	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
@@ -76,11 +76,11 @@ private: // Init
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {}
 	void Init() override {
 		// universe.Init(this);
-		planet.Init(this);
+		planetRenderer.Init(this);
 	}
 	void Info() override {
 		// universe.Info(this, renderingDevice);
-		planet.Info(this, renderingDevice);
+		planetRenderer.Info(this, renderingDevice);
 	}
 
 	void InitLayouts() override {
@@ -90,7 +90,7 @@ private: // Init
 		
 		// Universe
 		// universe.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
-		planet.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
+		planetRenderer.InitLayouts(this, descriptorSets, baseDescriptorSet_0);
 		
 		// Standard pipeline
 		//TODO standardPipelineLayout
@@ -123,7 +123,7 @@ private: // Init
 	void ConfigureShaders() override {
 		
 		// universe.ConfigureShaders();
-		planet.ConfigureShaders();
+		planetRenderer.ConfigureShaders();
 		
 		// Standard pipeline
 		//TODO opaqueRasterizationShaders, transparentRasterizationShaders
@@ -164,7 +164,7 @@ private: // Resources
 		uint uiHeight = (uint)(screenHeight * uiImageScale);
 		
 		// universe.CreateResources(this, renderingDevice, screenWidth, screenHeight);
-		planet.CreateResources(this, renderingDevice, screenWidth, screenHeight);
+		planetRenderer.CreateResources(this, renderingDevice, screenWidth, screenHeight);
 		
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
@@ -178,7 +178,7 @@ private: // Resources
 	
 	void DestroyResources() override {
 		// universe.DestroyResources(renderingDevice);
-		planet.DestroyResources(renderingDevice);
+		planetRenderer.DestroyResources(renderingDevice);
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
 		mainCamera.DestroyResources(renderingDevice);
@@ -193,7 +193,7 @@ private: // Resources
 		cameraUniformBuffer.MapMemory(renderingDevice);
 		
 		// universe.AllocateBuffers(renderingDevice);
-		planet.AllocateBuffers(this, renderingDevice, transferQueue);
+		planetRenderer.AllocateBuffers(this, renderingDevice, transferQueue);
 	}
 	
 	void FreeBuffers() override {
@@ -207,7 +207,7 @@ private: // Resources
 		cameraUniformBuffer.Free(renderingDevice);
 		
 		// universe.FreeBuffers(this, renderingDevice);
-		planet.FreeBuffers(this, renderingDevice);
+		planetRenderer.FreeBuffers(this, renderingDevice);
 	}
 
 private: // Graphics configuration
@@ -218,7 +218,7 @@ private: // Graphics configuration
 		};
 		
 		// universe.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
-		planet.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
+		planetRenderer.CreatePipelines(this, renderingDevice, opaqueLightingShaders);
 		
 		standardPipelineLayout.Create(renderingDevice);
 		lightingPipelineLayout.Create(renderingDevice);
@@ -537,7 +537,7 @@ private: // Graphics configuration
 	
 	void DestroyPipelines() override {
 		// universe.DestroyPipelines(this, renderingDevice);
-		planet.DestroyPipelines(this, renderingDevice);
+		planetRenderer.DestroyPipelines(this, renderingDevice);
 		
 		// Rasterization pipelines
 		for (ShaderPipeline* shaderPipeline : opaqueRasterizationShaders) {
@@ -602,12 +602,12 @@ private: // Commands
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
 		
 		// universe.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
-		planet.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
+		planetRenderer.RecordGraphicsCommandBuffer(commandBuffer, imageIndex);
 	}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
 		// Prepass
-		planet.RunDynamic(renderingDevice, commandBuffer);
+		planetRenderer.RunDynamic(renderingDevice, commandBuffer);
 		
 		// Opaque Raster pass
 		opaqueRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
@@ -619,7 +619,7 @@ private: // Commands
 		// Opaque Lighting pass
 		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
 			// universe.RunInOpaqueLightingPass(renderingDevice, commandBuffer);
-			planet.RunInOpaqueLightingPass(this, renderingDevice, commandBuffer, mainCamera);
+			planetRenderer.RunInOpaqueLightingPass(this, renderingDevice, commandBuffer, mainCamera);
 			opaqueLightingShader.Execute(renderingDevice, commandBuffer);
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
@@ -645,12 +645,12 @@ private: // Commands
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
 		// universe.RunLowPriorityGraphics(renderingDevice, commandBuffer);
-		planet.RunLowPriorityGraphics(renderingDevice, commandBuffer);
+		planetRenderer.RunLowPriorityGraphics(renderingDevice, commandBuffer);
 	}
 	
 public: // Scene configuration
 	void LoadScene() override {
-		planet.LoadScene();
+		planetRenderer.LoadScene();
 	}
 	
 	void ReadShaders() override {
@@ -666,7 +666,7 @@ public: // Scene configuration
 			shader->ReadShaders();
 			
 		// universe.ReadShaders();
-		planet.ReadShaders();
+		planetRenderer.ReadShaders();
 	}
 	
 	void UnloadScene() override {
@@ -690,11 +690,11 @@ public: // Update
 		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
 		
 		// universe.FrameUpdate(this, renderingDevice, mainCamera);
-		planet.FrameUpdate(this, renderingDevice, mainCamera);
+		planetRenderer.FrameUpdate(this, renderingDevice, mainCamera);
 	}
 	void LowPriorityFrameUpdate() override {
 		// universe.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
-		planet.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
+		planetRenderer.LowPriorityFrameUpdate(this, renderingDevice, mainCamera, lowPriorityGraphicsQueue);
 	}
 	
 };
