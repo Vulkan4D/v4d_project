@@ -16,7 +16,7 @@ layout(std430, push_constant) uniform PlanetChunk {
 	// double radius;
 } planetChunk;
 
-#include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
+// #include "incubator_rendering/assets/shaders/_v4d_baseDescriptorSet.glsl"
 
 ##################################################################
 #shader vert
