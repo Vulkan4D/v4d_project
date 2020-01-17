@@ -8,10 +8,7 @@
 
 // V4D Core Header
 #include <v4d.h>
-
-class Planets : public v4d::modules::Rendering {
-	
-};
+#include "Planets.hpp"
 
 V4DMODULE void V4D_ModuleCreate() {
 	V4D_LOAD_SUBMODULE(Planets)
