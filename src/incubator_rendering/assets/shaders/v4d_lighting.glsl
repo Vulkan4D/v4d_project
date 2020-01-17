@@ -4,7 +4,7 @@ precision highp int;
 precision highp float;
 precision highp sampler2D;
 
-#include "_v4d_baseDescriptorSet.glsl"
+// #include "_v4d_baseDescriptorSet.glsl"
 
 #common .*frag
 

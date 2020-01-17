@@ -4,14 +4,14 @@
 
 namespace v4d::graphics {
 	
-	// struct CameraUBO {
+	struct CameraUBO {
 	// 	glm::dmat4 origin;
-	// 	glm::mat4 projection;
+		glm::mat4 projection;
 	// 	glm::mat4 relativeView;
 	// 	glm::dvec4 absolutePosition;
 	// 	int screenWidth;
 	// 	int screenHeight;
-	// };
+	};
 	
 	class Camera {
 	public:
@@ -41,9 +41,9 @@ namespace v4d::graphics {
 		// glm::dvec3 viewUp = {0,0,1};
 		// glm::dvec3 velocity {0};
 		// glm::dmat4 view {1};
-		// glm::dmat4 projection {1};
+		glm::dmat4 projection {1};
 		// glm::dmat4 origin = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
-		// CameraUBO ubo {};
+		CameraUBO ubo {};
 		
 		// Images
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
@@ -156,12 +156,12 @@ namespace v4d::graphics {
 			return gBuffers;
 		}
 		
-		// glm::dmat4& GetProjectionMatrix() {
-		// 	return projection;
-		// }
-		glm::dmat4 GetProjectionMatrix() {
-			return glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
+		glm::dmat4& GetProjectionMatrix() {
+			return projection;
 		}
+		// glm::dmat4 GetProjectionMatrix() {
+		// 	return glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
+		// }
 		
 		// glm::dmat4& GetViewMatrix() {
 		// 	return view;
@@ -171,9 +171,9 @@ namespace v4d::graphics {
 		// 	return projection * view;
 		// }
 		
-		// CameraUBO& GetUBO() {
-		// 	return ubo;
-		// }
+		CameraUBO& GetUBO() {
+			return ubo;
+		}
 		
 		std::vector<VkClearValue> GetGBuffersClearValues() {
 			std::vector<VkClearValue> clearValues(GBUFFER_NB_IMAGES);
@@ -192,10 +192,10 @@ namespace v4d::graphics {
 		// 	view = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
 		// }
 		
-		// void RefreshProjectionMatrix() {
-		// 	projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
-		// 	projection[1][1] *= -1;
-		// }
+		void RefreshProjectionMatrix() {
+			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
+			projection[1][1] *= -1;
+		}
 		
 		// glm::dvec3 GetPositionInScreen(glm::dvec3 a) {
 		// 	auto pos = projection * view * glm::dvec4(a, 1);
@@ -220,14 +220,14 @@ namespace v4d::graphics {
 		// 	return (pp.z < 1.0 && glm::abs(pp.x) < 1.0 && glm::abs(pp.y) < 1.0);
 		// }
 		
-		// void RefreshUBO() {
+		void RefreshUBO() {
 		// 	ubo.origin = origin;
-		// 	ubo.projection = projection;
+			ubo.projection = projection;
 		// 	ubo.relativeView = glm::inverse(origin) * view;
 		// 	ubo.absolutePosition = glm::dvec4(worldPosition, 1);
 		// 	ubo.screenWidth = extent.width;
 		// 	ubo.screenHeight = extent.height;
-		// }
+		}
 		
 		void CreateResources(Device* device) {
 			uint rasterWidth = (uint)((float)extent.width * rasterizationResolutionScale);

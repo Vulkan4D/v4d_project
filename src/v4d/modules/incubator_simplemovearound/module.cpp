@@ -119,6 +119,8 @@ public:
 	Camera* camera;
 	
 	Rendering(Camera* camera) : camera(camera) {}
+
+	int OrderIndex() const override {return -1;}
 	
 	void FrameUpdate(uint imageIndex, glm::dmat4& projection, glm::dmat4& view) override {
 		view = glm::lookAt(camera->worldPosition, camera->worldPosition + camera->viewDirection, camera->viewUp);

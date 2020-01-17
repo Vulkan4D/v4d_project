@@ -90,15 +90,15 @@ if(COMPILE_V4D_CORE)
 endif()
 
 
-# Assets
-if(COMPILE_ASSETS)
-	add_subdirectory(tools/assetcompiler)
-endif()
-
-
 # V4D Modules
 if(COMPILE_V4D_MODULES)
 	add_subdirectory(src/v4d/modules)
+endif()
+
+
+# Assets
+if(COMPILE_ASSETS)
+	add_subdirectory(tools/assetcompiler)
 endif()
 
 
