@@ -11,7 +11,7 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	std::vector<v4d::modules::Rendering*> renderingSubmodules {};
 	
 	#pragma region Buffers
-	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
+	// Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
 	// std::vector<Buffer*> stagedBuffers {};
 	#pragma endregion
 	
@@ -74,12 +74,10 @@ public: // Camera
 private: // Init
 	void Init() override {
 		// Submodules
-		for (auto[id, module] : v4d::modules::ModuleInstance::GetLoadedModules()) {
-			module->ForEachSubmodule<v4d::modules::Rendering>([this](auto* submodule){
-				renderingSubmodules.push_back(submodule);
-				submodule->SetRenderer(this);
-				submodule->Init();
-			});
+		renderingSubmodules = v4d::modules::GetSubmodules<v4d::modules::Rendering>();
+		for (auto* submodule : renderingSubmodules) {
+			submodule->SetRenderer(this);
+			submodule->Init();
 		}
 	}
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {
@@ -103,7 +101,7 @@ private: // Init
 	void InitLayouts() override {
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		// baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		// Standard pipeline
 		//TODO standardPipelineLayout
@@ -212,9 +210,9 @@ private: // Resources
 		// // Staged Buffers
 		// AllocateBuffersStaged(transferQueue, stagedBuffers);
 		
-		// Other buffers
-		cameraUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		cameraUniformBuffer.MapMemory(renderingDevice);
+		// // Camera UBO
+		// cameraUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		// cameraUniformBuffer.MapMemory(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -228,9 +226,9 @@ private: // Resources
 		// 	buffer->Free(renderingDevice);
 		// }
 		
-		// Other buffers
-		cameraUniformBuffer.UnmapMemory(renderingDevice);
-		cameraUniformBuffer.Free(renderingDevice);
+		// // Camera UBO
+		// cameraUniformBuffer.UnmapMemory(renderingDevice);
+		// cameraUniformBuffer.Free(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -625,14 +623,21 @@ private: // Graphics configuration
 	
 private: // Commands
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+		
 		// Gen Thumbnail
 		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, mainCamera.GetThumbnailImage(), {{.0,.0,.0,.0}});
-		thumbnailShader.Execute(renderingDevice, commandBuffer);
+			for (auto* shaderPipeline : shaders["thumbnail"]) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		thumbnailRenderPass.End(renderingDevice, commandBuffer);
+		
 		// Post Processing
 		postProcessingRenderPass.Begin(renderingDevice, commandBuffer, swapChain, {{.0,.0,.0,.0}}, imageIndex);
-		postProcessingShader.Execute(renderingDevice, commandBuffer);
+			for (auto* shaderPipeline : shaders["postProcessing"]) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
+		
 	}
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
@@ -683,9 +688,9 @@ private: // Commands
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
 		// UI
 		uiRenderPass.Begin(renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
-		for (auto* shaderPipeline : shaders["ui"]) {
-			shaderPipeline->Execute(renderingDevice, commandBuffer);
-		}
+			for (auto* shaderPipeline : shaders["ui"]) {
+				shaderPipeline->Execute(renderingDevice, commandBuffer);
+			}
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
 		// Submodules
@@ -740,19 +745,20 @@ public: // Scene configuration
 	
 public: // Update
 	void FrameUpdate(uint imageIndex) override {
-		// Refresh camera matrices
-		mainCamera.RefreshProjectionMatrix();
-		mainCamera.RefreshViewMatrix();
+		// // Refresh camera matrices
+		// mainCamera.RefreshProjectionMatrix();
+		// mainCamera.RefreshViewMatrix();
 		
-		// Update and Write UBO
-		mainCamera.RefreshProjectionMatrix();
-		mainCamera.RefreshViewMatrix();
-		mainCamera.RefreshUBO();
-		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
+		// // Update and Write UBO
+		// mainCamera.RefreshUBO();
+		// cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
+		
+		glm::dmat4 projectionMatrix = mainCamera.GetProjectionMatrix();
+		glm::dmat4 viewMatrix {1};
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->FrameUpdate(imageIndex);
+			submodule->FrameUpdate(imageIndex, projectionMatrix, viewMatrix);
 		}
 	}
 	void LowPriorityFrameUpdate() override {

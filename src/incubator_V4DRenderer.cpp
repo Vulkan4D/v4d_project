@@ -3,39 +3,56 @@
 
 using namespace v4d::graphics;
 
+#define APPLICATION_NAME "V4D Test"
+#define WINDOW_TITLE "TEST"
+#define WINDOW_WIDTH 1280
+#define WINDOW_HEIGHT 720
+#define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
+
 #include "incubator_rendering/V4DRenderer.hpp"
+
+static std::vector<std::string> v4dModules {
+	"incubator_simplemovearound",
+	"incubator_galaxy4d",
+};
+
+#if defined(_DEBUG) && defined(_LINUX)
+	// Shaders to watch for modifications to automatically reload the renderer
+	static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
+		// {"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
+		// {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
+		// {"incubator_galaxy4d/assets/shaders/planetRayMarching.meta", 0},
+		{"incubator_galaxy4d/assets/shaders/planetRaster.meta", 0},
+	};
+#endif
+
 Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
 
-#ifdef _WINDOWS
-	//TODO find windows equivalent, and put it in v4d helper macros
-	#define SET_CPU_AFFINITY(n)
-#else
-	#define SET_CPU_AFFINITY(n) \
-		cpu_set_t cpuset;\
-		CPU_ZERO(&cpuset);\
-		CPU_SET(std::min((int)std::thread::hardware_concurrency()-1, n), &cpuset);\
-		int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);\
-		if (rc != 0) {\
-			LOG_ERROR("Error calling pthread_setaffinity_np: " << rc)\
-		}
-#endif
-
 int main() {
-	SET_CPU_AFFINITY(0)
+	// SET_CPU_AFFINITY(0)
 	
+	// Core & Modules
+	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN ( v4dCore )
+	for (auto module : v4dModules) v4dCore->LoadModule(module);
+
+	// Input Submodules
+	auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
+	
+	// Vulkan
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
 	
-	// Needed for RayTracing
-	vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+	// // Needed for RayTracing
+	// vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 	// Create Window and Init Vulkan
-	Window* window = new Window("TEST", 1280, 720);
+	Window* window = new Window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
 	
-	auto* renderer = new V4DRenderer(&vulkanLoader, "V4D Test", VK_MAKE_VERSION(1, 0, 0), window);
+	// Renderer
+	auto* renderer = new V4DRenderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
 		VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
@@ -46,60 +63,17 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	// Normal: 10 km/s, Shift: 1000 km/s, Alt: 10 m/s
-	double camSpeed = 10000.0, mouseSensitivity = 1.0;
-	double horizontalAngle = 0;
-	double verticalAngle = 0;
-	renderer->mainCamera.SetWorldPosition(0, 0, 0);
-	renderer->mainCamera.SetViewDirection(
-		cos(verticalAngle) * sin(horizontalAngle),
-		cos(verticalAngle) * cos(horizontalAngle),
-		sin(verticalAngle)
-	);
+	// Submodules
+	for (auto* submodule : inputSubmodules) {
+		submodule->SetWindow(window);
+		submodule->SetRenderer(renderer);
+		submodule->Init();
+		submodule->AddCallbacks();
+	}
 	
-	// Input Events
-	window->AddKeyCallback("app", [window, renderer](int key, int scancode, int action, int mods){
-		
-		// Might want to lock UBO in some cases
-		
-		// Quit application upon pressing the Escape key
-		if (action != GLFW_RELEASE) {
-			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
-			switch (key) {
-				
-				// Quit
-				case GLFW_KEY_ESCAPE:
-					glfwSetWindowShouldClose(window->GetHandle(), 1);
-					break;
-					
-				// Reload Renderer
-				case GLFW_KEY_R:
-					renderer->ReloadRenderer();
-					break;
-				
-			}
-		}
-	});
-	
-	// Mouse buttons
-	window->AddMouseButtonCallback("app", [window, renderer](int button, int action, int mods){
-		if (action == GLFW_RELEASE) {
-			switch (button) {
-				case GLFW_MOUSE_BUTTON_1:
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					break;
-				case GLFW_MOUSE_BUTTON_2:
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-					break;
-			}
-		}
-	});
-
 	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
-		SET_CPU_AFFINITY(1)
+		// SET_CPU_AFFINITY(1)
 		while (appRunning) {
 			//...
 			SLEEP(10ms)
@@ -108,7 +82,7 @@ int main() {
 	
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
-		SET_CPU_AFFINITY(2)
+		// SET_CPU_AFFINITY(2)
 		while (appRunning) {
 			// std::this_thread::yield();
 			if (!appRunning) break;
@@ -119,7 +93,7 @@ int main() {
 	
 	// Rendering Loop
 	std::thread renderingThread([&]{
-		SET_CPU_AFFINITY(3)
+		// SET_CPU_AFFINITY(3)
 		// Frame timer
 		v4d::Timer timer(true);
 		double elapsedTime = 0;
@@ -145,65 +119,17 @@ int main() {
 	});
 	
 	while (window->IsActive()) {
-		SET_CPU_AFFINITY(1)
-		
-		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
+		// SET_CPU_AFFINITY(1)
 		
 		// Events
 		glfwPollEvents();
 		
-		// Camera Movements
-		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.001 : 1.0);
-		renderer->mainCamera.SetVelocity(glm::dvec3{0});
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			renderer->mainCamera.SetVelocity(+renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			renderer->mainCamera.SetVelocity(-renderer->mainCamera.GetViewDirection() * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			renderer->mainCamera.SetVelocity(-glm::cross(renderer->mainCamera.GetViewDirection(), glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			renderer->mainCamera.SetVelocity(+glm::cross(renderer->mainCamera.GetViewDirection(), glm::dvec3(0,0,1)) * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			renderer->mainCamera.SetVelocity(+glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			renderer->mainCamera.SetVelocity(-glm::dvec3(0,0,1) * camSpeed * camSpeedMult * deltaTime);
-			renderer->mainCamera.SetWorldPosition(renderer->mainCamera.GetWorldPosition() + renderer->mainCamera.GetVelocity());
-		}
-		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
-			double x, y;
-			glfwGetCursorPos(window->GetHandle(), &x, &y);
-			glfwSetCursorPos(window->GetHandle(), 0, 0);
-			if (x != 0 || y != 0) {
-				horizontalAngle += double(x * mouseSensitivity * deltaTime);
-				verticalAngle -= double(y * mouseSensitivity * deltaTime);
-				if (verticalAngle < -1.5) verticalAngle = -1.5;
-				if (verticalAngle > 1.5) verticalAngle = 1.5;
-				renderer->mainCamera.SetViewDirection(
-					cos(verticalAngle) * sin(horizontalAngle),
-					cos(verticalAngle) * cos(horizontalAngle),
-					sin(verticalAngle)
-				);
-			}
+		for (auto* submodule : inputSubmodules) {
+			submodule->Update();
 		}
 		
 		#if defined(_DEBUG) && defined(_LINUX)
 			// Watch shader modifications to automatically reload the renderer
-			static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
-				// {"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
-				// {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
-				// {"incubator_galaxy4d/assets/shaders/planetRayMarching.meta", 0},
-				{"incubator_galaxy4d/assets/shaders/planetRaster.meta", 0},
-			};
 			for (auto&[f, t] : shaderFilesToWatch) {
 				if (t == 0) {
 					t = f.GetLastWriteTime();
@@ -224,6 +150,10 @@ int main() {
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
+	for (auto* submodule : inputSubmodules) {
+		submodule->RemoveCallbacks();
+	}
+	
 	renderer->UnloadRenderer();
 	renderer->UnloadScene();
 	
@@ -231,6 +161,8 @@ int main() {
 	delete renderer;
 	delete window;
 
-	LOG("\n\nApplication terminated\n\n");
+	// Unload modules
+	for (auto module : v4dModules) v4dCore->UnloadModule(module);
 	
+	LOG("\n\nApplication terminated\n\n");
 }
