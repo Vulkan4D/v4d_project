@@ -17,6 +17,7 @@ layout(std430, push_constant) uniform PlanetChunk {
 struct V2F {
 	vec3 relPos;
 	vec3 normal;
+	vec2 uv;
 };
 
 ##################################################################
@@ -24,6 +25,7 @@ struct V2F {
 
 layout(location = 0) in vec4 pos;
 layout(location = 1) in vec4 normal;
+layout(location = 2) in vec2 uv;
 
 layout(location = 0) out V2F v2f;
 
@@ -35,6 +37,7 @@ void main() {
 	gl_Position = cameraUBO.projection * planetChunk.modelView * vec4(pos.xyz, 1);
 	v2f.relPos = (planetChunk.modelView * vec4(pos.xyz, 1)).xyz;
 	v2f.normal = normal.xyz;
+	v2f.uv = uv.st;
 }
 
 ##################################################################
