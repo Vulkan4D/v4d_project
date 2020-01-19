@@ -276,6 +276,7 @@ struct Planet {
 		}
 	
 		void GenerateAsync() {
+			meshGenerating = true;
 			static v4d::processing::ThreadPoolPriorityQueue<Chunk*> chunkGenerator ([](Chunk* chunk){
 				chunk->Generate();
 			}, [](Chunk* a, Chunk* b) {
@@ -283,6 +284,11 @@ struct Planet {
 			});
 			chunkGenerator.RunThreads(4);
 			chunkGenerator.Enqueue(this);
+		}
+		
+		void CancelMeshGeneration() {
+			shouldBeGenerated = false;
+			meshGenerating = false;
 		}
 		
 		int genRow = 0;
@@ -295,12 +301,15 @@ struct Planet {
 			
 			for (; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
 				for (; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+					
 					uint32_t topLeftIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
 					
 					glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
 					glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 					
 					glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
+					
+					// std::lock_guard lock(stateMutex);
 					
 					vertices[topLeftIndex].pos = glm::vec4(pos * planet->GetHeightMap(pos) - centerPos, 0);
 					vertices[topLeftIndex].normal = glm::vec4(Spherify(pos), 0);
@@ -339,6 +348,7 @@ struct Planet {
 				genCol = 0;
 			}
 			
+			// std::lock_guard lock(stateMutex);
 			meshGenerated = true;
 		}
 		
@@ -352,12 +362,9 @@ struct Planet {
 				indexBufferPool.Free(indexBufferAllocation);
 				allocated = false;
 			}
-			for (auto* subChunk : subChunks) {
-				subChunk->FreeBuffers();
-			}
 		}
 	
-		void CreateSubChunks() {
+		void AddSubChunks() {
 			subChunks.reserve(4);
 			
 			subChunks.emplace_back(new Chunk{
@@ -398,8 +405,19 @@ struct Planet {
 			});
 		}
 		
+		void Remove() {
+			CancelMeshGeneration();
+			active = false;
+			render = false;
+			FreeBuffers();
+			if (subChunks.size() > 0) {
+				for (auto* subChunk : subChunks) {
+					subChunk->Remove();
+				}
+			}
+		}
+		
 		void BeforeRender(Renderer* renderer, Device* device, Queue* queue) {
-			// std::lock_guard lock(stateMutex);
 			RefreshDistanceFromCamera();
 			
 			// Angle Culling
@@ -410,6 +428,7 @@ struct Planet {
 				glm::dot(planet->cameraPos - bottomLeftPosLowestPoint, bottomLeftPos) > 0.0 ||
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
 			
+			// std::lock_guard lock(stateMutex);
 			if (chunkVisibleByAngle) {
 				active = true;
 				
@@ -419,29 +438,40 @@ struct Planet {
 				else
 					testColor = glm::vec4{1,1,1,1};
 				
-				
-				//////
-				if (allocated) {
-					render = true;
+				if (ShouldAddSubChunks()) {
+					if (subChunks.size() == 0) AddSubChunks();
+					bool allSubchunksGenerated = true;
+					for (auto* subChunk : subChunks) {
+						subChunk->BeforeRender(renderer, device, queue);
+						if (subChunk->shouldBeGenerated && !subChunk->meshGenerated) {
+							allSubchunksGenerated = false;
+						}
+					}
+					if (allSubchunksGenerated) {
+						render = false;
+					}
 				} else {
-					render = false;
-					shouldBeGenerated = true;
-					if (!meshGenerated && !meshGenerating) GenerateAsync();
-					meshGenerating = true;
-					if (meshGenerated) {
-						vertexBufferAllocation = vertexBufferPool.Allocate(renderer, device, queue, vertices.data());
-						indexBufferAllocation = indexBufferPool.Allocate(renderer, device, queue, indices.data());
-						allocated = true;
+					if (ShouldRemoveSubChunks()) {
+						for (auto* subChunk : subChunks) {
+							subChunk->Remove();
+						}
 						render = true;
 					}
+					if (!allocated) {
+						render = false;
+						shouldBeGenerated = true;
+						if (!meshGenerated && !meshGenerating) GenerateAsync();
+						if (meshGenerated) {
+							vertexBufferAllocation = vertexBufferPool.Allocate(renderer, device, queue, vertices.data());
+							indexBufferAllocation = indexBufferPool.Allocate(renderer, device, queue, indices.data());
+							allocated = true;
+							render = true;
+						}
+					}
 				}
-				//////
 				
 			} else {
-				shouldBeGenerated = false;
-				active = false;
-				render = false;
-				FreeBuffers();
+				Remove();
 			}
 		}
 		
@@ -560,7 +590,7 @@ public:
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, Planet::Chunk* chunk) {
-		// std::lock_guard lock(chunk.stateMutex);
+		// std::lock_guard lock(chunk->stateMutex);
 		if (chunk->active) {
 			if (chunk->render) {
 				planetChunkPushConstant.modelView = viewMatrix * glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos);
@@ -620,10 +650,10 @@ public:
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
 		shaders["opaqueRasterization"].push_back(&planetShader);
 		
-		planetShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		planetShader.rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		planetShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		planetShader.depthStencilState.depthTestEnable = VK_FALSE;
+		planetShader.depthStencilState.depthWriteEnable = VK_TRUE;
+		planetShader.depthStencilState.depthTestEnable = VK_TRUE;
 		planetShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, {
 			{0, offsetof(Vertex, Vertex::pos), VK_FORMAT_R32G32B32A32_SFLOAT},
 			{1, offsetof(Vertex, Vertex::normal), VK_FORMAT_R32G32B32A32_SFLOAT},
@@ -658,6 +688,11 @@ public:
 	// void AllocateBuffers() override {}
 	
 	void FreeBuffers() override {
+		for (auto* planet : planets) {
+			for (auto* chunk : planet->chunks) {
+				chunk->Remove();
+			}
+		}
 		vertexBufferPool.FreePool(renderingDevice);
 		indexBufferPool.FreePool(renderingDevice);
 	}
