@@ -8,12 +8,32 @@
 
 // V4D Core Header
 #include <v4d.h>
-#include "Planets.hpp"
+#include "PlanetsRenderer/PlanetsRenderer.hpp"
+
+PlanetsRenderer* planetsRenderer = nullptr;
 
 V4DMODULE void V4D_ModuleCreate() {
-	V4D_LOAD_SUBMODULE(Planets)
+	
+	// Planets Renderer
+	planetsRenderer = V4D_LOAD_SUBMODULE(PlanetsRenderer)
+	planetsRenderer->planetaryTerrains.push_back(new PlanetaryTerrain{
+		24000000,
+		23900000,
+		10000,
+		// {0, 21740000, -10000000}
+		{0, 28000000, -10000000}
+		// {20000000, 20000000, -20000000}
+	});
+	
 }
 
 V4DMODULE void V4D_ModuleDestroy() {
-	V4D_UNLOAD_SUBMODULES(Planets)
+	
+	// Planets Renderer
+	for (auto* planetaryTerrain : planetsRenderer->planetaryTerrains) {
+		delete planetaryTerrain;
+	}
+	planetsRenderer->planetaryTerrains.clear();
+	V4D_UNLOAD_SUBMODULES(PlanetsRenderer)
+	
 }
