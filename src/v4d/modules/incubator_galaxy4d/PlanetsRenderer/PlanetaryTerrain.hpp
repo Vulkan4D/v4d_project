@@ -22,6 +22,7 @@ struct PlanetaryTerrain {
 	static const int vertexSubdivisionsPerChunk = 32;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
+	static const int nbChunksPerBufferPool = 128;
 	#pragma endregion
 
 	#pragma region Calculated constants
@@ -47,8 +48,10 @@ struct PlanetaryTerrain {
 	};
 
 	// Buffer pools
-	static DeviceLocalBufferPool<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, nbVerticesPerChunk*sizeof(Vertex), 128/*chunks*/> vertexBufferPool;
-	static DeviceLocalBufferPool<VK_BUFFER_USAGE_INDEX_BUFFER_BIT, nbIndicesPerChunk*sizeof(uint32_t), 128/*chunks*/> indexBufferPool;
+	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, nbVerticesPerChunk*sizeof(Vertex), nbChunksPerBufferPool> ChunkVertexBufferPool;
+	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_INDEX_BUFFER_BIT, nbIndicesPerChunk*sizeof(uint32_t), nbChunksPerBufferPool> ChunkIndexBufferPool;
+	static ChunkVertexBufferPool vertexBufferPool;
+	static ChunkIndexBufferPool indexBufferPool;
 
 	glm::dvec3 cameraPos {0};
 	
@@ -509,5 +512,5 @@ struct PlanetaryTerrain {
 };
 
 // Buffer pools
-DeviceLocalBufferPool<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, PlanetaryTerrain::nbVerticesPerChunk*sizeof(PlanetaryTerrain::Vertex), 128/*chunks*/> PlanetaryTerrain::vertexBufferPool {};
-DeviceLocalBufferPool<VK_BUFFER_USAGE_INDEX_BUFFER_BIT, PlanetaryTerrain::nbIndicesPerChunk*sizeof(uint32_t), 128/*chunks*/> PlanetaryTerrain::indexBufferPool {};
+PlanetaryTerrain::ChunkVertexBufferPool PlanetaryTerrain::vertexBufferPool {};
+PlanetaryTerrain::ChunkIndexBufferPool PlanetaryTerrain::indexBufferPool {};
