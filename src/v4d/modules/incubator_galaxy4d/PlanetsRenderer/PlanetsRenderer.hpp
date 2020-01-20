@@ -49,19 +49,30 @@ public:
 	// // Executed when calling their respective methods on the main Renderer
 	// void ReadShaders() override {}
 	
+	LightSource sun = {
+		POINT_LIGHT,
+		{0, -50000000, -20000000},
+		{1,1,1}, // color
+		100
+	};
+	
 	void LoadScene(Scene& scene) override {
+		
+		// Sun(s)
+		scene.lightSources["sun"] = &sun;
+		
 		// Planets
 		for (auto* planetaryTerrain : planetaryTerrains) {
-			if (planetaryTerrain->lightIntensity > 0) {
-				planetaryTerrain->lightSource = {
-					POINT_LIGHT,
-					planetaryTerrain->absolutePosition,
-					{1,1,1}, // color
-					planetaryTerrain->lightIntensity
-				};
-				// Sun(s)
-				scene.lightSources["sun"] = &planetaryTerrain->lightSource;
-			}
+			// if (planetaryTerrain->lightIntensity > 0) {
+			// 	planetaryTerrain->lightSource = {
+			// 		POINT_LIGHT,
+			// 		planetaryTerrain->absolutePosition,
+			// 		{1,1,1}, // color
+			// 		planetaryTerrain->lightIntensity
+			// 	};
+			// 	// Sun(s)
+			// 	scene.lightSources["sun"] = &planetaryTerrain->lightSource;
+			// }
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
@@ -118,6 +129,7 @@ public:
 		
 		// Planets
 		for (auto* planetaryTerrain : planetaryTerrains) {
+			std::lock_guard lock(planetaryTerrain->chunksMutex);
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
@@ -127,8 +139,15 @@ public:
 	
 	void LowPriorityFrameUpdate() override {
 		for (auto* planetaryTerrain : planetaryTerrains) {
+			std::lock_guard lock(planetaryTerrain->chunksMutex);
+			// Sort chunks when camera moved at least 1km and not more than once every 10 seconds
+			if (glm::distance(planetaryTerrain->cameraPos, planetaryTerrain->lastSortPosition) > 1000 && planetaryTerrain->lastSortTime.GetElapsedSeconds() > 10) {
+				planetaryTerrain->SortChunks();
+				planetaryTerrain->lastSortPosition = planetaryTerrain->cameraPos;
+				planetaryTerrain->lastSortTime.Reset();
+			}
 			for (auto* chunk : planetaryTerrain->chunks) {
-				chunk->Process();
+				chunk->Process(renderingDevice, transferQueue);
 			}
 		}
 	}

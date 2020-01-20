@@ -64,7 +64,10 @@ struct PlanetaryTerrain {
 	static ChunkVertexBufferPool vertexBufferPool;
 	static ChunkIndexBufferPool indexBufferPool;
 
+	// Camera
 	glm::dvec3 cameraPos {0};
+	glm::dvec3 lastSortPosition {0};
+	v4d::Timer lastSortTime {true};
 	
 	struct Chunk {
 	
@@ -109,6 +112,8 @@ struct PlanetaryTerrain {
 		std::atomic<bool> meshShouldGenerate = false;
 		std::atomic<bool> meshGenerated = false;
 		std::atomic<bool> meshGenerating = false;
+		std::recursive_mutex stateMutex;
+		std::recursive_mutex subChunksMutex;
 		#pragma endregion
 		
 		#pragma region Data
@@ -195,6 +200,12 @@ struct PlanetaryTerrain {
 			topRightPosLowestPoint = Spherify(topRight) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
 			bottomLeftPosLowestPoint = Spherify(bottomLeft) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
 			bottomRightPosLowestPoint = Spherify(bottomRight) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+		
+			// Green = last level (most precise)
+			if (IsLastLevel())
+				testColor = glm::vec4{0,1,0,1};
+			else
+				testColor = glm::vec4{1,1,1,1};
 			
 			RefreshDistanceFromCamera();
 		}
@@ -286,6 +297,7 @@ struct PlanetaryTerrain {
 				++genRow;
 			}
 			
+			std::scoped_lock lock(stateMutex);
 			meshGenerated = true;
 		}
 		
@@ -336,9 +348,12 @@ struct PlanetaryTerrain {
 				bottom,
 				bottomRight
 			});
+			
+			SortSubChunks();
 		}
 		
 		void Remove() {
+			std::scoped_lock lock(stateMutex, subChunksMutex);
 			active = false;
 			render = false;
 			CancelMeshGeneration();
@@ -350,12 +365,8 @@ struct PlanetaryTerrain {
 			}
 		}
 		
-		void Process() {
-			
-		}
-		
-		void BeforeRender(Device* device, Queue* transferQueue) {
-			RefreshDistanceFromCamera();
+		void Process(Device* device, Queue* transferQueue) {
+			std::scoped_lock lock(stateMutex);
 			
 			// Angle Culling
 			bool chunkVisibleByAngle = 
@@ -364,21 +375,16 @@ struct PlanetaryTerrain {
 				glm::dot(planet->cameraPos - topRightPosLowestPoint, topRightPos) > 0.0 ||
 				glm::dot(planet->cameraPos - bottomLeftPosLowestPoint, bottomLeftPos) > 0.0 ||
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
-			
+				
 			if (chunkVisibleByAngle) {
 				active = true;
 				
-				// Green = last level (most precise)
-				if (IsLastLevel())
-					testColor = glm::vec4{0,1,0,1};
-				else
-					testColor = glm::vec4{1,1,1,1};
-				
 				if (ShouldAddSubChunks()) {
+					std::scoped_lock lock(subChunksMutex);
 					if (subChunks.size() == 0) AddSubChunks();
 					bool allSubchunksGenerated = true;
 					for (auto* subChunk : subChunks) {
-						subChunk->BeforeRender(device, transferQueue);
+						subChunk->Process(device, transferQueue);
 						if (subChunk->meshShouldGenerate && !subChunk->meshGenerated) {
 							allSubchunksGenerated = false;
 						}
@@ -388,6 +394,7 @@ struct PlanetaryTerrain {
 					}
 				} else {
 					if (ShouldRemoveSubChunks()) {
+						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
 							subChunk->Remove();
 						}
@@ -412,10 +419,28 @@ struct PlanetaryTerrain {
 			} else {
 				Remove();
 			}
+			
+		}
+		
+		void BeforeRender(Device* device, Queue* transferQueue) {
+			std::scoped_lock lock(stateMutex, subChunksMutex);
+			RefreshDistanceFromCamera();
+			for (auto* subChunk : subChunks) {
+				subChunk->BeforeRender(device, transferQueue);
+			}
+		}
+		
+		void SortSubChunks() {
+			std::lock_guard lock(subChunksMutex);
+			std::sort(subChunks.begin(), subChunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+			for (auto* chunk : subChunks) {
+				chunk->SortSubChunks();
+			}
 		}
 		
 	};
 
+	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos) {
@@ -511,6 +536,8 @@ struct PlanetaryTerrain {
 				}
 			}
 		}
+		
+		SortChunks();
 	}
 	
 	void RemoveBaseChunks() {
@@ -518,6 +545,14 @@ struct PlanetaryTerrain {
 			delete chunk;
 		}
 		chunks.clear();
+	}
+
+	void SortChunks() {
+		std::lock_guard lock(chunksMutex);
+		std::sort(chunks.begin(), chunks.end(), [](Chunk* a, Chunk* b) -> bool {return /*a->level > b->level ||*/ a->distanceFromCamera < b->distanceFromCamera;});
+		for (auto* chunk : chunks) {
+			chunk->SortSubChunks();
+		}
 	}
 	
 };

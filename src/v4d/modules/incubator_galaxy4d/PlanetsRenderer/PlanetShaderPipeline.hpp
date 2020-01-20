@@ -20,6 +20,7 @@ public:
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
+		std::scoped_lock lock(chunk->stateMutex, chunk->subChunksMutex);
 		if (chunk->active) {
 			if (chunk->render) {
 				
@@ -52,6 +53,7 @@ public:
 		Bind(device, cmdBuffer);
 		if (planets) {
 			for (auto* planet : *planets) {
+				std::lock_guard lock(planet->chunksMutex);
 				for (auto* chunk : planet->chunks) {
 					RenderChunk(device, cmdBuffer, chunk);
 				}
