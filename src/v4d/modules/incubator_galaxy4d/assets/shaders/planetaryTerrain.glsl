@@ -5,12 +5,10 @@ precision highp int;
 precision highp float;
 precision highp sampler2D;
 
-layout(set = 0, binding = 0) uniform CameraUBO {
-	mat4 projection;
-} cameraUBO;
+#include "Camera.glsl"
 
 layout(std430, push_constant) uniform PlanetChunk {
-	mat4 modelView;
+	mat4 modelViewMatrix;
 	vec4 testColor;
 } planetChunk;
 
@@ -30,54 +28,16 @@ layout(location = 2) in vec2 uv;
 layout(location = 0) out V2F v2f;
 
 void main() {
-	// vec2 uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-	// vec4 pos = vec4(uv * 2.0f + -1.0f, 0.0f, 1.0f);
-	// vec4 normal = vec4(0);
-	
-	gl_Position = cameraUBO.projection * planetChunk.modelView * vec4(pos.xyz, 1);
-	v2f.relPos = (planetChunk.modelView * vec4(pos.xyz, 1)).xyz;
-	v2f.normal = normal.xyz;
+	v2f.relPos = (planetChunk.modelViewMatrix * vec4(pos.xyz, 1)).xyz;
+	v2f.normal = normalize(transpose(inverse(mat3(planetChunk.modelViewMatrix))) * normal.xyz);
 	v2f.uv = uv.st;
+	gl_Position = mat4(camera.projectionMatrix) * vec4(v2f.relPos, 1);
 }
 
 ##################################################################
 
 #shader wireframe.geom
-
-layout(triangles) in;
-layout(line_strip, max_vertices = 6) out;
-
-layout(location = 0) in V2F in_v2f[];
-layout(location = 0) out V2F out_v2f;
-
-void main() {
-	gl_Position = gl_in[0].gl_Position;
-	out_v2f = in_v2f[0];
-	EmitVertex();
-	gl_Position = gl_in[1].gl_Position;
-	out_v2f = in_v2f[1];
-	EmitVertex();
-	
-	EndPrimitive();
-	
-	gl_Position = gl_in[1].gl_Position;
-	out_v2f = in_v2f[1];
-	EmitVertex();
-	gl_Position = gl_in[2].gl_Position;
-	out_v2f = in_v2f[2];
-	EmitVertex();
-	
-	EndPrimitive();
-	
-	gl_Position = gl_in[2].gl_Position;
-	out_v2f = in_v2f[2];
-	EmitVertex();
-	gl_Position = gl_in[0].gl_Position;
-	out_v2f = in_v2f[0];
-	EmitVertex();
-	
-	EndPrimitive();
-}
+#include "wireframe.geom"
 
 ##################################################################
 
@@ -85,24 +45,19 @@ void main() {
 
 layout(location = 0) in V2F v2f;
 
-// G-Buffers
-layout(location = 0) out highp vec4 gBuffer_albedo;
-layout(location = 1) out lowp  vec3 gBuffer_normal;
-layout(location = 2) out lowp float gBuffer_roughness;
-layout(location = 3) out lowp float gBuffer_metallic;
-layout(location = 4) out lowp float gBuffer_scatter;
-layout(location = 5) out lowp float gBuffer_occlusion;
-layout(location = 6) out highp vec3 gBuffer_emission;
-layout(location = 7) out highp vec3 gBuffer_position;
+#include "gBuffers_out.glsl"
 
 void main() {
-	gBuffer_albedo = planetChunk.testColor;
-	gBuffer_normal = v2f.normal;
-	gBuffer_roughness = 0;
-	gBuffer_metallic = 0;
-	gBuffer_scatter = 0;
-	gBuffer_occlusion = 0;
-	gBuffer_emission = vec3(0);
-	gBuffer_position = v2f.relPos;
+	GBuffers gBuffers;
+	
+	gBuffers.albedo = planetChunk.testColor;
+	gBuffers.normal = normalize(v2f.normal);
+	gBuffers.roughness = 0;
+	gBuffers.metallic = 0;
+	gBuffers.scatter = 0;
+	gBuffers.occlusion = 0;
+	gBuffers.emission = vec3(0);
+	gBuffers.position = v2f.relPos;
+	
+	WriteGBuffers(gBuffers);
 }
-

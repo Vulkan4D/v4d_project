@@ -1,18 +1,19 @@
 #pragma once
 #include <v4d.h>
-#include "Camera.hpp"
+
+#include "RenderTargetGroup.hpp"
 
 using namespace v4d::graphics;
 // using namespace v4d::graphics::vulkan::rtx;
 
 class V4DRenderer : public v4d::graphics::Renderer {
+private: 
 	using v4d::graphics::Renderer::Renderer;
 
 	std::vector<v4d::modules::Rendering*> renderingSubmodules {};
 	
 	#pragma region Buffers
-	Buffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(CameraUBO), true};
-	// std::vector<Buffer*> stagedBuffers {};
+	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
 	#pragma endregion
 	
 	#pragma region UI
@@ -20,10 +21,6 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	RenderPass uiRenderPass;
 	PipelineLayout uiPipelineLayout;
-	#pragma endregion
-	
-	#pragma region Standard Pipelines
-	PipelineLayout standardPipelineLayout;
 	#pragma endregion
 	
 	#pragma region Render passes
@@ -67,9 +64,9 @@ class V4DRenderer : public v4d::graphics::Renderer {
 	
 	#pragma endregion
 	
-private: 
-public: // Camera
-	Camera mainCamera;
+protected:
+	Scene scene {};
+	RenderTargetGroup renderTargetGroup {};
 	
 private: // Init
 	void Init() override {
@@ -80,6 +77,8 @@ private: // Init
 			submodule->SetRenderer(this);
 			submodule->Init();
 		}
+		
+		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
 	}
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {
 		// Submodules
@@ -102,27 +101,25 @@ private: // Init
 	void InitLayouts() override {
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		
-		// Standard pipeline
-		//TODO standardPipelineLayout
+		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
 		
 		// Lighting pass
 		auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
-			gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &mainCamera.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
+			gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &renderTargetGroup.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		lightingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		lightingPipelineLayout.AddDescriptorSet(gBuffersDescriptorSet_1);
+		lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		// Thumbnail Gen
 		auto* thumbnailDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		thumbnailDescriptorSet_1->AddBinding_combinedImageSampler(0, &mainCamera.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		thumbnailDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		thumbnailPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		thumbnailPipelineLayout.AddDescriptorSet(thumbnailDescriptorSet_1);
 		
 		// Post-Processing
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &mainCamera.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
@@ -137,9 +134,6 @@ private: // Init
 	}
 	
 	void ConfigureShaders() override {
-		
-		// Standard pipeline
-		//TODO opaqueRasterizationShaders, transparentRasterizationShaders
 		
 		// Lighting Passes
 		opaqueLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -182,12 +176,12 @@ private: // Resources
 		
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
-		mainCamera.SetRenderTarget(swapChain);
-		mainCamera.CreateResources(renderingDevice);
+		renderTargetGroup.SetRenderTarget(swapChain);
+		renderTargetGroup.CreateResources(renderingDevice);
 		
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		TransitionImageLayout(mainCamera.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(renderTargetGroup.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -199,7 +193,7 @@ private: // Resources
 	void DestroyResources() override {
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
-		mainCamera.DestroyResources(renderingDevice);
+		renderTargetGroup.DestroyResources(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -208,12 +202,8 @@ private: // Resources
 	}
 	
 	void AllocateBuffers() override {
-		// // Staged Buffers
-		// AllocateBuffersStaged(transferQueue, stagedBuffers);
-		
-		// Camera UBO
-		cameraUniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		cameraUniformBuffer.MapMemory(renderingDevice);
+		// Camera
+		cameraUniformBuffer.Allocate(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -222,13 +212,7 @@ private: // Resources
 	}
 	
 	void FreeBuffers() override {
-		// // Staged Buffers
-		// for (auto& buffer : stagedBuffers) {
-		// 	buffer->Free(renderingDevice);
-		// }
-		
-		// Camera UBO
-		cameraUniformBuffer.UnmapMemory(renderingDevice);
+		// Camera
 		cameraUniformBuffer.Free(renderingDevice);
 		
 		// Submodules
@@ -237,11 +221,11 @@ private: // Resources
 		}
 	}
 
-private: // Graphics configuration
+private: // Pipelines
 
 	void CreatePipelines() override {
 		
-		standardPipelineLayout.Create(renderingDevice);
+		// Pipeline layouts
 		lightingPipelineLayout.Create(renderingDevice);
 		thumbnailPipelineLayout.Create(renderingDevice);
 		postProcessingPipelineLayout.Create(renderingDevice);
@@ -253,11 +237,11 @@ private: // Graphics configuration
 		}
 		
 		{// Opaque Raster pass
-			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> attachments {};
-			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
-			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i) {
+			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES> attachments {};
+			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
+			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
 				// Format
-				attachments[i].format = mainCamera.GetGBuffer(i).format;
+				attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
 				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
 				// Color
 				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -283,12 +267,12 @@ private: // Graphics configuration
 			
 			// Create the render pass
 			opaqueRasterPass.Create(renderingDevice);
-			opaqueRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
+			opaqueRasterPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetGBuffers().data(), renderTargetGroup.GetGBuffers().size());
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
-				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), opaqueRasterPass.handle, 0);
-				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+				shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), opaqueRasterPass.handle, 0);
+				for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
 					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -296,15 +280,15 @@ private: // Graphics configuration
 		
 		{// Opaque Lighting pass
 			const int nbColorAttachments = 1;
-			const int nbInputAttachments = Camera::GBUFFER_NB_IMAGES;
+			const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
 			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
 			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
 			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs;
 			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs;
 			
 			// Color attachment
-			images[0] = &mainCamera.GetTmpImage();
-			attachments[0].format = mainCamera.GetTmpImage().format;
+			images[0] = &renderTargetGroup.GetTmpImage();
+			attachments[0].format = renderTargetGroup.GetTmpImage().format;
 			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -319,8 +303,8 @@ private: // Graphics configuration
 			
 			// Input attachments
 			for (int i = 0; i < nbInputAttachments; ++i) {
-				images[i+nbColorAttachments] = &mainCamera.GetGBuffer(i);
-				attachments[i+nbColorAttachments].format = mainCamera.GetGBuffer(i).format;
+				images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
+				attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
 				attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
 				attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -349,18 +333,18 @@ private: // Graphics configuration
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
-				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), opaqueLightingPass.handle, 0);
+				shaderPipeline->SetRenderPass(&renderTargetGroup.GetTmpImage(), opaqueLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
 		}
 		
 		{// Transparent Raster pass
-			std::array<VkAttachmentDescription, Camera::GBUFFER_NB_IMAGES> attachments {};
-			std::array<VkAttachmentReference, Camera::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
-			for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i) {
+			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES> attachments {};
+			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
+			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
 				// Format
-				attachments[i].format = mainCamera.GetGBuffer(i).format;
+				attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
 				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
 				// Color
 				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -386,12 +370,12 @@ private: // Graphics configuration
 			
 			// Create the render pass
 			transparentRasterPass.Create(renderingDevice);
-			transparentRasterPass.CreateFrameBuffers(renderingDevice, mainCamera.GetGBuffers().data(), mainCamera.GetGBuffers().size());
+			transparentRasterPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetGBuffers().data(), renderTargetGroup.GetGBuffers().size());
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
-				shaderPipeline->SetRenderPass(&mainCamera.GetGBuffer(0), transparentRasterPass.handle, 0);
-				for (int i = 0; i < Camera::GBUFFER_NB_IMAGES; ++i)
+				shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), transparentRasterPass.handle, 0);
+				for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
 					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -399,15 +383,15 @@ private: // Graphics configuration
 		
 		{// Transparent Lighting pass
 			const int nbColorAttachments = 1;
-			const int nbInputAttachments = Camera::GBUFFER_NB_IMAGES;
+			const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
 			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
 			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
 			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs;
 			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs;
 			
 			// Color attachment
-			images[0] = &mainCamera.GetTmpImage();
-			attachments[0].format = mainCamera.GetTmpImage().format;
+			images[0] = &renderTargetGroup.GetTmpImage();
+			attachments[0].format = renderTargetGroup.GetTmpImage().format;
 			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -422,8 +406,8 @@ private: // Graphics configuration
 			
 			// Input attachments
 			for (int i = 0; i < nbInputAttachments; ++i) {
-				images[i+nbColorAttachments] = &mainCamera.GetGBuffer(i);
-				attachments[i+nbColorAttachments].format = mainCamera.GetGBuffer(i).format;
+				images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
+				attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
 				attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
 				attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -452,7 +436,7 @@ private: // Graphics configuration
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["transparentLighting"]) {
-				shaderPipeline->SetRenderPass(&mainCamera.GetTmpImage(), transparentLightingPass.handle, 0);
+				shaderPipeline->SetRenderPass(&renderTargetGroup.GetTmpImage(), transparentLightingPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -492,7 +476,7 @@ private: // Graphics configuration
 		
 		{// Thumbnail Gen render pass
 			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = mainCamera.GetThumbnailImage().format;
+				colorAttachment.format = renderTargetGroup.GetThumbnailImage().format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -512,11 +496,11 @@ private: // Graphics configuration
 			
 			// Create the render pass
 			thumbnailRenderPass.Create(renderingDevice);
-			thumbnailRenderPass.CreateFrameBuffers(renderingDevice, mainCamera.GetThumbnailImage());
+			thumbnailRenderPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetThumbnailImage());
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
-				shaderPipeline->SetRenderPass(&mainCamera.GetThumbnailImage(), thumbnailRenderPass.handle, 0);
+				shaderPipeline->SetRenderPass(&renderTargetGroup.GetThumbnailImage(), thumbnailRenderPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -610,7 +594,6 @@ private: // Graphics configuration
 		
 		////////////////////////////
 		// Pipeline layouts
-		standardPipelineLayout.Destroy(renderingDevice);
 		lightingPipelineLayout.Destroy(renderingDevice);
 		thumbnailPipelineLayout.Destroy(renderingDevice);
 		postProcessingPipelineLayout.Destroy(renderingDevice);
@@ -623,10 +606,11 @@ private: // Graphics configuration
 	}
 	
 private: // Commands
+
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		// Gen Thumbnail
-		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, mainCamera.GetThumbnailImage(), {{.0,.0,.0,.0}});
+		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetThumbnailImage(), {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
@@ -640,52 +624,85 @@ private: // Commands
 		postProcessingRenderPass.End(renderingDevice, commandBuffer);
 		
 	}
+	
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
+		
+		std::unordered_map<std::string, Image*> images {
+			{"ui", &uiImage},
+			{"tmpImage", &renderTargetGroup.GetTmpImage()},
+			{"thumbnail", &renderTargetGroup.GetThumbnailImage()},
+			{"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
+			{"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
+			{"gBuffer_roughness", &renderTargetGroup.GetGBuffer(2)},
+			{"gBuffer_metallic", &renderTargetGroup.GetGBuffer(3)},
+			{"gBuffer_scatter", &renderTargetGroup.GetGBuffer(4)},
+			{"gBuffer_occlusion", &renderTargetGroup.GetGBuffer(5)},
+			{"gBuffer_emission", &renderTargetGroup.GetGBuffer(6)},
+			{"gBuffer_position", &renderTargetGroup.GetGBuffer(7)},
+		};
+		
+		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicGraphicsTop(commandBuffer);
+			submodule->RunDynamicGraphicsTop(commandBuffer, images);
 		}
 		
 		// Opaque Raster pass
-		opaqueRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
+		opaqueRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), renderTargetGroup.GetGBuffersClearValues());
 			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
 		opaqueRasterPass.End(renderingDevice, commandBuffer);
 	
 		// Opaque Lighting pass
-		opaqueLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage(), {{.0,.0,.0,.0}});
+		opaqueLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetTmpImage(), {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
-				shaderPipeline->Execute(renderingDevice, commandBuffer);
+				if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
+					for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
+						//TODO optimisation : render spheres here instead of fullscreen quads
+						shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
+					}
+				} else {
+					shaderPipeline->Execute(renderingDevice, commandBuffer);
+				}
 			}
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
 		// Transparent Raster pass
-		transparentRasterPass.Begin(renderingDevice, commandBuffer, mainCamera.GetGBuffer(0), mainCamera.GetGBuffersClearValues());
+		transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), renderTargetGroup.GetGBuffersClearValues());
 			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
 		transparentRasterPass.End(renderingDevice, commandBuffer);
 		
 		// Transparent Lighting pass
-		transparentLightingPass.Begin(renderingDevice, commandBuffer, mainCamera.GetTmpImage());
+		transparentLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetTmpImage());
 			for (auto* shaderPipeline : shaders["transparentLighting"]) {
-				shaderPipeline->Execute(renderingDevice, commandBuffer);
+				if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
+					for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
+						//TODO optimisation : render spheres here instead of fullscreen quads
+						shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
+					}
+				} else {
+					shaderPipeline->Execute(renderingDevice, commandBuffer);
+				}
 			}
 		transparentLightingPass.End(renderingDevice, commandBuffer);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicGraphicsBottom(commandBuffer);
+			submodule->RunDynamicGraphicsBottom(commandBuffer, images);
 		}
 	}
+	
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicLowPriorityCompute(commandBuffer);
 		}
 	}
+	
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
 		// UI
 		uiRenderPass.Begin(renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
@@ -703,9 +720,12 @@ private: // Commands
 public: // Scene configuration
 	
 	void ReadShaders() override {
-		for (auto&[t, shaderList] : shaders)
-			for (auto* shader : shaderList)
+		// All shaders
+		for (auto&[t, shaderList] : shaders) {
+			for (auto* shader : shaderList) {
 				shader->ReadShaders();
+			}
+		}
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -716,41 +736,39 @@ public: // Scene configuration
 	void LoadScene() override {
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->LoadScene();
+			submodule->LoadScene(scene);
 		}
 	}
 	
 	void UnloadScene() override {
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->UnloadScene();
+			submodule->UnloadScene(scene);
 		}
-		
-		// // Staged buffers
-		// for (auto* buffer : stagedBuffers) {
-		// 	delete buffer;
-		// }
-		// stagedBuffers.clear();
 	}
 	
 public: // Update
+
 	void FrameUpdate(uint imageIndex) override {
-		// Refresh camera matrices
-		mainCamera.RefreshProjectionMatrix();
-		// mainCamera.RefreshViewMatrix();
 		
-		// Update and Write UBO
-		mainCamera.RefreshUBO();
-		cameraUniformBuffer.WriteToMappedData(renderingDevice, &mainCamera.GetUBO());
-		
-		glm::dmat4 projectionMatrix = mainCamera.GetProjectionMatrix();
-		glm::dmat4 viewMatrix {1};
+		// Reset scene information
+		scene.camera.width = swapChain->extent.width;
+		scene.camera.height = swapChain->extent.height;
+		scene.camera.RefreshProjectionMatrix();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->FrameUpdate(imageIndex, projectionMatrix, viewMatrix);
+			submodule->FrameUpdate(scene);
 		}
+		
+		// Light sources
+		for (auto[id,lightSource] : scene.lightSources) {
+			lightSource->viewPosition = scene.camera.viewMatrix * glm::dvec4(lightSource->worldPosition, 1);
+			lightSource->viewDirection = glm::transpose(glm::inverse(glm::mat3(scene.camera.viewMatrix))) * lightSource->worldDirection;
+		}
+		
 	}
+	
 	void LowPriorityFrameUpdate() override {
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {

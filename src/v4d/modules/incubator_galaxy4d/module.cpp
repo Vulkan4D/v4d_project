@@ -16,7 +16,7 @@ V4DMODULE void V4D_ModuleCreate() {
 	
 	// Planets Renderer
 	planetsRenderer = V4D_LOAD_SUBMODULE(PlanetsRenderer)
-	planetsRenderer->planetaryTerrains.push_back(new PlanetaryTerrain{
+	planetsRenderer->planetaryTerrains.emplace_back(new PlanetaryTerrain{
 		24000000,
 		23900000,
 		10000,
@@ -24,6 +24,12 @@ V4DMODULE void V4D_ModuleCreate() {
 		{0, 28000000, -10000000}
 		// {20000000, 20000000, -20000000}
 	});
+	planetsRenderer->planetaryTerrains.emplace_back(new PlanetaryTerrain{
+		2400000,
+		2390000,
+		1000,
+		{0, -50000000, -20000000},
+	})->lightIntensity = 100;
 	
 }
 

@@ -20,6 +20,8 @@ class PlanetsRenderer : public v4d::modules::Rendering {
 	
 public:
 
+	int OrderIndex() const override {return 10;}
+	
 	std::vector<PlanetaryTerrain*> planetaryTerrains {};
 
 	// // Executed when calling InitRenderer() on the main Renderer
@@ -31,6 +33,7 @@ public:
 		planetPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
 		planetPipelineLayout.AddPushConstant<PlanetShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
+	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
 		shaders["opaqueRasterization"].push_back(&planetShader);
 		
@@ -40,17 +43,42 @@ public:
 		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		planetShader.depthStencilState.depthWriteEnable = VK_TRUE;
 		planetShader.depthStencilState.depthTestEnable = VK_TRUE;
-		planetShader.AddVertexInputBinding(sizeof(PlanetaryTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, {
-			{0, offsetof(PlanetaryTerrain::Vertex, PlanetaryTerrain::Vertex::pos), VK_FORMAT_R32G32B32A32_SFLOAT},
-			{1, offsetof(PlanetaryTerrain::Vertex, PlanetaryTerrain::Vertex::normal), VK_FORMAT_R32G32B32A32_SFLOAT},
-			{2, offsetof(PlanetaryTerrain::Vertex, PlanetaryTerrain::Vertex::uv), VK_FORMAT_R32G32_SFLOAT},
-		});
+		planetShader.AddVertexInputBinding(sizeof(PlanetaryTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetaryTerrain::Vertex::GetInputAttributes());
 	}
 	
 	// // Executed when calling their respective methods on the main Renderer
 	// void ReadShaders() override {}
-	// void LoadScene() override {}
-	// void UnloadScene() override {}
+	
+	void LoadScene(Scene& scene) override {
+		// Planets
+		for (auto* planetaryTerrain : planetaryTerrains) {
+			if (planetaryTerrain->lightIntensity > 0) {
+				planetaryTerrain->lightSource = {
+					POINT_LIGHT,
+					planetaryTerrain->absolutePosition,
+					{1,1,1}, // color
+					planetaryTerrain->lightIntensity
+				};
+				// Sun(s)
+				scene.lightSources["sun"] = &planetaryTerrain->lightSource;
+			}
+			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
+			for (auto* chunk : planetaryTerrain->chunks) {
+				chunk->BeforeRender(renderingDevice, transferQueue);
+			}
+		}
+	}
+	
+	void UnloadScene(Scene& scene) override {
+		// Planets
+		for (auto* planetaryTerrain : planetaryTerrains) {
+			if (planetaryTerrain->lightIntensity > 0) {
+				// Sun(s)
+				scene.lightSources["sun"] = nullptr;
+				scene.lightSources.erase("sun");
+			}
+		}
+	}
 	
 	// // Executed when calling LoadRenderer()
 	// void ScorePhysicalDeviceSelection(int& score, PhysicalDevice*) override {}
@@ -73,29 +101,30 @@ public:
 	void CreatePipelines() override {
 		planetPipelineLayout.Create(renderingDevice);
 	}
+	
 	void DestroyPipelines() override {
 		planetPipelineLayout.Destroy(renderingDevice);
 	}
 	
 	// // Rendering methods potentially executed on each frame
-	// void RunDynamicGraphicsTop(VkCommandBuffer) override {}
-	// void RunDynamicGraphicsBottom(VkCommandBuffer) override {}
+	// void RunDynamicGraphicsTop(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
+	// void RunDynamicGraphicsBottom(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
 	// void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	// void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 	// Executed before each frame
-	void FrameUpdate(uint imageIndex, glm::dmat4& projection, glm::dmat4& view) override {
-		glm::dvec4 cameraAbsolutePosition = glm::inverse(view)[3];
-		planetShader.viewMatrix = view;
+	void FrameUpdate(Scene& scene) override {
+		planetShader.viewMatrix = scene.camera.viewMatrix;
 		
 		// Planets
 		for (auto* planetaryTerrain : planetaryTerrains) {
-			planetaryTerrain->cameraPos = glm::dvec3(cameraAbsolutePosition)/cameraAbsolutePosition.w - planetaryTerrain->absolutePosition;
+			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
 			}
 		}
 	}
+	
 	void LowPriorityFrameUpdate() override {
 		for (auto* planetaryTerrain : planetaryTerrains) {
 			for (auto* chunk : planetaryTerrain->chunks) {

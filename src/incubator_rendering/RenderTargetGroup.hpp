@@ -4,25 +4,11 @@
 
 namespace v4d::graphics {
 	
-	struct CameraUBO {
-	// 	glm::dmat4 origin;
-		glm::mat4 projection;
-	// 	glm::mat4 relativeView;
-	// 	glm::dvec4 absolutePosition;
-	// 	int screenWidth;
-	// 	int screenHeight;
-	};
-	
-	class Camera {
+	class RenderTargetGroup {
 	public:
 		static const int GBUFFER_NB_IMAGES = 8;
 		
 	protected:
-		
-		// Configuration
-		double fov = 70;
-		double znear = 0.01;
-		double zfar = 1.5e17; // 1cm - 1 000 000 UA  (WTF!!! seems to be working great..... 32bit z-buffer is enough???)
 		
 		// Resolution scaling
 		float rasterizationResolutionScale = 1.0;
@@ -34,16 +20,6 @@ namespace v4d::graphics {
 		SwapChain* targetSwapChain = nullptr;
 		VkOffset2D offset {0,0};
 		VkExtent2D extent {0,0};
-		
-		// // Dynamic variables
-		// glm::dvec3 viewDirection {0,1,0};
-		// glm::dvec3 worldPosition {0};
-		// glm::dvec3 viewUp = {0,0,1};
-		// glm::dvec3 velocity {0};
-		// glm::dmat4 view {1};
-		glm::dmat4 projection {1};
-		// glm::dmat4 origin = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
-		CameraUBO ubo {};
 		
 		// Images
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
@@ -75,16 +51,6 @@ namespace v4d::graphics {
 	
 		#pragma region Setters/Getters
 		
-		void SetFov(double angle) {
-			fov = angle;
-		}
-		void SetNearField(double nearField) {
-			znear = nearField;
-		}
-		void SetFarField(double farField) {
-			zfar = farField;
-		}
-		
 		void SetRenderTarget(SwapChain* target, VkOffset2D offset = {0,0}, VkExtent2D extent = {0,0}) {
 			targetSwapChain = target;
 			targetImage = nullptr;
@@ -103,43 +69,6 @@ namespace v4d::graphics {
 			this->extent = extent;
 		}
 		
-		// void SetViewDirection(double x, double y, double z) {
-		// 	viewDirection.x = x;
-		// 	viewDirection.y = y;
-		// 	viewDirection.z = z;
-		// 	viewDirection = glm::normalize(viewDirection);
-		// }
-		// void SetViewDirection(glm::dvec3 dir) {
-		// 	viewDirection = glm::normalize(dir);
-		// }
-		// glm::dvec3 GetViewDirection() const {
-		// 	return viewDirection;
-		// }
-		
-		// void SetWorldPosition(double x, double y, double z) {
-		// 	worldPosition.x = x;
-		// 	worldPosition.y = y;
-		// 	worldPosition.z = z;
-		// }
-		// void SetWorldPosition(glm::dvec3 pos) {
-		// 	worldPosition = pos;
-		// }
-		// glm::dvec3 GetWorldPosition() const {
-		// 	return worldPosition;
-		// }
-		
-		// void SetVelocity(double x, double y, double z) {
-		// 	velocity.x = x;
-		// 	velocity.y = y;
-		// 	velocity.z = z;
-		// }
-		// void SetVelocity(glm::dvec3 v) {
-		// 	velocity = v;
-		// }
-		// glm::dvec3 GetVelocity() const {
-		// 	return velocity;
-		// }
-		
 		Image& GetTmpImage() {
 			return tmpImage;
 		}
@@ -156,25 +85,6 @@ namespace v4d::graphics {
 			return gBuffers;
 		}
 		
-		glm::dmat4& GetProjectionMatrix() {
-			return projection;
-		}
-		// glm::dmat4 GetProjectionMatrix() {
-		// 	return glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
-		// }
-		
-		// glm::dmat4& GetViewMatrix() {
-		// 	return view;
-		// }
-		
-		// glm::dmat4 GetProjectionViewMatrix() {
-		// 	return projection * view;
-		// }
-		
-		CameraUBO& GetUBO() {
-			return ubo;
-		}
-		
 		std::vector<VkClearValue> GetGBuffersClearValues() {
 			std::vector<VkClearValue> clearValues(GBUFFER_NB_IMAGES);
 			for (int i = 0; i < GBUFFER_NB_IMAGES; ++i)
@@ -182,52 +92,7 @@ namespace v4d::graphics {
 			return clearValues;
 		}
 		
-		// void SetOrigin(glm::dvec3 worldPosition, glm::dvec3 lookDirection = {0,1,0}, glm::dvec3 up = {0,0,1}) {
-		// 	origin = glm::lookAt(worldPosition, worldPosition + lookDirection, up);
-		// }
-		
 		#pragma endregion
-		
-		// void RefreshViewMatrix() {
-		// 	view = glm::lookAt(worldPosition, worldPosition + viewDirection, viewUp);
-		// }
-		
-		void RefreshProjectionMatrix() {
-			projection = glm::perspective(glm::radians(fov), (double) extent.width / extent.height, znear, zfar);
-			projection[1][1] *= -1;
-		}
-		
-		// glm::dvec3 GetPositionInScreen(glm::dvec3 a) {
-		// 	auto pos = projection * view * glm::dvec4(a, 1);
-		// 	return glm::dvec3{pos.x, pos.y, pos.z} / pos.w;
-		// }
-		
-		// double GetApproximateBoundingSizeInScreen(glm::dvec3 a, glm::dvec3 b) {
-		// 	return glm::distance(GetPositionInScreen(a) / 2.0, GetPositionInScreen(b) / 2.0);
-		// }
-		
-		// double GetFixedBoundingSizeInScreen(glm::dvec3 a, glm::dvec3 b) {
-		// 	auto v = glm::lookAt(worldPosition, (a + b)/2.0, viewUp);
-		// 	auto posA = projection * v * glm::dvec4(a, 1);
-		// 	posA /= posA.w;
-		// 	auto posB = projection * v * glm::dvec4(b, 1);
-		// 	posB /= posB.w;
-		// 	return glm::distance(glm::dvec2(posA.x, posA.y) / 2.0, glm::dvec2(posB.x, posB.y) / 2.0);
-		// }
-		
-		// bool IsVisibleInScreen(glm::dvec3 a) {
-		// 	auto pp = GetPositionInScreen(a);
-		// 	return (pp.z < 1.0 && glm::abs(pp.x) < 1.0 && glm::abs(pp.y) < 1.0);
-		// }
-		
-		void RefreshUBO() {
-		// 	ubo.origin = origin;
-			ubo.projection = projection;
-		// 	ubo.relativeView = glm::inverse(origin) * view;
-		// 	ubo.absolutePosition = glm::dvec4(worldPosition, 1);
-		// 	ubo.screenWidth = extent.width;
-		// 	ubo.screenHeight = extent.height;
-		}
 		
 		void CreateResources(Device* device) {
 			uint rasterWidth = (uint)((float)extent.width * rasterizationResolutionScale);

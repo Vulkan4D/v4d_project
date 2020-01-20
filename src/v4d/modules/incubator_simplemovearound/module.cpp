@@ -9,12 +9,12 @@
 // V4D Core Header
 #include <v4d.h>
 
-struct Camera {
+struct PlayerView {
 	glm::dvec3 worldPosition {0};
-	glm::dvec3 viewDirection {0,1,0};
+	glm::dvec3 lookDirection {0,1,0};
 	glm::dvec3 velocity {0};
 	glm::dvec3 viewUp = {0,0,1};
-} camera;
+} player;
 
 class Input : public v4d::modules::Input {
 	
@@ -24,9 +24,9 @@ class Input : public v4d::modules::Input {
 	double verticalAngle = 0;
 	
 public:
-	Camera* camera;
+	PlayerView* player;
 	
-	Input(Camera* camera) : camera(camera) {}
+	Input(PlayerView* player) : player(player) {}
 	
 	void KeyCallback(int key, int scancode, int action, int mods) override {
 		if (action != GLFW_RELEASE) {
@@ -69,28 +69,28 @@ public:
 		// Camera Movements
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.001 : 1.0);
 		
-		camera->velocity = glm::dvec3{0};
+		player->velocity = glm::dvec3{0};
 		
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			camera->velocity = +camera->viewDirection * camSpeed * camSpeedMult;
+			player->velocity = +player->lookDirection * camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			camera->velocity = -camera->viewDirection * camSpeed * camSpeedMult;
+			player->velocity = -player->lookDirection * camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			camera->velocity = -glm::cross(camera->viewDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult;
+			player->velocity = -glm::cross(player->lookDirection, player->viewUp) * camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			camera->velocity = +glm::cross(camera->viewDirection, glm::dvec3(0,0,1)) * camSpeed * camSpeedMult;
+			player->velocity = +glm::cross(player->lookDirection, player->viewUp) * camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			camera->velocity = +glm::dvec3(0,0,1) * camSpeed * camSpeedMult;
+			player->velocity = +player->viewUp * camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			camera->velocity = -glm::dvec3(0,0,1) * camSpeed * camSpeedMult;
+			player->velocity = -player->viewUp * camSpeed * camSpeedMult;
 		}
 		
-		camera->worldPosition += camera->velocity * deltaTime;
+		player->worldPosition += player->velocity * deltaTime;
 		
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
 			double x, y;
@@ -104,7 +104,7 @@ public:
 			}
 		}
 		
-		camera->viewDirection = glm::normalize(glm::dvec3(
+		player->lookDirection = glm::normalize(glm::dvec3(
 			cos(verticalAngle) * sin(horizontalAngle),
 			cos(verticalAngle) * cos(horizontalAngle),
 			sin(verticalAngle)
@@ -116,20 +116,23 @@ public:
 
 class Rendering : public v4d::modules::Rendering {
 public:
-	Camera* camera;
+	PlayerView* player;
 	
-	Rendering(Camera* camera) : camera(camera) {}
+	Rendering(PlayerView* player) : player(player) {}
 
 	int OrderIndex() const override {return -1;}
 	
-	void FrameUpdate(uint imageIndex, glm::dmat4& projection, glm::dmat4& view) override {
-		view = glm::lookAt(camera->worldPosition, camera->worldPosition + camera->viewDirection, camera->viewUp);
+	void FrameUpdate(v4d::graphics::Scene& scene) override {
+		scene.camera.worldPosition = player->worldPosition;
+		scene.camera.lookDirection = player->lookDirection;
+		scene.camera.viewUp = player->viewUp;
+		scene.camera.RefreshViewMatrix();
 	}
 };
 
 V4DMODULE void V4D_ModuleCreate() {
-	V4D_LOAD_SUBMODULE(Input, &camera)
-	V4D_LOAD_SUBMODULE(Rendering, &camera)
+	V4D_LOAD_SUBMODULE(Input, &player)
+	V4D_LOAD_SUBMODULE(Rendering, &player)
 }
 
 V4DMODULE void V4D_ModuleDestroy() {

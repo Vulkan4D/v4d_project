@@ -17,9 +17,12 @@ struct PlanetaryTerrain {
 	glm::dvec3 absolutePosition; // position of planet relative to world (star system center)
 	#pragma endregion
 	
+	float lightIntensity = 0;
+	LightSource lightSource {};
+	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 8;
-	static const int vertexSubdivisionsPerChunk = 32;
+	static const int chunkSubdivisionsPerFace = 16;
+	static const int vertexSubdivisionsPerChunk = 16;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
@@ -36,6 +39,14 @@ struct PlanetaryTerrain {
 		glm::vec4 pos;
 		glm::vec4 normal;
 		glm::vec2 uv;
+		
+		static std::vector<VertexInputAttributeDescription> GetInputAttributes() {
+			return {
+				{0, offsetof(Vertex, pos), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{1, offsetof(Vertex, normal), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{2, offsetof(Vertex, uv), VK_FORMAT_R32G32_SFLOAT},
+			};
+		}
 	};
 
 	enum FACE : int {

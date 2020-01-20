@@ -15,14 +15,19 @@ public:
 	std::vector<PlanetaryTerrain*>* planets = nullptr;
 
 	struct PlanetChunkPushConstant { // max 128 bytes
-		glm::mat4 modelView; // 64
-		glm::vec4 testColor; // 16
+		alignas(64) glm::mat4 modelViewMatrix;
+		alignas(16) glm::vec4 testColor;
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
 		if (chunk->active) {
 			if (chunk->render) {
-				planetChunkPushConstant.modelView = viewMatrix * glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos);
+				
+				//TODO
+				double planetRotationAngle = 0;
+				glm::dvec3 planetRotationAxis {0,1,0};
+				
+				planetChunkPushConstant.modelViewMatrix = viewMatrix * glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
 				planetChunkPushConstant.testColor = chunk->testColor;
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(
