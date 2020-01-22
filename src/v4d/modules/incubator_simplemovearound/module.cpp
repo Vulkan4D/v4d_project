@@ -10,18 +10,20 @@
 #include <v4d.h>
 
 struct PlayerView {
-	glm::dvec3 worldPosition {0};
-	glm::dvec3 lookDirection {0,1,0};
-	glm::dvec3 velocity {0};
-	glm::dvec3 viewUp = {0,0,1};
-} player;
-
-class Input : public v4d::modules::Input {
-	
 	// Normal: 10 km/s, Shift: 1000 km/s, Alt: 10 m/s
 	double camSpeed = 10000.0, mouseSensitivity = 1.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
+	glm::dvec3 worldPosition {0};
+	glm::dvec3 velocity {0};
+	glm::dvec3 viewUp = {0,0,1};
+	glm::dvec3 viewForward {0,1,0};
+	glm::dvec3 viewRight = glm::cross(viewForward, viewUp);
+	bool useFreeFlyCam = true;
+	glm::dmat4 freeFlyCamRotationMatrix {1};
+} player;
+
+class Input : public v4d::modules::Input {
 	
 public:
 	PlayerView* player;
@@ -72,22 +74,22 @@ public:
 		player->velocity = glm::dvec3{0};
 		
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			player->velocity = +player->lookDirection * camSpeed * camSpeedMult;
+			player->velocity = +player->viewForward * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			player->velocity = -player->lookDirection * camSpeed * camSpeedMult;
+			player->velocity = -player->viewForward * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			player->velocity = -glm::cross(player->lookDirection, player->viewUp) * camSpeed * camSpeedMult;
+			player->velocity = -player->viewRight * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			player->velocity = +glm::cross(player->lookDirection, player->viewUp) * camSpeed * camSpeedMult;
+			player->velocity = +player->viewRight * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			player->velocity = +player->viewUp * camSpeed * camSpeedMult;
+			player->velocity = +player->viewUp * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			player->velocity = -player->viewUp * camSpeed * camSpeedMult;
+			player->velocity = -player->viewUp * player->camSpeed * camSpeedMult;
 		}
 		
 		player->worldPosition += player->velocity * deltaTime;
@@ -96,19 +98,37 @@ public:
 			double x, y;
 			glfwGetCursorPos(window->GetHandle(), &x, &y);
 			glfwSetCursorPos(window->GetHandle(), 0, 0);
-			if (x != 0 || y != 0) {
-				horizontalAngle += double(x * mouseSensitivity * deltaTime);
-				verticalAngle -= double(y * mouseSensitivity * deltaTime);
-				if (verticalAngle < -1.5) verticalAngle = -1.5;
-				if (verticalAngle > 1.5) verticalAngle = 1.5;
+			if (player->useFreeFlyCam) {
+				if (x != 0) {
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, x * player->mouseSensitivity * deltaTime, player->viewUp);
+				}
+				if (y != 0) {
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, y * player->mouseSensitivity * deltaTime, player->viewRight);
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_Q)) {
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, 1.0 * player->mouseSensitivity * deltaTime, player->viewForward);
+				}
+				if (glfwGetKey(window->GetHandle(), GLFW_KEY_E)) {
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, -1.0 * player->mouseSensitivity * deltaTime, player->viewForward);
+				}
+				player->viewUp = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
+				player->viewForward = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
+				player->viewRight = glm::cross(player->viewForward, player->viewUp);
+			} else {
+				if (x != 0 || y != 0) {
+					player->horizontalAngle += double(x * player->mouseSensitivity * deltaTime);
+					player->verticalAngle -= double(y * player->mouseSensitivity * deltaTime);
+					if (player->verticalAngle < -1.5) player->verticalAngle = -1.5;
+					if (player->verticalAngle > 1.5) player->verticalAngle = 1.5;
+					player->viewForward = glm::normalize(glm::dvec3(
+						cos(player->verticalAngle) * sin(player->horizontalAngle),
+						cos(player->verticalAngle) * cos(player->horizontalAngle),
+						sin(player->verticalAngle)
+					));
+					player->viewRight = glm::cross(player->viewForward, player->viewUp);
+				}
 			}
 		}
-		
-		player->lookDirection = glm::normalize(glm::dvec3(
-			cos(verticalAngle) * sin(horizontalAngle),
-			cos(verticalAngle) * cos(horizontalAngle),
-			sin(verticalAngle)
-		));
 		
 	}
 	
@@ -124,7 +144,7 @@ public:
 	
 	void FrameUpdate(v4d::graphics::Scene& scene) override {
 		scene.camera.worldPosition = player->worldPosition;
-		scene.camera.lookDirection = player->lookDirection;
+		scene.camera.lookDirection = player->viewForward;
 		scene.camera.viewUp = player->viewUp;
 		scene.camera.RefreshViewMatrix();
 	}

@@ -13,7 +13,7 @@ class PlanetsRenderer : public v4d::modules::Rendering {
 	PipelineLayout planetPipelineLayout;
 	PlanetShaderPipeline planetShader {planetPipelineLayout, {
 		"modules/incubator_galaxy4d/assets/shaders/planetaryTerrain.vert",
-		"modules/incubator_galaxy4d/assets/shaders/planetaryTerrain.wireframe.geom",
+		// "modules/incubator_galaxy4d/assets/shaders/planetaryTerrain.wireframe.geom",
 		"modules/incubator_galaxy4d/assets/shaders/planetaryTerrain.surface.frag",
 	}};
 	#pragma endregion
@@ -31,7 +31,7 @@ public:
 		auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		planetPipelineLayout.AddDescriptorSet(descriptorSets[0]);
 		planetPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
-		planetPipelineLayout.AddPushConstant<PlanetShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		planetPipelineLayout.AddPushConstant<PlanetShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
@@ -57,6 +57,9 @@ public:
 	};
 	
 	void LoadScene(Scene& scene) override {
+		// scene.camera.znear = 1.0;
+		// scene.camera.zfar = 1.5e14; // 1cm - 1 000 UA
+		// scene.camera.zfar = 200000000;
 		
 		// Sun(s)
 		scene.lightSources["sun"] = &sun;

@@ -6,6 +6,7 @@ precision highp sampler2D;
 
 #common .*frag
 
+#include "Camera.glsl"
 #include "LightSource.glsl"
 #include "gBuffers_in.glsl"
 
@@ -30,6 +31,65 @@ void main() {
 	GBuffers gBuffers = LoadGBuffers();
 	vec3 color = gBuffers.albedo.rgb;
 	float alpha = gBuffers.albedo.a;
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+		
+	/////////////////////////////
+	// Blinn-Phong
+
+	// ambient
+	vec3 ambient = vec3(0);// lightSource.color * lightSource.ambientStrength;
+
+	// diffuse
+	vec3 norm = normalize(gBuffers.normal);
+	vec3 lightDir = normalize(lightSource.viewPosition - gBuffers.position);
+	float diff = max(dot(norm, lightDir), 0.0);
+	vec3 diffuse = diff * lightSource.color;
+
+	// specular
+	float specularStrength = 0.5;
+	vec3 viewDir = normalize(-gBuffers.position);
+	vec3 reflectDir = reflect(-lightDir, norm);
+	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+	vec3 specular = specularStrength * spec * lightSource.color;
+
+
+	// // Attenuation (light.constant >= 1.0, light.linear ~= 0.1, light.quadratic ~= 0.05)
+	// float dist = distance(lightSource.viewPosition, gBuffers.position);
+	// float attenuation = 1.0 / (1.0/*light.constant*/ + 0.1/*light.linear*/*dist + 0.05/*light.quadratic*/*(dist*dist));
+	// ambient *= attenuation;
+	// diffuse *= attenuation;
+	// specular *= attenuation;
+	
+	
+	// Final color
+	color *= (ambient + diffuse + specular);
+
+	/////////////////////////////
+	
+	
+	
+	
+	
+	
+	
+	
+	// color = gBuffers.albedo.rgb * vec3(dot(gBuffers.normal, normalize(lightSource.viewPosition - gBuffers.position)));
+	
+	
+	
+	
+	
+	
+	
 	
 	out_color = vec4(color, alpha);
 }

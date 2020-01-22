@@ -6,8 +6,6 @@
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 
-// #define SPHERIFY_CUBE_BY_NORMALIZE // otherwise use technique shown here : http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
-
 struct PlanetaryTerrain {
 	
 	#pragma region Constructor arguments
@@ -36,15 +34,17 @@ struct PlanetaryTerrain {
 	#pragma endregion
 
 	struct Vertex {
-		glm::vec4 pos;
-		glm::vec4 normal;
-		glm::vec2 uv;
+		glm::vec4 pos; // pos.a = altitude
+		glm::vec4 uv; // uv.pq = ?
+		glm::vec4 tangentX; // tangentX.w = slope
+		glm::vec4 tangentY; // tangentY.w = ?
 		
 		static std::vector<VertexInputAttributeDescription> GetInputAttributes() {
 			return {
 				{0, offsetof(Vertex, pos), VK_FORMAT_R32G32B32A32_SFLOAT},
-				{1, offsetof(Vertex, normal), VK_FORMAT_R32G32B32A32_SFLOAT},
-				{2, offsetof(Vertex, uv), VK_FORMAT_R32G32_SFLOAT},
+				{1, offsetof(Vertex, uv), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{2, offsetof(Vertex, tangentX), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{3, offsetof(Vertex, tangentY), VK_FORMAT_R32G32B32A32_SFLOAT},
 			};
 		}
 	};
@@ -133,18 +133,14 @@ struct PlanetaryTerrain {
 		#pragma endregion
 		
 		static glm::dvec3 Spherify(glm::dvec3 point) {
-			#ifdef SPHERIFY_CUBE_BY_NORMALIZE
-				point = glm::normalize(point);
-			#else
-				// http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
-				double	x2 = point.x * point.x,
-						y2 = point.y * point.y,
-						z2 = point.z * point.z;
-				point.x *= glm::sqrt(1.0 - y2 / 2.0 - z2 / 2.0 + y2 * z2 / 3.0);
-				point.y *= glm::sqrt(1.0 - z2 / 2.0 - x2 / 2.0 + z2 * x2 / 3.0);
-				point.z *= glm::sqrt(1.0 - x2 / 2.0 - y2 / 2.0 + x2 * y2 / 3.0);
-			#endif
-			return point;
+			// // http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
+			// double	x2 = point.x * point.x,
+			// 		y2 = point.y * point.y,
+			// 		z2 = point.z * point.z;
+			// point.x *= glm::sqrt(1.0 - y2 / 2.0 - z2 / 2.0 + y2 * z2 / 3.0);
+			// point.y *= glm::sqrt(1.0 - z2 / 2.0 - x2 / 2.0 + z2 * x2 / 3.0);
+			// point.z *= glm::sqrt(1.0 - x2 / 2.0 - y2 / 2.0 + x2 * y2 / 3.0);
+			return glm::normalize(point);
 		}
 	
 		bool IsLastLevel() {
@@ -248,19 +244,24 @@ struct PlanetaryTerrain {
 			
 			while (genRow <= vertexSubdivisionsPerChunk) {
 				while (genCol <= vertexSubdivisionsPerChunk) {
-					
-					uint32_t topLeftIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
 					
 					glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
 					glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 					
 					glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
 					
-					vertices[topLeftIndex].pos = glm::vec4(pos * planet->GetHeightMap(pos) - centerPos, 0);
-					vertices[topLeftIndex].normal = glm::vec4(Spherify(pos), 0);
-					vertices[topLeftIndex].uv = glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk);
+					double altitude = planet->GetHeightMap(pos);
+					
+					//TODO
+					float additionalInfo1 = 0;
+					float additionalInfo2 = 0;
+					
+					vertices[currentIndex].pos = glm::vec4(pos * altitude - centerPos, altitude);
+					vertices[currentIndex].uv = glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), additionalInfo1, additionalInfo2);
 					
 					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+						uint32_t topLeftIndex = currentIndex;
 						uint32_t topRightIndex = topLeftIndex+1;
 						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						uint32_t bottomRightIndex = bottomLeftIndex+1;
@@ -295,6 +296,67 @@ struct PlanetaryTerrain {
 				
 				genCol = 0;
 				++genRow;
+			}
+			
+			if (!meshShouldGenerate) return;
+			
+			// Check for errors
+			if (nbIndicesPerChunk != genIndexIndex) {
+				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size")
+				return;
+			}
+			
+			// Normals and Tangents
+			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
+				for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+					uint32 currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+					Vertex& point = vertices[currentIndex];
+					
+					//TODO
+					float additionalInfo = 0;
+					
+					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+						// For full face (generate top left)
+						uint32_t topLeftIndex = currentIndex;
+						uint32_t topRightIndex = topLeftIndex+1;
+						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
+						
+						float slope = 0;
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[topRightIndex].pos) - glm::vec3(point.pos)), slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomLeftIndex].pos)), additionalInfo);
+						
+					} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
+						// For right-most bottom-most vertex (generate bottom right)
+						uint32_t bottomRightIndex = currentIndex;
+						uint32_t bottomLeftIndex = bottomRightIndex-1;
+						uint32_t topRightIndex = bottomRightIndex-vertexSubdivisionsPerChunk-1;
+						
+						float slope = 0;
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomLeftIndex].pos)), slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(vertices[topRightIndex].pos) - glm::vec3(point.pos)), additionalInfo);
+						
+					} else if (genCol == vertexSubdivisionsPerChunk) {
+						// For others in right col (generate top right)
+						uint32_t topRightIndex = currentIndex;
+						uint32_t topLeftIndex = topRightIndex-1;
+						uint32_t bottomRightIndex = topRightIndex+vertexSubdivisionsPerChunk+1;
+						
+						float slope = 0;
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[topLeftIndex].pos)), slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomRightIndex].pos)), additionalInfo);
+						
+					} else if (genRow == vertexSubdivisionsPerChunk) {
+						// For others in bottom row (generate bottom left)
+						uint32_t bottomLeftIndex = currentIndex;
+						uint32_t bottomRightIndex = currentIndex+1;
+						uint32_t topLeftIndex = bottomLeftIndex-vertexSubdivisionsPerChunk-1;
+						
+						float slope = 0;
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[bottomRightIndex].pos) - glm::vec3(point.pos)), slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(vertices[topLeftIndex].pos) - glm::vec3(point.pos)), additionalInfo);
+						
+					}
+				}
 			}
 			
 			std::scoped_lock lock(stateMutex);

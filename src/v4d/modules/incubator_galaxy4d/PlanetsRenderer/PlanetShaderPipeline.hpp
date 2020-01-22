@@ -17,6 +17,10 @@ public:
 	struct PlanetChunkPushConstant { // max 128 bytes
 		alignas(64) glm::mat4 modelViewMatrix;
 		alignas(16) glm::vec4 testColor;
+		alignas(4) float chunkSize;
+		alignas(4) int level;
+		alignas(4) bool isLastLevel;
+		alignas(4) int vertexSubdivisionsPerChunk;
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
@@ -30,6 +34,10 @@ public:
 				
 				planetChunkPushConstant.modelViewMatrix = viewMatrix * glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
 				planetChunkPushConstant.testColor = chunk->testColor;
+				planetChunkPushConstant.chunkSize = (float)chunk->chunkSize;
+				planetChunkPushConstant.level = chunk->level;
+				planetChunkPushConstant.vertexSubdivisionsPerChunk = PlanetaryTerrain::vertexSubdivisionsPerChunk;
+				planetChunkPushConstant.isLastLevel = chunk->IsLastLevel();
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(
 					PlanetaryTerrain::vertexBufferPool[chunk->vertexBufferAllocation.bufferIndex],

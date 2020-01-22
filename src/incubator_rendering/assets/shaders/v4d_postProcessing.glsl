@@ -24,10 +24,12 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 1, binding = 0) uniform sampler2D tmpImage;
 layout(set = 1, binding = 1) uniform sampler2D uiImage;
+// layout(set = 1, binding = 2) uniform sampler2D depthStencilImage;
 
 void main() {
 	vec3 color = texture(tmpImage, uv).rgb;
 	vec4 ui = texture(uiImage, uv);
+	// vec2 depthStencil = texture(depthStencilImage, gl_FragCoord.st / vec2(textureSize(depthStencilImage, 0))).rg;
 	
 	// Post processing here
 	//...
@@ -43,5 +45,7 @@ void main() {
 	
 	// Output final color
 	out_color = vec4(mix(color.rgb, ui.rgb, ui.a), 1.0);
+	
+	// out_color = vec4(depthStencil.r);
 }
 

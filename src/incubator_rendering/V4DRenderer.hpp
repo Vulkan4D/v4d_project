@@ -121,6 +121,7 @@ private: // Init
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		// postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -177,11 +178,13 @@ private: // Resources
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		renderTargetGroup.SetRenderTarget(swapChain);
+		renderTargetGroup.GetDepthImage().usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		renderTargetGroup.CreateResources(renderingDevice);
 		
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		// TransitionImageLayout(renderTargetGroup.GetDepthImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -237,7 +240,7 @@ private: // Pipelines
 		}
 		
 		{// Opaque Raster pass
-			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES> attachments {};
+			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
 			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
 			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
 				// Format
@@ -246,9 +249,6 @@ private: // Pipelines
 				// Color
 				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Stencil
-				attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				// Layout
 				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -258,16 +258,39 @@ private: // Pipelines
 				};
 			}
 			
+			int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
+			attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
+			attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference depthStencilAttachment {
+				opaqueRasterPass.AddAttachment(attachments[depthStencilIndex]),
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			};
+			
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.colorAttachmentCount = colorAttachmentRefs.size();
 				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.pDepthStencilAttachment = &depthStencilAttachment;
 			opaqueRasterPass.AddSubpass(subpass);
+			
+			// prepare images
+			std::vector<Image*> images {};
+			images.reserve(attachments.size());
+			for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
+				images.push_back(&gBufferImage);
+			}
+			images.push_back(&renderTargetGroup.GetDepthImage());
 			
 			// Create the render pass
 			opaqueRasterPass.Create(renderingDevice);
-			opaqueRasterPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetGBuffers().data(), renderTargetGroup.GetGBuffers().size());
+			opaqueRasterPass.CreateFrameBuffers(renderingDevice, images);
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
@@ -292,8 +315,6 @@ private: // Pipelines
 			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			colorAttachmentRefs[0] = {
@@ -340,7 +361,7 @@ private: // Pipelines
 		}
 		
 		{// Transparent Raster pass
-			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES> attachments {};
+			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
 			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
 			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
 				// Format
@@ -349,9 +370,6 @@ private: // Pipelines
 				// Color
 				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Stencil
-				attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				// Layout
 				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 				attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -361,16 +379,39 @@ private: // Pipelines
 				};
 			}
 			
+			int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
+			attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
+			attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference depthStencilAttachment {
+				transparentRasterPass.AddAttachment(attachments[depthStencilIndex]),
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			};
+			
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.colorAttachmentCount = colorAttachmentRefs.size();
 				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.pDepthStencilAttachment = &depthStencilAttachment;
 			transparentRasterPass.AddSubpass(subpass);
+			
+			// prepare images
+			std::vector<Image*> images {};
+			images.reserve(attachments.size());
+			for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
+				images.push_back(&gBufferImage);
+			}
+			images.push_back(&renderTargetGroup.GetDepthImage());
 			
 			// Create the render pass
 			transparentRasterPass.Create(renderingDevice);
-			transparentRasterPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetGBuffers().data(), renderTargetGroup.GetGBuffers().size());
+			transparentRasterPass.CreateFrameBuffers(renderingDevice, images);
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
@@ -411,8 +452,6 @@ private: // Pipelines
 				attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
 				attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				inputAttachmentRefs[i] = {
@@ -443,28 +482,39 @@ private: // Pipelines
 		}
 		
 		{// Post Processing render pass
-			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = swapChain->format.format;
-				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-			VkAttachmentReference colorAttachmentRef = {
-				postProcessingRenderPass.AddAttachment(colorAttachment),
+			std::array<VkAttachmentDescription, 1> attachments;
+			std::array<VkAttachmentReference, 1> colorAttachmentRefs;
+			std::array<VkAttachmentReference, 0> inputAttachmentRefs;
+			
+			int presentAttachmentIndex = 0;
+			attachments[presentAttachmentIndex].format = swapChain->format.format;
+			attachments[presentAttachmentIndex].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[presentAttachmentIndex].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[presentAttachmentIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[presentAttachmentIndex].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[presentAttachmentIndex].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			colorAttachmentRefs[presentAttachmentIndex] = {
+				postProcessingRenderPass.AddAttachment(attachments[presentAttachmentIndex]),
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 			};
 			
 			// SubPass
 			VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.inputAttachmentCount = inputAttachmentRefs.size();
+				subpass.pInputAttachments = inputAttachmentRefs.data();
 			postProcessingRenderPass.AddSubpass(subpass);
+			
+			// prepare images
+			std::vector<VkImageView> images {};
+			images.reserve(attachments.size());
+			images.push_back(VK_NULL_HANDLE); // swapChain
 			
 			// Create the render pass
 			postProcessingRenderPass.Create(renderingDevice);
-			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain);
+			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain, images);
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["postProcessing"]) {
@@ -528,7 +578,6 @@ private: // Pipelines
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.colorAttachmentCount = 1;
 				subpass.pColorAttachments = &colorAttachmentRef;
-				subpass.pDepthStencilAttachment = nullptr;
 			uiRenderPass.AddSubpass(subpass);
 			
 			// Create the render pass
@@ -648,8 +697,11 @@ private: // Commands
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
 		}
 		
+		auto gBuffersAndDepthStencilClearValues = renderTargetGroup.GetGBuffersClearValues();
+		gBuffersAndDepthStencilClearValues.push_back(VkClearValue{1.0f,0});
+		
 		// Opaque Raster pass
-		opaqueRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), renderTargetGroup.GetGBuffersClearValues());
+		opaqueRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
 			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
@@ -670,7 +722,7 @@ private: // Commands
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
 		
 		// Transparent Raster pass
-		transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), renderTargetGroup.GetGBuffersClearValues());
+		transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
 			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}

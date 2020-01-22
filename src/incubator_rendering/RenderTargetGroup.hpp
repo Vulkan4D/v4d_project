@@ -25,7 +25,7 @@ namespace v4d::graphics {
 		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT };
 		Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		DepthStencilImage depthStencilImage {};
+		DepthStencilImage depthImage {};
 		enum GBUFFER : int {
 			ALBEDO = 0, 	// rgb32_sfloat
 			NORMAL = 1, 	// rgb8_snorm
@@ -77,6 +77,10 @@ namespace v4d::graphics {
 			return thumbnailImage;
 		}
 		
+		Image& GetDepthImage() {
+			return depthImage;
+		}
+		
 		Image& GetGBuffer(int index) {
 			return gBuffers[index];
 		}
@@ -105,7 +109,7 @@ namespace v4d::graphics {
 			tmpImage.Create(device, rasterWidth, rasterHeight);
 			thumbnailImage.Create(device, thumbnailWidth, thumbnailHeight, {tmpImage.format});
 			rayTracingImage.Create(device, rayTracingWidth, rayTracingHeight);
-			depthStencilImage.Create(device, rasterWidth, rasterHeight);
+			depthImage.Create(device, rasterWidth, rasterHeight);
 			
 			for (auto& image : gBuffers) {
 				image.Create(device, rasterWidth, rasterHeight);
@@ -116,7 +120,7 @@ namespace v4d::graphics {
 			tmpImage.Destroy(device);
 			thumbnailImage.Destroy(device);
 			rayTracingImage.Destroy(device);
-			depthStencilImage.Destroy(device);
+			depthImage.Destroy(device);
 			
 			for (auto& image : gBuffers) {
 				image.Destroy(device);
