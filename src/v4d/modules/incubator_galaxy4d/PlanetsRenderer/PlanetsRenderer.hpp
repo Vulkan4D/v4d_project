@@ -39,13 +39,15 @@ public:
 		
 		planetShader.planets = &planetaryTerrains;
 		
-		// planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		planetShader.rasterizer.lineWidth = 2;
+		#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		#else
+		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		#endif
+		planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
 		planetShader.AddVertexInputBinding(sizeof(PlanetaryTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetaryTerrain::Vertex::GetInputAttributes());
-		
-		// //TODO change to TRIANGLE_STRIP
-		// planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		// planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
 		
 	}
 	

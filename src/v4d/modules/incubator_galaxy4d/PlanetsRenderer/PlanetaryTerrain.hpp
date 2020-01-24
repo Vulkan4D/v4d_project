@@ -6,6 +6,8 @@
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 
+#define PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+
 struct PlanetaryTerrain {
 	
 	#pragma region Constructor arguments
@@ -19,11 +21,11 @@ struct PlanetaryTerrain {
 	LightSource lightSource {};
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 16;
-	static constexpr float chunkSubdivisionDistanceFactor = 2;
-	static constexpr float targetVertexSeparationInMeters = 0.001f; // approximative vertex separation in meters for the most precise level of detail
-	static const size_t chunkGeneratorNbThreads = 4;
+	static const int chunkSubdivisionsPerFace = 2;
+	static const int vertexSubdivisionsPerChunk = 32;
+	static constexpr float chunkSubdivisionDistanceFactor = 4;
+	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
+	static const size_t chunkGeneratorNbThreads = 6;
 	static const int nbChunksPerBufferPool = 128;
 	#pragma endregion
 
@@ -31,7 +33,11 @@ struct PlanetaryTerrain {
 	static const int nbChunksPerFace = chunkSubdivisionsPerFace * chunkSubdivisionsPerFace;
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
 	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1);
-	static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6; //TODO change to TRIANGLE_STRIP
+	#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 2 + (vertexSubdivisionsPerChunk*3) - 1; // 559 indices for vertexSubdivisionsPerChunk=16
+	#else
+		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6; // 1536 indices for vertexSubdivisionsPerChunk=16
+	#endif
 	#pragma endregion
 
 	struct Vertex {
@@ -135,13 +141,13 @@ struct PlanetaryTerrain {
 		#pragma endregion
 		
 		static glm::dvec3 Spherify(glm::dvec3 point) {
-			// // http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
-			// double	x2 = point.x * point.x,
-			// 		y2 = point.y * point.y,
-			// 		z2 = point.z * point.z;
-			// point.x *= glm::sqrt(1.0 - y2 / 2.0 - z2 / 2.0 + y2 * z2 / 3.0);
-			// point.y *= glm::sqrt(1.0 - z2 / 2.0 - x2 / 2.0 + z2 * x2 / 3.0);
-			// point.z *= glm::sqrt(1.0 - x2 / 2.0 - y2 / 2.0 + x2 * y2 / 3.0);
+			// http://mathproofs.blogspot.com/2005/07/mapping-cube-to-sphere.html
+			double	x2 = point.x * point.x,
+					y2 = point.y * point.y,
+					z2 = point.z * point.z;
+			point.x *= glm::sqrt(1.0 - y2 / 2.0 - z2 / 2.0 + y2 * z2 / 3.0);
+			point.y *= glm::sqrt(1.0 - z2 / 2.0 - x2 / 2.0 + z2 * x2 / 3.0);
+			point.z *= glm::sqrt(1.0 - x2 / 2.0 - y2 / 2.0 + x2 * y2 / 3.0);
 			return glm::normalize(point);
 		}
 	
@@ -243,6 +249,8 @@ struct PlanetaryTerrain {
 			if (!meshShouldGenerate) return;
 			
 			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+			double topSign = topDir.x + topDir.y + topDir.z;
+			double rightSign = rightDir.x + rightDir.y + rightDir.z;
 			
 			while (genRow <= vertexSubdivisionsPerChunk) {
 				while (genCol <= vertexSubdivisionsPerChunk) {
@@ -262,36 +270,59 @@ struct PlanetaryTerrain {
 					vertices[currentIndex].pos = glm::vec4(pos * altitude - centerPos, altitude);
 					vertices[currentIndex].uv = glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), additionalInfo1, additionalInfo2);
 					
-					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+					if (genRow < vertexSubdivisionsPerChunk) {
 						uint32_t topLeftIndex = currentIndex;
 						uint32_t topRightIndex = topLeftIndex+1;
 						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						uint32_t bottomRightIndex = bottomLeftIndex+1;
 						
-						//TODO change to TRIANGLE_STRIP
-						
-						switch (face) {
-							case FRONT:
-							case LEFT:
-							case BOTTOM:
-								indices[genIndexIndex++] = topLeftIndex;
-								indices[genIndexIndex++] = bottomLeftIndex;
-								indices[genIndexIndex++] = bottomRightIndex;
-								indices[genIndexIndex++] = topLeftIndex;
-								indices[genIndexIndex++] = bottomRightIndex;
-								indices[genIndexIndex++] = topRightIndex;
-								break;
-							case BACK:
-							case RIGHT:
-							case TOP:
-								indices[genIndexIndex++] = topLeftIndex;
-								indices[genIndexIndex++] = bottomRightIndex;
-								indices[genIndexIndex++] = bottomLeftIndex;
-								indices[genIndexIndex++] = topLeftIndex;
-								indices[genIndexIndex++] = topRightIndex;
-								indices[genIndexIndex++] = bottomRightIndex;
-								break;
-						}
+						#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+							if (topSign == rightSign) {
+								if (genCol < vertexSubdivisionsPerChunk) {
+									if (genCol == 0) {
+										indices[genIndexIndex++] = topLeftIndex;
+									}
+									indices[genIndexIndex++] = bottomLeftIndex;
+									indices[genIndexIndex++] = topRightIndex;
+								} else {
+									indices[genIndexIndex++] = bottomLeftIndex; // bottom right-most
+									if (genRow < vertexSubdivisionsPerChunk-1) {
+										indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
+									}
+								}
+							} else {
+								if (genCol < vertexSubdivisionsPerChunk) {
+									if (genCol == 0) {
+										indices[genIndexIndex++] = bottomLeftIndex;
+									}
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+								} else {
+									indices[genIndexIndex++] = topLeftIndex; // top right-most
+									if (genRow < vertexSubdivisionsPerChunk-1) {
+										indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
+									}
+								}
+							}
+						#else
+							if (genCol < vertexSubdivisionsPerChunk) {
+								if (topSign == rightSign) {
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = topRightIndex;
+								} else {
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+									indices[genIndexIndex++] = bottomLeftIndex;
+									indices[genIndexIndex++] = topLeftIndex;
+									indices[genIndexIndex++] = topRightIndex;
+									indices[genIndexIndex++] = bottomRightIndex;
+								}
+							}
+						#endif
 					}
 					
 					++genCol;
@@ -307,7 +338,7 @@ struct PlanetaryTerrain {
 			
 			// Check for errors
 			if (nbIndicesPerChunk != genIndexIndex) {
-				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size")
+				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size " << nbIndicesPerChunk << " != " << genIndexIndex)
 				return;
 			}
 			
@@ -320,48 +351,77 @@ struct PlanetaryTerrain {
 					//TODO
 					float additionalInfo = 0;
 					
-					//TODO fix some faces
-					
 					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
 						// For full face (generate top left)
 						uint32_t topLeftIndex = currentIndex;
 						uint32_t topRightIndex = topLeftIndex+1;
 						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						
+						//TODO
 						float slope = 0;
-						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[topRightIndex].pos) - glm::vec3(point.pos)), slope);
-						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomLeftIndex].pos)), additionalInfo);
+						
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[topRightIndex].pos) - glm::vec3(point.pos)) * (float)rightSign, slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomLeftIndex].pos)) * (float)topSign, additionalInfo);
 						
 					} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
-						// For right-most bottom-most vertex (generate bottom right)
-						uint32_t bottomRightIndex = currentIndex;
-						uint32_t bottomLeftIndex = bottomRightIndex-1;
-						uint32_t topRightIndex = bottomRightIndex-vertexSubdivisionsPerChunk-1;
+						// For right-most bottom-most vertex (generate bottom-most right-most)
 						
+						//TODO
 						float slope = 0;
-						point.tangentX = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomLeftIndex].pos)), slope);
-						point.tangentY = glm::vec4(glm::normalize(glm::vec3(vertices[topRightIndex].pos) - glm::vec3(point.pos)), additionalInfo);
+						
+						glm::vec3 bottomLeftPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
+							bottomLeftPos = {pos * planet->GetHeightMap(pos) - centerPos};
+						}
+
+						glm::vec3 topRightPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
+							topRightPos = {pos * planet->GetHeightMap(pos) - centerPos};
+						}
+
+						point.tangentX = glm::vec4(glm::normalize(topRightPos - glm::vec3(point.pos)) * (float)rightSign, slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - bottomLeftPos) * (float)topSign, additionalInfo);
 						
 					} else if (genCol == vertexSubdivisionsPerChunk) {
 						// For others in right col (generate top right)
-						uint32_t topRightIndex = currentIndex;
-						uint32_t topLeftIndex = topRightIndex-1;
-						uint32_t bottomRightIndex = topRightIndex+vertexSubdivisionsPerChunk+1;
+						uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
 						
+						glm::vec3 topRightPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
+							topRightPos = {pos * planet->GetHeightMap(pos) - centerPos};
+						}
+
+						//TODO
 						float slope = 0;
-						point.tangentX = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[topLeftIndex].pos)), slope);
-						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomRightIndex].pos)), additionalInfo);
+						
+						point.tangentX = glm::vec4(glm::normalize(topRightPos - glm::vec3(point.pos)) * (float)rightSign, slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - glm::vec3(vertices[bottomRightIndex].pos)) * (float)topSign, additionalInfo);
 						
 					} else if (genRow == vertexSubdivisionsPerChunk) {
 						// For others in bottom row (generate bottom left)
-						uint32_t bottomLeftIndex = currentIndex;
-						uint32_t bottomRightIndex = currentIndex+1;
-						uint32_t topLeftIndex = bottomLeftIndex-vertexSubdivisionsPerChunk-1;
 						
+						//TODO
 						float slope = 0;
-						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[bottomRightIndex].pos) - glm::vec3(point.pos)), slope);
-						point.tangentY = glm::vec4(glm::normalize(glm::vec3(vertices[topLeftIndex].pos) - glm::vec3(point.pos)), additionalInfo);
 						
+						glm::vec3 bottomLeftPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset);
+							bottomLeftPos = {pos * planet->GetHeightMap(pos) - centerPos};
+						}
+
+						point.tangentX = glm::vec4(glm::normalize(glm::vec3(vertices[currentIndex+1].pos) - glm::vec3(point.pos)) * (float)rightSign, slope);
+						point.tangentY = glm::vec4(glm::normalize(glm::vec3(point.pos) - bottomLeftPos) * (float)topSign, additionalInfo);
 					}
 				}
 			}
@@ -465,7 +525,9 @@ struct PlanetaryTerrain {
 					if (ShouldRemoveSubChunks()) {
 						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
-							subChunk->Remove();
+							if (meshGenerated) {
+								subChunk->Remove();
+							}
 						}
 						render = true;
 					}
@@ -513,7 +575,7 @@ struct PlanetaryTerrain {
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos) {
-		double height = v4d::noise::SimplexFractal(normalizedPos*1000.0, 32);
+		double height = v4d::noise::SimplexFractal(normalizedPos*500.0, 20);
 		return solidRadius + height*heightVariation;
 	}
 	
@@ -531,6 +593,16 @@ struct PlanetaryTerrain {
 				top = glm::dvec3(0, 1, 0);
 				right = glm::dvec3(1, 0, 0);
 				break;
+			case LEFT:
+				dir = glm::dvec3(-1, 0, 0);
+				top = glm::dvec3(0, -1, 0);
+				right = glm::dvec3(0, 0, -1);
+				break;
+			case BOTTOM:
+				dir = glm::dvec3(0, -1, 0);
+				top = glm::dvec3(0, 0, -1);
+				right = glm::dvec3(-1, 0, 0);
+				break;
 			case BACK:
 				dir = glm::dvec3(0, 0, -1);
 				top = glm::dvec3(0, 1, 0);
@@ -541,19 +613,9 @@ struct PlanetaryTerrain {
 				top = glm::dvec3(0, 1, 0);
 				right = glm::dvec3(0, 0, -1);
 				break;
-			case LEFT:
-				dir = glm::dvec3(-1, 0, 0);
-				top = glm::dvec3(0, -1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
 			case TOP:
 				dir = glm::dvec3(0, 1, 0);
 				top = glm::dvec3(0, 0, 1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
-			case BOTTOM:
-				dir = glm::dvec3(0, -1, 0);
-				top = glm::dvec3(0, 0, -1);
 				right = glm::dvec3(-1, 0, 0);
 				break;
 		}

@@ -11,7 +11,7 @@
 
 struct PlayerView {
 	// Normal: 10 km/s, Shift: 1000 km/s, Alt: 10 m/s
-	double camSpeed = 10000.0, mouseSensitivity = 1.0;
+	double camSpeed = 10000.0, mouseSensitivity = 1.0, tiltSpeed = 2.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
 	glm::dvec3 worldPosition {0};
@@ -118,10 +118,10 @@ public:
 					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, y * player->mouseSensitivity * deltaTime, player->viewRight);
 				}
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_Q)) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, 1.0 * player->mouseSensitivity * deltaTime, player->viewForward);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, player->tiltSpeed * deltaTime, player->viewForward);
 				}
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_E)) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, -1.0 * player->mouseSensitivity * deltaTime, player->viewForward);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, -player->tiltSpeed * deltaTime, player->viewForward);
 				}
 				player->viewUp = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
 				player->viewForward = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
