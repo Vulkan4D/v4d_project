@@ -63,15 +63,26 @@ float normalsLength = planetChunk.chunkSize / float(planetChunk.vertexSubdivisio
 
 #shader surface.frag
 
-layout(location = 0) in V2F v2f;
+#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
 #include "gBuffers_out.glsl"
 
+layout(location = 0) in V2F v2f;
+
 void main() {
+	
+	vec3 normalNoise = normalize(
+		vec3(
+			Noise(v2f.uv*60.0+0.865) + Noise(v2f.uv*400.0+0.2685)*0.7 + Noise(v2f.uv*1000.0+20.85)*0.4 + Noise(v2f.uv*2500.0+201.85)*0.2, 
+			Noise(v2f.uv*60.0+24.5) + Noise(v2f.uv*400.0+21.5)*0.7 + Noise(v2f.uv*1000.0+150.5)*0.4 + Noise(v2f.uv*2500.0+300.5)*0.2, 
+			Noise(v2f.uv*60.0-41.12) + Noise(v2f.uv*400.0-50.12)*0.7 + Noise(v2f.uv*1000.0-140.12)*0.4 + Noise(v2f.uv*2500.0-1402.12)*0.2
+		)
+	);
+	
 	GBuffers gBuffers;
 	
 	gBuffers.albedo = v2f.color;
-	gBuffers.normal = normalize(v2f.normal);
+	gBuffers.normal = normalize(mix(v2f.normal, v2f.normal * normalNoise, 0.5));
 	gBuffers.roughness = 0;
 	gBuffers.metallic = 0;
 	gBuffers.scatter = 0;

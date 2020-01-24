@@ -38,17 +38,18 @@ public:
 		shaders["opaqueRasterization"].push_back(&planetShader);
 		
 		planetShader.planets = &planetaryTerrains;
-		
-		planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-		planetShader.rasterizer.lineWidth = 2;
-		#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		#else
-		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		#endif
-		planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
 		planetShader.AddVertexInputBinding(sizeof(PlanetaryTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetaryTerrain::Vertex::GetInputAttributes());
 		
+		// planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		// planetShader.rasterizer.lineWidth = 1;
+		
+		// Mesh Topology
+		#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+			planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
+		#else
+			planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		#endif
 	}
 	
 	// // Executed when calling their respective methods on the main Renderer
@@ -92,6 +93,12 @@ public:
 				scene.lightSources["sun"] = nullptr;
 				scene.lightSources.erase("sun");
 			}
+		}
+		
+		// Chunks Generator
+		if (PlanetaryTerrain::chunkGenerator) {
+			delete PlanetaryTerrain::chunkGenerator;
+			PlanetaryTerrain::chunkGenerator = nullptr;
 		}
 	}
 	

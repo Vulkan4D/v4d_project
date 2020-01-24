@@ -21,11 +21,11 @@ struct PlanetaryTerrain {
 	LightSource lightSource {};
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 2;
+	static const int chunkSubdivisionsPerFace = 1;
 	static const int vertexSubdivisionsPerChunk = 32;
-	static constexpr float chunkSubdivisionDistanceFactor = 4;
+	static constexpr float chunkSubdivisionDistanceFactor = 2;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
-	static const size_t chunkGeneratorNbThreads = 6;
+	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
 	#pragma endregion
 
@@ -34,9 +34,9 @@ struct PlanetaryTerrain {
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
 	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1);
 	#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 2 + (vertexSubdivisionsPerChunk*3) - 1; // 559 indices for vertexSubdivisionsPerChunk=16
+		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 2 + (vertexSubdivisionsPerChunk*3) - 1; // 16=559, 32=2143
 	#else
-		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6; // 1536 indices for vertexSubdivisionsPerChunk=16
+		static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6; // 16=1536, 32=6144
 	#endif
 	#pragma endregion
 
@@ -224,18 +224,20 @@ struct PlanetaryTerrain {
 		}
 		
 		void GenerateAsync() {
-			static v4d::processing::ThreadPoolPriorityQueue<Chunk*> chunkGenerator ([](Chunk* chunk){
-				std::lock_guard lock(chunk->generatorMutex);
-				chunk->Generate();
-				chunk->meshGenerating = false;
-			}, [](Chunk* a, Chunk* b) {
-				return a->distanceFromCamera > b->distanceFromCamera;
-			});
+			if (!chunkGenerator) {
+				chunkGenerator = new v4d::processing::ThreadPoolPriorityQueue<Chunk*> ([](Chunk* chunk){
+					std::lock_guard lock(chunk->generatorMutex);
+					chunk->Generate();
+					chunk->meshGenerating = false;
+				}, [](Chunk* a, Chunk* b) {
+					return a->distanceFromCamera > b->distanceFromCamera;
+				});
+			}
 			if (meshGenerating) return;
 			std::lock_guard lock(generatorMutex);
 			meshGenerating = true;
-			chunkGenerator.Enqueue(this);
-			chunkGenerator.RunThreads(chunkGeneratorNbThreads);
+			chunkGenerator->Enqueue(this);
+			chunkGenerator->RunThreads(chunkGeneratorNbThreads);
 		}
 		
 		void CancelMeshGeneration() {
@@ -570,6 +572,8 @@ struct PlanetaryTerrain {
 		}
 		
 	};
+	
+	static v4d::processing::ThreadPoolPriorityQueue<Chunk*>* chunkGenerator;
 
 	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
@@ -691,3 +695,6 @@ struct PlanetaryTerrain {
 // Buffer pools
 PlanetaryTerrain::ChunkVertexBufferPool PlanetaryTerrain::vertexBufferPool {};
 PlanetaryTerrain::ChunkIndexBufferPool PlanetaryTerrain::indexBufferPool {};
+
+// Chunk Generator thread pool
+v4d::processing::ThreadPoolPriorityQueue<PlanetaryTerrain::Chunk*>* PlanetaryTerrain::chunkGenerator = nullptr;

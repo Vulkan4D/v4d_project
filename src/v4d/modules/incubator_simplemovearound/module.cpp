@@ -10,8 +10,7 @@
 #include <v4d.h>
 
 struct PlayerView {
-	// Normal: 10 km/s, Shift: 1000 km/s, Alt: 10 m/s
-	double camSpeed = 10000.0, mouseSensitivity = 1.0, tiltSpeed = 2.0;
+	double camSpeed = 1000.0, mouseSensitivity = 1.0, tiltSpeed = 2.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
 	glm::dvec3 worldPosition {0};
