@@ -19,9 +19,10 @@ struct PlanetaryTerrain {
 	LightSource lightSource {};
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 16;
+	static const int chunkSubdivisionsPerFace = 1;
 	static const int vertexSubdivisionsPerChunk = 16;
-	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
+	static constexpr float chunkSubdivisionDistanceFactor = 2;
+	static constexpr float targetVertexSeparationInMeters = 0.001f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
 	#pragma endregion
@@ -30,7 +31,7 @@ struct PlanetaryTerrain {
 	static const int nbChunksPerFace = chunkSubdivisionsPerFace * chunkSubdivisionsPerFace;
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
 	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1);
-	static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6;
+	static const int nbIndicesPerChunk = (vertexSubdivisionsPerChunk) * (vertexSubdivisionsPerChunk) * 6; //TODO change to TRIANGLE_STRIP
 	#pragma endregion
 
 	struct Vertex {
@@ -66,6 +67,7 @@ struct PlanetaryTerrain {
 
 	// Camera
 	glm::dvec3 cameraPos {0};
+	double cameraAltitudeAboveTerrain = 0;
 	glm::dvec3 lastSortPosition {0};
 	v4d::Timer lastSortTime {true};
 	
@@ -149,12 +151,12 @@ struct PlanetaryTerrain {
 		
 		bool ShouldAddSubChunks() {
 			if (IsLastLevel()) return false;
-			return chunkSize / distanceFromCamera > 1.0;
+			return chunkSize / distanceFromCamera > (1.0/chunkSubdivisionDistanceFactor);
 		}
 		
 		bool ShouldRemoveSubChunks() {
 			if (IsLastLevel()) return false;
-			return chunkSize / distanceFromCamera < 0.5;
+			return chunkSize / distanceFromCamera < (0.5/chunkSubdivisionDistanceFactor);
 		}
 		
 		void RefreshDistanceFromCamera() {
@@ -265,6 +267,9 @@ struct PlanetaryTerrain {
 						uint32_t topRightIndex = topLeftIndex+1;
 						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						uint32_t bottomRightIndex = bottomLeftIndex+1;
+						
+						//TODO change to TRIANGLE_STRIP
+						
 						switch (face) {
 							case FRONT:
 							case LEFT:
@@ -314,6 +319,8 @@ struct PlanetaryTerrain {
 					
 					//TODO
 					float additionalInfo = 0;
+					
+					//TODO fix some faces
 					
 					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
 						// For full face (generate top left)
@@ -431,7 +438,7 @@ struct PlanetaryTerrain {
 			std::scoped_lock lock(stateMutex);
 			
 			// Angle Culling
-			bool chunkVisibleByAngle = 
+			bool chunkVisibleByAngle =
 				glm::dot(planet->cameraPos - centerPosLowestPoint, centerPos) > 0.0 ||
 				glm::dot(planet->cameraPos - topLeftPosLowestPoint, topLeftPos) > 0.0 ||
 				glm::dot(planet->cameraPos - topRightPosLowestPoint, topRightPos) > 0.0 ||
@@ -506,7 +513,7 @@ struct PlanetaryTerrain {
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos) {
-		double height = v4d::noise::SimplexFractal(normalizedPos*200.0, 16);
+		double height = v4d::noise::SimplexFractal(normalizedPos*1000.0, 32);
 		return solidRadius + height*heightVariation;
 	}
 	

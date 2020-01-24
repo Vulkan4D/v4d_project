@@ -18,9 +18,14 @@ public:
 		alignas(64) glm::mat4 modelViewMatrix;
 		alignas(16) glm::vec4 testColor;
 		alignas(4) float chunkSize;
+		alignas(4) float radius;
+		alignas(4) float solidRadius;
 		alignas(4) int level;
 		alignas(4) bool isLastLevel;
 		alignas(4) int vertexSubdivisionsPerChunk;
+		alignas(4) float cameraAltitudeAboveTerrain;
+		alignas(4) float cameraDistanceFromPlanet;
+		// 16 bytes remaining
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
@@ -31,13 +36,19 @@ public:
 				//TODO
 				double planetRotationAngle = 0;
 				glm::dvec3 planetRotationAxis {0,1,0};
+				glm::dmat4 planetRotationMatrix = glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
 				
-				planetChunkPushConstant.modelViewMatrix = viewMatrix * glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
+				planetChunkPushConstant.modelViewMatrix = viewMatrix * planetRotationMatrix;
 				planetChunkPushConstant.testColor = chunk->testColor;
 				planetChunkPushConstant.chunkSize = (float)chunk->chunkSize;
+				planetChunkPushConstant.radius = (float)chunk->planet->radius;
+				planetChunkPushConstant.solidRadius = (float)chunk->planet->solidRadius;
 				planetChunkPushConstant.level = chunk->level;
-				planetChunkPushConstant.vertexSubdivisionsPerChunk = PlanetaryTerrain::vertexSubdivisionsPerChunk;
 				planetChunkPushConstant.isLastLevel = chunk->IsLastLevel();
+				planetChunkPushConstant.vertexSubdivisionsPerChunk = PlanetaryTerrain::vertexSubdivisionsPerChunk;
+				planetChunkPushConstant.cameraAltitudeAboveTerrain = (float)chunk->planet->cameraAltitudeAboveTerrain;
+				planetChunkPushConstant.cameraDistanceFromPlanet = (float)glm::length(chunk->planet->cameraPos);
+				
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(
 					PlanetaryTerrain::vertexBufferPool[chunk->vertexBufferAllocation.bufferIndex],

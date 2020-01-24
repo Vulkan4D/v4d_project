@@ -39,11 +39,14 @@ public:
 		
 		planetShader.planets = &planetaryTerrains;
 		
-		planetShader.rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		planetShader.depthStencilState.depthWriteEnable = VK_TRUE;
-		planetShader.depthStencilState.depthTestEnable = VK_TRUE;
+		// planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		planetShader.rasterizer.lineWidth = 2;
 		planetShader.AddVertexInputBinding(sizeof(PlanetaryTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetaryTerrain::Vertex::GetInputAttributes());
+		
+		// //TODO change to TRIANGLE_STRIP
+		// planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		// planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
+		
 	}
 	
 	// // Executed when calling their respective methods on the main Renderer
@@ -57,10 +60,6 @@ public:
 	};
 	
 	void LoadScene(Scene& scene) override {
-		// scene.camera.znear = 1.0;
-		// scene.camera.zfar = 1.5e14; // 1cm - 1 000 UA
-		// scene.camera.zfar = 200000000;
-		
 		// Sun(s)
 		scene.lightSources["sun"] = &sun;
 		
@@ -134,6 +133,7 @@ public:
 		for (auto* planetaryTerrain : planetaryTerrains) {
 			std::lock_guard lock(planetaryTerrain->chunksMutex);
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
+			planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos));
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
 			}

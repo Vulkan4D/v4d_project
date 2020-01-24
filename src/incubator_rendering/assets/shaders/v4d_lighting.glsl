@@ -70,6 +70,18 @@ void main() {
 	// specular *= attenuation;
 	
 	
+	// //////
+	// // For Spot lights : 
+	// float innerCutOff = cos(radians(12/*degrees*/));
+	// float outerCutOff = cos(radians(18/*degrees*/));
+	// float theta = dot(lightDir, normalize(-spotLight.direction));
+	// float epsilon = (innerCutOff - outerCutOff);
+	// float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+	// diffuse *= intensity;
+	// specular *= intensity;
+	
+
+	
 	// Final color
 	color *= (ambient + diffuse + specular);
 

@@ -11,9 +11,13 @@ layout(std430, push_constant) uniform PlanetChunk {
 	mat4 modelViewMatrix;
 	vec4 testColor;
 	float chunkSize;
+	float radius;
+	float solidRadius;
 	int level;
 	bool isLastLevel;
 	int vertexSubdivisionsPerChunk;
+	float cameraAltitudeAboveTerrain;
+	float cameraDistanceFromPlanet;
 } planetChunk;
 
 struct V2F {

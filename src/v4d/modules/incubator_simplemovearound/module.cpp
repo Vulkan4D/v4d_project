@@ -45,6 +45,18 @@ public:
 					renderer->ReloadRenderer();
 					break;
 				
+				// Increase speed
+				case GLFW_KEY_PAGE_UP:
+					player->camSpeed *= 10;
+					LOG("Movement speed: " << player->camSpeed << " m/s")
+					break;
+				
+				// Decrease speed
+				case GLFW_KEY_PAGE_DOWN:
+					player->camSpeed *= 0.1;
+					LOG("Movement speed: " << player->camSpeed << " m/s")
+					break;
+				
 			}
 		}
 	}
@@ -69,7 +81,7 @@ public:
 		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
 		
 		// Camera Movements
-		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 100.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.001 : 1.0);
+		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 4.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.25 : 1.0);
 		
 		player->velocity = glm::dvec3{0};
 		

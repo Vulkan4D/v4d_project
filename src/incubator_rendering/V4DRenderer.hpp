@@ -140,22 +140,26 @@ private: // Init
 		opaqueLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		opaqueLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
 		opaqueLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		opaqueLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		opaqueLightingShader.SetData(3);
 		transparentLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		transparentLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
 		transparentLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		transparentLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		transparentLightingShader.SetData(3);
 		
 		// Post-Processing
 		postProcessingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		postProcessingShader.depthStencilState.depthTestEnable = VK_FALSE;
 		postProcessingShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		postProcessingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		postProcessingShader.SetData(3);
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		thumbnailShader.depthStencilState.depthTestEnable = VK_FALSE;
 		thumbnailShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		thumbnailShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		thumbnailShader.SetData(3);
 		
 		// UI
@@ -178,6 +182,8 @@ private: // Resources
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		renderTargetGroup.SetRenderTarget(swapChain);
+		renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
 		renderTargetGroup.GetDepthImage().usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		renderTargetGroup.CreateResources(renderingDevice);
 		
@@ -698,7 +704,7 @@ private: // Commands
 		}
 		
 		auto gBuffersAndDepthStencilClearValues = renderTargetGroup.GetGBuffersClearValues();
-		gBuffersAndDepthStencilClearValues.push_back(VkClearValue{1.0f,0});
+		gBuffersAndDepthStencilClearValues.push_back(VkClearValue{0.0f,0});
 		
 		// Opaque Raster pass
 		opaqueRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
