@@ -45,6 +45,6 @@ As a developer for this project or for a resulting game, you will respect our 5 
 - `Tools` Useful tools to help programmers (build scripts, shader compiler, ...)
 
 ## License
-V4D is going to be Open-source, with limited commercial use. 
+V4D is going to be Open-source (most likely LGPL), with limited commercial use. 
 Developers/companies that contribute to its development may get a free license for commercial use depending on the scale of their contribution (funding or development time). 
 
