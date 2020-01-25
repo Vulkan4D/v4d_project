@@ -9,7 +9,7 @@ precision highp sampler2D;
 
 layout(std430, push_constant) uniform PlanetChunk {
 	mat4 modelViewMatrix;
-	vec4 testColor;
+	ivec3 chunkPos;
 	float chunkSize;
 	float radius;
 	float solidRadius;
@@ -21,10 +21,14 @@ layout(std430, push_constant) uniform PlanetChunk {
 } planetChunk;
 
 struct V2F {
-	vec3 relPos;
+	vec3 pos;
+	float altitude;
 	vec3 normal;
+	float slope;
+	vec3 tangentX;
+	// float ???;
 	vec2 uv;
-	vec4 color;
+	// vec2 ???;
 };
 
 ##################################################################
@@ -33,43 +37,34 @@ struct V2F {
 layout(location = 0) in vec4 pos;
 layout(location = 1) in vec4 uv;
 layout(location = 2) in vec4 tangentX;
-layout(location = 3) in vec4 tangentY;
+layout(location = 3) in vec4 normal;
 
 layout(location = 0) out V2F v2f;
 
 void main() {
-	// float altitude = pos.a;
-	// float slope = tangentX.w;
-	vec3 normal = cross(tangentX.xyz, tangentY.xyz);
+	gl_Position = mat4(camera.projectionMatrix) * planetChunk.modelViewMatrix * vec4(pos.xyz, 1);
 	
-	v2f.relPos = (planetChunk.modelViewMatrix * vec4(pos.xyz, 1)).xyz;
-	v2f.normal = normalize(transpose(inverse(mat3(planetChunk.modelViewMatrix))) * normal);
+	v2f.pos = pos.xyz;
+	v2f.altitude = pos.a;
+	v2f.normal = normalize(transpose(inverse(mat3(planetChunk.modelViewMatrix))) * normal.xyz);
+	v2f.slope = normal.w;
+	v2f.tangentX = tangentX.xyz;
+	// v2f.??? = tangentX.w;
 	v2f.uv = uv.st;
-	v2f.color = planetChunk.testColor;
-	gl_Position = mat4(camera.projectionMatrix) * vec4(v2f.relPos, 1);
+	// v2f.??? = uv.pq;
 }
-
-##################################################################
-
-#shader wireframe.geom
-bool debugMesh = true;
-vec4 meshColor = vec4(0);
-bool debugNormals = true;
-vec4 normalsColor = vec4(0,1,1,1);
-float normalsLength = planetChunk.chunkSize / float(planetChunk.vertexSubdivisionsPerChunk) / 2.0;
-#include "wireframe.geom"
 
 ##################################################################
 
 #shader surface.frag
 
 #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
-
 #include "gBuffers_out.glsl"
 
 layout(location = 0) in V2F v2f;
 
 void main() {
+	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(v2f.pos);
 	
 	vec3 normalNoise = normalize(
 		vec3(
@@ -81,14 +76,14 @@ void main() {
 	
 	GBuffers gBuffers;
 	
-	gBuffers.albedo = v2f.color;
+	gBuffers.albedo = planetChunk.isLastLevel? vec4(0,1,0,1) : vec4(1);
 	gBuffers.normal = normalize(mix(v2f.normal, v2f.normal * normalNoise, 0.5));
 	gBuffers.roughness = 0;
 	gBuffers.metallic = 0;
 	gBuffers.scatter = 0;
 	gBuffers.occlusion = 0;
 	gBuffers.emission = vec3(0);
-	gBuffers.position = v2f.relPos;
+	gBuffers.position = (planetChunk.modelViewMatrix * vec4(v2f.pos, 1)).xyz;
 	
 	WriteGBuffers(gBuffers);
 }

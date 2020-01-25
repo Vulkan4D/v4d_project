@@ -32,6 +32,10 @@ public:
 		planetPipelineLayout.AddDescriptorSet(descriptorSets[0]);
 		planetPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
 		planetPipelineLayout.AddPushConstant<PlanetShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		
+		if (sizeof(PlanetShaderPipeline::PlanetChunkPushConstant) > 128) {
+			INVALIDCODE("PlanetChunkPushConstant should be no more than 128 bytes. Current size is " << sizeof(PlanetShaderPipeline::PlanetChunkPushConstant))
+		}
 	}
 	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {

@@ -16,7 +16,7 @@ public:
 
 	struct PlanetChunkPushConstant { // max 128 bytes
 		alignas(64) glm::mat4 modelViewMatrix;
-		alignas(16) glm::vec4 testColor;
+		alignas(16) glm::ivec3 chunkPos;
 		alignas(4) float chunkSize;
 		alignas(4) float radius;
 		alignas(4) float solidRadius;
@@ -25,7 +25,11 @@ public:
 		alignas(4) int vertexSubdivisionsPerChunk;
 		alignas(4) float cameraAltitudeAboveTerrain;
 		alignas(4) float cameraDistanceFromPlanet;
-		// 16 bytes remaining
+		
+		// 20 bytes remaining
+			// alignas(4) float ???;
+			// alignas(16) glm::vec4 ???;
+		
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
@@ -39,7 +43,7 @@ public:
 				glm::dmat4 planetRotationMatrix = glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
 				
 				planetChunkPushConstant.modelViewMatrix = viewMatrix * planetRotationMatrix;
-				planetChunkPushConstant.testColor = chunk->testColor;
+				planetChunkPushConstant.chunkPos = chunk->centerPos;
 				planetChunkPushConstant.chunkSize = (float)chunk->chunkSize;
 				planetChunkPushConstant.radius = (float)chunk->planet->radius;
 				planetChunkPushConstant.solidRadius = (float)chunk->planet->solidRadius;

@@ -21,8 +21,8 @@ V4DMODULE void V4D_ModuleCreate() {
 		24000000,
 		23950000,
 		10000,
-		// {0, 15777530, -18020000} // ground level
-		{0, 21800000, -10000000} // high altitude aircraft
+		{0, 15778650, -18020000} // ground level
+		// {0, 21800000, -10000000} // high altitude aircraft
 		// {0, 28000000, -10000000} // high orbit
 		// {0, 80000000, 0} // moon distance
 	});

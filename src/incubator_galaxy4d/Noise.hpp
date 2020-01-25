@@ -220,7 +220,7 @@ namespace v4d::noise {
 		dvec4 m = max(0.6 - dvec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
 		return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 	}
-		
+	
 	double SimplexFractal(dvec3 pos, int octaves) {
 		double amplitude = 0.5333333333;
 		double frequency = 1.0;
@@ -319,6 +319,18 @@ namespace v4d::noise {
 				+0.1333333* FastSimplex(4.0*m)
 				+0.0666667* FastSimplex(8.0*m);
 	}
+	double FastSimplexFractal(dvec3 pos, int octaves) {
+		double amplitude = 0.5333333333;
+		double frequency = 1.0;
+		double f = FastSimplex(pos * frequency);
+		for (int i = 1; i < octaves; ++i) {
+			amplitude /= 2.0;
+			frequency *= 2.0;
+			f += amplitude * FastSimplex(pos * frequency);
+		}
+		return f;
+	}
+
 
 
 	////////////////////////////////////////////////////

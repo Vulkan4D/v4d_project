@@ -78,7 +78,7 @@ void main() {
 	// diffuse *= intensity;
 	// specular *= intensity;
 	
-
+	
 	
 	// Final color
 	color *= (ambient + diffuse + specular);
