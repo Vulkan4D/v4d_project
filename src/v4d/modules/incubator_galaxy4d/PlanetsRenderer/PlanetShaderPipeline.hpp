@@ -55,9 +55,9 @@ public:
 				
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(
-					PlanetaryTerrain::vertexBufferPool[chunk->vertexBufferAllocation.bufferIndex],
+					PlanetaryTerrain::vertexBufferPool[chunk->vertexBufferAllocation],
 					chunk->vertexBufferAllocation.bufferOffset,
-					PlanetaryTerrain::indexBufferPool[chunk->indexBufferAllocation.bufferIndex],
+					PlanetaryTerrain::indexBufferPool[chunk->indexBufferAllocation],
 					chunk->indexBufferAllocation.bufferOffset,
 					PlanetaryTerrain::nbIndicesPerChunk
 				);

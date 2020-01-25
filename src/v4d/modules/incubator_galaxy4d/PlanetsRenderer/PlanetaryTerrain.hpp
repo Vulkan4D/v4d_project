@@ -65,17 +65,18 @@ struct PlanetaryTerrain {
 		BOTTOM
 	};
 
+	// Camera
+	glm::dvec3 cameraPos {0};
+	double cameraAltitudeAboveTerrain = 0;
+	glm::dvec3 lastOptimizePosition {0};
+	v4d::Timer lastOptimizeTime {true};
+	
 	// Buffer pools
 	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, nbVerticesPerChunk*sizeof(Vertex), nbChunksPerBufferPool> ChunkVertexBufferPool;
 	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_INDEX_BUFFER_BIT, nbIndicesPerChunk*sizeof(uint32_t), nbChunksPerBufferPool> ChunkIndexBufferPool;
 	static ChunkVertexBufferPool vertexBufferPool;
 	static ChunkIndexBufferPool indexBufferPool;
-
-	// Camera
-	glm::dvec3 cameraPos {0};
-	double cameraAltitudeAboveTerrain = 0;
-	glm::dvec3 lastSortPosition {0};
-	v4d::Timer lastSortTime {true};
+	static v4d::Timer lastGarbageCollectionTime;
 	
 	struct Chunk {
 	
@@ -214,17 +215,40 @@ struct PlanetaryTerrain {
 			std::lock_guard lock(generatorMutex);
 		}
 		
+		bool Cleanup() { // bool returns whether to delete the parent as well
+			std::scoped_lock lock(stateMutex, subChunksMutex);
+			
+			for (auto* subChunk : subChunks) {
+				if (!subChunk->Cleanup()) {
+					return false;
+				}
+			}
+			
+			for (auto* subChunk : subChunks) {
+				delete subChunk;
+			}
+			subChunks.clear();
+			
+			if (meshShouldGenerate || render || allocated)
+				return false;
+			
+			CancelMeshGeneration();
+			std::lock_guard lockGenerator(generatorMutex);
+			return true;
+		}
+		
 		void GenerateAsync() {
 			if (!chunkGenerator) {
 				chunkGenerator = new v4d::processing::ThreadPoolPriorityQueue<Chunk*> ([](Chunk* chunk){
 					std::lock_guard lock(chunk->generatorMutex);
-					chunk->Generate();
+					if (!chunk->meshGenerated)
+						chunk->Generate();
 					chunk->meshGenerating = false;
 				}, [](Chunk* a, Chunk* b) {
 					return a->distanceFromCamera > b->distanceFromCamera;
 				});
 			}
-			if (meshGenerating) return;
+			if (meshGenerating || meshGenerated) return;
 			std::lock_guard lock(generatorMutex);
 			meshGenerating = true;
 			chunkGenerator->Enqueue(this);
@@ -682,9 +706,37 @@ struct PlanetaryTerrain {
 		}
 	}
 	
+	void CleanupOldChunks() {
+		std::lock_guard lock(chunksMutex);
+		
+		for (auto* chunk : chunks) {
+			chunk->Cleanup();
+		}
+	}
+	
+	void Optimize() {
+		// Optimize only when no chunk is being generated, camera moved at least 1km and not more than once every 10 seconds
+		if (PlanetaryTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < 1000 || lastOptimizeTime.GetElapsedSeconds() < 10) return;
+		lastOptimizePosition = cameraPos;
+		lastOptimizeTime.Reset();
+		
+		CleanupOldChunks();
+		SortChunks();
+	}
+
+	static void CollectGarbage(Device* device) {
+		// Collect garbage not more than once every 30 seconds
+		if (lastGarbageCollectionTime.GetElapsedSeconds() < 15) return;
+		lastGarbageCollectionTime.Reset();
+		
+		vertexBufferPool.CollectGarbage(device);
+		indexBufferPool.CollectGarbage(device);
+	}
+	
 };
 
 // Buffer pools
+v4d::Timer PlanetaryTerrain::lastGarbageCollectionTime {true};
 PlanetaryTerrain::ChunkVertexBufferPool PlanetaryTerrain::vertexBufferPool {};
 PlanetaryTerrain::ChunkIndexBufferPool PlanetaryTerrain::indexBufferPool {};
 

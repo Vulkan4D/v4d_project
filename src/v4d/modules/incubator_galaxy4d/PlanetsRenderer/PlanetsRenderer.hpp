@@ -156,16 +156,12 @@ public:
 	void LowPriorityFrameUpdate() override {
 		for (auto* planetaryTerrain : planetaryTerrains) {
 			std::lock_guard lock(planetaryTerrain->chunksMutex);
-			// Sort chunks when camera moved at least 1km and not more than once every 10 seconds
-			if (glm::distance(planetaryTerrain->cameraPos, planetaryTerrain->lastSortPosition) > 1000 && planetaryTerrain->lastSortTime.GetElapsedSeconds() > 10) {
-				planetaryTerrain->SortChunks();
-				planetaryTerrain->lastSortPosition = planetaryTerrain->cameraPos;
-				planetaryTerrain->lastSortTime.Reset();
-			}
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->Process(renderingDevice, transferQueue);
 			}
+			planetaryTerrain->Optimize();
 		}
+		PlanetaryTerrain::CollectGarbage(renderingDevice);
 	}
 	
 };
