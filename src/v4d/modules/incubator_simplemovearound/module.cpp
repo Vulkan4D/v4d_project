@@ -85,22 +85,22 @@ public:
 		player->velocity = glm::dvec3{0};
 		
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			player->velocity = +player->viewForward * player->camSpeed * camSpeedMult;
+			player->velocity += +player->viewForward * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			player->velocity = -player->viewForward * player->camSpeed * camSpeedMult;
+			player->velocity += -player->viewForward * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			player->velocity = -player->viewRight * player->camSpeed * camSpeedMult;
+			player->velocity += -player->viewRight * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			player->velocity = +player->viewRight * player->camSpeed * camSpeedMult;
+			player->velocity += +player->viewRight * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			player->velocity = +player->viewUp * player->camSpeed * camSpeedMult;
+			player->velocity += +player->viewUp * player->camSpeed * camSpeedMult;
 		}
 		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			player->velocity = -player->viewUp * player->camSpeed * camSpeedMult;
+			player->velocity += -player->viewUp * player->camSpeed * camSpeedMult;
 		}
 		
 		player->worldPosition += player->velocity * deltaTime;

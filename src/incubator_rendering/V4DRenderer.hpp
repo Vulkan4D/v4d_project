@@ -513,14 +513,9 @@ private: // Pipelines
 				subpass.pInputAttachments = inputAttachmentRefs.data();
 			postProcessingRenderPass.AddSubpass(subpass);
 			
-			// prepare images
-			std::vector<VkImageView> images {};
-			images.reserve(attachments.size());
-			images.push_back(VK_NULL_HANDLE); // swapChain
-			
 			// Create the render pass
 			postProcessingRenderPass.Create(renderingDevice);
-			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain, images);
+			postProcessingRenderPass.CreateFrameBuffers(renderingDevice, swapChain);
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["postProcessing"]) {

@@ -64,19 +64,22 @@ void main() {
 layout(location = 0) in V2F v2f;
 
 void main() {
-	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(v2f.pos);
+	dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(v2f.pos);
 	
 	vec3 normalNoise = normalize(
 		vec3(
-			Noise(v2f.uv*60.0+0.865) + Noise(v2f.uv*400.0+0.2685)*0.7 + Noise(v2f.uv*1000.0+20.85)*0.4 + Noise(v2f.uv*2500.0+201.85)*0.2, 
-			Noise(v2f.uv*60.0+24.5) + Noise(v2f.uv*400.0+21.5)*0.7 + Noise(v2f.uv*1000.0+150.5)*0.4 + Noise(v2f.uv*2500.0+300.5)*0.2, 
-			Noise(v2f.uv*60.0-41.12) + Noise(v2f.uv*400.0-50.12)*0.7 + Noise(v2f.uv*1000.0-140.12)*0.4 + Noise(v2f.uv*2500.0-1402.12)*0.2
+			Noise(v2f.uv*100.0+0.865)*0.4 + Noise(v2f.uv*800.0+0.2685)*0.5 + Noise(v2f.uv*2000.0+20.85)*0.4 + Noise(v2f.uv*5000.0+201.85)*0.2, 
+			Noise(v2f.uv*100.0+24.5)*0.4 + Noise(v2f.uv*800.0+21.5)*0.5 + Noise(v2f.uv*2000.0+150.5)*0.4 + Noise(v2f.uv*5000.0+300.5)*0.2, 
+			Noise(v2f.uv*100.0-41.12)*0.4 + Noise(v2f.uv*800.0-50.12)*0.5 + Noise(v2f.uv*2000.0-140.12)*0.4 + Noise(v2f.uv*5000.0-1402.12)*0.2
 		)
 	);
 	
+	vec3 color = vec3(1)*smoothstep(0.85, 0.98, v2f.slope) + vec3(0.6,0.4,0.2)*smoothstep(0.02, 0.15, 1 - v2f.slope);
+	color = vec3(1);
+	
 	GBuffers gBuffers;
 	
-	gBuffers.albedo = planetChunk.isLastLevel? vec4(0,1,0,1) : vec4(1);
+	gBuffers.albedo = vec4(color, 1);//planetChunk.isLastLevel? vec4(0,1,0,1) : vec4(1);
 	gBuffers.normal = normalize(mix(v2f.normal, v2f.normal * normalNoise, 0.5));
 	gBuffers.roughness = 0;
 	gBuffers.metallic = 0;

@@ -440,7 +440,7 @@ struct PlanetaryTerrain {
 					}
 					
 					// Slope
-					point.normal.w = (float) dot(glm::dvec3(point.normal), centerPos + glm::dvec3(point.pos));
+					point.normal.w = (float) glm::max(0.0, dot(glm::dvec3(point.normal), glm::normalize(centerPos + glm::dvec3(point.pos))));
 				}
 			}
 			
