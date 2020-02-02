@@ -1,4 +1,54 @@
 // helpers functions
+double sina_9(double x)
+{
+    //minimax coefs for sin for 0..pi/2 range
+    const double a3 = -1.666665709650470145824129400050267289858e-1LF;
+    const double a5 =  8.333017291562218127986291618761571373087e-3LF;
+    const double a7 = -1.980661520135080504411629636078917643846e-4LF;
+    const double a9 =  2.600054767890361277123254766503271638682e-6LF;
+
+    const double m_2_pi = 0.636619772367581343076LF;
+    const double m_pi_2 = 1.57079632679489661923LF;
+
+    double y = abs(x * m_2_pi);
+    double q = floor(y);
+    int quadrant = int(q);
+
+    double t = (quadrant & 1) != 0 ? 1 - y + q : y - q;
+    t *= m_pi_2;
+
+    double t2 = t * t;
+    double r = fma(fma(fma(fma(a9, t2, a7), t2, a5), t2, a3), t2*t, t);
+
+    r = x < 0 ? -r : r;
+
+    return (quadrant & 2) != 0 ? -r : r;
+}
+double sina_11(double x) {
+	//minimax coefs for sin for 0..pi/2 range
+	const double a3 = -1.666666660646699151540776973346659104119e-1LF;
+	const double a5 =  8.333330495671426021718370503012583606364e-3LF;
+	const double a7 = -1.984080403919620610590106573736892971297e-4LF;
+	const double a9 =  2.752261885409148183683678902130857814965e-6LF;
+	const double ab = -2.384669400943475552559273983214582409441e-8LF;
+
+	const double m_2_pi = 0.636619772367581343076LF;
+	const double m_pi_2 = 1.57079632679489661923LF;
+
+	double y = abs(x * m_2_pi);
+	double q = floor(y);
+	int quadrant = int(q);
+
+	double t = (quadrant & 1) != 0 ? 1 - y + q : y - q;
+	t *= m_pi_2;
+
+	double t2 = t * t;
+	double r = fma(fma(fma(fma(fma(ab, t2, a9), t2, a7), t2, a5), t2, a3), t2*t, t);
+
+	r = x < 0 ? -r : r;
+
+	return (quadrant & 2) != 0 ? -r : r;
+}
 vec4 _permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} // used for Simplex
 dvec4 _permute(dvec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} // used for Simplex
 vec3 Noise3(vec3 pos) { // used for FastSimplex
@@ -12,7 +62,7 @@ vec3 Noise3(vec3 pos) { // used for FastSimplex
 	return r-0.5;
 }
 dvec3 Noise3(dvec3 pos) { // used for FastSimplex
-	double j = 4096.0*sin(dot(pos,dvec3(17.0, 59.4, 15.0)));
+	double j = 4096.0*sina_9(dot(pos,dvec3(17.0, 59.4, 15.0)));
 	dvec3 r;
 	r.z = fract(512.0*j);
 	j *= .125;
@@ -184,13 +234,36 @@ double Simplex(dvec3 pos){
 	dvec4 m = max(0.6 - dvec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
 	return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 }
+float SimplexFractal(vec3 pos, int octaves) {
+	float amplitude = 0.533333333333333;
+	float frequency = 1.0;
+	float f = Simplex(pos * frequency);
+	for (int i = 1; i < octaves; ++i) {
+		amplitude /= 2.0;
+		frequency *= 2.0;
+		f += amplitude * Simplex(pos * frequency);
+	}
+	return f;
+}
+double SimplexFractal(dvec3 pos, int octaves) {
+	double amplitude = 0.533333333333333;
+	double frequency = 1.0;
+	double f = Simplex(pos * frequency);
+	for (int i = 1; i < octaves; ++i) {
+		amplitude /= 2.0;
+		frequency *= 2.0;
+		f += amplitude * Simplex(pos * frequency);
+	}
+	return f;
+}
+
 
 
 // Faster Simplex noise, less precise and not well tested, seems suitable for pos ranges (-10k, +10k) with a step of 0.01 and gradient of 0.5
 // Returns a float value between -1.00 and +1.00 with a distribution that strongly tends towards the center (0.5)
 float FastSimplex(vec3 pos) {
-	const float F3 = 0.3333333;
-	const float G3 = 0.1666667;
+	const float F3 = 0.33333333333333333;
+	const float G3 = 0.16666666666666667;
 
 	vec3 s = floor(pos + dot(pos, vec3(F3)));
 	vec3 x = pos - s + dot(s, vec3(G3));
@@ -258,7 +331,28 @@ double FastSimplex(dvec3 pos) {
 
 	return dot(d, dvec4(52.0));
 }
-
+double FastSimplexFractal(dvec3 pos, int octaves) {
+	double amplitude = 0.5333333333;
+	double frequency = 1.0;
+	double f = FastSimplex(pos * frequency);
+	for (int i = 1; i < octaves; ++i) {
+		amplitude /= 2.0;
+		frequency *= 2.0;
+		f += amplitude * FastSimplex(pos * frequency);
+	}
+	return f;
+}
+float FastSimplexFractal(vec3 pos, int octaves) {
+	float amplitude = 0.5333333333;
+	float frequency = 1.0;
+	float f = FastSimplex(pos * frequency);
+	for (int i = 1; i < octaves; ++i) {
+		amplitude /= 2.0;
+		frequency *= 2.0;
+		f += amplitude * FastSimplex(pos * frequency);
+	}
+	return f;
+}
 
 
 
@@ -279,17 +373,6 @@ float clamp01(float v) {
 	return max(0.0, min(1.0, v));
 }
 
-float FastSimplexFractal(vec3 pos, int octaves) {
-	float amplitude = 0.5333333333;
-	float frequency = 1.0;
-	float f = FastSimplex(pos * frequency);
-	for (int i = 1; i < octaves; ++i) {
-		amplitude /= 2.0;
-		frequency *= 2.0;
-		f += amplitude * FastSimplex(pos * frequency);
-	}
-	return f;
-}
 
 struct GalaxyInfo {
 	float spiralCloudsFactor;

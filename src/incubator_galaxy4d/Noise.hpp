@@ -221,8 +221,21 @@ namespace v4d::noise {
 		return 42.0 * dot(m*m*m*m, dvec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
 	}
 	
+	float SimplexFractal(vec3 pos, int octaves) {
+		if (octaves == 1) return Simplex(pos);
+		float amplitude = 0.533333333333333f;
+		float frequency = 1.0f;
+		float f = Simplex(pos * frequency);
+		for (int i = 1; i < octaves; ++i) {
+			amplitude /= 2.0f;
+			frequency *= 2.0f;
+			f += amplitude * Simplex(pos * frequency);
+		}
+		return f;
+	}
 	double SimplexFractal(dvec3 pos, int octaves) {
-		double amplitude = 0.5333333333;
+		if (octaves == 1) return Simplex(pos);
+		double amplitude = 0.533333333333333;
 		double frequency = 1.0;
 		double f = Simplex(pos * frequency);
 		for (int i = 1; i < octaves; ++i) {
@@ -319,8 +332,19 @@ namespace v4d::noise {
 				+0.1333333* FastSimplex(4.0*m)
 				+0.0666667* FastSimplex(8.0*m);
 	}
+	float FastSimplexFractal(vec3 pos, int octaves) {
+		float amplitude = 0.5333333333333333f;
+		float frequency = 1.0;
+		float f = FastSimplex(pos * frequency);
+		for (int i = 1; i < octaves; ++i) {
+			amplitude /= 2.0f;
+			frequency *= 2.0f;
+			f += amplitude * FastSimplex(pos * frequency);
+		}
+		return f;
+	}
 	double FastSimplexFractal(dvec3 pos, int octaves) {
-		double amplitude = 0.5333333333;
+		double amplitude = 0.5333333333333333;
 		double frequency = 1.0;
 		double f = FastSimplex(pos * frequency);
 		for (int i = 1; i < octaves; ++i) {

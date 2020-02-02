@@ -59,6 +59,8 @@ void main() {
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
 	vec3 specular = specularStrength * spec * lightSource.color;
 
+// diffuse = vec3(0.5);
+// specular = vec3(0);
 
 	// // Attenuation (light.constant >= 1.0, light.linear ~= 0.1, light.quadratic ~= 0.05)
 	// float dist = distance(lightSource.viewPosition, gBuffers.position);

@@ -25,11 +25,9 @@ public:
 		alignas(4) int vertexSubdivisionsPerChunk;
 		alignas(4) float cameraAltitudeAboveTerrain;
 		alignas(4) float cameraDistanceFromPlanet;
-		
-		// 20 bytes remaining
-			// alignas(4) float ???;
-			// alignas(16) glm::vec4 ???;
-		
+		// alignas(4) float ???;
+		alignas(16) glm::vec3 northDir;
+		// alignas(4) float ???;
 	} planetChunkPushConstant {};
 	
 	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetaryTerrain::Chunk* chunk) {
@@ -52,6 +50,17 @@ public:
 				planetChunkPushConstant.vertexSubdivisionsPerChunk = PlanetaryTerrain::vertexSubdivisionsPerChunk;
 				planetChunkPushConstant.cameraAltitudeAboveTerrain = (float)chunk->planet->cameraAltitudeAboveTerrain;
 				planetChunkPushConstant.cameraDistanceFromPlanet = (float)glm::length(chunk->planet->cameraPos);
+				planetChunkPushConstant.northDir = glm::normalize(glm::transpose(glm::inverse(glm::dmat3(planetRotationMatrix))) * glm::dvec3(0,1,0));
+				
+				// switch (chunk->face) {
+				// 	case PlanetaryTerrain::FRONT: planetChunkPushConstant.testColor = {1,0,0};break; // red
+				// 	case PlanetaryTerrain::LEFT: planetChunkPushConstant.testColor = {0,1,0};break; // green
+				// 	case PlanetaryTerrain::BOTTOM: planetChunkPushConstant.testColor = {0,0,1};break; // blue
+				// 	case PlanetaryTerrain::BACK: planetChunkPushConstant.testColor = {1,1,0};break; // yellow
+				// 	case PlanetaryTerrain::RIGHT: planetChunkPushConstant.testColor = {1,0,1};break; // pink
+				// 	case PlanetaryTerrain::TOP: planetChunkPushConstant.testColor = {0,1,1};break; // turquoise
+				// 	default: planetChunkPushConstant.testColor = {1,1,1};
+				// }
 				
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(

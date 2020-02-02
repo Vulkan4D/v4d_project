@@ -389,9 +389,9 @@ private: // Pipelines
 			attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
 			attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
 			attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			VkAttachmentReference depthStencilAttachment {

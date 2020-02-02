@@ -146,7 +146,7 @@ public:
 		for (auto* planetaryTerrain : planetaryTerrains) {
 			std::lock_guard lock(planetaryTerrain->chunksMutex);
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
-			planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos));
+			planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos), 0.5);
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
 			}
