@@ -1,6 +1,7 @@
 #pragma once
 #include <v4d.h>
 
+#include "PlanetAtmosphere.hpp"
 #include "../../incubator_galaxy4d/Noise.hpp"
 
 using namespace v4d::graphics;
@@ -8,7 +9,7 @@ using namespace v4d::graphics::vulkan;
 
 #define PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
 
-struct PlanetaryTerrain {
+struct PlanetTerrain {
 	
 	#pragma region Constructor arguments
 	double radius; // top of atmosphere (maximum radius)
@@ -19,6 +20,8 @@ struct PlanetaryTerrain {
 	
 	float lightIntensity = 0;
 	LightSource lightSource {};
+	
+	PlanetAtmosphere* atmosphere = nullptr;
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 2;
@@ -85,7 +88,7 @@ struct PlanetaryTerrain {
 	struct Chunk {
 	
 		#pragma region Constructor arguments
-		PlanetaryTerrain* planet;
+		PlanetTerrain* planet;
 		FACE face;
 		int level;
 		// Cube positions (-1.0 to +1.0)
@@ -238,7 +241,7 @@ struct PlanetaryTerrain {
 			distanceFromCamera = glm::max((double)distanceFromCamera, 1.0);
 		}
 		
-		Chunk(PlanetaryTerrain* planet, int face, int level, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
+		Chunk(PlanetTerrain* planet, int face, int level, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
 		: planet(planet), face((FACE)face), level(level), topLeft(topLeft), topRight(topRight), bottomLeft(bottomLeft), bottomRight(bottomRight) {
 			
 			chunkSize = planet->GetSolidCirconference() / 4.0 / chunkSubdivisionsPerFace / glm::pow(2, level);
@@ -503,24 +506,7 @@ struct PlanetaryTerrain {
 						(float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(point.pos))))
 					);
 					
-					float wet = 0;
-					float snow = 0.5;
-					
-					// Textures
-					point.sand	= (0	<< 24)	// R
-								| (0	<< 16)	// G
-								| (0	<< 8)	// B
-								| (0	);		// A
-					
-					point.dust	= (0	<< 24)	// R
-								| (0	<< 16)	// G
-								| (0	<< 8)	// B
-								| (0	);		// A
-					
-					point.terrainType = 1; // 1-44
-					
-					point.uv.p = wet;
-					point.uv.q = snow;
+					planet->GenerateTerrainTextures(this, point);
 				}
 			}
 			
@@ -530,8 +516,8 @@ struct PlanetaryTerrain {
 		
 		void FreeBuffers() {
 			if (allocated) {
-				PlanetaryTerrain::vertexBufferPool.Free(vertexBufferAllocation);
-				PlanetaryTerrain::indexBufferPool.Free(indexBufferAllocation);
+				PlanetTerrain::vertexBufferPool.Free(vertexBufferAllocation);
+				PlanetTerrain::indexBufferPool.Free(indexBufferAllocation);
 				allocated = false;
 			}
 		}
@@ -633,8 +619,8 @@ struct PlanetaryTerrain {
 						render = false;
 						meshShouldGenerate = true;
 						if (meshGenerated) {
-							vertexBufferAllocation = PlanetaryTerrain::vertexBufferPool.Allocate(device, transferQueue, vertices.data());
-							indexBufferAllocation = PlanetaryTerrain::indexBufferPool.Allocate(device, transferQueue, indices.data());
+							vertexBufferAllocation = PlanetTerrain::vertexBufferPool.Allocate(device, transferQueue, vertices.data());
+							indexBufferAllocation = PlanetTerrain::indexBufferPool.Allocate(device, transferQueue, indices.data());
 							allocated = true;
 							render = true;
 						} else {
@@ -682,6 +668,27 @@ struct PlanetaryTerrain {
 		return solidRadius + height /* * heightVariation */;
 	}
 	
+	void GenerateTerrainTextures(Chunk* chunk, Vertex& point) {
+		float wet = 0;
+		float snow = 0.5;
+		
+		// Textures
+		point.sand	= (0	<< 24)	// R
+					| (0	<< 16)	// G
+					| (0	<< 8)	// B
+					| (0	);		// A
+		
+		point.dust	= (0	<< 24)	// R
+					| (0	<< 16)	// G
+					| (0	<< 8)	// B
+					| (0	);		// A
+		
+		point.terrainType = 1; // 1-44 (can bitshift and have up to 4 blended types)
+		
+		point.uv.p = wet;
+		point.uv.q = snow;
+	}
+	
 	double GetSolidCirconference() {
 		return solidRadius * 2.0 * 3.14159265359;
 	}
@@ -725,7 +732,7 @@ struct PlanetaryTerrain {
 		return {dir, top, right};
 	}
 	
-	PlanetaryTerrain(
+	PlanetTerrain(
 		double radius,
 		double solidRadius,
 		double heightVariation,
@@ -736,10 +743,12 @@ struct PlanetaryTerrain {
 		absolutePosition(absolutePosition)
 	{
 		AddBaseChunks();
+		atmosphere = new PlanetAtmosphere(radius, solidRadius);
 	}
 	
-	~PlanetaryTerrain() {
+	~PlanetTerrain() {
 		RemoveBaseChunks();
+		if (atmosphere) delete atmosphere;
 	}
 	
 	void AddBaseChunks() {
@@ -799,7 +808,7 @@ struct PlanetaryTerrain {
 	
 	void Optimize() {
 		// Optimize only when no chunk is being generated, camera moved at least 1km and not more than once every 10 seconds
-		if (PlanetaryTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < 1000 || lastOptimizeTime.GetElapsedSeconds() < 10) return;
+		if (PlanetTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < 1000 || lastOptimizeTime.GetElapsedSeconds() < 10) return;
 		lastOptimizePosition = cameraPos;
 		lastOptimizeTime.Reset();
 		
@@ -819,9 +828,9 @@ struct PlanetaryTerrain {
 };
 
 // Buffer pools
-v4d::Timer PlanetaryTerrain::lastGarbageCollectionTime {true};
-PlanetaryTerrain::ChunkVertexBufferPool PlanetaryTerrain::vertexBufferPool {};
-PlanetaryTerrain::ChunkIndexBufferPool PlanetaryTerrain::indexBufferPool {};
+v4d::Timer PlanetTerrain::lastGarbageCollectionTime {true};
+PlanetTerrain::ChunkVertexBufferPool PlanetTerrain::vertexBufferPool {};
+PlanetTerrain::ChunkIndexBufferPool PlanetTerrain::indexBufferPool {};
 
 // Chunk Generator thread pool
-v4d::processing::ThreadPoolPriorityQueue<PlanetaryTerrain::Chunk*>* PlanetaryTerrain::chunkGenerator = nullptr;
+v4d::processing::ThreadPoolPriorityQueue<PlanetTerrain::Chunk*>* PlanetTerrain::chunkGenerator = nullptr;

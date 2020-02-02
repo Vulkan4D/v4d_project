@@ -17,7 +17,7 @@ V4DMODULE void V4D_ModuleCreate() {
 	// Planets Renderer
 	planetsRenderer = V4D_LOAD_SUBMODULE(PlanetsRenderer)
 	
-	planetsRenderer->planetaryTerrains.emplace_back(new PlanetaryTerrain{
+	planetsRenderer->planetTerrains.emplace_back(new PlanetTerrain{
 		24000000,
 		23950000,
 		10000,
@@ -34,10 +34,10 @@ V4DMODULE void V4D_ModuleCreate() {
 V4DMODULE void V4D_ModuleDestroy() {
 	
 	// Planets Renderer
-	for (auto* planetaryTerrain : planetsRenderer->planetaryTerrains) {
-		delete planetaryTerrain;
+	for (auto* planetTerrain : planetsRenderer->planetTerrains) {
+		delete planetTerrain;
 	}
-	planetsRenderer->planetaryTerrains.clear();
+	planetsRenderer->planetTerrains.clear();
 	V4D_UNLOAD_SUBMODULES(PlanetsRenderer)
 	
 }
