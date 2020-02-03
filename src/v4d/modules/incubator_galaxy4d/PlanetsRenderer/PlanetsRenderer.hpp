@@ -13,15 +13,16 @@ class PlanetsRenderer : public v4d::modules::Rendering {
 	
 	#pragma region Graphics
 	PipelineLayout planetTerrainPipelineLayout;
-	PlanetTerrainShaderPipeline planetShader {planetTerrainPipelineLayout, {
+	PlanetTerrainShaderPipeline planetTerrainShader {planetTerrainPipelineLayout, {
 		"modules/incubator_galaxy4d/assets/shaders/planetTerrain.vert",
 		"modules/incubator_galaxy4d/assets/shaders/planetTerrain.surface.frag",
 	}};
 	PipelineLayout planetAtmospherePipelineLayout;
 	PlanetAtmosphereShaderPipeline planetAtmosphereShader {planetAtmospherePipelineLayout, {
 		"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.vert",
-		"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.surface.transparent.frag",
+		"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.frag",
 	}};
+	RenderPass	atmospherePass;
 	#pragma endregion
 	
 public:
@@ -33,14 +34,16 @@ public:
 	// // Executed when calling InitRenderer() on the main Renderer
 	// void Init() override {}
 	
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets) override {
-		auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images) override {
+		// auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		auto* atmosphereDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		
 		planetTerrainPipelineLayout.AddDescriptorSet(descriptorSets[0]);
-		planetTerrainPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
+		// planetTerrainPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
 		planetTerrainPipelineLayout.AddPushConstant<PlanetTerrainShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
+		atmosphereDescriptorSet_1->AddBinding_combinedImageSampler(0, images["depthImage"], VK_SHADER_STAGE_FRAGMENT_BIT);
+		atmosphereDescriptorSet_1->AddBinding_inputAttachment(1, &images["gBuffer_position"]->view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		planetAtmospherePipelineLayout.AddDescriptorSet(descriptorSets[0]);
 		planetAtmospherePipelineLayout.AddDescriptorSet(atmosphereDescriptorSet_1);
 		planetAtmospherePipelineLayout.AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -54,31 +57,29 @@ public:
 	}
 	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
-		shaders["opaqueRasterization"].push_back(&planetShader);
 		
-		planetShader.planets = &planetTerrains;
-		planetShader.AddVertexInputBinding(sizeof(PlanetTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetTerrain::Vertex::GetInputAttributes());
-		
-		// planetShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-		// planetShader.rasterizer.lineWidth = 1;
-		
+		// Terrain
+		shaders["opaqueRasterization"].push_back(&planetTerrainShader);
+		planetTerrainShader.planets = &planetTerrains;
+		planetTerrainShader.AddVertexInputBinding(sizeof(PlanetTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetTerrain::Vertex::GetInputAttributes());
+		// planetTerrainShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		// planetTerrainShader.rasterizer.lineWidth = 1;
 		// Mesh Topology
 		#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-			planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-			planetShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
+			planetTerrainShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			planetTerrainShader.inputAssembly.primitiveRestartEnable = VK_TRUE;
 		#else
-			planetShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			planetTerrainShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		#endif
 		
-		
-		shaders["transparentRasterization"].push_back(&planetAtmosphereShader);
-		
+		// Atmosphere
 		planetAtmosphereShader.planets = &planetTerrains;
+		planetAtmosphereShader.rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+		planetAtmosphereShader.depthStencilState.depthTestEnable = VK_FALSE;
+		planetAtmosphereShader.depthStencilState.depthWriteEnable = VK_FALSE;
 		planetAtmosphereShader.AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
-		
-		planetAtmosphereShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		// planetAtmosphereShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
 		// planetAtmosphereShader.rasterizer.lineWidth = 1;
-		
 		// Mesh Topology
 		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
 			planetAtmosphereShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -89,7 +90,9 @@ public:
 	}
 	
 	// // Executed when calling their respective methods on the main Renderer
-	// void ReadShaders() override {}
+	void ReadShaders() override {
+		planetAtmosphereShader.ReadShaders();
+	}
 	
 	LightSource sun = {
 		POINT_LIGHT,
@@ -154,27 +157,98 @@ public:
 		}
 		PlanetTerrain::vertexBufferPool.FreePool(renderingDevice);
 		PlanetTerrain::indexBufferPool.FreePool(renderingDevice);
+		
+		// Planets
+		for (auto* planetaryTerrain : planetTerrains) {
+			if (planetaryTerrain->atmosphere) {
+				if (planetaryTerrain->atmosphere->allocated) {
+					planetaryTerrain->atmosphere->Free(renderingDevice);
+				}
+			}
+		}
 	}
 	
-	void CreatePipelines() override {
+	void CreatePipelines(std::unordered_map<std::string, Image*>& images) override {
 		planetTerrainPipelineLayout.Create(renderingDevice);
 		planetAtmospherePipelineLayout.Create(renderingDevice);
+		
+		{// Atmosphere pass
+			VkAttachmentDescription colorAttachment {};
+			// Format
+			colorAttachment.format = images["tmpImage"]->format;
+			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			// Color
+			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			// Layout
+			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			VkAttachmentReference colorAttachmentRef = {
+				atmospherePass.AddAttachment(colorAttachment),
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			
+			VkAttachmentDescription inputAttachment {};
+			// Format
+			inputAttachment.format = images["tmpImage"]->format;
+			inputAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			// Color
+			inputAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			inputAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			// Layout
+			inputAttachment.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			inputAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			VkAttachmentReference inputAttachmentRef = {
+				atmospherePass.AddAttachment(inputAttachment),
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
+			
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttachmentRef;
+				subpass.inputAttachmentCount = 1;
+				subpass.pInputAttachments = &inputAttachmentRef;
+			atmospherePass.AddSubpass(subpass);
+			
+			// Create the render pass
+			atmospherePass.Create(renderingDevice);
+			atmospherePass.CreateFrameBuffers(renderingDevice, {images["tmpImage"], images["gBuffer_position"]});
+			
+			// Shaders
+			planetAtmosphereShader.SetRenderPass(images["tmpImage"], atmospherePass.handle, 0);
+			planetAtmosphereShader.AddColorBlendAttachmentState();
+			planetAtmosphereShader.CreatePipeline(renderingDevice);
+		}
+		
 	}
 	
 	void DestroyPipelines() override {
 		planetTerrainPipelineLayout.Destroy(renderingDevice);
 		planetAtmospherePipelineLayout.Destroy(renderingDevice);
+		
+		planetAtmosphereShader.DestroyPipeline(renderingDevice);
+		atmospherePass.DestroyFrameBuffers(renderingDevice);
+		atmospherePass.Destroy(renderingDevice);
 	}
 	
 	// // Rendering methods potentially executed on each frame
 	// void RunDynamicGraphicsTop(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
+	void RunDynamicGraphicsMiddle(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>& images) override {
+		// Atmosphere
+		atmospherePass.Begin(renderingDevice, commandBuffer, *images["tmpImage"]);
+		planetAtmosphereShader.Execute(renderingDevice, commandBuffer);
+		atmospherePass.End(renderingDevice, commandBuffer);
+	}
 	// void RunDynamicGraphicsBottom(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
 	// void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	// void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
 	
 	// Executed before each frame
 	void FrameUpdate(Scene& scene) override {
-		planetShader.viewMatrix = scene.camera.viewMatrix;
+		planetTerrainShader.viewMatrix = scene.camera.viewMatrix;
+		planetAtmosphereShader.viewMatrix = scene.camera.viewMatrix;
 		
 		// Planets
 		for (auto* planetaryTerrain : planetTerrains) {
@@ -183,6 +257,14 @@ public:
 			planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos), 0.5);
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
+			}
+			
+			if (planetaryTerrain->atmosphere) {
+				if (!planetaryTerrain->atmosphere->allocated) {
+					auto cmdBuffer = renderingDevice->BeginSingleTimeCommands(*transferQueue);
+					planetaryTerrain->atmosphere->Allocate(renderingDevice, cmdBuffer);
+					renderingDevice->EndSingleTimeCommands(*transferQueue, cmdBuffer);
+				}
 			}
 		}
 	}

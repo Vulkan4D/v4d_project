@@ -190,6 +190,8 @@ void main() {
 	
 	GBuffers gBuffers;
 	
+	mat4 modelMatrix = inverse(mat4(camera.viewMatrix)) * planetChunk.modelViewMatrix;
+	
 	gBuffers.albedo = vec4(terrain.albedo, 1);
 	gBuffers.normal = ViewSpaceNormal(normalize(terrain.normal));
 	gBuffers.roughness = terrain.roughness;
@@ -197,7 +199,7 @@ void main() {
 	gBuffers.scatter = terrain.scatter;
 	gBuffers.occlusion = 0;
 	gBuffers.emission = terrain.emission;
-	gBuffers.position = (planetChunk.modelViewMatrix * vec4(v2f.pos, 1)).xyz;
+	gBuffers.position = vec4((planetChunk.modelViewMatrix * vec4(v2f.pos, 1)).xyz, distance(vec3(camera.worldPosition), (modelMatrix * vec4(v2f.pos, 1)).xyz));
 	
 	WriteGBuffers(gBuffers);
 }

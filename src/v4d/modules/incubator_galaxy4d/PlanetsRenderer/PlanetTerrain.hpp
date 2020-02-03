@@ -1,6 +1,7 @@
 #pragma once
 #include <v4d.h>
 
+#include "CubeToSphere.hpp"
 #include "PlanetAtmosphere.hpp"
 #include "../../incubator_galaxy4d/Noise.hpp"
 
@@ -63,15 +64,6 @@ struct PlanetTerrain {
 		}
 	};
 
-	enum FACE : int {
-		FRONT,
-		BACK,
-		RIGHT,
-		LEFT,
-		TOP,
-		BOTTOM
-	};
-
 	// Camera
 	glm::dvec3 cameraPos {0};
 	double cameraAltitudeAboveTerrain = 0;
@@ -89,7 +81,7 @@ struct PlanetTerrain {
 	
 		#pragma region Constructor arguments
 		PlanetTerrain* planet;
-		FACE face;
+		CubeToSphere::FACE face;
 		int level;
 		// Cube positions (-1.0 to +1.0)
 		glm::dvec3 topLeft;
@@ -145,73 +137,6 @@ struct PlanetTerrain {
 		BufferPoolAllocation indexBufferAllocation {};
 		#pragma endregion
 		
-		static glm::dvec3 Spherify(glm::dvec3 point, int face) {
-			glm::dvec2 pos;
-			switch (face) {
-			case FRONT:
-				pos = {point.x, point.y};
-				break;
-			case LEFT:
-				pos = {point.z, point.y};
-				break;
-			case BOTTOM:
-				pos = {point.x, point.z};
-				break;
-			case BACK:
-				pos = {point.x, point.y};
-				break;
-			case RIGHT:
-				pos = {point.z, point.y};
-				break;
-			case TOP:
-				pos = {point.x, point.z};
-				break;
-			}
-			
-			// cube-sphere projection algorithm		http://jcgt.org/published/0007/02/01/paper.pdf
-			#if 0
-				// Arvo's (100% accurate but asymetrical and sometimes non-continuous with other edges)
-				double tan_a_term = glm::tan(pos.x * 0.523598775598);
-				double cos_a_term = glm::cos(pos.x * 1.0471975512);
-				pos = glm::vec2(1.41421356237 * tan_a_term / glm::sqrt(1.0 - tan_a_term*tan_a_term), pos.y / glm::sqrt(1.0 + (1.0 - pos.y*pos.y)*cos_a_term));
-			#else
-				// Cobe's (less accurate but symmetrical and continuous)
-				glm::dvec2 y = {pos.y, pos.x};
-				glm::dvec2 x2 = pos*pos, y2=y*y;
-				glm::dvec2 bsum = ( (-0.0941180085824 + 0.0409125981187*y2 - 0.0623272690881*x2)*x2 + (0.0275922480902 + 0.0342217026979*y2)*y2 );
-				pos *= 0.723951234952 + 0.276048765048*x2 + (1.0 - x2)*bsum;
-			#endif
-			
-			switch (face) {
-			case FRONT:
-				point.x = pos.x;
-				point.y = pos.y;
-				break;
-			case LEFT:
-				point.z = pos.x;
-				point.y = pos.y;
-				break;
-			case BOTTOM:
-				point.x = pos.x;
-				point.z = pos.y;
-				break;
-			case BACK:
-				point.x = pos.x;
-				point.y = pos.y;
-				break;
-			case RIGHT:
-				point.z = pos.x;
-				point.y = pos.y;
-				break;
-			case TOP:
-				point.x = pos.x;
-				point.z = pos.y;
-				break;
-			}
-			
-			return glm::normalize(point);
-		}
-	
 		bool IsLastLevel() {
 			return (triangleSize < targetVertexSeparationInMeters*1.9);
 		}
@@ -242,7 +167,7 @@ struct PlanetTerrain {
 		}
 		
 		Chunk(PlanetTerrain* planet, int face, int level, glm::dvec3 topLeft, glm::dvec3 topRight, glm::dvec3 bottomLeft, glm::dvec3 bottomRight)
-		: planet(planet), face((FACE)face), level(level), topLeft(topLeft), topRight(topRight), bottomLeft(bottomLeft), bottomRight(bottomRight) {
+		: planet(planet), face((CubeToSphere::FACE)face), level(level), topLeft(topLeft), topRight(topRight), bottomLeft(bottomLeft), bottomRight(bottomRight) {
 			
 			chunkSize = planet->GetSolidCirconference() / 4.0 / chunkSubdivisionsPerFace / glm::pow(2, level);
 			triangleSize = chunkSize/vertexSubdivisionsPerChunk;
@@ -251,22 +176,22 @@ struct PlanetTerrain {
 			left = (topLeft + bottomLeft) / 2.0;
 			right = (topRight + bottomRight) / 2.0;
 			bottom = (bottomLeft + bottomRight) / 2.0;
-			centerPos = Spherify(center, face);
+			centerPos = CubeToSphere::Spherify(center, face);
 			heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
 			centerPos = glm::round(centerPos * heightAtCenter);
-			topLeftPos = Spherify(topLeft, face);
+			topLeftPos = CubeToSphere::Spherify(topLeft, face);
 			topLeftPos *= planet->GetHeightMap(topLeftPos, triangleSize);
-			topRightPos = Spherify(topRight, face);
+			topRightPos = CubeToSphere::Spherify(topRight, face);
 			topRightPos *= planet->GetHeightMap(topRightPos, triangleSize);
-			bottomLeftPos = Spherify(bottomLeft, face);
+			bottomLeftPos = CubeToSphere::Spherify(bottomLeft, face);
 			bottomLeftPos *= planet->GetHeightMap(bottomLeftPos, triangleSize);
-			bottomRightPos = Spherify(bottomRight, face);
+			bottomRightPos = CubeToSphere::Spherify(bottomRight, face);
 			bottomRightPos *= planet->GetHeightMap(bottomRightPos, triangleSize);
-			centerPosLowestPoint = Spherify(center, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
-			topLeftPosLowestPoint = Spherify(topLeft, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
-			topRightPosLowestPoint = Spherify(topRight, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
-			bottomLeftPosLowestPoint = Spherify(bottomLeft, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
-			bottomRightPosLowestPoint = Spherify(bottomRight, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+			centerPosLowestPoint = CubeToSphere::Spherify(center, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+			topLeftPosLowestPoint = CubeToSphere::Spherify(topLeft, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+			topRightPosLowestPoint = CubeToSphere::Spherify(topRight, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+			bottomLeftPosLowestPoint = CubeToSphere::Spherify(bottomLeft, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
+			bottomRightPosLowestPoint = CubeToSphere::Spherify(bottomRight, face) * (planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0));
 		
 			RefreshDistanceFromCamera();
 		}
@@ -340,9 +265,9 @@ struct PlanetTerrain {
 					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
 					
 					glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-					glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+					glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 					
-					glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset, face);
+					glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 					
 					double altitude = planet->GetHeightMap(pos, triangleSize);
 					
@@ -449,16 +374,16 @@ struct PlanetTerrain {
 						glm::vec3 bottomLeftPos {0};
 						{
 							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset, face);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 						}
 
 						glm::vec3 topRightPos {0};
 						{
 							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset, face);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 						}
 
@@ -472,8 +397,8 @@ struct PlanetTerrain {
 						glm::vec3 topRightPos {0};
 						{
 							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset, face);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 						}
 
@@ -486,8 +411,8 @@ struct PlanetTerrain {
 						glm::vec3 bottomLeftPos {0};
 						{
 							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 leftOffset =	glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*leftOffset, face);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 						}
 
@@ -693,45 +618,6 @@ struct PlanetTerrain {
 		return solidRadius * 2.0 * 3.14159265359;
 	}
 	
-	static constexpr std::tuple<glm::dvec3, glm::dvec3, glm::dvec3> GetFaceVectors(int face) {
-		glm::dvec3 dir {0};
-		glm::dvec3 top {0};
-		glm::dvec3 right {0};
-		switch (face) {
-			case FRONT:
-				dir = glm::dvec3(0, 0, 1);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(1, 0, 0);
-				break;
-			case LEFT:
-				dir = glm::dvec3(-1, 0, 0);
-				top = glm::dvec3(0, -1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
-			case BOTTOM:
-				dir = glm::dvec3(0, -1, 0);
-				top = glm::dvec3(0, 0, -1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
-			case BACK:
-				dir = glm::dvec3(0, 0, -1);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(-1, 0, 0);
-				break;
-			case RIGHT:
-				dir = glm::dvec3(1, 0, 0);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
-			case TOP:
-				dir = glm::dvec3(0, 1, 0);
-				top = glm::dvec3(0, 0, 1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
-		}
-		return {dir, top, right};
-	}
-	
 	PlanetTerrain(
 		double radius,
 		double solidRadius,
@@ -743,7 +629,7 @@ struct PlanetTerrain {
 		absolutePosition(absolutePosition)
 	{
 		AddBaseChunks();
-		atmosphere = new PlanetAtmosphere(radius, solidRadius);
+		atmosphere = new PlanetAtmosphere(radius);
 	}
 	
 	~PlanetTerrain() {
@@ -755,7 +641,7 @@ struct PlanetTerrain {
 		chunks.reserve(nbBaseChunksPerPlanet);
 		
 		for (int face = 0; face < 6; ++face) {
-			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+			auto [faceDir, topDir, rightDir] = CubeToSphere::GetFaceVectors(face);
 			
 			topDir /= chunkSubdivisionsPerFace;
 			rightDir /= chunkSubdivisionsPerFace;

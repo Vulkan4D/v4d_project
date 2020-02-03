@@ -16,8 +16,9 @@ public:
 
 	struct PlanetAtmospherePushConstant { // max 128 bytes
 		alignas(64) glm::mat4 modelViewMatrix;
-		alignas(4) float radius;
-		alignas(4) float solidRadius;
+		alignas(32) glm::dvec3 absolutePosition;
+		alignas(4) float innerRadius;
+		alignas(4) float outerRadius;
 		alignas(4) float cameraAltitudeAboveTerrain;
 		alignas(4) float cameraDistanceFromPlanet;
 	} planetAtmospherePushConstant {};
@@ -29,8 +30,9 @@ public:
 			for (auto* planet : *planets) if (planet->atmosphere) {
 				
 				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * glm::translate(glm::dmat4(1), planet->absolutePosition);
-				planetAtmospherePushConstant.radius = (float)planet->radius;
-				planetAtmospherePushConstant.solidRadius = (float)planet->solidRadius;
+				planetAtmospherePushConstant.absolutePosition = planet->absolutePosition;
+				planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
+				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
 				planetAtmospherePushConstant.cameraAltitudeAboveTerrain = (float)planet->cameraAltitudeAboveTerrain;
 				planetAtmospherePushConstant.cameraDistanceFromPlanet = (float)glm::length(planet->cameraPos);
 				
@@ -40,7 +42,7 @@ public:
 					&planet->atmosphere->indexBuffer.deviceLocalBuffer,
 					PlanetAtmosphere::nbIndices
 				);
-				// Render(device, cmdBuffer);
+				Render(device, cmdBuffer);
 			}
 		}
 	}

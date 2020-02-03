@@ -67,6 +67,20 @@ private:
 protected:
 	Scene scene {};
 	RenderTargetGroup renderTargetGroup {};
+	std::unordered_map<std::string, Image*> images {
+		{"ui", &uiImage},
+		{"tmpImage", &renderTargetGroup.GetTmpImage()},
+		{"depthImage", &renderTargetGroup.GetDepthImage()},
+		{"thumbnail", &renderTargetGroup.GetThumbnailImage()},
+		{"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
+		{"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
+		{"gBuffer_roughness", &renderTargetGroup.GetGBuffer(2)},
+		{"gBuffer_metallic", &renderTargetGroup.GetGBuffer(3)},
+		{"gBuffer_scatter", &renderTargetGroup.GetGBuffer(4)},
+		{"gBuffer_occlusion", &renderTargetGroup.GetGBuffer(5)},
+		{"gBuffer_emission", &renderTargetGroup.GetGBuffer(6)},
+		{"gBuffer_position", &renderTargetGroup.GetGBuffer(7)},
+	};
 	
 private: // Init
 	void Init() override {
@@ -130,7 +144,7 @@ private: // Init
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->InitLayouts(descriptorSets);
+			submodule->InitLayouts(descriptorSets, images);
 		}
 	}
 	
@@ -242,7 +256,7 @@ private: // Pipelines
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->CreatePipelines();
+			submodule->CreatePipelines(images);
 		}
 		
 		{// Opaque Raster pass
@@ -272,7 +286,7 @@ private: // Pipelines
 			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			VkAttachmentReference depthStencilAttachment {
 				opaqueRasterPass.AddAttachment(attachments[depthStencilIndex]),
 				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
@@ -392,8 +406,8 @@ private: // Pipelines
 			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			VkAttachmentReference depthStencilAttachment {
 				transparentRasterPass.AddAttachment(attachments[depthStencilIndex]),
 				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
@@ -677,20 +691,6 @@ private: // Commands
 	
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
-		std::unordered_map<std::string, Image*> images {
-			{"ui", &uiImage},
-			{"tmpImage", &renderTargetGroup.GetTmpImage()},
-			{"thumbnail", &renderTargetGroup.GetThumbnailImage()},
-			{"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
-			{"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
-			{"gBuffer_roughness", &renderTargetGroup.GetGBuffer(2)},
-			{"gBuffer_metallic", &renderTargetGroup.GetGBuffer(3)},
-			{"gBuffer_scatter", &renderTargetGroup.GetGBuffer(4)},
-			{"gBuffer_occlusion", &renderTargetGroup.GetGBuffer(5)},
-			{"gBuffer_emission", &renderTargetGroup.GetGBuffer(6)},
-			{"gBuffer_position", &renderTargetGroup.GetGBuffer(7)},
-		};
-		
 		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
 		
 		// Submodules
@@ -721,6 +721,11 @@ private: // Commands
 				}
 			}
 		opaqueLightingPass.End(renderingDevice, commandBuffer);
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
+		}
 		
 		// Transparent Raster pass
 		transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
