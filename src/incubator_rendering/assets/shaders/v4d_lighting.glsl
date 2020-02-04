@@ -48,13 +48,13 @@ void main() {
 
 	// diffuse
 	vec3 norm = normalize(gBuffers.normal);
-	vec3 lightDir = normalize(lightSource.viewPosition - gBuffers.position);
+	vec3 lightDir = normalize(lightSource.viewPosition - gBuffers.position.xyz);
 	float diff = max(dot(norm, lightDir), 0.0);
 	vec3 diffuse = diff * lightSource.color;
 
 	// specular
 	float specularStrength = 0.5;
-	vec3 viewDir = normalize(-gBuffers.position);
+	vec3 viewDir = normalize(-gBuffers.position.xyz);
 	vec3 reflectDir = reflect(-lightDir, norm);
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
 	vec3 specular = specularStrength * spec * lightSource.color;
@@ -63,7 +63,7 @@ void main() {
 // specular = vec3(0);
 
 	// // Attenuation (light.constant >= 1.0, light.linear ~= 0.1, light.quadratic ~= 0.05)
-	// float dist = distance(lightSource.viewPosition, gBuffers.position);
+	// float dist = distance(lightSource.viewPosition, gBuffers.position.xyz);
 	// float attenuation = 1.0 / (1.0/*light.constant*/ + 0.1/*light.linear*/*dist + 0.05/*light.quadratic*/*(dist*dist));
 	// ambient *= attenuation;
 	// diffuse *= attenuation;
