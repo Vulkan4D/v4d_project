@@ -18,7 +18,7 @@ V4DMODULE void V4D_ModuleCreate() {
 	planetsRenderer = V4D_LOAD_SUBMODULE(PlanetsRenderer)
 	
 	planetsRenderer->planetTerrains.emplace_back(new PlanetTerrain{
-		24000000,
+		24500000,
 		23950000,
 		10000,
 		// {0, 15776000, -18020000} // ground level
