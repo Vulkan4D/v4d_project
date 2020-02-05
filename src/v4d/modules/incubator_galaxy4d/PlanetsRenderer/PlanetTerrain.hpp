@@ -70,6 +70,9 @@ struct PlanetTerrain {
 	glm::dvec3 lastOptimizePosition {0};
 	v4d::Timer lastOptimizeTime {true};
 	
+	// Suns
+	std::vector<LightSource*> suns {};
+	
 	// Buffer pools
 	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, nbVerticesPerChunk*sizeof(Vertex), nbChunksPerBufferPool> ChunkVertexBufferPool;
 	typedef DeviceLocalBufferPool<VK_BUFFER_USAGE_INDEX_BUFFER_BIT, nbIndicesPerChunk*sizeof(uint32_t), nbChunksPerBufferPool> ChunkIndexBufferPool;

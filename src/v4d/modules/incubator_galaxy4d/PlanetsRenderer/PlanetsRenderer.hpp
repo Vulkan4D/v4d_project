@@ -98,7 +98,7 @@ public:
 		POINT_LIGHT,
 		{0, -50000000, -20000000},
 		{1,1,1}, // color
-		100
+		1
 	};
 	
 	void LoadScene(Scene& scene) override {
@@ -117,6 +117,7 @@ public:
 			// 	// Sun(s)
 			// 	scene.lightSources["sun"] = &planetaryTerrain->lightSource;
 			// }
+			planetaryTerrain->suns = {&sun};
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);

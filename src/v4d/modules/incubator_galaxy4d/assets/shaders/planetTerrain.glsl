@@ -1,10 +1,4 @@
-#version 460 core
-#extension GL_ARB_enhanced_layouts : enable
-
-precision highp int;
-precision highp float;
-precision highp sampler2D;
-
+#include "core.glsl"
 #include "Camera.glsl"
 
 // https://www.thoughtco.com/rock-identification-tables-1441174
@@ -57,24 +51,6 @@ layout(location = 4) in uint dust;
 layout(location = 5) in uint terrainType;
 
 layout(location = 0) out V2F v2f;
-
-ivec4 UnpackIVec4FromUint(uint i) {
-	return ivec4(
-		(i & 0xff000000) >> 24,
-		(i & 0x00ff0000) >> 16,
-		(i & 0x0000ff00) >> 8,
-		(i & 0x000000ff)
-	);
-}
-
-vec4 UnpackVec4FromUint(uint i) {
-	return vec4(
-		(i & 0xff000000) >> 24,
-		(i & 0x00ff0000) >> 16,
-		(i & 0x0000ff00) >> 8,
-		(i & 0x000000ff)
-	);
-}
 
 void main() {
 	gl_Position = mat4(camera.projectionMatrix) * planetChunk.modelViewMatrix * vec4(pos.xyz, 1);

@@ -13,15 +13,21 @@ public:
 	glm::dmat4 viewMatrix {1};
 	
 	std::vector<PlanetTerrain*>* planets = nullptr;
+	
+	const static int NB_SUNS = 3;
 
-	struct PlanetAtmospherePushConstant { // max 128 bytes
+	struct PlanetAtmospherePushConstant { // max of 128 bytes reached, no more space in this struct
 		alignas(64) glm::mat4 modelViewMatrix;
-		alignas(32) glm::dvec3 absolutePosition;
+		alignas(64) glm::vec4 suns[NB_SUNS];
+		alignas(4) uint color;
 		alignas(4) float innerRadius;
 		alignas(4) float outerRadius;
-		alignas(4) float cameraAltitudeAboveTerrain;
 		alignas(4) float cameraDistanceFromPlanet;
 	} planetAtmospherePushConstant {};
+	
+	static glm::vec4 CompactSunInfo(glm::vec3 sunViewDir, float sunIntensity, glm::vec3 sunColor) {
+		return glm::vec4(sunViewDir*sunIntensity, CompactVec3NormToFloat(sunColor.r, sunColor.g, sunColor.b));
+	}
 	
 	using RasterShaderPipeline::Execute;
 	void Execute(Device* device, VkCommandBuffer cmdBuffer) override {
@@ -30,11 +36,24 @@ public:
 			for (auto* planet : *planets) if (planet->atmosphere) {
 				
 				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * glm::translate(glm::dmat4(1), planet->absolutePosition);
-				planetAtmospherePushConstant.absolutePosition = planet->absolutePosition;
 				planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
 				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
-				planetAtmospherePushConstant.cameraAltitudeAboveTerrain = (float)planet->cameraAltitudeAboveTerrain;
 				planetAtmospherePushConstant.cameraDistanceFromPlanet = (float)glm::length(planet->cameraPos);
+				
+				planetAtmospherePushConstant.color = CompactIVec4ToUint(255,255,255,   255/*unused*/  );
+				
+				for (int i = 0; i < NB_SUNS; ++i) {
+					if (planet->suns.size() > i) {
+						auto* sun = planet->suns[i];
+						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
+							glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1))), 
+							sun->intensity, 
+							sun->color
+						);
+					} else {
+						planetAtmospherePushConstant.suns[i] = {0,0,0,0};
+					}
+				}
 				
 				PushConstant(device, cmdBuffer, &planetAtmospherePushConstant);
 				SetData(
