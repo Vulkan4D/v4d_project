@@ -42,8 +42,7 @@ public:
 		// planetTerrainPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
 		planetTerrainPipelineLayout.AddPushConstant<PlanetTerrainShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
-		atmosphereDescriptorSet_1->AddBinding_combinedImageSampler(0, images["depthImage"], VK_SHADER_STAGE_FRAGMENT_BIT);
-		atmosphereDescriptorSet_1->AddBinding_inputAttachment(1, &images["gBuffer_position"]->view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		atmosphereDescriptorSet_1->AddBinding_inputAttachment(0, &images["gBuffer_position"]->view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		planetAtmospherePipelineLayout.AddDescriptorSet(descriptorSets[0]);
 		planetAtmospherePipelineLayout.AddDescriptorSet(atmosphereDescriptorSet_1);
 		planetAtmospherePipelineLayout.AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -98,7 +97,7 @@ public:
 		POINT_LIGHT,
 		{0, -50000000, -20000000},
 		{1,1,1}, // color
-		1
+		40
 	};
 	
 	void LoadScene(Scene& scene) override {

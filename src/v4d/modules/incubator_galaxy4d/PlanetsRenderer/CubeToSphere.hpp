@@ -53,7 +53,7 @@ namespace CubeToSphere {
 	}
 	
 	glm::dvec3 Spherify(glm::dvec3 point, int face) {
-		glm::dvec2 pos;
+		glm::dvec2 pos {0};
 		switch (face) {
 		case FRONT:
 			pos = {point.x, point.y};

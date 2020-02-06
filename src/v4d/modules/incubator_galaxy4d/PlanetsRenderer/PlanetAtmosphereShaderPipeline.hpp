@@ -25,8 +25,8 @@ public:
 		alignas(4) float cameraDistanceFromPlanet;
 	} planetAtmospherePushConstant {};
 	
-	static glm::vec4 CompactSunInfo(glm::vec3 sunViewDir, float sunIntensity, glm::vec3 sunColor) {
-		return glm::vec4(sunViewDir*sunIntensity, CompactVec3NormToFloat(sunColor.r, sunColor.g, sunColor.b));
+	static glm::vec4 CompactSunInfo(glm::vec3 sunDir, float sunIntensity, glm::vec3 sunColor) {
+		return glm::vec4(sunDir*sunIntensity, CompactVec3ToFloat(sunColor.r, sunColor.g, sunColor.b));
 	}
 	
 	using RasterShaderPipeline::Execute;
@@ -46,7 +46,8 @@ public:
 					if (planet->suns.size() > i) {
 						auto* sun = planet->suns[i];
 						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
-							glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1))), 
+							// Sun direction is from planet center to sun, in view space
+							glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1)) - glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3])), 
 							sun->intensity, 
 							sun->color
 						);

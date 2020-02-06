@@ -21,7 +21,7 @@ struct Sun {
 Sun UnpackSunFromVec4(vec4 in_sun) {
 	Sun sun;
 	sun.dir = normalize(in_sun.xyz);
-	sun.intensity = UnpackVec3NormFromFloat(in_sun.w) * length(in_sun.xyz);
+	sun.intensity = UnpackVec3FromFloat(in_sun.w) * length(in_sun.xyz);
 	sun.valid = length(in_sun.xyz) > 0.001;
 	return sun;
 }
@@ -49,8 +49,7 @@ void main() {
 ##################################################################
 #shader frag
 
-// layout(set = 1, binding = 0) uniform highp sampler2D depthImage;
-layout(set = 1, input_attachment_index = 1, binding = 1) uniform highp subpassInput gBuffer_position;
+layout(set = 1, input_attachment_index = 1, binding = 0) uniform highp subpassInput gBuffer_position;
 layout(location = 0) in V2F v2f;
 
 layout(location = 0) out vec4 color;
@@ -58,12 +57,8 @@ layout(location = 0) out vec4 color;
 const int RAYMARCH_STEPS = 100; // minimum of 3
 const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
 
-// To put in push constant
-float density = 0.5;
-float densityPow = 2.0;
-
-#define RAYLEIGH_BETA vec3(5.5e-6, 13.0e-6, 22.4e-6)
-#define MIE_BETA vec3(21e-6)
+#define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
+#define MIE_BETA vec3(10e-6)
 #define AMBIENT_BETA vec3(0.0)
 #define G 0.7 /* blob around the sun */
 
@@ -85,35 +80,11 @@ void main() {
 	float stepSize = rayLength / float(RAYMARCH_STEPS);
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
 	
-	
-	
-	
-	
-	// // Ray Marching atmospheric density
-	// float atm = 0;
-	// float distanceDensity = pow(min(1.0, stepSize / atmosphereHeight), 0.5);
-	// for (int i = 0; i < RAYMARCH_STEPS; ++i) {
-	// 	vec3 posOnSphere = mix(rayStart, rayEnd, float(i)/float(RAYMARCH_STEPS-1));
-	// 	float altitude = length(posOnSphere);
-	// 	float altitudeDensity = pow(min(1.0, mix(0.0, 1.0, smoothstep(planetAtmosphere.outerRadius, planetAtmosphere.innerRadius, altitude))), densityPow);
-	// 	atm += altitudeDensity * distanceDensity * density;
-	// }
-	// color = vec4(0.9,0.9,1.0, min(1.0, atm));
-	
-	
-	
-	
-	
-	
 	// Unpack suns
 	Sun suns[NB_SUNS];
 	for (int i = 0; i < NB_SUNS; ++i) {
 		suns[i] = UnpackSunFromVec4(planetAtmosphere.suns[i]);
 	}
-	
-	// suns[0].valid = true;
-	suns[0].intensity = vec3(40);
-	suns[0].dir = normalize(vec3((camera.viewMatrix * dvec4(0, -50000000, -20000000, 1)).xyz) + p);
 	
 	float rayleighHeight = atmosphereHeight / 20.0;
 	float mieHeight = atmosphereHeight / 100.0;
@@ -169,13 +140,17 @@ void main() {
 		}
 		
 		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x))); //TODO check for correctness : (MIE_BETA * opticalDepth.y)
-		atmColor += vec3((
-					rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh color
-					+ miePhase * MIE_BETA * totalMie // mie
-					+ opticalDepth.x * AMBIENT_BETA // and ambient
-				) * lightIntensity);
+		atmColor += vec3(
+			(
+				rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh color
+				+ miePhase * MIE_BETA * totalMie // mie
+				+ opticalDepth.x * AMBIENT_BETA // and ambient
+			) * lightIntensity * (1.0-opacity)
+		);
 	}
 	
-	color = vec4(1.0 - exp(-atmColor), 0.7);
+	color = vec4(1.0 - exp(-atmColor), 0);
+	color.a = length(color.xyz);
+	color.a = 1.0 - exp(-color.a);
 	
 }
