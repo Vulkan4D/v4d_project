@@ -31,6 +31,9 @@ struct PlanetTerrain {
 	static constexpr float targetVertexSeparationInMeters = 1.0; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
+	static constexpr double garbageCollectionInterval = 30; // seconds
+	static constexpr double chunkOptimizationMinMoveDistance = 1000; // meters
+	static constexpr double chunkOptimizationMinTimeInterval = 15; // seconds
 	#pragma endregion
 
 	#pragma region Calculated constants
@@ -591,8 +594,8 @@ struct PlanetTerrain {
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
 		// height += (double)v4d::noise::SimplexFractal(glm::vec3(round(normalizedPos*solidRadius)/10000.0), 1)*2000.0;
-		height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/200000.0, 8)*20000.0;
-		height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/100.0, 6)*20.0;
+		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/200000.0, 8)*20000.0;
+		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/100.0, 6)*20.0;
 		return solidRadius + height /* * heightVariation */;
 	}
 	
@@ -696,20 +699,28 @@ struct PlanetTerrain {
 	}
 	
 	void Optimize() {
-		// Optimize only when no chunk is being generated, camera moved at least 1km and not more than once every 10 seconds
-		if (PlanetTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < 1000 || lastOptimizeTime.GetElapsedSeconds() < 10) return;
+		// Optimize only when no chunk is being generated, camera moved at least x distance and not more than once every x seconds
+		if (PlanetTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
+			return;
+		
+		// reset 
 		lastOptimizePosition = cameraPos;
 		lastOptimizeTime.Reset();
 		
+		// Optimize
 		CleanupOldChunks();
 		SortChunks();
 	}
 
 	static void CollectGarbage(Device* device) {
-		// Collect garbage not more than once every 30 seconds
-		if (lastGarbageCollectionTime.GetElapsedSeconds() < 15) return;
+		// Collect garbage not more than once every x seconds
+		if (lastGarbageCollectionTime.GetElapsedSeconds() < garbageCollectionInterval)
+			return;
+		
+		// reset
 		lastGarbageCollectionTime.Reset();
 		
+		// Collect garbage
 		vertexBufferPool.CollectGarbage(device);
 		indexBufferPool.CollectGarbage(device);
 	}

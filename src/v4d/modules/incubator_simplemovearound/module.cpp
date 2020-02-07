@@ -18,7 +18,11 @@ struct PlayerView {
 	glm::dvec3 viewUp = {0,0,1};
 	glm::dvec3 viewForward {0,1,0};
 	glm::dvec3 viewRight = glm::cross(viewForward, viewUp);
+	glm::dvec3 viewUpTarget = viewUp;
+	glm::dvec3 viewForwardTarget = viewForward;
+	glm::dvec3 viewRightTarget = viewRight;
 	bool useFreeFlyCam = true;
+	bool smoothFlyCam = true;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
 } player;
 
@@ -111,20 +115,29 @@ public:
 			glfwSetCursorPos(window->GetHandle(), 0, 0);
 			if (player->useFreeFlyCam) {
 				if (x != 0) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, x * player->mouseSensitivity * deltaTime, player->viewUp);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, x * player->mouseSensitivity * deltaTime, player->viewUpTarget);
 				}
 				if (y != 0) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, y * player->mouseSensitivity * deltaTime, player->viewRight);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, y * player->mouseSensitivity * deltaTime, player->viewRightTarget);
 				}
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_Q)) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, player->tiltSpeed * deltaTime, player->viewForward);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, player->tiltSpeed * deltaTime, player->viewForwardTarget);
 				}
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_E)) {
-					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, -player->tiltSpeed * deltaTime, player->viewForward);
+					player->freeFlyCamRotationMatrix = glm::rotate(player->freeFlyCamRotationMatrix, -player->tiltSpeed * deltaTime, player->viewForwardTarget);
 				}
-				player->viewUp = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
-				player->viewForward = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
-				player->viewRight = glm::cross(player->viewForward, player->viewUp);
+				player->viewUpTarget = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
+				player->viewForwardTarget = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
+				player->viewRightTarget = glm::cross(player->viewForwardTarget, player->viewUpTarget);
+				if (player->smoothFlyCam) {
+					player->viewUp = glm::mix(player->viewUp, player->viewUpTarget, 0.1);
+					player->viewForward = glm::mix(player->viewForward, player->viewForwardTarget, 0.1);
+					player->viewRight = glm::mix(player->viewRight, player->viewRightTarget, 0.1);
+				} else {
+					player->viewUp = player->viewUpTarget;
+					player->viewForward = player->viewForwardTarget;
+					player->viewRight = player->viewRightTarget;
+				}
 			} else {
 				if (x != 0 || y != 0) {
 					player->horizontalAngle += double(x * player->mouseSensitivity * deltaTime);
