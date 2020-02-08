@@ -153,7 +153,7 @@ int main() {
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
 		while (appRunning) {
-			CALCULATE_FRAMERATE(secondaryAvgFrameRate)
+			CALCULATE_FRAMERATE(secondaryAvgFrameRate)\
 			// Lower cpu priority
 			std::this_thread::yield();
 			if (!appRunning) break;
@@ -162,7 +162,13 @@ int main() {
 			#ifdef _ENABLE_IMGUI
 				static bool showOtherUI = true;
 				ImGui_ImplVulkan_NewFrame();
-				ImGui_ImplGlfw_NewFrame();
+				
+				ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
+				// The quick fix is simply to always fetch the mouse position right here...
+				double mouse_x, mouse_y;
+				glfwGetCursorPos(window->GetHandle(), &mouse_x, &mouse_y);
+				io.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
+				
 				ImGui::NewFrame();
 				
 				// Main info UI
@@ -205,7 +211,7 @@ int main() {
 		CALCULATE_DELTATIME(deltaTime)
 	
 		glfwPollEvents();
-		
+	
 		for (auto* submodule : inputSubmodules) {
 			submodule->Update(deltaTime);
 		}

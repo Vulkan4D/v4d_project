@@ -53,7 +53,7 @@ void main() {
 		if (opaqueUI) {
 			out_color.rgb = ui.rgb;
 		} else {
-			out_color.rgb += ui.rgb;
+			out_color.rgb += ui.rgb - 0.2;
 		}
 	}
 	
