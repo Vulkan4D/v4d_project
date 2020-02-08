@@ -244,6 +244,19 @@ public:
 	// void RunDynamicGraphicsBottom(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
 	// void RunDynamicLowPriorityCompute(VkCommandBuffer) override {}
 	// void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {}
+
+	#ifdef _ENABLE_IMGUI
+		void RunImGui() override {
+			for (auto* planet : planetTerrains) {
+				ImGui::Begin("Planet");
+				ImGui::Text("Terrain Radius: %d km", (int)planet->solidRadius/1000);
+				ImGui::Text("Terrain Diameter: %d km", (int)planet->solidRadius/500);
+				ImGui::Text("Atmosphere: ");
+				ImGui::SliderFloat("density", &planet->atmosphere->densityFactor, 0.0f, 1.0f);
+				ImGui::End();
+			}
+		}
+	#endif
 	
 	// Executed before each frame
 	void FrameUpdate(Scene& scene) override {

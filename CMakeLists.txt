@@ -8,6 +8,7 @@ option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
 option(USE_CCACHE "Use ccache" ON)
+option(ENABLE_IMGUI "Enable ImGUI" ON)
 
 ###########################################################################################
 
@@ -109,10 +110,6 @@ add_executable(${APP_NAME}
 target_link_libraries(${APP_NAME}
 	v4d
 )
-target_include_directories(${APP_NAME}
-	PRIVATE
-		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-)
 target_compile_definitions(${APP_NAME}
 	PRIVATE -D_V4D_PROJECT
 )
@@ -124,10 +121,6 @@ add_executable(tests
 )
 target_link_libraries(tests
 	v4d
-)
-target_include_directories(tests
-	PRIVATE
-		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
 )
 target_compile_definitions(tests
 	PRIVATE -D_V4D_PROJECT
@@ -145,14 +138,6 @@ add_executable(incubator
 )
 target_link_libraries(incubator
 	v4d
-	glfw
-)
-target_include_directories(incubator
-	PRIVATE
-		"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
-		"${PROJECT_SOURCE_DIR}/src/v4d/xvk"
-		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw/include"
-		"${PROJECT_SOURCE_DIR}/src/v4d/xvk/Vulkan-Headers/include"
 )
 target_compile_definitions(incubator
 	PRIVATE -D_V4D_PROJECT

@@ -11,7 +11,8 @@
 				"${workspaceFolder}/src/Vulkan-Hpp/glslang",
 				"${workspaceFolder}/src/Vulkan-Hpp/glfw/include",
 				"${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers/include",
-				"${workspaceFolder}/src/openssl/include"
+				"${workspaceFolder}/src/openssl/include",
+				"${workspaceFolder}/src/imgui"
 			],
 			"defines": [
 				"_LINUX",
@@ -22,6 +23,7 @@
 				"_V4D_PROJECT",
 				"_V4D_MODULE",
 				"_VULKAN_LOAD_AT_RUNTIME",
+				"_ENABLE_IMGUI",
 				"THIS_MODULE_VENDOR_ID=0",
 				"THIS_MODULE_ID=0",
 				"THIS_MODULE_REV=0",

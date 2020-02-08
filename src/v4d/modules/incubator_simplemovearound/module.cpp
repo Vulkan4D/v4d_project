@@ -22,7 +22,7 @@ struct PlayerView {
 	glm::dvec3 viewForwardTarget = viewForward;
 	glm::dvec3 viewRightTarget = viewRight;
 	bool useFreeFlyCam = true;
-	bool smoothFlyCam = true;
+	float flyCamSmoothness = 25.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
 } player;
 
@@ -34,7 +34,11 @@ public:
 	Input(PlayerView* player) : player(player) {}
 	
 	void KeyCallback(int key, int scancode, int action, int mods) override {
-		if (action != GLFW_RELEASE) {
+		if (action != GLFW_RELEASE
+			#ifdef _ENABLE_IMGUI
+				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+			#endif
+		) {
 			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
 			switch (key) {
 				
@@ -65,7 +69,11 @@ public:
 	}
 	
 	void MouseButtonCallback(int button, int action, int mods) override {
-		if (action == GLFW_RELEASE) {
+		if (action == GLFW_RELEASE
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
 					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -79,37 +87,47 @@ public:
 		}
 	}
 	
-	void Update() override {
+	void Update(double deltaTime) override {
 		
-		double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
+		// double deltaTime = 0.005f; // No need to calculate it... This seems to already be taken into account in GLFW ???????
 		
 		// Camera Movements
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 4.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.25 : 1.0);
 		
 		player->velocity = glm::dvec3{0};
 		
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
-			player->velocity += +player->viewForward * player->camSpeed * camSpeedMult;
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
-			player->velocity += -player->viewForward * player->camSpeed * camSpeedMult;
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
-			player->velocity += -player->viewRight * player->camSpeed * camSpeedMult;
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
-			player->velocity += +player->viewRight * player->camSpeed * camSpeedMult;
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
-			player->velocity += +player->viewUp * player->camSpeed * camSpeedMult;
-		}
-		if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
-			player->velocity += -player->viewUp * player->camSpeed * camSpeedMult;
+		if (true
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
+				player->velocity += +player->viewForward * player->camSpeed * camSpeedMult;
+			}
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_S)) {
+				player->velocity += -player->viewForward * player->camSpeed * camSpeedMult;
+			}
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_A)) {
+				player->velocity += -player->viewRight * player->camSpeed * camSpeedMult;
+			}
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_D)) {
+				player->velocity += +player->viewRight * player->camSpeed * camSpeedMult;
+			}
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_SPACE)) {
+				player->velocity += +player->viewUp * player->camSpeed * camSpeedMult;
+			}
+			if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
+				player->velocity += -player->viewUp * player->camSpeed * camSpeedMult;
+			}
 		}
 		
 		player->worldPosition += player->velocity * deltaTime;
 		
-		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED) {
+		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
 			double x, y;
 			glfwGetCursorPos(window->GetHandle(), &x, &y);
 			glfwSetCursorPos(window->GetHandle(), 0, 0);
@@ -129,10 +147,10 @@ public:
 				player->viewUpTarget = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
 				player->viewForwardTarget = glm::normalize(glm::dvec3(glm::inverse(player->freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
 				player->viewRightTarget = glm::cross(player->viewForwardTarget, player->viewUpTarget);
-				if (player->smoothFlyCam) {
-					player->viewUp = glm::mix(player->viewUp, player->viewUpTarget, 0.1);
-					player->viewForward = glm::mix(player->viewForward, player->viewForwardTarget, 0.1);
-					player->viewRight = glm::mix(player->viewRight, player->viewRightTarget, 0.1);
+				if (player->flyCamSmoothness > 2.0) {
+					player->viewUp = glm::mix(player->viewUp, player->viewUpTarget, 300.0 / player->flyCamSmoothness * deltaTime);
+					player->viewForward = glm::mix(player->viewForward, player->viewForwardTarget, 300.0 / player->flyCamSmoothness * deltaTime);
+					player->viewRight = glm::mix(player->viewRight, player->viewRightTarget, 300.0 / player->flyCamSmoothness * deltaTime);
 				} else {
 					player->viewUp = player->viewUpTarget;
 					player->viewForward = player->viewForwardTarget;
@@ -165,6 +183,15 @@ public:
 	Rendering(PlayerView* player) : player(player) {}
 
 	int OrderIndex() const override {return -1;}
+	
+	#ifdef _ENABLE_IMGUI
+		void RunImGui() override {
+			ImGui::Begin("Inputs");
+			ImGui::Text("Smooth mouse look: ");
+			ImGui::SliderFloat("", &player->flyCamSmoothness, 0.0f, 100.0f);
+			ImGui::End();
+		}
+	#endif
 	
 	void FrameUpdate(v4d::graphics::Scene& scene) override {
 		scene.camera.worldPosition = player->worldPosition;

@@ -9,7 +9,7 @@ layout(std430, push_constant) uniform PlanetAtmosphere{
 	uint color;
 	float innerRadius;
 	float outerRadius;
-	float cameraDistanceFromPlanet;
+	float densityFactor;
 } planetAtmosphere;
 
 struct Sun {
@@ -54,12 +54,12 @@ layout(location = 0) in V2F v2f;
 
 layout(location = 0) out vec4 color;
 
-const int RAYMARCH_STEPS = 100; // minimum of 3
+const int RAYMARCH_STEPS = 64; // minimum of 3
 const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
 
 #define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
-#define MIE_BETA vec3(10e-6)
-#define AMBIENT_BETA vec3(0.0)
+#define MIE_BETA vec3(1e-7)
+#define AMBIENT_BETA vec3(0)
 #define G 0.7 /* blob around the sun */
 
 void main() {
@@ -86,8 +86,8 @@ void main() {
 		suns[i] = UnpackSunFromVec4(planetAtmosphere.suns[i]);
 	}
 	
-	float rayleighHeight = atmosphereHeight / 20.0;
-	float mieHeight = atmosphereHeight / 100.0;
+	float rayleighHeight = atmosphereHeight * 0.07 * planetAtmosphere.densityFactor;
+	float mieHeight = atmosphereHeight / 10.0;
 	vec2 scaleHeight = vec2(rayleighHeight, mieHeight);
 	bool allowMie = distEnd > depthDistance;
 	float gg = G * G;
@@ -95,6 +95,7 @@ void main() {
 	vec3 totalRayleigh = vec3(0);
 	vec3 totalMie = vec3(0);
 	vec3 atmColor = vec3(0);
+	float atmosphereDensity = 0;
 	
 	int sunIndex = 0;
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
@@ -139,18 +140,16 @@ void main() {
 			rayDist += stepSize;
 		}
 		
-		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x))); //TODO check for correctness : (MIE_BETA * opticalDepth.y)
+		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x)));
 		atmColor += vec3(
 			(
 				rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh color
 				+ miePhase * MIE_BETA * totalMie // mie
 				+ opticalDepth.x * AMBIENT_BETA // and ambient
-			) * lightIntensity * (1.0-opacity)
+			) * lightIntensity
 		);
+		atmosphereDensity += pow(length(opticalDepth), 0.01);
 	}
 	
-	color = vec4(1.0 - exp(-atmColor), 0);
-	color.a = length(color.xyz);
-	color.a = 1.0 - exp(-color.a);
-	
+	color = vec4(atmColor, min(1.0, atmosphereDensity * planetAtmosphere.densityFactor));
 }

@@ -1,6 +1,3 @@
-// Project Config
-#include "config.hh"
-
 // V4D Core Header
 #include <v4d.h>
 

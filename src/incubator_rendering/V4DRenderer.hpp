@@ -84,6 +84,8 @@ protected:
 	
 private: // Init
 	void Init() override {
+		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
+		
 		// Submodules
 		renderingSubmodules = v4d::modules::GetSubmodules<v4d::modules::Rendering>();
 		std::sort(renderingSubmodules.begin(), renderingSubmodules.end(), [](auto* a, auto* b){return a->OrderIndex() < b->OrderIndex();});
@@ -91,8 +93,6 @@ private: // Init
 			submodule->SetRenderer(this);
 			submodule->Init();
 		}
-		
-		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
 	}
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {
 		// Submodules
@@ -135,7 +135,7 @@ private: // Init
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetTmpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		// postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -204,7 +204,6 @@ private: // Resources
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		// TransitionImageLayout(renderTargetGroup.GetDepthImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -607,9 +606,34 @@ private: // Pipelines
 			}
 		}
 		
+		#ifdef _ENABLE_IMGUI
+			{// ImGui
+				ImGui_ImplVulkan_InitInfo init_info {};
+				init_info.Instance = GetHandle();
+				init_info.PhysicalDevice = renderingDevice->GetPhysicalDevice()->GetHandle();
+				init_info.Device = renderingDevice->GetHandle();
+				init_info.QueueFamily = graphicsQueue.familyIndex;
+				init_info.Queue = graphicsQueue.handle;
+				init_info.DescriptorPool = descriptorPool;
+				init_info.MinImageCount = swapChain->images.size();
+				init_info.ImageCount = swapChain->images.size();
+				ImGui_ImplVulkan_Init(&init_info, uiRenderPass.handle);
+				// Font Upload
+				auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+				ImGui_ImplVulkan_CreateFontsTexture(cmdBuffer);
+				EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+				ImGui_ImplVulkan_DestroyFontUploadObjects();
+			}
+		#endif
+		
 	}
 	
 	void DestroyPipelines() override {
+		
+		#ifdef _ENABLE_IMGUI
+			// ImGui
+			ImGui_ImplVulkan_Shutdown();
+		#endif
 		
 		// Rasterization pipelines
 		for (ShaderPipeline* shaderPipeline : shaders["opaqueRasterization"]) {
@@ -762,17 +786,22 @@ private: // Commands
 	}
 	
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
+		
 		// UI
 		uiRenderPass.Begin(renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["ui"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
+			#ifdef _ENABLE_IMGUI
+				ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+			#endif
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicLowPriorityGraphics(commandBuffer);
 		}
+		
 	}
 	
 public: // Scene configuration
@@ -833,5 +862,14 @@ public: // Update
 			submodule->LowPriorityFrameUpdate();
 		}
 	}
+	
+	#ifdef _ENABLE_IMGUI
+		void RunImGui() {
+			// Submodules
+			for (auto* submodule : renderingSubmodules) {
+				submodule->RunImGui();
+			}
+		}
+	#endif
 	
 };

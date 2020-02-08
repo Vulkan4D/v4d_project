@@ -98,7 +98,8 @@
         "*.include": "cpp",
         "__functional_base_03": "cpp",
         "*.inc": "cpp",
-        "parentbad": "cpp"
+        "parentbad": "cpp",
+        "xvkinterface.c": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

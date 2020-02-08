@@ -22,7 +22,7 @@ public:
 		alignas(4) uint color;
 		alignas(4) float innerRadius;
 		alignas(4) float outerRadius;
-		alignas(4) float cameraDistanceFromPlanet;
+		alignas(4) float densityFactor;
 	} planetAtmospherePushConstant {};
 	
 	static glm::vec4 CompactSunInfo(glm::vec3 sunDir, float sunIntensity, glm::vec3 sunColor) {
@@ -38,7 +38,7 @@ public:
 				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * glm::translate(glm::dmat4(1), planet->absolutePosition);
 				planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
 				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
-				planetAtmospherePushConstant.cameraDistanceFromPlanet = (float)glm::length(planet->cameraPos);
+				planetAtmospherePushConstant.densityFactor = planet->atmosphere->densityFactor;
 				
 				planetAtmospherePushConstant.color = CompactIVec4ToUint(255,255,255,   255/*unused*/  );
 				

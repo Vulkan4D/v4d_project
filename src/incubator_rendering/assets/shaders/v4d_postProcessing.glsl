@@ -24,28 +24,39 @@ layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 1, binding = 0) uniform sampler2D tmpImage;
 layout(set = 1, binding = 1) uniform sampler2D uiImage;
-// layout(set = 1, binding = 2) uniform sampler2D depthStencilImage;
+layout(set = 1, binding = 2) uniform sampler2D depthStencilImage;
+
+const bool opaqueUI = false;
 
 void main() {
 	vec3 color = texture(tmpImage, uv).rgb;
 	vec4 ui = texture(uiImage, uv);
-	// vec2 depthStencil = texture(depthStencilImage, gl_FragCoord.st / vec2(textureSize(depthStencilImage, 0))).rg;
+	vec2 depthStencil = texture(depthStencilImage, gl_FragCoord.st / vec2(textureSize(depthStencilImage, 0))).rg;
 	
 	// Post processing here
 	//...
 	
-	// // HDR ToneMapping (Reinhard)
-	// const float exposure = 1.0;
-	// color = vec3(1.0) - exp(-color * exposure);
+	// HDR ToneMapping (Reinhard)
+	const float exposure = 1.0;
+	color = vec3(1.0) - exp(-color * exposure);
 	
-	// // Gamma correction 
-	// const float gamma = 2.2;
-	// color = pow(color, vec3(1.0 / gamma));
+	// Gamma correction 
+	const float gamma = 2.2;
+	color = pow(color, vec3(1.0 / gamma));
 	
 	
-	// Output final color
-	out_color = vec4(mix(color.rgb, ui.rgb, ui.a), 1.0);
+	// Final color
+	out_color = vec4(color.rgb, 1.0);
 	
-	// out_color = vec4(depthStencil.r);
+	// Add UI Overlay
+	if (length(ui.rgb) > 0) {
+		if (opaqueUI) {
+			out_color.rgb = ui.rgb;
+		} else {
+			out_color.rgb += ui.rgb;
+		}
+	}
+	
+	// out_color = vec4(depthStencil.r*10000000);
 }
 

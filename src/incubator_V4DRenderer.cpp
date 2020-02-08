@@ -1,4 +1,3 @@
-#include "config.hh"
 #include <v4d.h>
 
 using namespace v4d::graphics;
@@ -26,12 +25,38 @@ static std::vector<std::string> v4dModules {
 		{"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
 		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
 		{"incubator_rendering/assets/shaders/v4d_lighting.meta", 0},
+		{"incubator_rendering/assets/shaders/v4d_postProcessing.meta", 0},
 	};
 #endif
 
 Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
+
+double primaryAvgFrameRate = 0;
+double secondaryAvgFrameRate = 0;
+double gameLoopAvgFrameRate = 0;
+double slowLoopAvgFrameRate = 0;
+double inputAvgFrameRate = 0;
+
+#define CALCULATE_FRAMERATE(varRef) {\
+	static v4d::Timer frameTimer(true);\
+	static double elapsedTime = 0.01;\
+	static int nbFrames = 0;\
+	++nbFrames;\
+	elapsedTime = frameTimer.GetElapsedSeconds();\
+	if (elapsedTime > 1.0) {\
+		varRef = nbFrames / elapsedTime;\
+		nbFrames = 0;\
+		frameTimer.Reset();\
+	}\
+}
+
+#define CALCULATE_DELTATIME(varRef) {\
+	static v4d::Timer deltaTimer(true);\
+	varRef = deltaTimer.GetElapsedSeconds();\
+	deltaTimer.Reset();\
+}
 
 int main() {
 	// SET_CPU_AFFINITY(0)
@@ -53,9 +78,20 @@ int main() {
 	// Create Window and Init Vulkan
 	Window* window = new Window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT);
 	window->GetRequiredVulkanInstanceExtensions(vulkanLoader.requiredInstanceExtensions);
+
+	// ImGui
+	#ifdef _ENABLE_IMGUI
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO& io = ImGui::GetIO(); // (void)io;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		ImGui::StyleColorsDark();
+		ImGui_ImplGlfw_InitForVulkan(window->GetHandle(), true);
+	#endif
 	
-	// Renderer
+	// Create Renderer (and Vulkan Instance)
 	auto* renderer = new V4DRenderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
+	// Load renderer
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
 		VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
@@ -74,82 +110,113 @@ int main() {
 		submodule->AddCallbacks();
 	}
 	
+	// Slow Loop (stuff unrelated to rendering that does not require any performance)
+	std::thread slowLoopThread([&]{
+		while (appRunning) {
+			CALCULATE_FRAMERATE(slowLoopAvgFrameRate)
+			// Lower cpu priority
+			std::this_thread::yield();
+			if (!appRunning) break;
+			
+			// Auto-reload modified shaders
+			#if defined(_DEBUG) && defined(_LINUX)
+				// Watch shader modifications to automatically reload the renderer
+				for (auto&[f, t] : shaderFilesToWatch) {
+					if (t == 0) {
+						t = f.GetLastWriteTime();
+					} else if (f.GetLastWriteTime() > t) {
+						t = 0;
+						renderer->ReloadRenderer();
+						break;
+					}
+				}
+			#endif
+			
+			SLEEP(200ms)
+		}
+	});
+	
 	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
-		// SET_CPU_AFFINITY(1)
 		while (appRunning) {
+			CALCULATE_FRAMERATE(gameLoopAvgFrameRate)
+			// Lower cpu priority
+			std::this_thread::yield();
+			if (!appRunning) break;
+			
 			//...
-			SLEEP(10ms)
+			
+			SLEEP(20ms)
 		}
 	});
 	
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
-		// SET_CPU_AFFINITY(2)
 		while (appRunning) {
-			// std::this_thread::yield();
+			CALCULATE_FRAMERATE(secondaryAvgFrameRate)
+			// Lower cpu priority
+			std::this_thread::yield();
 			if (!appRunning) break;
+			
+			// ImGui
+			#ifdef _ENABLE_IMGUI
+				static bool showOtherUI = true;
+				ImGui_ImplVulkan_NewFrame();
+				ImGui_ImplGlfw_NewFrame();
+				ImGui::NewFrame();
+				
+				// Main info UI
+				ImGui::SetNextWindowPos({0,0});
+				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
+				ImGui::Begin("Vulkan4D: V4DRenderer (Incubator)");
+				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
+				ImGui::Text("Secondary rendering thread & UI : %.1f FPS", secondaryAvgFrameRate);
+				ImGui::Text("Input thread : %.1f FPS", inputAvgFrameRate);
+				ImGui::Text("Game Loop thread : %.1f FPS", gameLoopAvgFrameRate);
+				ImGui::Text("Slow Loop thread : %.1f FPS", slowLoopAvgFrameRate);
+				ImGui::Checkbox("Show other UI windows", &showOtherUI);
+				ImGui::End();
+				
+				if (showOtherUI) {
+					renderer->RunImGui();
+				}
+				
+				ImGui::Render();
+			#endif
+			
 			renderer->RenderLowPriority();
-			// SLEEP(10ms)
+			
+			SLEEP(5ms)
 		}
 	});
 	
 	// Rendering Loop
 	std::thread renderingThread([&]{
-		// SET_CPU_AFFINITY(3)
-		// Frame timer
-		v4d::Timer timer(true);
-		double elapsedTime = 0;
-		int nbFrames = 0;
-		double fps = 0;
-
 		while (appRunning) {
-			
-			// Rendering
+			CALCULATE_FRAMERATE(primaryAvgFrameRate)
 			renderer->Render();
-			
-			// Frame time
-			++nbFrames;
-			elapsedTime = timer.GetElapsedMilliseconds();
-			if (elapsedTime > 1000) {
-				fps = nbFrames / elapsedTime * 1000.0;
-				// FPS counter
-				glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)fps)+" FPS").c_str());
-				nbFrames = 0;
-				timer.Reset();
-			}
 		}
 	});
 	
+	// Input loop
 	while (window->IsActive()) {
-		// SET_CPU_AFFINITY(1)
-		
-		// Events
+		static double deltaTime = 0.01;
+		CALCULATE_FRAMERATE(inputAvgFrameRate)
+		CALCULATE_DELTATIME(deltaTime)
+	
 		glfwPollEvents();
 		
 		for (auto* submodule : inputSubmodules) {
-			submodule->Update();
+			submodule->Update(deltaTime);
 		}
 		
-		#if defined(_DEBUG) && defined(_LINUX)
-			// Watch shader modifications to automatically reload the renderer
-			for (auto&[f, t] : shaderFilesToWatch) {
-				if (t == 0) {
-					t = f.GetLastWriteTime();
-				} else if (f.GetLastWriteTime() > t) {
-					t = 0;
-					renderer->ReloadRenderer();
-					break;
-				}
-			}
-		#endif
-		
-		SLEEP(10ms)
+		SLEEP(5ms)
 	}
 	
 	appRunning = false;
 	
 	gameLoopThread.join();
+	slowLoopThread.join();
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
@@ -159,6 +226,12 @@ int main() {
 	
 	renderer->UnloadRenderer();
 	renderer->UnloadScene();
+	
+	// ImGui
+	#ifdef _ENABLE_IMGUI
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+	#endif
 	
 	// Close Window and delete Vulkan
 	delete renderer;
