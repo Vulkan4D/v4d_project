@@ -46,7 +46,7 @@ void main() {
 	
 	
 	// Final color
-	out_color = vec4(color.rgb, 1.0);
+	out_color = vec4(max(vec3(0),color.rgb), 1.0);
 	
 	// Add UI Overlay
 	if (length(ui.rgb) > 0) {
@@ -57,6 +57,7 @@ void main() {
 		}
 	}
 	
+	// Tests
 	// out_color = vec4(depthStencil.r*10000000);
 }
 

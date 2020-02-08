@@ -172,7 +172,7 @@ int main() {
 				ImGui::NewFrame();
 				
 				// Main info UI
-				ImGui::SetNextWindowPos({0,0});
+				ImGui::SetNextWindowPos({20,0});
 				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
 				ImGui::Begin("Vulkan4D: V4DRenderer (Incubator)");
 				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
@@ -182,6 +182,7 @@ int main() {
 				ImGui::Text("Slow Loop thread : %.1f FPS", slowLoopAvgFrameRate);
 				ImGui::Checkbox("Show other UI windows", &showOtherUI);
 				ImGui::End();
+				ImGui::SetNextWindowPos({425,0});
 				
 				if (showOtherUI) {
 					renderer->RunImGui();

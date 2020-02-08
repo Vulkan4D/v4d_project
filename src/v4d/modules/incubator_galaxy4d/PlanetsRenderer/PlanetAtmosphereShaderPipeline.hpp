@@ -40,7 +40,12 @@ public:
 				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
 				planetAtmospherePushConstant.densityFactor = planet->atmosphere->densityFactor;
 				
-				planetAtmospherePushConstant.color = CompactIVec4ToUint(255,255,255,   255/*unused*/  );
+				planetAtmospherePushConstant.color = CompactIVec4ToUint(
+					(uint)(planet->atmosphere->color.r*255),
+					(uint)(planet->atmosphere->color.g*255),
+					(uint)(planet->atmosphere->color.b*255),
+					255/*unused*/
+				);
 				
 				for (int i = 0; i < NB_SUNS; ++i) {
 					if (planet->suns.size() > i) {
