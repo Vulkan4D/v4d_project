@@ -55,16 +55,24 @@ public:
 				// Increase speed
 				case GLFW_KEY_PAGE_UP:
 					player->camSpeed *= 10;
-					LOG("Movement speed: " << player->camSpeed << " m/s")
 					break;
 				
 				// Decrease speed
 				case GLFW_KEY_PAGE_DOWN:
 					player->camSpeed *= 0.1;
-					LOG("Movement speed: " << player->camSpeed << " m/s")
 					break;
 				
 			}
+		}
+	}
+	
+	void ScrollCallback(double x, double y) override {
+		if (true
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
+			player->camSpeed *= (1+y/10);
 		}
 	}
 	
@@ -186,13 +194,15 @@ public:
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() override {
-			ImGui::SetNextWindowSizeConstraints({250,90},{250,90});
+			ImGui::SetNextWindowSizeConstraints({380,90},{380,90});
 			ImGui::Begin("Inputs");
 			float speed = (float)glm::length(player->velocity);
-			if (speed < 1000) {
-				ImGui::Text("Movement speed: %d m/s", (int)std::ceil(speed));
+			if (speed < 1.0) {
+				ImGui::Text("Movement speed: %d mm/s", (int)std::ceil(speed*1000.0));
+			} else if (speed < 1000.0) {
+				ImGui::Text("Movement speed: %d m/s (%d kph, %d mph)", (int)std::ceil(speed), (int)std::round(speed*3.6), (int)std::round(speed*2.23694));
 			} else {
-				ImGui::Text("Movement speed: %d km/s", (int)std::ceil(speed/1000.0));
+				ImGui::Text("Movement speed: %d km/s (%d kph, %d mph)", (int)std::ceil(speed/1000.0), (int)std::round(speed*3.6), (int)std::round(speed*2.23694));
 			}
 			ImGui::Text("Mouse look");
 			ImGui::SliderFloat("Smoothness", &player->flyCamSmoothness, 0.0f, 100.0f);

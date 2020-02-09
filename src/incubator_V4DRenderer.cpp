@@ -153,7 +153,7 @@ int main() {
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
 		while (appRunning) {
-			CALCULATE_FRAMERATE(secondaryAvgFrameRate)\
+			CALCULATE_FRAMERATE(secondaryAvgFrameRate)
 			// Lower cpu priority
 			std::this_thread::yield();
 			if (!appRunning) break;
@@ -193,7 +193,7 @@ int main() {
 			
 			renderer->RenderLowPriority();
 			
-			SLEEP(5ms)
+			SLEEP(20ms)
 		}
 	});
 	

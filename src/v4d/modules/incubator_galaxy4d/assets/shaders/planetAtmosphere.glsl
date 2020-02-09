@@ -64,7 +64,7 @@ const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
 #define G 0.7 /* blob around the sun */
 
 void main() {
-	vec3 atmosphereColor = UnpackVec4FromUint(planetAtmosphere.color).rgb;
+	vec3 atmosphereColor = normalize(UnpackVec4FromUint(planetAtmosphere.color).rgb);
 	
 	float depthDistance = subpassLoad(gBuffer_position).w;
 	if (depthDistance == 0) depthDistance = float(camera.zfar);

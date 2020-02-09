@@ -21,19 +21,16 @@ layout(std430, push_constant) uniform PlanetChunk {
 } planetChunk;
 
 struct V2F {
-	vec3 pos;
-	float altitude;
-	vec3 normal;
-	float slope;
+	vec4 pos_alt; // w = altitude
+	vec4 normal_slope; // w = slope
 	vec3 tangentX;
 	vec3 tangentY;
-	vec2 uv;
-	float wet;
-	float snow;
+	vec4 uv_wet_snow;
+	vec4 rockTypes[NB_ROCK_TYPES/4];
+	vec4 terrainType;
+	vec4 terrainFeature;
 	vec4 sand;
 	vec4 dust;
-	vec4 terrainTypes[NB_ROCK_TYPES/4];
-	// one vec4 remaining for future use when using 80 rock types
 };
 
 vec3 ViewSpaceNormal(vec3 normal) {
@@ -43,44 +40,42 @@ vec3 ViewSpaceNormal(vec3 normal) {
 ##################################################################
 #shader vert
 
-layout(location = 0) in vec4 pos;
-layout(location = 1) in vec4 uv;
-layout(location = 2) in vec4 normal;
-layout(location = 3) in uint sand;
-layout(location = 4) in uint dust;
-layout(location = 5) in uint terrainType;
+layout(location = 0) in vec4 v_pos_alt;
+layout(location = 1) in vec4 v_uv_wet_snow;
+layout(location = 2) in vec4 v_normal_slope;
+layout(location = 3) in uint v_rockType;
+layout(location = 4) in uint v_terrainType;
+layout(location = 5) in uint v_terrainFeature;
+layout(location = 6) in uint v_sand;
+layout(location = 7) in uint v_dust;
 
 layout(location = 0) out V2F v2f;
 
 void main() {
-	gl_Position = mat4(camera.projectionMatrix) * planetChunk.modelViewMatrix * vec4(pos.xyz, 1);
+	gl_Position = mat4(camera.projectionMatrix) * planetChunk.modelViewMatrix * vec4(v_pos_alt.xyz, 1);
 	
-	v2f.pos = pos.xyz;
-	v2f.altitude = pos.a;
-	v2f.normal = normal.xyz;
-	v2f.slope = normal.w;
-	v2f.tangentX = cross(planetChunk.northDir, normal.xyz);
-	v2f.tangentY = cross(normalize(normal.xyz), v2f.tangentX);
-	v2f.uv = uv.st;
+	v2f.pos_alt = v_pos_alt;
+	v2f.normal_slope = v_normal_slope;
+	v2f.tangentX = cross(planetChunk.northDir, v_normal_slope.xyz);
+	v2f.tangentY = cross(normalize(v_normal_slope.xyz), v2f.tangentX);
+	v2f.uv_wet_snow = v_uv_wet_snow;
 	
-	v2f.wet = uv.p;
-	v2f.snow = uv.q;
-	
-	v2f.sand = UnpackVec4FromUint(sand);
-	v2f.dust = UnpackVec4FromUint(dust);
-	
-	ivec4 terrainTypes = UnpackIVec4FromUint(terrainType);
-	float total = float((terrainTypes.x>0?1:0) + (terrainTypes.y>0?1:0) + (terrainTypes.z>0?1:0) + (terrainTypes.w>0?1:0));
+	ivec4 rockTypes = UnpackIVec4FromUint(v_rockType);
+	float total = float((rockTypes.x>0?1:0) + (rockTypes.y>0?1:0) + (rockTypes.z>0?1:0) + (rockTypes.w>0?1:0));
 	if (total > 0.0) {
 		for (int i = 0; i < NB_ROCK_TYPES; i+=4) {
-			v2f.terrainTypes[i] = vec4(
-				(terrainTypes.x==i+1 || terrainTypes.y==i+1 || terrainTypes.z==i+1 || terrainTypes.w==i+1)? 1.0/total : 0.0,
-				(terrainTypes.x==i+2 || terrainTypes.y==i+2 || terrainTypes.z==i+2 || terrainTypes.w==i+2)? 1.0/total : 0.0,
-				(terrainTypes.x==i+3 || terrainTypes.y==i+3 || terrainTypes.z==i+3 || terrainTypes.w==i+3)? 1.0/total : 0.0,
-				(terrainTypes.x==i+4 || terrainTypes.y==i+4 || terrainTypes.z==i+4 || terrainTypes.w==i+4)? 1.0/total : 0.0
+			v2f.rockTypes[i] = vec4(
+				(rockTypes.x==i+1 || rockTypes.y==i+1 || rockTypes.z==i+1 || rockTypes.w==i+1)? 1.0/total : 0.0,
+				(rockTypes.x==i+2 || rockTypes.y==i+2 || rockTypes.z==i+2 || rockTypes.w==i+2)? 1.0/total : 0.0,
+				(rockTypes.x==i+3 || rockTypes.y==i+3 || rockTypes.z==i+3 || rockTypes.w==i+3)? 1.0/total : 0.0,
+				(rockTypes.x==i+4 || rockTypes.y==i+4 || rockTypes.z==i+4 || rockTypes.w==i+4)? 1.0/total : 0.0
 			);
 		}
 	}
+	v2f.terrainType = UnpackVec4FromUint(v_terrainType);
+	v2f.terrainFeature = UnpackVec4FromUint(v_terrainFeature);
+	v2f.sand = UnpackVec4FromUint(v_sand);
+	v2f.dust = UnpackVec4FromUint(v_dust);
 }
 
 ##################################################################
@@ -90,8 +85,22 @@ void main() {
 #include "gBuffers_out.glsl"
 
 layout(location = 0) in V2F v2f;
+mat4 modelMatrix = inverse(mat4(camera.viewMatrix)) * planetChunk.modelViewMatrix;
 
-struct TerrainDetail {
+// Fragment information
+vec3 f_pos = v2f.pos_alt.xyz;
+float f_altitude = v2f.pos_alt.w;
+vec3 f_normal = v2f.normal_slope.xyz;
+float f_slope = v2f.normal_slope.w;
+vec2 f_uv = v2f.uv_wet_snow.st;
+float f_wet = v2f.uv_wet_snow.p;
+float f_snow = v2f.uv_wet_snow.q;
+vec4 f_sand = v2f.sand;
+vec4 f_dust = v2f.dust;
+vec3 f_viewPos = (planetChunk.modelViewMatrix * vec4(f_pos, 1)).xyz;
+float f_trueDistance = distance(vec3(camera.worldPosition), (modelMatrix * vec4(f_pos, 1)).xyz);
+
+struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 	vec3 albedo;
 	vec3 normal;
 	vec3 emission;
@@ -100,13 +109,13 @@ struct TerrainDetail {
 	float scatter;
 };
 
-TerrainDetail TerrainType_1() {
-	TerrainDetail t;
+RockDetail RockType_1() {
+	RockDetail rock;
 	
-	t.albedo = vec3(0.6,0.4,0.2);
+	rock.albedo = vec3(0.6,0.4,0.2);
 	
 	// Normals
-	vec2 normalsUV = abs(v2f.uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
+	vec2 normalsUV = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
 	float normalNoiseX = Noise(normalsUV+0.865)*0.4 + Noise(normalsUV*8.0+0.2685)*0.5 + Noise(normalsUV*20.0+20.85)*0.4;
 	float normalNoiseY = Noise(normalsUV+24.5)*0.4 + Noise(normalsUV*8.0+21.5)*0.5 + Noise(normalsUV*20.0+150.5)*0.4;
 	if (planetChunk.isLastLevel) {
@@ -117,12 +126,12 @@ TerrainDetail TerrainType_1() {
 		+ normalize(v2f.tangentX) * normalNoiseX
 		+ normalize(v2f.tangentY) * normalNoiseY
 	) - 0.5) / 2.0;
-	t.normal = normalize(mix(v2f.normal, v2f.normal + normalNoise, 0.5));
+	rock.normal = normalize(mix(f_normal, f_normal + normalNoise, 0.5));
 	
-	return t;
+	return rock;
 }
 
-void GetRockColorBlend(inout TerrainDetail dst, in TerrainDetail src, float blendFactor) {
+void GetRockColorBlend(inout RockDetail dst, in RockDetail src, float blendFactor) {
 	dst.albedo += src.albedo * blendFactor;
 	dst.normal += src.normal * blendFactor;
 	dst.emission += src.emission * blendFactor;
@@ -132,122 +141,62 @@ void GetRockColorBlend(inout TerrainDetail dst, in TerrainDetail src, float blen
 }
 
 void main() {
-	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(v2f.pos);
+	vec3 albedo = vec3(0);
+	vec3 normal;
+	vec3 emission = vec3(0);
+	float roughness = 0;
+	float metallic = 0;
+	float scatter = 0;
+	float occlusion = 0;
 	
-	TerrainDetail terrain;
-	terrain.albedo = vec3(0);
-	terrain.normal = vec3(0);
-	terrain.emission = vec3(0);
-	terrain.roughness = 0;
-	terrain.metallic = 0;
-	terrain.scatter = 0;
+	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(f_pos);
 	
-	const float terrainType_1 = v2f.terrainTypes[0].x;
-	// const float terrainType_2 = v2f.terrainTypes[0].y;
-	// const float terrainType_3 = v2f.terrainTypes[0].z;
-	// const float terrainType_4 = v2f.terrainTypes[0].w;
-	// const float terrainType_5 = v2f.terrainTypes[1].x;
+	RockDetail rocks;
+	rocks.albedo = vec3(0);
+	rocks.normal = vec3(0);
+	rocks.emission = vec3(0);
+	rocks.roughness = 0;
+	rocks.metallic = 0;
+	rocks.scatter = 0;
+	
+	const float rockType_1 = v2f.rockTypes[0].x;
+	// const float rockType_2 = v2f.rockTypes[0].y;
+	// const float rockType_3 = v2f.rockTypes[0].z;
+	// const float rockType_4 = v2f.rockTypes[0].w;
+	// const float rockType_5 = v2f.rockTypes[1].x;
 	//...
 	
-	if (terrainType_1 > 0) GetRockColorBlend(terrain, TerrainType_1(), terrainType_1);
-	// if (terrainType_2 > 0) GetRockColorBlend(terrain, TerrainType_2(), terrainType_2);
+	if (rockType_1 > 0) GetRockColorBlend(rocks, RockType_1(), rockType_1);
+	// if (rockType_2 > 0) GetRockColorBlend(rocks, TerrainType_2(), rockType_2);
 	//...
+	albedo += rocks.albedo;
+	normal = rocks.normal;
+	emission += rocks.emission;
+	roughness += rocks.roughness;
+	metallic += rocks.metallic;
+	scatter += rocks.scatter;
 	
 	// Snow
-	vec2 uv = abs(v2f.uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
+	vec2 uv = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
 	float slopeNoise = Noise(uv)+Noise(uv*7.81)*0.6+Noise(uv*19.2)*0.3;
 	if (planetChunk.isLastLevel) {
 		slopeNoise += Noise(uv*45.37)*0.2;
 		slopeNoise += Noise(uv*98.12)*0.1;
 		slopeNoise += Noise(uv*256.94)*0.1;
 	}
-	float slope = mix(v2f.slope, slopeNoise, 0.1);
-	terrain.albedo = mix(terrain.albedo, vec3(1), smoothstep(0.85, 0.98, slope));
+	float slope = mix(f_slope, slopeNoise, 0.1);
+	albedo = mix(albedo, vec3(1), smoothstep(0.85, 0.98, slope));
+	
+	// May discard fragment here...
 	
 	GBuffers gBuffers;
-	
-	mat4 modelMatrix = inverse(mat4(camera.viewMatrix)) * planetChunk.modelViewMatrix;
-	
-	gBuffers.albedo = vec4(terrain.albedo, 1);
-	gBuffers.normal = ViewSpaceNormal(normalize(terrain.normal));
-	gBuffers.roughness = terrain.roughness;
-	gBuffers.metallic = terrain.metallic;
-	gBuffers.scatter = terrain.scatter;
-	gBuffers.occlusion = 0;
-	gBuffers.emission = terrain.emission;
-	gBuffers.position = vec4((planetChunk.modelViewMatrix * vec4(v2f.pos, 1)).xyz, distance(vec3(camera.worldPosition), (modelMatrix * vec4(v2f.pos, 1)).xyz));
-	
+	gBuffers.albedo = vec4(albedo, 1);
+	gBuffers.normal = ViewSpaceNormal(normalize(normal));
+	gBuffers.roughness = roughness;
+	gBuffers.metallic = metallic;
+	gBuffers.scatter = scatter;
+	gBuffers.occlusion = occlusion;
+	gBuffers.emission = emission;
+	gBuffers.position = vec4(f_viewPos, f_trueDistance);
 	WriteGBuffers(gBuffers);
 }
-
-// #################
-// #shader wireframe.geom
-
-// layout(triangles) in;
-// layout(line_strip, max_vertices = 12) out;
-
-// layout(location = 0) in V2F in_v2f[];
-// layout(location = 0) out V2F out_v2f;
-
-// void main() {
-	
-// 	float normalsLength = 500000.0;
-
-// 	// Mesh
-// 	gl_Position = gl_in[0].gl_Position;
-// 	out_v2f = in_v2f[0];
-// 	EmitVertex();
-// 	gl_Position = gl_in[1].gl_Position;
-// 	out_v2f = in_v2f[1];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-
-// 	gl_Position = gl_in[1].gl_Position;
-// 	out_v2f = in_v2f[1];
-// 	EmitVertex();
-// 	gl_Position = gl_in[2].gl_Position;
-// 	out_v2f = in_v2f[2];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-
-// 	gl_Position = gl_in[2].gl_Position;
-// 	out_v2f = in_v2f[2];
-// 	EmitVertex();
-// 	gl_Position = gl_in[0].gl_Position;
-// 	out_v2f = in_v2f[0];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-
-// 	// Normals
-// 	gl_Position = gl_in[0].gl_Position;
-// 	out_v2f = in_v2f[0];
-// 	EmitVertex();
-// 	gl_Position = mat4(camera.projectionMatrix) * (inverse(mat4(camera.projectionMatrix)) * gl_in[0].gl_Position + vec4(in_v2f[1].normal * normalsLength, 0));
-// 	out_v2f = in_v2f[1];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-
-// 	gl_Position = gl_in[1].gl_Position;
-// 	out_v2f = in_v2f[1];
-// 	EmitVertex();
-// 	gl_Position = mat4(camera.projectionMatrix) * (inverse(mat4(camera.projectionMatrix)) * gl_in[1].gl_Position + vec4(in_v2f[2].normal * normalsLength, 0));
-// 	out_v2f = in_v2f[2];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-
-// 	gl_Position = gl_in[2].gl_Position;
-// 	out_v2f = in_v2f[2];
-// 	EmitVertex();
-// 	gl_Position = mat4(camera.projectionMatrix) * (inverse(mat4(camera.projectionMatrix)) * gl_in[2].gl_Position + vec4(in_v2f[0].normal * normalsLength, 0));
-// 	out_v2f = in_v2f[0];
-// 	EmitVertex();
-
-// 	EndPrimitive();
-	
-// }
-

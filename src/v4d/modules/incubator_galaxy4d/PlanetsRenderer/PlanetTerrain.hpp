@@ -28,12 +28,12 @@ struct PlanetTerrain {
 	static const int chunkSubdivisionsPerFace = 2;
 	static const int vertexSubdivisionsPerChunk = 100;
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
-	static constexpr float targetVertexSeparationInMeters = 1.0; // approximative vertex separation in meters for the most precise level of detail
+	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
-	static constexpr double garbageCollectionInterval = 30; // seconds
-	static constexpr double chunkOptimizationMinMoveDistance = 1000; // meters
-	static constexpr double chunkOptimizationMinTimeInterval = 15; // seconds
+	static constexpr double garbageCollectionInterval = 20; // seconds
+	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
+	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
 	#pragma endregion
 
 	#pragma region Calculated constants
@@ -51,18 +51,22 @@ struct PlanetTerrain {
 		glm::vec4 pos; // pos.a = altitude
 		glm::vec4 uv; // uv.pq = wet, snow
 		glm::vec4 normal; // normal.w = slope
-		int sand;
-		int dust;
-		uint terrainType; // can fit 4 rock types, one per byte
+		uint rockType; // can fit 4 rock types, one per byte
+		uint terrainType; // compacted vec4
+		uint terrainFeature; // compacted vec4
+		uint sand;
+		uint dust;
 		
 		static std::vector<VertexInputAttributeDescription> GetInputAttributes() {
 			return {
 				{0, offsetof(Vertex, pos), VK_FORMAT_R32G32B32A32_SFLOAT},
 				{1, offsetof(Vertex, uv), VK_FORMAT_R32G32B32A32_SFLOAT},
 				{2, offsetof(Vertex, normal), VK_FORMAT_R32G32B32A32_SFLOAT},
-				{3, offsetof(Vertex, sand), VK_FORMAT_R32_UINT},
-				{4, offsetof(Vertex, dust), VK_FORMAT_R32_UINT},
-				{5, offsetof(Vertex, terrainType), VK_FORMAT_R32_UINT},
+				{3, offsetof(Vertex, rockType), VK_FORMAT_R32_UINT},
+				{4, offsetof(Vertex, terrainType), VK_FORMAT_R32_UINT},
+				{5, offsetof(Vertex, terrainFeature), VK_FORMAT_R32_UINT},
+				{6, offsetof(Vertex, sand), VK_FORMAT_R32_UINT},
+				{7, offsetof(Vertex, dust), VK_FORMAT_R32_UINT},
 			};
 		}
 	};
@@ -437,7 +441,7 @@ struct PlanetTerrain {
 						(float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(point.pos))))
 					);
 					
-					planet->GenerateTerrainTextures(this, point);
+					planet->GenerateTerrainDetails(this, point);
 				}
 			}
 			
@@ -593,17 +597,34 @@ struct PlanetTerrain {
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
-		// height += (double)v4d::noise::SimplexFractal(glm::vec3(round(normalizedPos*solidRadius)/10000.0), 1)*2000.0;
-		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/200000.0, 8)*20000.0;
-		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/100.0, 6)*20.0;
-		return solidRadius + height /* * heightVariation */;
+		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 10)*15000.0;
+		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/60000.0, 8)*8000.0;
+		if (triangleSize < 200)
+			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/50.0, 7)*4.0;
+		if (triangleSize < 4)
+			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 5)*0.5;
+		return solidRadius + height;
 	}
 	
-	void GenerateTerrainTextures(Chunk* chunk, Vertex& point) {
+	void GenerateTerrainDetails(Chunk* chunk, Vertex& point) {
 		float wet = 0;
 		float snow = 0.5;
 		
 		// Textures
+		point.rockType = 1; // 1-44 (can bitshift and have up to 4 blended rock types)
+		point.terrainType = ShaderPipeline::CompactVec4ToUint( // 4 terrain type information (255 units of precision each)
+			1,
+			0,
+			0,
+			0
+		);
+		point.terrainFeature = ShaderPipeline::CompactVec4ToUint( // 4 terrain feature information (255 units of precision each)
+			1,
+			0,
+			0,
+			0
+		);
+		
 		point.sand	= (0	<< 24)	// R
 					| (0	<< 16)	// G
 					| (0	<< 8)	// B
@@ -613,8 +634,6 @@ struct PlanetTerrain {
 					| (0	<< 16)	// G
 					| (0	<< 8)	// B
 					| (0	);		// A
-		
-		point.terrainType = 1; // 1-44 (can bitshift and have up to 4 blended types)
 		
 		point.uv.p = wet;
 		point.uv.q = snow;

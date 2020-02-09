@@ -44,7 +44,7 @@ void main() {
 	// Blinn-Phong
 
 	// ambient
-	vec3 ambient = vec3(0);// lightSource.color * lightSource.ambientStrength;
+	vec3 ambient = vec3(0.0);// lightSource.color * lightSource.ambientStrength;
 
 	// diffuse
 	vec3 norm = normalize(gBuffers.normal);
