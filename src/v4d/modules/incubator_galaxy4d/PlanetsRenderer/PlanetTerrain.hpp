@@ -25,7 +25,7 @@ struct PlanetTerrain {
 	PlanetAtmosphere* atmosphere = nullptr;
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 7;
+	static const int chunkSubdivisionsPerFace = 5;
 	static const int vertexSubdivisionsPerChunk = 100;
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
 	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
@@ -34,16 +34,17 @@ struct PlanetTerrain {
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
+	static const bool useSkirts = true;
 	#pragma endregion
 
 	#pragma region Calculated constants
 	static const int nbChunksPerFace = chunkSubdivisionsPerFace * chunkSubdivisionsPerFace;
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
-	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1);
+	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1) + (useSkirts? (vertexSubdivisionsPerChunk * 4) : 0);
 	#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*2 + vertexSubdivisionsPerChunk*3 - 1; // 16=559, 32=2143, 128=33151
+		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*2 + vertexSubdivisionsPerChunk*3 - 1 + (useSkirts? (vertexSubdivisionsPerChunk * 4 * 2 + 2 + 1) : 0);
 	#else
-		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*6; // 16=1536, 32=6144, 128=98304
+		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*6 + (useSkirts? (vertexSubdivisionsPerChunk * 4 * 6) : 0);
 	#endif
 	#pragma endregion
 
@@ -283,6 +284,7 @@ struct PlanetTerrain {
 					
 					vertices[currentIndex].pos = glm::vec4(pos * altitude - centerPos, altitude);
 					vertices[currentIndex].uv = glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), 0, 0);
+					
 					genVertexIndex++;
 					
 					if (genRow < vertexSubdivisionsPerChunk) {
@@ -350,16 +352,6 @@ struct PlanetTerrain {
 			}
 			
 			if (!meshShouldGenerate) return;
-			
-			// Check for errors
-			if (genVertexIndex != nbVerticesPerChunk) {
-				INVALIDCODE("Problem with terrain mesh generation, generated vertices do not match array size " << genVertexIndex << " != " << nbVerticesPerChunk)
-				return;
-			}
-			if (genIndexIndex != nbIndicesPerChunk) {
-				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size " << genIndexIndex << " != " << nbIndicesPerChunk)
-				return;
-			}
 			
 			// Normals and textures
 			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
@@ -443,6 +435,92 @@ struct PlanetTerrain {
 					
 					planet->GenerateTerrainDetails(this, point);
 				}
+			}
+			
+			// Skirts
+			if (useSkirts) {
+				int firstSkirtIndex = genVertexIndex;
+				auto addSkirt = [this, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
+					int skirtIndex = genVertexIndex++;
+					vertices[skirtIndex] = vertices[pointIndex];
+					vertices[skirtIndex].pos -= glm::vec4(glm::normalize(centerPos)*chunkSize/double(vertexSubdivisionsPerChunk)*2.0, 0);
+					#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
+						if (firstPoint) indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
+						if (topSign == rightSign) {
+							if (firstPoint) indices[genIndexIndex++] = pointIndex;
+							indices[genIndexIndex++] = skirtIndex;
+							indices[genIndexIndex++] = nextPointIndex;
+							if (lastPoint) indices[genIndexIndex++] = firstSkirtIndex;
+						} else {
+							if (firstPoint) indices[genIndexIndex++] = skirtIndex;
+							indices[genIndexIndex++] = pointIndex;
+							if (lastPoint) {
+								indices[genIndexIndex++] = firstSkirtIndex;
+								indices[genIndexIndex++] = 0;
+							} else {
+								indices[genIndexIndex++] = skirtIndex + 1;
+							}
+						}
+					#else
+						if (topSign == rightSign) {
+							indices[genIndexIndex++] = pointIndex;
+							indices[genIndexIndex++] = skirtIndex;
+							indices[genIndexIndex++] = nextPointIndex;
+							indices[genIndexIndex++] = nextPointIndex;
+							indices[genIndexIndex++] = skirtIndex;
+							if (lastPoint) {
+								indices[genIndexIndex++] = firstSkirtIndex;
+							} else {
+								indices[genIndexIndex++] = skirtIndex + 1;
+							}
+						} else {
+							indices[genIndexIndex++] = pointIndex;
+							indices[genIndexIndex++] = nextPointIndex;
+							indices[genIndexIndex++] = skirtIndex;
+							indices[genIndexIndex++] = skirtIndex;
+							indices[genIndexIndex++] = nextPointIndex;
+							if (lastPoint) {
+								indices[genIndexIndex++] = firstSkirtIndex;
+							} else {
+								indices[genIndexIndex++] = skirtIndex + 1;
+							}
+						}
+					#endif
+				};
+				// Left
+				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+					int pointIndex = i * (vertexSubdivisionsPerChunk+1);
+					int nextPointIndex = (i+1) * (vertexSubdivisionsPerChunk+1);
+					addSkirt(pointIndex, nextPointIndex, i == 0);
+				}
+				// Bottom
+				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+					int pointIndex = vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+1) + i;
+					int nextPointIndex = pointIndex + 1;
+					addSkirt(pointIndex, nextPointIndex);
+				}
+				// Right
+				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+					int pointIndex = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1) - 1 - i*(vertexSubdivisionsPerChunk+1);
+					int nextPointIndex = pointIndex - vertexSubdivisionsPerChunk - 1;
+					addSkirt(pointIndex, nextPointIndex);
+				}
+				// Top
+				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+					int pointIndex = vertexSubdivisionsPerChunk - i;
+					int nextPointIndex = pointIndex - 1;
+					addSkirt(pointIndex, nextPointIndex, false, i == vertexSubdivisionsPerChunk - 1);
+				}
+			}
+			
+			// Check for errors
+			if (genVertexIndex != nbVerticesPerChunk) {
+				INVALIDCODE("Problem with terrain mesh generation, generated vertices do not match array size " << genVertexIndex << " != " << nbVerticesPerChunk)
+				return;
+			}
+			if (genIndexIndex != nbIndicesPerChunk) {
+				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size " << genIndexIndex << " != " << nbIndicesPerChunk)
+				return;
 			}
 			
 			std::scoped_lock lock(stateMutex);

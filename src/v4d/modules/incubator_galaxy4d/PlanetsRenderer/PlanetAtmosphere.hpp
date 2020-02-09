@@ -11,7 +11,7 @@ struct PlanetAtmosphere {
 	
 	// Constructor arguments
 	double radius; // top of atmosphere (maximum radius)
-	float densityFactor = 0.3f;
+	float densityFactor = 0.5f;
 	glm::vec3 color = vec3(1);
 
 	#pragma region Calculated constants

@@ -44,7 +44,7 @@ public:
 					(uint)(planet->atmosphere->color.r*255),
 					(uint)(planet->atmosphere->color.g*255),
 					(uint)(planet->atmosphere->color.b*255),
-					255/*unused*/
+					0 // ambient
 				);
 				
 				for (int i = 0; i < NB_SUNS; ++i) {

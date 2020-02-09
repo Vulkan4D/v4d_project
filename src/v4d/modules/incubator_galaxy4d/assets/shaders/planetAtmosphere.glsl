@@ -56,7 +56,7 @@ layout(location = 0) out vec4 color;
 
 const int RAYMARCH_STEPS = 64; // minimum of 3
 const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
-const float minStepSize = 0.5; // meters
+const float minStepSize = 100.0; // meters
 
 #define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
 #define MIE_BETA vec3(1e-7)
@@ -65,7 +65,9 @@ const float minStepSize = 0.5; // meters
 #define G 0.7 /* blob around the sun */
 
 void main() {
-	vec3 atmosphereColor = normalize(UnpackVec4FromUint(planetAtmosphere.color).rgb);
+	vec4 unpackedAtmosphereColor = UnpackVec4FromUint(planetAtmosphere.color);
+	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
+	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
 	float depthDistance = subpassLoad(gBuffer_position).w;
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
@@ -154,11 +156,12 @@ void main() {
 			(
 				rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh color
 				+ miePhase * MIE_BETA * totalMie // mie
-				+ opticalDepth.x * (atmosphereColor/200000000.0*min(0.5, planetAtmosphere.densityFactor)) // ambient
+				+ opticalDepth.x * (atmosphereColor/10000000.0*min(0.5, planetAtmosphere.densityFactor)*atmosphereAmbient) // ambient
 			) * lightIntensity * atmosphereColor
 		);
 		atmosphereDensity += clamp(pow(length(opticalDepth), 0.01), 0, 1);
 	}
 	
+	// color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));
 	color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));
 }
