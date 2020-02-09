@@ -60,7 +60,6 @@ public:
 		// Terrain
 		shaders["opaqueRasterization"].push_back(&planetTerrainShader);
 		planetTerrainShader.planets = &planetTerrains;
-		// planetTerrainShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		planetTerrainShader.AddVertexInputBinding(sizeof(PlanetTerrain::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetTerrain::Vertex::GetInputAttributes());
 		// planetTerrainShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
 		// planetTerrainShader.rasterizer.lineWidth = 1;
@@ -104,6 +103,8 @@ public:
 	void LoadScene(Scene& scene) override {
 		// Sun(s)
 		scene.lightSources["sun"] = &sun;
+		
+		planetTerrainShader.camera = &scene.camera;
 		
 		// Planets
 		for (auto* planetaryTerrain : planetTerrains) {
@@ -253,7 +254,10 @@ public:
 				ImGui::Text("Planet");
 				ImGui::Text("Terrain Radius: %d km", (int)planet->solidRadius/1000);
 				ImGui::Text("Terrain Diameter: %d km", (int)planet->solidRadius/500);
-				if (planet->chunkGenerator) ImGui::Text("Chunk generator queue : %d", (int)planet->chunkGenerator->Count());
+				if (planet->chunkGenerator) {
+					ImGui::Text("Chunk generator queue : %d", (int)planet->chunkGenerator->Count());
+					ImGui::Text("Chunks: %d (%d active, %d rendered)", planet->totalChunks, planet->activeChunks, planet->renderedChunks);
+				}
 				float altitude = (float)planet->cameraAltitudeAboveTerrain;
 				if (altitude < 1.0) {
 					ImGui::Text("Altitude above terrain: %d mm", (int)std::ceil(altitude*1000.0));

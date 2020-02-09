@@ -13,6 +13,7 @@ public:
 	glm::dmat4 viewMatrix {1};
 	
 	std::vector<PlanetTerrain*>* planets = nullptr;
+	Camera* camera = nullptr;
 
 	struct PlanetChunkPushConstant { // max 128 bytes
 		alignas(64) glm::mat4 modelViewMatrix;
@@ -23,10 +24,13 @@ public:
 		alignas(4) bool isLastLevel;
 	} planetChunkPushConstant {};
 	
-	void RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetTerrain::Chunk* chunk) {
+	std::tuple<int/*totalChunks*/, int/*activeChunks*/, int/*renderedChunks*/> RenderChunk(Device* device, VkCommandBuffer cmdBuffer, PlanetTerrain::Chunk* chunk) {
 		std::scoped_lock lock(chunk->stateMutex, chunk->subChunksMutex);
 		if (chunk->active) {
 			if (chunk->render) {
+				
+				// Frustum culling
+				if (!camera->IsVisibleInScreen(chunk->planet->absolutePosition + chunk->centerPos, chunk->boundingDistance)) return {1,1,0};
 				
 				//TODO
 				double planetRotationAngle = 0;
@@ -49,13 +53,22 @@ public:
 					PlanetTerrain::nbIndicesPerChunk
 				);
 				Render(device, cmdBuffer);
+				return {1,1,1};
 			} else {
+				int totalChunks = 1;
+				int activeChunks = 0;
+				int renderedChunks = 0;
 				// Render subChunks recursively
 				for (auto* subChunk : chunk->subChunks) {
-					RenderChunk(device, cmdBuffer, subChunk);
+					auto [a,b,c] = RenderChunk(device, cmdBuffer, subChunk);
+					totalChunks += a;
+					activeChunks += b;
+					renderedChunks += c;
 				}
+				return {totalChunks, activeChunks, renderedChunks};
 			}
 		}
+		return {1,0,0};
 	}
 	
 	using RasterShaderPipeline::Execute;
@@ -63,10 +76,19 @@ public:
 		Bind(device, cmdBuffer);
 		if (planets) {
 			for (auto* planet : *planets) {
+				int totalChunks = 1;
+				int activeChunks = 0;
+				int renderedChunks = 0;
 				std::lock_guard lock(planet->chunksMutex);
 				for (auto* chunk : planet->chunks) {
-					RenderChunk(device, cmdBuffer, chunk);
+					auto [a,b,c] = RenderChunk(device, cmdBuffer, chunk);
+					totalChunks += a;
+					activeChunks += b;
+					renderedChunks += c;
 				}
+				planet->totalChunks = totalChunks;
+				planet->activeChunks = activeChunks;
+				planet->renderedChunks = renderedChunks;
 			}
 		}
 	}

@@ -30,6 +30,8 @@ const bool opaqueUI = false;
 
 void main() {
 	vec3 color = texture(tmpImage, uv).rgb;
+	
+	// UI
 	vec4 ui = texture(uiImage, uv);
 	vec2 depthStencil = texture(depthStencilImage, gl_FragCoord.st / vec2(textureSize(depthStencilImage, 0))).rg;
 	
