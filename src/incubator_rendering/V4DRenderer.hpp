@@ -866,9 +866,12 @@ public: // Update
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
 			// Submodules
+			ImGui::Begin("Modules");
 			for (auto* submodule : renderingSubmodules) {
+				ImGui::Separator();
 				submodule->RunImGui();
 			}
+			ImGui::End();
 		}
 	#endif
 	

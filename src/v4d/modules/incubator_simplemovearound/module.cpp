@@ -194,8 +194,9 @@ public:
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() override {
-			ImGui::SetNextWindowSizeConstraints({380,90},{380,90});
-			ImGui::Begin("Inputs");
+			// ImGui::SetNextWindowSizeConstraints({380,90},{380,90});
+			// ImGui::Begin("Inputs");
+			ImGui::Text("Inputs");
 			float speed = (float)glm::length(player->velocity);
 			if (speed < 1.0) {
 				ImGui::Text("Movement speed: %d mm/s", (int)std::ceil(speed*1000.0));
@@ -206,8 +207,8 @@ public:
 			}
 			ImGui::Text("Mouse look");
 			ImGui::SliderFloat("Smoothness", &player->flyCamSmoothness, 0.0f, 100.0f);
-			ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowSize().x + 5, 0});
-			ImGui::End();
+			// ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowSize().x + 5, 0});
+			// ImGui::End();
 		}
 	#endif
 	

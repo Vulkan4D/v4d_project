@@ -44,20 +44,20 @@ void main() {
 	// Blinn-Phong
 
 	// ambient
-	vec3 ambient = vec3(0.0);// lightSource.color * lightSource.ambientStrength;
+	vec3 ambient = vec3(0);// lightSource.color * lightSource.ambientStrength;
 
 	// diffuse
 	vec3 norm = normalize(gBuffers.normal);
 	vec3 lightDir = normalize(lightSource.viewPosition - gBuffers.position.xyz);
 	float diff = max(dot(norm, lightDir), 0.0);
-	vec3 diffuse = diff * lightSource.color;
+	vec3 diffuse = diff * lightSource.color * (lightSource.intensity/20.0);
 
 	// specular
 	float specularStrength = 0.5;
 	vec3 viewDir = normalize(-gBuffers.position.xyz);
 	vec3 reflectDir = reflect(-lightDir, norm);
 	float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-	vec3 specular = specularStrength * spec * lightSource.color;
+	vec3 specular = specularStrength * spec * lightSource.color * (lightSource.intensity/30.0);
 
 // diffuse = vec3(0.5);
 // specular = vec3(0);

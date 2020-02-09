@@ -20,3 +20,6 @@
 [submodule "src/imgui"]
 	path = src/imgui
 	url = git@github.com:ocornut/imgui.git
+[submodule "src/ImGuiColorTextEdit"]
+	path = src/ImGuiColorTextEdit
+	url = git@github.com:BalazsJako/ImGuiColorTextEdit.git

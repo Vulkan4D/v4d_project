@@ -248,7 +248,8 @@ public:
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() override {
 			for (auto* planet : planetTerrains) {
-				ImGui::Begin("Planet");
+				ImGui::Separator();
+				ImGui::Text("Planet");
 				ImGui::Text("Terrain Radius: %d km", (int)planet->solidRadius/1000);
 				ImGui::Text("Terrain Diameter: %d km", (int)planet->solidRadius/500);
 				float altitude = (float)planet->cameraAltitudeAboveTerrain;
@@ -262,7 +263,15 @@ public:
 				ImGui::Text("Atmosphere");
 				ImGui::SliderFloat("density", &planet->atmosphere->densityFactor, 0.0f, 1.0f);
 				ImGui::ColorEdit3("color", (float*)&planet->atmosphere->color);
-				ImGui::End();
+				ImGui::Separator();
+				ImGui::Text("Sun");
+				static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
+				static float sunDistanceFactor = 10.0f;
+				ImGui::ColorEdit3("Color", (float*)&sun.color);
+				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1, 500);
+				ImGui::ColorEdit3("Position", (float*)&sunPosition);
+				ImGui::SliderFloat("Distance", (float*)&sunDistanceFactor, 5, 100);
+				sun.worldPosition = planet->absolutePosition + glm::dvec3(sunPosition) * double(sunDistanceFactor * planet->radius);
 			}
 		}
 	#endif

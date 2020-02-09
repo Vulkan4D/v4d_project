@@ -8,16 +8,9 @@ layout(std430, push_constant) uniform PlanetChunk {
 	mat4 modelViewMatrix;
 	ivec3 chunkPos;
 	float chunkSize;
-	float radius;
-	float solidRadius;
-	int level;
-	bool isLastLevel;
-	int vertexSubdivisionsPerChunk;
-	float cameraAltitudeAboveTerrain;
-	float cameraDistanceFromPlanet;
-	// float ???;
 	vec3 northDir;
-	// float ???;
+	int vertexSubdivisionsPerChunk;
+	bool isLastLevel;
 } planetChunk;
 
 struct V2F {
@@ -98,7 +91,7 @@ float f_snow = v2f.uv_wet_snow.q;
 vec4 f_sand = v2f.sand;
 vec4 f_dust = v2f.dust;
 vec3 f_viewPos = (planetChunk.modelViewMatrix * vec4(f_pos, 1)).xyz;
-float f_trueDistance = distance(vec3(camera.worldPosition), (modelMatrix * vec4(f_pos, 1)).xyz);
+float f_trueDistance = clamp(distance(vec3(camera.worldPosition), (modelMatrix * vec4(f_pos, 1)).xyz), float(camera.znear), float(camera.zfar));
 
 struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 	vec3 albedo;
@@ -195,7 +188,7 @@ void main() {
 	gBuffers.roughness = roughness;
 	gBuffers.metallic = metallic;
 	gBuffers.scatter = scatter;
-	gBuffers.occlusion = occlusion;
+	gBuffers.occlusion = clamp(occlusion, 0, 1);
 	gBuffers.emission = emission;
 	gBuffers.position = vec4(f_viewPos, f_trueDistance);
 	WriteGBuffers(gBuffers);

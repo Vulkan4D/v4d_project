@@ -56,6 +56,7 @@ layout(location = 0) out vec4 color;
 
 const int RAYMARCH_STEPS = 64; // minimum of 3
 const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
+const float minStepSize = 0.5; // meters
 
 #define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
 #define MIE_BETA vec3(1e-7)
@@ -65,23 +66,29 @@ const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
 
 void main() {
 	vec3 atmosphereColor = normalize(UnpackVec4FromUint(planetAtmosphere.color).rgb);
-	
+	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
 	float depthDistance = subpassLoad(gBuffer_position).w;
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
+	depthDistance = max(minStepSize, depthDistance);
 	vec3 p = -planetAtmosphere.modelViewMatrix[3].xyz; // equivalent to cameraPosition - spherePosition (or negative position of sphere in view space)
 	vec3 viewDir = normalize(v2f.pos); // direction from camera to hit points (or direction to hit point in view space)
 	float r = planetAtmosphere.outerRadius;
 	float b = -dot(p,viewDir);
 	float det = sqrt(b*b - dot(p,p) + r*r);
 	
-	float distBegin = max(0.1, min(b - det, length(v2f.pos)));
-	float distEnd = max(min(depthDistance, b + det), distBegin + 0.01);
+	float distStart = max(0.1, min(b - det, length(v2f.pos)));
+	float distEnd = max(min(depthDistance, b + det), distStart + 0.01);
 	// Position on sphere
-	vec3 rayStart = (viewDir * distBegin) + p;
+	vec3 rayStart = (viewDir * distStart) + p;
 	vec3 rayEnd = (viewDir * distEnd) + p;
 	float rayLength = distance(rayStart, rayEnd);
-	float stepSize = rayLength / float(RAYMARCH_STEPS);
-	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
+	
+	int rayMarchingSteps = RAYMARCH_STEPS;
+	float stepSize = rayLength / float(rayMarchingSteps);
+	if (stepSize < minStepSize) {
+		rayMarchingSteps = int(ceil(rayLength / minStepSize));
+		stepSize = rayLength / float(rayMarchingSteps);
+	}
 	
 	// Unpack suns
 	Sun suns[NB_SUNS];
@@ -99,8 +106,7 @@ void main() {
 	vec3 totalMie = vec3(0);
 	vec3 atmColor = vec3(0);
 	float atmosphereDensity = 0;
-	
-	int sunIndex = 0;
+
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
 		// Calculate Rayleigh and Mie phases
 		vec3 lightDir = suns[sunIndex].dir;
@@ -113,7 +119,7 @@ void main() {
 		// RayMarch atmosphere
 		vec2 opticalDepth = vec2(0);
 		float rayDist = 0;
-		for (int i = 0; i < RAYMARCH_STEPS; ++i) {
+		for (int i = 0; i < rayMarchingSteps; ++i) {
 			vec3 posOnSphere = rayStart + viewDir * (rayDist + stepSize / 2.0);
 			float altitude = length(posOnSphere) - planetAtmosphere.innerRadius;
 			vec2 density = exp(-altitude / scaleHeight) * stepSize;
@@ -142,7 +148,7 @@ void main() {
 			
 			rayDist += stepSize;
 		}
-		
+
 		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x)));
 		atmColor += vec3(
 			(
@@ -151,7 +157,7 @@ void main() {
 				+ opticalDepth.x * (atmosphereColor/200000000.0*min(0.5, planetAtmosphere.densityFactor)) // ambient
 			) * lightIntensity * atmosphereColor
 		);
-		atmosphereDensity += pow(length(opticalDepth), 0.01);
+		atmosphereDensity += clamp(pow(length(opticalDepth), 0.01), 0, 1);
 	}
 	
 	color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));

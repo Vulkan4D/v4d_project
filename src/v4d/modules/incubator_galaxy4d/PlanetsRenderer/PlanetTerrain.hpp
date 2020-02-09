@@ -25,7 +25,7 @@ struct PlanetTerrain {
 	PlanetAtmosphere* atmosphere = nullptr;
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 2;
+	static const int chunkSubdivisionsPerFace = 7;
 	static const int vertexSubdivisionsPerChunk = 100;
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
 	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
