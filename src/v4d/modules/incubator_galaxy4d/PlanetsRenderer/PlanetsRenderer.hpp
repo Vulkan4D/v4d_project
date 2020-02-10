@@ -177,7 +177,7 @@ public:
 		{// Atmosphere pass
 			VkAttachmentDescription colorAttachment {};
 			// Format
-			colorAttachment.format = images["tmpImage"]->format;
+			colorAttachment.format = images["litImage"]->format;
 			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			// Color
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -192,7 +192,7 @@ public:
 			
 			VkAttachmentDescription inputAttachment {};
 			// Format
-			inputAttachment.format = images["tmpImage"]->format;
+			inputAttachment.format = images["litImage"]->format;
 			inputAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			// Color
 			inputAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -216,10 +216,10 @@ public:
 			
 			// Create the render pass
 			atmospherePass.Create(renderingDevice);
-			atmospherePass.CreateFrameBuffers(renderingDevice, {images["tmpImage"], images["gBuffer_position"]});
+			atmospherePass.CreateFrameBuffers(renderingDevice, {images["litImage"], images["gBuffer_position"]});
 			
 			// Shaders
-			planetAtmosphereShader.SetRenderPass(images["tmpImage"], atmospherePass.handle, 0);
+			planetAtmosphereShader.SetRenderPass(images["litImage"], atmospherePass.handle, 0);
 			planetAtmosphereShader.AddColorBlendAttachmentState();
 			planetAtmosphereShader.CreatePipeline(renderingDevice);
 		}
@@ -239,7 +239,7 @@ public:
 	// void RunDynamicGraphicsTop(VkCommandBuffer, std::unordered_map<std::string, Image*>&) override {}
 	void RunDynamicGraphicsMiddle(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>& images) override {
 		// Atmosphere
-		atmospherePass.Begin(renderingDevice, commandBuffer, *images["tmpImage"]);
+		atmospherePass.Begin(renderingDevice, commandBuffer, *images["litImage"]);
 		planetAtmosphereShader.Execute(renderingDevice, commandBuffer);
 		atmospherePass.End(renderingDevice, commandBuffer);
 	}

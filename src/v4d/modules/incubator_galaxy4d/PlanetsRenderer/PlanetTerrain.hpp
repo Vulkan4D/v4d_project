@@ -244,7 +244,7 @@ struct PlanetTerrain {
 					mustCleanup = false;
 				}
 			}
-			if (!mustCleanup) return;
+			if (!mustCleanup) return false;
 			
 			for (auto* subChunk : subChunks) {
 				delete subChunk;

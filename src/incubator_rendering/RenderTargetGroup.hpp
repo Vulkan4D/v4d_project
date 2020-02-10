@@ -22,7 +22,9 @@ namespace v4d::graphics {
 		VkExtent2D extent {0,0};
 		
 		// Images
-		Image tmpImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		Image ppImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT };
+		Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
@@ -69,8 +71,16 @@ namespace v4d::graphics {
 			this->extent = extent;
 		}
 		
-		Image& GetTmpImage() {
-			return tmpImage;
+		Image& GetLitImage() {
+			return litImage;
+		}
+		
+		Image& GetPpImage() {
+			return ppImage;
+		}
+		
+		Image& GetHistoryImage() {
+			return historyImage;
 		}
 		
 		Image& GetThumbnailImage() {
@@ -106,8 +116,10 @@ namespace v4d::graphics {
 			uint rayTracingWidth = (uint)((float)extent.width * rayTracingScale);
 			uint rayTracingHeight = (uint)((float)extent.height * rayTracingScale);
 			
-			tmpImage.Create(device, rasterWidth, rasterHeight);
-			thumbnailImage.Create(device, thumbnailWidth, thumbnailHeight, {tmpImage.format});
+			litImage.Create(device, rasterWidth, rasterHeight);
+			ppImage.Create(device, rasterWidth, rasterHeight);
+			historyImage.Create(device, rasterWidth, rasterHeight);
+			thumbnailImage.Create(device, thumbnailWidth, thumbnailHeight, {litImage.format});
 			rayTracingImage.Create(device, rayTracingWidth, rayTracingHeight);
 			depthImage.Create(device, rasterWidth, rasterHeight);
 			
@@ -117,7 +129,9 @@ namespace v4d::graphics {
 		}
 		
 		void DestroyResources(Device* device) {
-			tmpImage.Destroy(device);
+			litImage.Destroy(device);
+			ppImage.Destroy(device);
+			historyImage.Destroy(device);
 			thumbnailImage.Destroy(device);
 			rayTracingImage.Destroy(device);
 			depthImage.Destroy(device);

@@ -12,7 +12,8 @@
 				"${workspaceFolder}/src/Vulkan-Hpp/glfw/include",
 				"${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers/include",
 				"${workspaceFolder}/src/openssl/include",
-				"${workspaceFolder}/src/imgui"
+				"${workspaceFolder}/src/imgui",
+				"${workspaceFolder}/src"
 			],
 			"defines": [
 				"_LINUX",
