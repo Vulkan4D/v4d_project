@@ -238,11 +238,13 @@ struct PlanetTerrain {
 		bool Cleanup() { // bool returns whether to delete the parent as well
 			std::scoped_lock lock(stateMutex, subChunksMutex);
 			
+			bool mustCleanup = true;
 			for (auto* subChunk : subChunks) {
 				if (!subChunk->Cleanup()) {
-					return false;
+					mustCleanup = false;
 				}
 			}
+			if (!mustCleanup) return;
 			
 			for (auto* subChunk : subChunks) {
 				delete subChunk;
