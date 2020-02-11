@@ -954,7 +954,7 @@ public: // Scene configuration
 	}
 	
 public: // Update
-
+	
 	void FrameUpdate(uint imageIndex) override {
 		
 		// Reset scene information
@@ -972,34 +972,6 @@ public: // Update
 			lightSource->viewPosition = scene.camera.viewMatrix * glm::dvec4(lightSource->worldPosition, 1);
 			lightSource->viewDirection = glm::transpose(glm::inverse(glm::mat3(scene.camera.viewMatrix))) * lightSource->worldDirection;
 		}
-		
-		// {// TXAA jittering
-		// 	static unsigned long frameCount = 0;
-		// 	static const glm::dvec2 samples[16] = {
-		// 		glm::dvec2(-8.0, 0.0) / 8.0,
-		// 		glm::dvec2(-6.0, -4.0) / 8.0,
-		// 		glm::dvec2(-3.0, -2.0) / 8.0,
-		// 		glm::dvec2(-2.0, -6.0) / 8.0,
-		// 		glm::dvec2(1.0, -1.0) / 8.0,
-		// 		glm::dvec2(2.0, -5.0) / 8.0,
-		// 		glm::dvec2(6.0, -7.0) / 8.0,
-		// 		glm::dvec2(5.0, -3.0) / 8.0,
-		// 		glm::dvec2(4.0, 1.0) / 8.0,
-		// 		glm::dvec2(7.0, 4.0) / 8.0,
-		// 		glm::dvec2(3.0, 5.0) / 8.0,
-		// 		glm::dvec2(0.0, 7.0) / 8.0,
-		// 		glm::dvec2(-1.0, 3.0) / 8.0,
-		// 		glm::dvec2(-4.0, 6.0) / 8.0,
-		// 		glm::dvec2(-7.0, 8.0) / 8.0,
-		// 		glm::dvec2(-5.0, 2.0) / 8.0
-		// 	};
-		// 	glm::dvec2 texelSize = 1.0 / glm::dvec2(scene.camera.width, scene.camera.height);
-		// 	glm::dvec2 subSample = samples[frameCount % 16] * texelSize / 2.0;
-		// 	scene.camera.projectionMatrix[2].x += subSample.x;
-		// 	scene.camera.projectionMatrix[2].y += subSample.y;
-		// 	frameCount++;
-		// }
-		
 	}
 	
 	void LowPriorityFrameUpdate() override {
@@ -1011,6 +983,12 @@ public: // Update
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
+			float txaa = (float)scene.camera.txaa;
+			ImGui::Text("TXAA");
+			ImGui::SliderFloat("Samples", &txaa, 0.0, 16.0);
+			scene.camera.txaa = txaa < 4 ? 0 : (txaa < 12? 8 : 16);
+			ImGui::SliderFloat("Kernel", &scene.camera.txaaKernelSize, 0.0, 2.0);
+			
 			// Submodules
 			ImGui::Begin("Modules");
 			for (auto* submodule : renderingSubmodules) {

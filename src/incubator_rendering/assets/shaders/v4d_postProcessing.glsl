@@ -4,6 +4,7 @@ precision highp int;
 precision highp float;
 precision highp sampler2D;
 
+#include "Camera.glsl"
 #include "_v4d_baseDescriptorSet.glsl"
 
 #common .*frag
@@ -31,45 +32,41 @@ void main() {
 #shader txaa.frag
 void main() {
 	vec4 lit = texture(litImage, uv);
-	out_color = vec4(lit.rgb, lit.a);
-	
-	// vec4 history = texture(historyImage, uv);
-	
-	// const float VARIANCE_CLIPPING_GAMMA = 1.0;
-
-	// vec3 nearColor0 = textureLodOffset(litImage, uv, 0.0, ivec2(1, 0)).rgb;
-	// vec3 nearColor1 = textureLodOffset(litImage, uv, 0.0, ivec2(0, 1)).rgb;
-	// vec3 nearColor2 = textureLodOffset(litImage, uv, 0.0, ivec2(-1, 0)).rgb;
-	// vec3 nearColor3 = textureLodOffset(litImage, uv, 0.0, ivec2(0, -1)).rgb;
-
-	// // Compute the two moments
-	// vec3 m1 = lit.rgb + nearColor0 + nearColor1 + nearColor2 + nearColor3;
-	// vec3 m2 = lit.rgb * lit.rgb + nearColor0 * nearColor0 + nearColor1 * nearColor1 
-	// 	+ nearColor2 * nearColor2 + nearColor3 * nearColor3;
-
-	// vec3 mu = m1 / 5.0;
-	// vec3 sigma = sqrt(m2 / 5.0 - mu * mu);
-
-	// vec3 boxMin = mu - VARIANCE_CLIPPING_GAMMA * sigma;
-	// vec3 boxMax = mu + VARIANCE_CLIPPING_GAMMA * sigma;
-
-	// history.rgb = clamp(history.rgb, boxMin, boxMax);
-	
-	
-	// float lum0 = ComputeLuminance(CurrentSubpixel);
-	// float lum1 = ComputeLuminance(History);
-
-	// float diff = abs(lum0 - lum1) / (EPSILON + max(lum0, max(lum1, ComputeLuminance(boxMax))));
-	// diff = 1.0 - diff;
-	// diff *= diff;
+	if (camera.txaa == 0) {
+		out_color = vec4(lit.rgb, lit.a);
+	} else {
+		vec4 history = texture(historyImage, uv);
 		
-	// modulationFactor *= diff;
-	// out_color = vec4(mix(lit.rgb, history.rgb, modulationFactor), lit.a);
+		const float VARIANCE_CLIPPING_GAMMA = 1.0;
+
+		vec3 nearColor0 = textureLodOffset(litImage, uv, 0.0, ivec2(1, 0)).rgb;
+		vec3 nearColor1 = textureLodOffset(litImage, uv, 0.0, ivec2(0, 1)).rgb;
+		vec3 nearColor2 = textureLodOffset(litImage, uv, 0.0, ivec2(-1, 0)).rgb;
+		vec3 nearColor3 = textureLodOffset(litImage, uv, 0.0, ivec2(0, -1)).rgb;
+
+		vec3 m1 = lit.rgb + nearColor0 + nearColor1 + nearColor2 + nearColor3;
+		vec3 m2 = lit.rgb * lit.rgb + nearColor0 * nearColor0 + nearColor1 * nearColor1 
+			+ nearColor2 * nearColor2 + nearColor3 * nearColor3;
+
+		vec3 mu = m1 / 5.0;
+		vec3 sigma = sqrt(m2 / 5.0 - mu * mu);
+
+		vec3 boxMin = mu - VARIANCE_CLIPPING_GAMMA * sigma;
+		vec3 boxMax = mu + VARIANCE_CLIPPING_GAMMA * sigma;
+
+		history.rgb = clamp(history.rgb, boxMin, boxMax);
+		
+		if (length(history.rgb) > 0) {
+			out_color = vec4(mix(history.rgb, lit.rgb, 1.0/float(camera.txaa*2)), lit.a);
+		} else {
+			out_color = vec4(lit.rgb, lit.a);
+		}
+	}
 }
 
 #shader history.frag
 void main() {
-	out_color = vec4(subpassLoad(ppImage).rgb, texture(depthStencilImage, uv).r);
+	out_color = vec4(subpassLoad(ppImage).rgb * (camera.txaa>0?2.0:0.0), texture(depthStencilImage, uv).r);
 }
 
 #shader hdr.frag
