@@ -984,10 +984,7 @@ public: // Update
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
 			float txaa = (float)scene.camera.txaa;
-			ImGui::Text("TXAA");
-			ImGui::SliderFloat("Samples", &txaa, 0.0, 16.0);
-			scene.camera.txaa = txaa < 4 ? 0 : (txaa < 12? 8 : 16);
-			ImGui::SliderFloat("Kernel", &scene.camera.txaaKernelSize, 0.0, 2.0);
+			ImGui::Checkbox("TXAA", &scene.camera.txaa);
 			
 			// Submodules
 			ImGui::Begin("Modules");

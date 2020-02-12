@@ -162,6 +162,5 @@ void main() {
 		atmosphereDensity += clamp(pow(length(opticalDepth), 0.01), 0, 1);
 	}
 	
-	// color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));
 	color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));
 }

@@ -213,10 +213,7 @@ public:
 	#endif
 	
 	void FrameUpdate(v4d::graphics::Scene& scene) override {
-		scene.camera.worldPosition = player->worldPosition;
-		scene.camera.lookDirection = player->viewForward;
-		scene.camera.viewUp = player->viewUp;
-		scene.camera.RefreshViewMatrix();
+		scene.camera.MakeViewMatrix(player->worldPosition, player->viewForward, player->viewUp);
 	}
 };
 
