@@ -38,22 +38,11 @@ void main() {
 	
 	if (camera.txaa) {
 		float depth = texture(depthStencilImage, uvCurrent).r;
-	
-		dmat4 projView = camera.projectionMatrix * camera.viewMatrix;
-		dmat4 historyProjView = camera.projectionMatrix * camera.historyViewMatrix;
-		dmat4 reprojectionMatrix = historyProjView * inverse(projView);
-		
-		dvec4 clipSpaceCoords = reprojectionMatrix * dvec4((uv * 2 - 1), depth, 1);
-		vec2 uvHistory = (vec2(clipSpaceCoords.xy) / 2 + 0.5) - camera.historyTxaaOffset;
-		
+		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((uv * 2 - 1), depth, 1);
+		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) - camera.historyTxaaOffset;
 		vec4 history = texture(historyImage, uvHistory);
 		
 		if (length(history.rgb) > 0) {
-			mat4 movementMatrix = mat4(camera.viewMatrix * inverse(camera.historyViewMatrix));
-			vec3 movement = movementMatrix[3].xyz;
-			float lookMovement = float(distance(camera.viewMatrix[2].xyz, camera.historyViewMatrix[2].xyz));
-			float viewMovement = clamp(lookMovement / 0.001 + length(movement) / 0.1, 0, 1);
-			
 			vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 0)).rgb;
 			vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, 1)).rgb;
 			vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
@@ -85,10 +74,9 @@ void main() {
 			vec3 mu = m1 / 8.0;
 			vec3 sigma = sqrt(m2 / 8.0 - mu * mu);
 
-			float variance_clipping_gamma = mix(3.0, 1.0, viewMovement);
+			float variance_clipping_gamma = 2.0;
 			vec3 boxMin = mu - variance_clipping_gamma * sigma;
 			vec3 boxMax = mu + variance_clipping_gamma * sigma;
-
 			history.rgb = clamp(history.rgb, boxMin, boxMax);
 			
 			out_color = vec4(mix(history.rgb, lit.rgb, 1.0/8.0), lit.a);
