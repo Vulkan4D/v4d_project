@@ -983,11 +983,10 @@ public: // Update
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
-			float txaa = (float)scene.camera.txaa;
-			ImGui::Checkbox("TXAA", &scene.camera.txaa);
-			
 			// Submodules
-			ImGui::Begin("Modules");
+			ImGui::SetNextWindowSize({405, 240});
+			ImGui::Begin("Settings and Modules");
+			ImGui::Checkbox("TXAA", &scene.camera.txaa);
 			for (auto* submodule : renderingSubmodules) {
 				ImGui::Separator();
 				submodule->RunImGui();

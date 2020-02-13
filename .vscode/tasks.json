@@ -52,5 +52,12 @@
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
+        {
+            "label": "send package",
+            "type": "shell",
+            "command": "clear; ./sendPackage.sh",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "test"
+        },
     ]
 }

@@ -16,8 +16,6 @@ layout(std430, push_constant) uniform PlanetChunk {
 struct V2F {
 	vec4 pos_alt; // w = altitude
 	vec4 normal_slope; // w = slope
-	vec3 tangentX;
-	vec3 tangentY;
 	vec4 uv_wet_snow;
 	vec4 rockTypes[NB_ROCK_TYPES/4];
 	vec4 terrainType;
@@ -49,8 +47,6 @@ void main() {
 	
 	v2f.pos_alt = v_pos_alt;
 	v2f.normal_slope = v_normal_slope;
-	v2f.tangentX = cross(planetChunk.northDir, v_normal_slope.xyz);
-	v2f.tangentY = cross(normalize(v_normal_slope.xyz), v2f.tangentX);
 	v2f.uv_wet_snow = v_uv_wet_snow;
 	
 	ivec4 rockTypes = UnpackIVec4FromUint(v_rockType);
@@ -92,6 +88,8 @@ vec4 f_sand = v2f.sand;
 vec4 f_dust = v2f.dust;
 vec3 f_viewPos = (planetChunk.modelViewMatrix * vec4(f_pos, 1)).xyz;
 float f_trueDistance = clamp(distance(vec3(camera.worldPosition), (modelMatrix * vec4(f_pos, 1)).xyz), float(camera.znear), float(camera.zfar));
+vec3 f_tangentX = cross(planetChunk.northDir, f_normal);
+vec3 f_tangentY = cross(normalize(f_normal), f_tangentX);
 
 struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 	vec3 albedo;
@@ -116,8 +114,8 @@ RockDetail RockType_1() {
 		normalNoiseY += Noise(normalsUV*50.0+300.5)*0.25 + Noise(normalsUV*100.0+120.78)*0.15;
 	}
 	vec3 normalNoise = ((
-		+ normalize(v2f.tangentX) * normalNoiseX
-		+ normalize(v2f.tangentY) * normalNoiseY
+		+ normalize(f_tangentX) * normalNoiseX
+		+ normalize(f_tangentY) * normalNoiseY
 	) - 0.5) / 2.0;
 	rock.normal = normalize(mix(f_normal, f_normal + normalNoise, 0.5));
 	
