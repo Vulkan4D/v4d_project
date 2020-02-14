@@ -42,7 +42,7 @@ struct PlanetTerrain {
 	static const int nbBaseChunksPerPlanet = nbChunksPerFace * 6;
 	static const int nbVerticesPerChunk = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1) + (useSkirts? (vertexSubdivisionsPerChunk * 4) : 0);
 	#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*2 + vertexSubdivisionsPerChunk*3 - 1 + (useSkirts? (vertexSubdivisionsPerChunk * 4 * 2 + 2 + 1) : 0);
+		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*2 + vertexSubdivisionsPerChunk*3 + (useSkirts? (vertexSubdivisionsPerChunk * 4 * 2 + 2 + 1) : 0);
 	#else
 		static const int nbIndicesPerChunk = vertexSubdivisionsPerChunk*vertexSubdivisionsPerChunk*6 + (useSkirts? (vertexSubdivisionsPerChunk * 4 * 6) : 0);
 	#endif
@@ -327,7 +327,7 @@ struct PlanetTerrain {
 									indices[genIndexIndex++] = topRightIndex;
 								} else {
 									indices[genIndexIndex++] = bottomLeftIndex; // bottom right-most
-									if (genRow < vertexSubdivisionsPerChunk-1) {
+									if (genRow < vertexSubdivisionsPerChunk) {
 										indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
 									}
 								}
@@ -469,7 +469,6 @@ struct PlanetTerrain {
 					vertices[skirtIndex] = vertices[pointIndex];
 					vertices[skirtIndex].pos -= glm::vec4(glm::normalize(centerPos)*chunkSize/double(vertexSubdivisionsPerChunk)*2.0, 0);
 					#ifdef PLANETARY_TERRAIN_MESH_USE_TRIANGLE_STRIPS
-						if (firstPoint) indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
 						if (topSign == rightSign) {
 							if (firstPoint) indices[genIndexIndex++] = pointIndex;
 							indices[genIndexIndex++] = skirtIndex;
@@ -485,6 +484,7 @@ struct PlanetTerrain {
 								indices[genIndexIndex++] = skirtIndex + 1;
 							}
 						}
+						if (lastPoint) indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
 					#else
 						if (topSign == rightSign) {
 							indices[genIndexIndex++] = pointIndex;
