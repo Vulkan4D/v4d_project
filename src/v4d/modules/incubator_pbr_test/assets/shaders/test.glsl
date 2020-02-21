@@ -16,10 +16,10 @@ layout(location = 1) out vec3 f_normal;
 layout(location = 2) out flat uint f_instanceIndex;
 
 vec3 positions[4] = {
-	vec3(-6,3,3),
-	vec3(-3,3,3),
-	vec3(0,3,3),
-	vec3(3,3,3)
+	vec3(-6,6,0),
+	vec3(-3,6,0),
+	vec3(0,6,0),
+	vec3(3,6,0)
 };
 
 void main() {

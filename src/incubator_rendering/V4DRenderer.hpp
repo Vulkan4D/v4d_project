@@ -24,8 +24,8 @@ private:
 	#pragma region Render passes
 	RenderPass	opaqueRasterPass,
 				opaqueLightingPass,
-				transparentRasterPass,
-				transparentLightingPass,
+				// transparentRasterPass,
+				// transparentLightingPass,
 				thumbnailRenderPass,
 				postProcessingRenderPass,
 				uiRenderPass;
@@ -38,10 +38,10 @@ private:
 		"incubator_rendering/assets/shaders/v4d_lighting.vert",
 		"incubator_rendering/assets/shaders/v4d_lighting.opaque.frag",
 	}};
-	RasterShaderPipeline transparentLightingShader {lightingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_lighting.vert",
-		"incubator_rendering/assets/shaders/v4d_lighting.transparent.frag",
-	}};
+	// RasterShaderPipeline transparentLightingShader {lightingPipelineLayout, {
+	// 	"incubator_rendering/assets/shaders/v4d_lighting.vert",
+	// 	"incubator_rendering/assets/shaders/v4d_lighting.transparent.frag",
+	// }};
 	RasterShaderPipeline thumbnailShader {thumbnailPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_thumbnail.vert",
 		"incubator_rendering/assets/shaders/v4d_thumbnail.frag",
@@ -66,9 +66,9 @@ private:
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaders {
 		/* RenderPass_SubPass => ShadersList */
 		{"opaqueRasterization", {}},
-		{"transparentRasterization", {}},
+		// {"transparentRasterization", {}},
 		{"opaqueLighting", {&opaqueLightingShader}},
-		{"transparentLighting", {&transparentLightingShader}},
+		// {"transparentLighting", {&transparentLightingShader}},
 		{"thumbnail", {&thumbnailShader}},
 		{"postProcessing_0", {&postProcessingShader_txaa}},
 		{"postProcessing_1", {&postProcessingShader_history}},
@@ -149,6 +149,8 @@ private: // Init
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(2, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_inputAttachment(4, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
+			postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i+5, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -169,11 +171,11 @@ private: // Init
 		opaqueLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
 		opaqueLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		opaqueLightingShader.SetData(3);
-		transparentLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		transparentLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
-		transparentLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		transparentLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		transparentLightingShader.SetData(3);
+		// transparentLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		// transparentLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
+		// transparentLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		// transparentLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		// transparentLightingShader.SetData(3);
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -288,7 +290,7 @@ private: // Pipelines
 				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 				// Layout
 				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 				colorAttachmentRefs[i] = {
 					opaqueRasterPass.AddAttachment(attachments[i]),
 					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -353,7 +355,7 @@ private: // Pipelines
 			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			colorAttachmentRefs[0] = {
 				opaqueLightingPass.AddAttachment(attachments[0]),
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -368,8 +370,8 @@ private: // Pipelines
 				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				attachments[i+nbColorAttachments].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				attachments[i+nbColorAttachments].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+				attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 				inputAttachmentRefs[i] = {
 					opaqueLightingPass.AddAttachment(attachments[i+nbColorAttachments]),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -397,126 +399,126 @@ private: // Pipelines
 			}
 		}
 		
-		{// Transparent Raster pass
-			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
-			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
-			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
-				// Format
-				attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
-				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
-				// Color
-				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Layout
-				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				colorAttachmentRefs[i] = {
-					transparentRasterPass.AddAttachment(attachments[i]),
-					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-				};
-			}
+		// {// Transparent Raster pass
+		// 	std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
+		// 	std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
+		// 	for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
+		// 		// Format
+		// 		attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
+		// 		attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+		// 		// Color
+		// 		attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		// 		attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		// 		// Layout
+		// 		attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		// 		attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		// 		colorAttachmentRefs[i] = {
+		// 			transparentRasterPass.AddAttachment(attachments[i]),
+		// 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		// 		};
+		// 	}
 			
-			int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
-			attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
-			attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			VkAttachmentReference depthStencilAttachment {
-				transparentRasterPass.AddAttachment(attachments[depthStencilIndex]),
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-			};
+		// 	int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
+		// 	attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
+		// 	attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
+		// 	attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		// 	attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		// 	attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		// 	attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		// 	attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 	attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 	VkAttachmentReference depthStencilAttachment {
+		// 		transparentRasterPass.AddAttachment(attachments[depthStencilIndex]),
+		// 		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+		// 	};
 			
-			// SubPass
-			VkSubpassDescription subpass = {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = colorAttachmentRefs.size();
-				subpass.pColorAttachments = colorAttachmentRefs.data();
-				subpass.pDepthStencilAttachment = &depthStencilAttachment;
-			transparentRasterPass.AddSubpass(subpass);
+		// 	// SubPass
+		// 	VkSubpassDescription subpass = {};
+		// 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		// 		subpass.colorAttachmentCount = colorAttachmentRefs.size();
+		// 		subpass.pColorAttachments = colorAttachmentRefs.data();
+		// 		subpass.pDepthStencilAttachment = &depthStencilAttachment;
+		// 	transparentRasterPass.AddSubpass(subpass);
 			
-			// prepare images
-			std::vector<Image*> images {};
-			images.reserve(attachments.size());
-			for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
-				images.push_back(&gBufferImage);
-			}
-			images.push_back(&renderTargetGroup.GetDepthImage());
+		// 	// prepare images
+		// 	std::vector<Image*> images {};
+		// 	images.reserve(attachments.size());
+		// 	for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
+		// 		images.push_back(&gBufferImage);
+		// 	}
+		// 	images.push_back(&renderTargetGroup.GetDepthImage());
 			
-			// Create the render pass
-			transparentRasterPass.Create(renderingDevice);
-			transparentRasterPass.CreateFrameBuffers(renderingDevice, images);
+		// 	// Create the render pass
+		// 	transparentRasterPass.Create(renderingDevice);
+		// 	transparentRasterPass.CreateFrameBuffers(renderingDevice, images);
 			
-			// Shaders
-			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
-				shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), transparentRasterPass.handle, 0);
-				for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
-				shaderPipeline->CreatePipeline(renderingDevice);
-			}
-		}
+		// 	// Shaders
+		// 	for (auto* shaderPipeline : shaders["transparentRasterization"]) {
+		// 		shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), transparentRasterPass.handle, 0);
+		// 		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
+		// 			shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
+		// 		shaderPipeline->CreatePipeline(renderingDevice);
+		// 	}
+		// }
 		
-		{// Transparent Lighting pass
-			const int nbColorAttachments = 1;
-			const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
-			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
-			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
-			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
-			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
+		// {// Transparent Lighting pass
+		// 	const int nbColorAttachments = 1;
+		// 	const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
+		// 	std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
+		// 	std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
+		// 	std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
+		// 	std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
 			
-			// Color attachment
-			images[0] = &renderTargetGroup.GetLitImage();
-			attachments[0].format = renderTargetGroup.GetLitImage().format;
-			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			colorAttachmentRefs[0] = {
-				transparentLightingPass.AddAttachment(attachments[0]),
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
+		// 	// Color attachment
+		// 	images[0] = &renderTargetGroup.GetLitImage();
+		// 	attachments[0].format = renderTargetGroup.GetLitImage().format;
+		// 	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+		// 	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		// 	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		// 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		// 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		// 	attachments[0].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 	attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 	colorAttachmentRefs[0] = {
+		// 		transparentLightingPass.AddAttachment(attachments[0]),
+		// 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		// 	};
 			
-			// Input attachments
-			for (int i = 0; i < nbInputAttachments; ++i) {
-				images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
-				attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
-				attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
-				attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				inputAttachmentRefs[i] = {
-					transparentLightingPass.AddAttachment(attachments[i+nbColorAttachments]),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				};
-			}
+		// 	// Input attachments
+		// 	for (int i = 0; i < nbInputAttachments; ++i) {
+		// 		images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
+		// 		attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
+		// 		attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
+		// 		attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		// 		attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		// 		attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 		attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		// 		inputAttachmentRefs[i] = {
+		// 			transparentLightingPass.AddAttachment(attachments[i+nbColorAttachments]),
+		// 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		// 		};
+		// 	}
 		
-			// SubPass
-			VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = colorAttachmentRefs.size();
-				subpass.pColorAttachments = colorAttachmentRefs.data();
-				subpass.inputAttachmentCount = inputAttachmentRefs.size();
-				subpass.pInputAttachments = inputAttachmentRefs.data();
-			transparentLightingPass.AddSubpass(subpass);
+		// 	// SubPass
+		// 	VkSubpassDescription subpass {};
+		// 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		// 		subpass.colorAttachmentCount = colorAttachmentRefs.size();
+		// 		subpass.pColorAttachments = colorAttachmentRefs.data();
+		// 		subpass.inputAttachmentCount = inputAttachmentRefs.size();
+		// 		subpass.pInputAttachments = inputAttachmentRefs.data();
+		// 	transparentLightingPass.AddSubpass(subpass);
 			
-			// Create the render pass
-			transparentLightingPass.Create(renderingDevice);
-			transparentLightingPass.CreateFrameBuffers(renderingDevice, images);
+		// 	// Create the render pass
+		// 	transparentLightingPass.Create(renderingDevice);
+		// 	transparentLightingPass.CreateFrameBuffers(renderingDevice, images);
 			
-			// Shaders
-			for (auto* shaderPipeline : shaders["transparentLighting"]) {
-				shaderPipeline->SetRenderPass(&renderTargetGroup.GetLitImage(), transparentLightingPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState();
-				shaderPipeline->CreatePipeline(renderingDevice);
-			}
-		}
+		// 	// Shaders
+		// 	for (auto* shaderPipeline : shaders["transparentLighting"]) {
+		// 		shaderPipeline->SetRenderPass(&renderTargetGroup.GetLitImage(), transparentLightingPass.handle, 0);
+		// 		shaderPipeline->AddColorBlendAttachmentState();
+		// 		shaderPipeline->CreatePipeline(renderingDevice);
+		// 	}
+		// }
 		
 		{// Thumbnail Gen render pass
 			VkAttachmentDescription colorAttachment = {};
@@ -750,8 +752,8 @@ private: // Pipelines
 		}
 		opaqueRasterPass.DestroyFrameBuffers(renderingDevice);
 		opaqueRasterPass.Destroy(renderingDevice);
-		transparentRasterPass.DestroyFrameBuffers(renderingDevice);
-		transparentRasterPass.Destroy(renderingDevice);
+		// transparentRasterPass.DestroyFrameBuffers(renderingDevice);
+		// transparentRasterPass.Destroy(renderingDevice);
 		
 		// Lighting pipelines
 		for (ShaderPipeline* shaderPipeline : shaders["opaqueLighting"]) {
@@ -762,8 +764,8 @@ private: // Pipelines
 		}
 		opaqueLightingPass.DestroyFrameBuffers(renderingDevice);
 		opaqueLightingPass.Destroy(renderingDevice);
-		transparentLightingPass.DestroyFrameBuffers(renderingDevice);
-		transparentLightingPass.Destroy(renderingDevice);
+		// transparentLightingPass.DestroyFrameBuffers(renderingDevice);
+		// transparentLightingPass.Destroy(renderingDevice);
 		
 		// Thumbnail Gen
 		for (auto* shaderPipeline : shaders["thumbnail"]) {
@@ -866,26 +868,26 @@ private: // Commands
 			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
 		}
 		
-		// Transparent Raster pass
-		transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
-			for (auto* shaderPipeline : shaders["transparentRasterization"]) {
-				shaderPipeline->Execute(renderingDevice, commandBuffer);
-			}
-		transparentRasterPass.End(renderingDevice, commandBuffer);
+		// // Transparent Raster pass
+		// transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
+		// 	for (auto* shaderPipeline : shaders["transparentRasterization"]) {
+		// 		shaderPipeline->Execute(renderingDevice, commandBuffer);
+		// 	}
+		// transparentRasterPass.End(renderingDevice, commandBuffer);
 		
-		// Transparent Lighting pass
-		transparentLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetLitImage());
-			for (auto* shaderPipeline : shaders["transparentLighting"]) {
-				if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
-					for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
-						//TODO optimisation : render spheres here instead of fullscreen quads
-						shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
-					}
-				} else {
-					shaderPipeline->Execute(renderingDevice, commandBuffer);
-				}
-			}
-		transparentLightingPass.End(renderingDevice, commandBuffer);
+		// // Transparent Lighting pass
+		// transparentLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetLitImage());
+		// 	for (auto* shaderPipeline : shaders["transparentLighting"]) {
+		// 		if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
+		// 			for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
+		// 				//TODO optimisation : render spheres here instead of fullscreen quads
+		// 				shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
+		// 			}
+		// 		} else {
+		// 			shaderPipeline->Execute(renderingDevice, commandBuffer);
+		// 		}
+		// 	}
+		// transparentLightingPass.End(renderingDevice, commandBuffer);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {

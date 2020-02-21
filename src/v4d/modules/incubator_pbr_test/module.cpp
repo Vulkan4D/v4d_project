@@ -1,7 +1,7 @@
 // Metadata
 #define _V4D_MODULE
 #define THIS_MODULE_VENDOR_ID 16
-#define THIS_MODULE_ID 2
+#define THIS_MODULE_ID 102
 #define THIS_MODULE_REV 1
 #define THIS_MODULE_NAME "PBR Test"
 #define THIS_MODULE_DESCRIPTION ""
@@ -103,18 +103,12 @@ struct PbrRenderer : v4d::modules::Rendering {
 	
 	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images) override {
 		pipelineLayout.AddDescriptorSet(descriptorSets[0]);
-		// pipelineLayout.AddPushConstant<glm::mat4>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
 		shaders["opaqueRasterization"].push_back(&pbrObjectShader);
 		pbrObjectShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, Vertex::GetInputAttributes());
 		pbrObjectShader.SetData(&vertexBuffer, &indexBuffer, indices.size());
-		// pbrObjectShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		// pbrObjectShader.depthStencilState.depthTestEnable = VK_FALSE;
-		// pbrObjectShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		// // pbrObjectShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-		// // pbrObjectShader.rasterizer.lineWidth = 1;
 	}
 	
 	void CreatePipelines(std::unordered_map<std::string, Image*>& images) override {

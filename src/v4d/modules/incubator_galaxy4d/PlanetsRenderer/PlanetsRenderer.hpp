@@ -183,8 +183,8 @@ public:
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			// Layout
-			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			VkAttachmentReference colorAttachmentRef = {
 				atmospherePass.AddAttachment(colorAttachment),
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -198,8 +198,8 @@ public:
 			inputAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			inputAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			// Layout
-			inputAttachment.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			inputAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			inputAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+			inputAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			VkAttachmentReference inputAttachmentRef = {
 				atmospherePass.AddAttachment(inputAttachment),
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL

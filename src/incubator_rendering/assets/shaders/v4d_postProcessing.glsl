@@ -16,6 +16,10 @@ layout(set = 1, binding = 1) uniform sampler2D depthStencilImage;
 layout(set = 1, binding = 2) uniform sampler2D historyImage; // previous frame
 layout(set = 1, binding = 3) uniform sampler2D uiImage;
 layout(set = 1, input_attachment_index = 0, binding = 4) uniform highp subpassInput ppImage;
+layout(set = 1, binding = 5) uniform sampler2D gBuffer_albedo;
+layout(set = 1, binding = 6) uniform sampler2D gBuffer_normal;
+layout(set = 1, binding = 7) uniform sampler2D gBuffer_emission;
+layout(set = 1, binding = 8) uniform sampler2D gBuffer_position;
 
 ##################################################################
 #shader vert
