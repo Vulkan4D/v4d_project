@@ -340,7 +340,7 @@ struct PlanetTerrain {
 									indices[genIndexIndex++] = bottomRightIndex;
 								} else {
 									indices[genIndexIndex++] = topLeftIndex; // top right-most
-									if (genRow < vertexSubdivisionsPerChunk-1) {
+									if (genRow < vertexSubdivisionsPerChunk) {
 										indices[genIndexIndex++] = 0xFFFFFFFF; // restart primitive
 									}
 								}

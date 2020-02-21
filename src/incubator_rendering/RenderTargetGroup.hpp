@@ -6,14 +6,13 @@ namespace v4d::graphics {
 	
 	class RenderTargetGroup {
 	public:
-		static const int GBUFFER_NB_IMAGES = 8;
+		static const int GBUFFER_NB_IMAGES = 4;
 		
 	protected:
 		
 		// Resolution scaling
-		float rasterizationResolutionScale = 1.0;
 		float thumbnailScale = 1.0/16;
-		float rayTracingScale = 1.0/4;
+		// float rayTracingScale = 1.0/4;
 	
 		// Render Target
 		Image* targetImage = nullptr;
@@ -26,26 +25,19 @@ namespace v4d::graphics {
 		Image ppImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT };
 		Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		// Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		
 		enum GBUFFER : int {
-			ALBEDO = 0, 	// rgb16_sfloat
-			NORMAL = 1, 	// rgb16_snorm
-			ROUGHNESS = 2, 	// r8_unorm
-			METALLIC = 3, 	// r8_unorm
-			SCATTER = 4, 	// r8_unorm
-			OCCLUSION = 5, 	// r8_unorm
-			EMISSION = 6, 	// rgb16_sfloat
-			POSITION = 7 	// rgba32_sfloat
+			ALBEDO = 0, 	// rgba16_sfloat
+			NORMAL = 1, 	// rgb16_sfloat + a16_sfloat = pack[roughness+metallic]
+			EMISSION = 2, 	// rgb16_sfloat + a16_sfloat = pack[scatter+occlusion]
+			POSITION = 3 	// rgb32_sfloat + a32_sfloat = dist (trueDistanceFromCamera)
 		};
 		std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
 			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
-			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16_SNORM, VK_FORMAT_R16G16B16A16_SNORM }},
-			/* ROUGHNESS */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* METALLIC */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* SCATTER */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* OCCLUSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R8_UNORM }},
-			/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16_SFLOAT, VK_FORMAT_R16G16B16A16_SFLOAT }},
+			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
+			/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
 			/* POSITION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }},
 		};
 		
@@ -109,18 +101,18 @@ namespace v4d::graphics {
 		#pragma endregion
 		
 		void CreateResources(Device* device) {
-			uint rasterWidth = (uint)((float)extent.width * rasterizationResolutionScale);
-			uint rasterHeight = (uint)((float)extent.height * rasterizationResolutionScale);
+			uint rasterWidth = (uint)((float)extent.width);
+			uint rasterHeight = (uint)((float)extent.height);
 			uint thumbnailWidth = (uint)((float)extent.width * thumbnailScale);
 			uint thumbnailHeight = (uint)((float)extent.height * thumbnailScale);
-			uint rayTracingWidth = (uint)((float)extent.width * rayTracingScale);
-			uint rayTracingHeight = (uint)((float)extent.height * rayTracingScale);
+			// uint rayTracingWidth = (uint)((float)extent.width * rayTracingScale);
+			// uint rayTracingHeight = (uint)((float)extent.height * rayTracingScale);
 			
 			litImage.Create(device, rasterWidth, rasterHeight);
 			ppImage.Create(device, rasterWidth, rasterHeight);
 			historyImage.Create(device, rasterWidth, rasterHeight);
 			thumbnailImage.Create(device, thumbnailWidth, thumbnailHeight, {litImage.format});
-			rayTracingImage.Create(device, rayTracingWidth, rayTracingHeight);
+			// rayTracingImage.Create(device, rayTracingWidth, rayTracingHeight);
 			depthImage.Create(device, rasterWidth, rasterHeight);
 			
 			for (auto& image : gBuffers) {
@@ -133,7 +125,7 @@ namespace v4d::graphics {
 			ppImage.Destroy(device);
 			historyImage.Destroy(device);
 			thumbnailImage.Destroy(device);
-			rayTracingImage.Destroy(device);
+			// rayTracingImage.Destroy(device);
 			depthImage.Destroy(device);
 			
 			for (auto& image : gBuffers) {

@@ -192,7 +192,7 @@ public:
 			
 			VkAttachmentDescription inputAttachment {};
 			// Format
-			inputAttachment.format = images["litImage"]->format;
+			inputAttachment.format = images["gBuffer_position"]->format;
 			inputAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			// Color
 			inputAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;

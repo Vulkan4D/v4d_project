@@ -188,6 +188,7 @@ void main() {
 	gBuffers.scatter = scatter;
 	gBuffers.occlusion = clamp(occlusion, 0, 1);
 	gBuffers.emission = emission;
-	gBuffers.position = vec4(f_viewPos, f_trueDistance);
+	gBuffers.position = f_viewPos;
+	gBuffers.dist = f_trueDistance;
 	WriteGBuffers(gBuffers);
 }
