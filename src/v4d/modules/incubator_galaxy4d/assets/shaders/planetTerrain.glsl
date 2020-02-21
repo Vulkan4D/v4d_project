@@ -97,7 +97,6 @@ struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 	vec3 emission;
 	float roughness;
 	float metallic;
-	float scatter;
 };
 
 RockDetail RockType_1() {
@@ -119,6 +118,10 @@ RockDetail RockType_1() {
 	) - 0.5) / 2.0;
 	rock.normal = normalize(mix(f_normal, f_normal + normalNoise, 0.5));
 	
+	rock.roughness = 0.8;
+	rock.metallic = 0.1;
+	rock.emission = vec3(0);
+	
 	return rock;
 }
 
@@ -128,7 +131,6 @@ void GetRockColorBlend(inout RockDetail dst, in RockDetail src, float blendFacto
 	dst.emission += src.emission * blendFactor;
 	dst.roughness += src.roughness * blendFactor;
 	dst.metallic += src.metallic * blendFactor;
-	dst.scatter += src.scatter * blendFactor;
 }
 
 void main() {
@@ -137,8 +139,6 @@ void main() {
 	vec3 emission = vec3(0);
 	float roughness = 0;
 	float metallic = 0;
-	float scatter = 0;
-	float occlusion = 0;
 	
 	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(f_pos);
 	
@@ -148,7 +148,6 @@ void main() {
 	rocks.emission = vec3(0);
 	rocks.roughness = 0;
 	rocks.metallic = 0;
-	rocks.scatter = 0;
 	
 	const float rockType_1 = v2f.rockTypes[0].x;
 	// const float rockType_2 = v2f.rockTypes[0].y;
@@ -165,7 +164,6 @@ void main() {
 	emission += rocks.emission;
 	roughness += rocks.roughness;
 	metallic += rocks.metallic;
-	scatter += rocks.scatter;
 	
 	// Snow
 	vec2 uv = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
@@ -176,17 +174,18 @@ void main() {
 		slopeNoise += Noise(uv*256.94)*0.1;
 	}
 	float slope = mix(f_slope, slopeNoise, 0.1);
-	albedo = mix(albedo, vec3(1), smoothstep(0.85, 0.98, slope));
+	albedo = mix(albedo, vec3(1), smoothstep(0.90, 0.95, slope));
+	metallic = mix(metallic, 0.0, smoothstep(0.90, 0.95, slope));
+	roughness = mix(roughness, 0.4, smoothstep(0.90, 0.95, slope));
 	
 	// May discard fragment here...
 	
 	GBuffers gBuffers;
-	gBuffers.albedo = vec4(albedo, 1);
+	gBuffers.albedo = albedo;
+	gBuffers.alpha = 1.0;
 	gBuffers.normal = ViewSpaceNormal(normalize(normal));
 	gBuffers.roughness = roughness;
 	gBuffers.metallic = metallic;
-	gBuffers.scatter = scatter;
-	gBuffers.occlusion = clamp(occlusion, 0, 1);
 	gBuffers.emission = emission;
 	gBuffers.position = f_viewPos;
 	gBuffers.dist = f_trueDistance;

@@ -29,10 +29,10 @@ namespace v4d::graphics {
 		// Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		
 		enum GBUFFER : int {
-			ALBEDO = 0, 	// rgba16_sfloat
-			NORMAL = 1, 	// rgb16_sfloat + a16_sfloat = pack[roughness+metallic]
-			EMISSION = 2, 	// rgb16_sfloat + a16_sfloat = pack[scatter+occlusion]
-			POSITION = 3 	// rgb32_sfloat + a32_sfloat = dist (trueDistanceFromCamera)
+			ALBEDO = 0, 	// rgb16_sfloat, a16_sfloat = alpha
+			NORMAL = 1, 	// rgb16_sfloat, a16_sfloat = roughness
+			EMISSION = 2, 	// rgb16_sfloat, a16_sfloat = metallic
+			POSITION = 3 	// rgb32_sfloat, a32_sfloat = dist (trueDistanceFromCamera)
 		};
 		std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
 			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},

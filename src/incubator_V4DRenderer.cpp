@@ -13,6 +13,7 @@ using namespace v4d::graphics;
 static std::vector<std::string> v4dModules {
 	"incubator_simplemovearound",
 	"incubator_galaxy4d",
+	"incubator_pbr_test",
 };
 
 #if defined(_DEBUG) && defined(_LINUX)
@@ -22,10 +23,11 @@ static std::vector<std::string> v4dModules {
 		// {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
 		// {"incubator_galaxy4d/assets/shaders/planetRayMarching.meta", 0},
 		// {"incubator_galaxy4d/assets/shaders/planetRaster.meta", 0},
-		{"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
-		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
 		{"incubator_rendering/assets/shaders/v4d_lighting.meta", 0},
 		{"incubator_rendering/assets/shaders/v4d_postProcessing.meta", 0},
+		{"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
+		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
+		{"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
 	};
 #endif
 
