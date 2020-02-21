@@ -96,7 +96,8 @@ void main() {
 #shader hdr.frag
 void main() {
 	vec3 color = subpassLoad(ppImage).rgb;
-
+	vec2 uv = gl_FragCoord.st / textureSize(litImage,0).st;
+	
 	// HDR ToneMapping (Reinhard)
 	const float exposure = 1.0;
 	color = vec3(1.0) - exp(-color * exposure);
@@ -105,6 +106,23 @@ void main() {
 	const float gamma = 2.2;
 	color = pow(color, vec3(1.0 / gamma));
 	
+	// Debug G-Buffers
+	if (camera.debug && uv.t > 0.75) {
+		if (uv.s < 0.25) {
+			color = vec3(texture(gBuffer_position, uv).a) / 100.0;
+			if (color.r == 0) color = vec3(1,0,1);
+		}
+		if (uv.s > 0.25 && uv.s < 0.5) {
+			color = texture(gBuffer_normal, uv).rgb;
+		}
+		if (uv.s > 0.5 && uv.s < 0.75) {
+			color = vec3(texture(gBuffer_normal, uv).a);
+		}
+		if (uv.s > 0.75) {
+			color = vec3(texture(gBuffer_emission, uv).a);
+		}
+	}
+
 	// Final color
 	out_color = vec4(max(vec3(0),color.rgb), 1.0);
 }

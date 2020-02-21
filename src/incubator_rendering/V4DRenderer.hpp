@@ -982,9 +982,10 @@ public: // Update
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
 			// Submodules
-			ImGui::SetNextWindowSize({405, 240});
+			ImGui::SetNextWindowSize({405, 264});
 			ImGui::Begin("Settings and Modules");
 			ImGui::Checkbox("TXAA", &scene.camera.txaa);
+			ImGui::Checkbox("Debug G-Buffers", &scene.camera.debug);
 			for (auto* submodule : renderingSubmodules) {
 				ImGui::Separator();
 				submodule->RunImGui();
