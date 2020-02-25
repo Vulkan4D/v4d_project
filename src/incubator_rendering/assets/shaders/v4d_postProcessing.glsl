@@ -120,6 +120,9 @@ void main() {
 		}
 		if (uv.s > 0.75) {
 			color = vec3(texture(gBuffer_emission, uv).a);
+			if (color.r < 0) {
+				color *= vec3(0,0,-1);
+			}
 		}
 	}
 

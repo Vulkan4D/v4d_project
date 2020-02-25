@@ -91,6 +91,8 @@ float f_trueDistance = clamp(distance(vec3(camera.worldPosition), (modelMatrix *
 vec3 f_tangentX = cross(planetChunk.northDir, f_normal);
 vec3 f_tangentY = cross(normalize(f_normal), f_tangentX);
 
+vec2 normalsUV = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
+
 struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 	vec3 albedo;
 	vec3 normal;
@@ -102,15 +104,19 @@ struct RockDetail { // 3 rgba image textures or in-shader procedural generation
 RockDetail RockType_1() {
 	RockDetail rock;
 	
-	rock.albedo = vec3(0.6,0.4,0.2);
+	float cracks = 0;
+	if (planetChunk.isLastLevel) {
+		cracks += clamp(pow(1-abs(FastSimplexFractal(vec3(normalsUV/2.1+2.12, 43.67), 4)), 20) - abs(Noise(normalsUV/2+98.12)), 0, 1);
+		cracks = clamp(cracks, 0, 1);
+	}
+	rock.albedo = mix(vec3(0.25,0.2,0.15), vec3(0), cracks);
 	
 	// Normals
-	vec2 normalsUV = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
-	float normalNoiseX = Noise(normalsUV+0.865)*0.4 + Noise(normalsUV*8.0+0.2685)*0.5 + Noise(normalsUV*20.0+20.85)*0.4;
-	float normalNoiseY = Noise(normalsUV+24.5)*0.4 + Noise(normalsUV*8.0+21.5)*0.5 + Noise(normalsUV*20.0+150.5)*0.4;
+	float normalNoiseX = Noise(normalsUV*4.0+10.25) + Noise(normalsUV*10.0+20.85);
+	float normalNoiseY = Noise(normalsUV*4.0+21.5) + Noise(normalsUV*10.0+150.5);
 	if (planetChunk.isLastLevel) {
-		normalNoiseX += Noise(normalsUV*50.0+201.85)*0.25 + Noise(normalsUV*100.0+450.25)*0.15;
-		normalNoiseY += Noise(normalsUV*50.0+300.5)*0.25 + Noise(normalsUV*100.0+120.78)*0.15;
+		normalNoiseX += Noise(normalsUV*50.0+201.85);
+		normalNoiseY += Noise(normalsUV*50.0+300.5);
 	}
 	vec3 normalNoise = ((
 		+ normalize(f_tangentX) * normalNoiseX
@@ -118,7 +124,7 @@ RockDetail RockType_1() {
 	) - 0.5) / 2.0;
 	rock.normal = normalize(mix(f_normal, f_normal + normalNoise, 0.5));
 	
-	rock.roughness = 0.8;
+	rock.roughness = 0.6;
 	rock.metallic = 0.1;
 	rock.emission = vec3(0);
 	
@@ -167,16 +173,34 @@ void main() {
 	
 	// Snow
 	vec2 uv = abs(f_uv - 0.5) * float(planetChunk.vertexSubdivisionsPerChunk);
-	float slopeNoise = Noise(uv)+Noise(uv*7.81)*0.6+Noise(uv*19.2)*0.3;
-	if (planetChunk.isLastLevel) {
-		slopeNoise += Noise(uv*45.37)*0.2;
-		slopeNoise += Noise(uv*98.12)*0.1;
-		slopeNoise += Noise(uv*256.94)*0.1;
+	float slopeNoise = Noise(uv)+Noise(uv*5.81)*0.6+Noise(uv*12.2)*0.3;
+	float slope = clamp(mix(f_slope, slopeNoise, 0.1), 0,1);
+	float snowSlope = mix(1, 0.7, f_snow);
+	if (slope > snowSlope) {
+		float snowGlitter = mix(pow(max(0,Noise(uv*35)),6) + pow(max(0,Noise(uv*70+12.85)),8), 0, smoothstep(20, 500, f_trueDistance));
+		snowGlitter += mix(pow(max(0,Noise(uv*85)),6) + pow(max(0,Noise(uv*150+12.85)),8), 0, smoothstep(5, 50, f_trueDistance));
+		
+		// Normals
+		float normalNoiseX = Noise(normalsUV+0.365)*0.4 + Noise(normalsUV*6.0+0.5685)*0.5 + Noise(normalsUV*12.0+8.85)*0.4;
+		float normalNoiseY = Noise(normalsUV+14.5)*0.4 + Noise(normalsUV*6.0+21.5)*0.5 + Noise(normalsUV*12.0+110.25)*0.4;
+		vec3 normalNoise = ((
+			+ normalize(f_tangentX) * normalNoiseX
+			+ normalize(f_tangentY) * normalNoiseY
+		) - 0.5) / 2.0;
+		
+		vec3 snowColor = vec3(1);
+		if (planetChunk.isLastLevel) {
+			snowColor += abs(vec3(Noise(normalsUV*46.0+11.5),Noise(normalsUV*47.0+11.5),Noise(normalsUV*43.0+16.5))/2);
+			snowColor += abs(vec3(Noise(normalsUV*98.0+38.5),Noise(normalsUV*98.0+1.5),Noise(normalsUV*90.0+82.5))/2);
+			snowColor += abs(vec3(Noise(normalsUV*746.0+11.5),Noise(normalsUV*745.0+11.5),Noise(normalsUV*744.0+16.5)));
+		}
+		
+		albedo = mix(albedo, snowColor, smoothstep(snowSlope, snowSlope+0.02, slope));
+		metallic = mix(metallic, -1.0, smoothstep(snowSlope, snowSlope+0.02, slope));
+		roughness = mix(roughness, 1.0-clamp(snowGlitter,0,1), smoothstep(snowSlope, snowSlope+0.02, slope));
+		normal = normalize(mix(f_normal, f_normal + normalNoise, 0.2));
+		emission = mix(emission, emission/3, smoothstep(snowSlope, snowSlope+0.02, slope));
 	}
-	float slope = mix(f_slope, slopeNoise, 0.1);
-	albedo = mix(albedo, vec3(1), smoothstep(0.90, 0.95, slope));
-	metallic = mix(metallic, 0.0, smoothstep(0.90, 0.95, slope));
-	roughness = mix(roughness, 0.4, smoothstep(0.90, 0.95, slope));
 	
 	// May discard fragment here...
 	

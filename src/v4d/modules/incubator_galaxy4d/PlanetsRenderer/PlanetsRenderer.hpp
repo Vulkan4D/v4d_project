@@ -272,7 +272,7 @@ public:
 				ImGui::Separator();
 				ImGui::Text("Sun");
 				static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
-				static float sunDistanceFactor = 3.0f;
+				static float sunDistanceFactor = 100.0f;
 				ImGui::ColorEdit3("Color", (float*)&sun.color);
 				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1, 500);
 				ImGui::ColorEdit3("Position", (float*)&sunPosition);

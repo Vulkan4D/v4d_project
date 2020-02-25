@@ -303,7 +303,7 @@ struct PlanetTerrain {
 					glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 					double altitude = planet->GetHeightMap(pos, triangleSize);
 					glm::dvec3 posOnChunk = pos * altitude - centerPos;
-					vertices[currentIndex].pos = glm::vec4(posOnChunk, altitude);
+					vertices[currentIndex].pos = glm::vec4(posOnChunk, altitude - planet->solidRadius);
 					vertices[currentIndex].uv = glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), 0, 0);
 					genVertexIndex++;
 					
@@ -700,7 +700,7 @@ struct PlanetTerrain {
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
 		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 10)*15000.0;
-		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/60000.0, 8)*8000.0;
+		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/30000.0, 8)*4000.0;
 		if (triangleSize < 200)
 			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/50.0, 7)*4.0;
 		if (triangleSize < 4)
@@ -710,8 +710,8 @@ struct PlanetTerrain {
 	
 	void GenerateTerrainDetails(Chunk* chunk, Vertex& point) {
 		float wet = 0;
-		float snow = 0.5;
-		
+		float snow = glm::smoothstep(0.0f, 10000.0f, point.pos.a);
+
 		// Textures
 		point.rockType = 1; // 1-44 (can bitshift and have up to 4 blended rock types)
 		point.terrainType = ShaderPipeline::CompactVec4ToUint( // 4 terrain type information (255 units of precision each)
