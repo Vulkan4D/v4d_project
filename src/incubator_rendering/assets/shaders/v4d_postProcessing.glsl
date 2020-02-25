@@ -11,15 +11,16 @@ precision highp sampler2D;
 
 layout(location = 0) in vec2 uv;
 layout(location = 0) out vec4 out_color;
-layout(set = 1, binding = 0) uniform sampler2D litImage;
-layout(set = 1, binding = 1) uniform sampler2D depthStencilImage;
-layout(set = 1, binding = 2) uniform sampler2D historyImage; // previous frame
-layout(set = 1, binding = 3) uniform sampler2D uiImage;
-layout(set = 1, input_attachment_index = 0, binding = 4) uniform highp subpassInput ppImage;
-layout(set = 1, binding = 5) uniform sampler2D gBuffer_albedo;
-layout(set = 1, binding = 6) uniform sampler2D gBuffer_normal;
-layout(set = 1, binding = 7) uniform sampler2D gBuffer_emission;
-layout(set = 1, binding = 8) uniform sampler2D gBuffer_position;
+layout(set = 1, binding = 0) uniform sampler2D gBuffer_albedo;
+layout(set = 1, binding = 1) uniform sampler2D gBuffer_normal;
+layout(set = 1, binding = 2) uniform sampler2D gBuffer_emission;
+layout(set = 1, binding = 3) uniform sampler2D gBuffer_position;
+layout(set = 1, binding = 4) uniform sampler2D litImage;
+layout(set = 1, binding = 5) uniform sampler2D depthStencilImage;
+layout(set = 1, binding = 6) uniform sampler2D historyImage; // previous frame
+layout(set = 1, binding = 7) uniform sampler2D uiImage;
+layout(set = 1, binding = 8) uniform sampler2D histogramImage;
+layout(set = 1, input_attachment_index = 0, binding = 9) uniform highp subpassInput ppImage;
 
 ##################################################################
 #shader vert
@@ -107,27 +108,32 @@ void main() {
 	color = pow(color, vec3(1.0 / gamma));
 	
 	// Debug G-Buffers
-	if (camera.debug && uv.t > 0.75) {
-		if (uv.s < 0.25) {
-			color = vec3(texture(gBuffer_position, uv).a) / 100.0;
-			if (color.r == 0) color = vec3(1,0,1);
-		}
-		if (uv.s > 0.25 && uv.s < 0.5) {
-			color = texture(gBuffer_normal, uv).rgb;
-		}
-		if (uv.s > 0.5 && uv.s < 0.75) {
-			color = vec3(texture(gBuffer_normal, uv).a);
-		}
-		if (uv.s > 0.75) {
-			color = vec3(texture(gBuffer_emission, uv).a);
-			if (color.r < 0) {
-				color *= vec3(0,0,-1);
+	if (camera.debug) {
+		if (uv.t > 0.75) {
+			if (uv.s < 0.25) {
+				color = vec3(texture(gBuffer_position, uv).a) / 100.0;
+				if (color.r == 0) color = vec3(1,0,1);
+			}
+			if (uv.s > 0.25 && uv.s < 0.5) {
+				color = texture(gBuffer_normal, uv).rgb;
+			}
+			if (uv.s > 0.5 && uv.s < 0.75) {
+				color = vec3(texture(gBuffer_normal, uv).a);
+			}
+			if (uv.s > 0.75) {
+				color = vec3(texture(gBuffer_emission, uv).a);
+				if (color.r < 0) {
+					color *= vec3(0,0,-1);
+				}
 			}
 		}
+		if (uv.s > 0.75 && uv.t < 0.25)
+			color = texture(histogramImage, (uv-vec2(0.75,0)) * 4).rgb;
 	}
 
 	// Final color
 	out_color = vec4(max(vec3(0),color.rgb), 1.0);
+	
 }
 
 #shader ui.frag

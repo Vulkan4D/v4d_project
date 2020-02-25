@@ -10,10 +10,6 @@ namespace v4d::graphics {
 		
 	protected:
 		
-		// Resolution scaling
-		float thumbnailScale = 1.0/16;
-		// float rayTracingScale = 1.0/4;
-	
 		// Render Target
 		Image* targetImage = nullptr;
 		SwapChain* targetSwapChain = nullptr;
@@ -24,9 +20,7 @@ namespace v4d::graphics {
 		Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image ppImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT };
 		Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		// Image rayTracingImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		
 		enum GBUFFER : int {
 			ALBEDO = 0, 	// rgb16_sfloat, a16_sfloat = alpha
@@ -75,10 +69,6 @@ namespace v4d::graphics {
 			return historyImage;
 		}
 		
-		Image& GetThumbnailImage() {
-			return thumbnailImage;
-		}
-		
 		Image& GetDepthImage() {
 			return depthImage;
 		}
@@ -103,16 +93,10 @@ namespace v4d::graphics {
 		void CreateResources(Device* device) {
 			uint rasterWidth = (uint)((float)extent.width);
 			uint rasterHeight = (uint)((float)extent.height);
-			uint thumbnailWidth = (uint)((float)extent.width * thumbnailScale);
-			uint thumbnailHeight = (uint)((float)extent.height * thumbnailScale);
-			// uint rayTracingWidth = (uint)((float)extent.width * rayTracingScale);
-			// uint rayTracingHeight = (uint)((float)extent.height * rayTracingScale);
 			
 			litImage.Create(device, rasterWidth, rasterHeight);
 			ppImage.Create(device, rasterWidth, rasterHeight);
 			historyImage.Create(device, rasterWidth, rasterHeight);
-			thumbnailImage.Create(device, thumbnailWidth, thumbnailHeight, {litImage.format});
-			// rayTracingImage.Create(device, rayTracingWidth, rayTracingHeight);
 			depthImage.Create(device, rasterWidth, rasterHeight);
 			
 			for (auto& image : gBuffers) {
@@ -124,8 +108,6 @@ namespace v4d::graphics {
 			litImage.Destroy(device);
 			ppImage.Destroy(device);
 			historyImage.Destroy(device);
-			thumbnailImage.Destroy(device);
-			// rayTracingImage.Destroy(device);
 			depthImage.Destroy(device);
 			
 			for (auto& image : gBuffers) {

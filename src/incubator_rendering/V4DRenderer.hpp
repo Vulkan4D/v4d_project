@@ -20,7 +20,13 @@ private:
 	float uiImageScale = 1.0;
 	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	#pragma endregion
-	
+
+	#pragma region Thumbnail/Histogram
+	float thumbnailScale = 1.0/4;
+	Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	Image histogramImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	#pragma endregion
+
 	#pragma region Render passes
 	RenderPass	opaqueRasterPass,
 				opaqueLightingPass,
@@ -33,7 +39,7 @@ private:
 	
 	#pragma region Shaders
 	
-	PipelineLayout lightingPipelineLayout, thumbnailPipelineLayout, postProcessingPipelineLayout, uiPipelineLayout;
+	PipelineLayout lightingPipelineLayout, thumbnailPipelineLayout, postProcessingPipelineLayout, uiPipelineLayout, histogramComputeLayout;
 	RasterShaderPipeline opaqueLightingShader {lightingPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_lighting.vert",
 		"incubator_rendering/assets/shaders/v4d_lighting.opaque.frag",
@@ -62,6 +68,9 @@ private:
 		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
 		"incubator_rendering/assets/shaders/v4d_postProcessing.ui.frag",
 	}};
+	ComputeShaderPipeline histogramComputeShader {histogramComputeLayout, 
+		"incubator_rendering/assets/shaders/v4d_histogram.comp"
+	};
 	
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaders {
 		/* RenderPass_SubPass => ShadersList */
@@ -88,7 +97,7 @@ protected:
 		{"gBuffer_emission", &renderTargetGroup.GetGBuffer(2)},
 		{"gBuffer_position", &renderTargetGroup.GetGBuffer(3)},
 		{"litImage", &renderTargetGroup.GetLitImage()},
-		{"thumbnail", &renderTargetGroup.GetThumbnailImage()},
+		{"thumbnail", &thumbnailImage},
 		{"historyImage", &renderTargetGroup.GetHistoryImage()},
 		{"ui", &uiImage},
 	};
@@ -144,18 +153,25 @@ private: // Init
 		
 		// Post-Processing
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(2, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_inputAttachment(4, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-			postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i+5, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
+			postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+0, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+1, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+2, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+3, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+4, &histogramImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_inputAttachment(RenderTargetGroup::GBUFFER_NB_IMAGES+5, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
 		// UI
 		//TODO uiPipelineLayout
+		
+		// Compute
+		auto* histogramComputeDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
+		histogramComputeDescriptorSet_0->AddBinding_imageView(0, &thumbnailImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
+		histogramComputeDescriptorSet_0->AddBinding_imageView(1, &histogramImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
+		histogramComputeLayout.AddDescriptorSet(histogramComputeDescriptorSet_0);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -211,9 +227,13 @@ private: // Resources
 		float screenHeight = (float)swapChain->extent.height;
 		uint uiWidth = (uint)(screenWidth * uiImageScale);
 		uint uiHeight = (uint)(screenHeight * uiImageScale);
+		uint thumbnailWidth = (uint)((float)swapChain->extent.width * thumbnailScale);
+		uint thumbnailHeight = (uint)((float)swapChain->extent.height * thumbnailScale);
 		
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
+		thumbnailImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
+		histogramImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
 		renderTargetGroup.SetRenderTarget(swapChain);
 		renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
@@ -222,7 +242,8 @@ private: // Resources
 		
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		TransitionImageLayout(renderTargetGroup.GetThumbnailImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(thumbnailImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(histogramImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetHistoryImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// Submodules
@@ -235,6 +256,8 @@ private: // Resources
 	void DestroyResources() override {
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
+		thumbnailImage.Destroy(renderingDevice);
+		histogramImage.Destroy(renderingDevice);
 		renderTargetGroup.DestroyResources(renderingDevice);
 		
 		// Submodules
@@ -272,6 +295,7 @@ private: // Pipelines
 		thumbnailPipelineLayout.Create(renderingDevice);
 		postProcessingPipelineLayout.Create(renderingDevice);
 		uiPipelineLayout.Create(renderingDevice);
+		histogramComputeLayout.Create(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -522,11 +546,11 @@ private: // Pipelines
 		
 		{// Thumbnail Gen render pass
 			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = renderTargetGroup.GetThumbnailImage().format;
+				colorAttachment.format = thumbnailImage.format;
 				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 			VkAttachmentReference colorAttachmentRef = {
 				thumbnailRenderPass.AddAttachment(colorAttachment),
@@ -542,11 +566,11 @@ private: // Pipelines
 			
 			// Create the render pass
 			thumbnailRenderPass.Create(renderingDevice);
-			thumbnailRenderPass.CreateFrameBuffers(renderingDevice, renderTargetGroup.GetThumbnailImage());
+			thumbnailRenderPass.CreateFrameBuffers(renderingDevice, thumbnailImage);
 			
 			// Shaders
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
-				shaderPipeline->SetRenderPass(&renderTargetGroup.GetThumbnailImage(), thumbnailRenderPass.handle, 0);
+				shaderPipeline->SetRenderPass(&thumbnailImage, thumbnailRenderPass.handle, 0);
 				shaderPipeline->AddColorBlendAttachmentState();
 				shaderPipeline->CreatePipeline(renderingDevice);
 			}
@@ -734,6 +758,9 @@ private: // Pipelines
 			}
 		#endif
 		
+		// Compute
+		histogramComputeShader.CreatePipeline(renderingDevice);
+		
 	}
 	
 	void DestroyPipelines() override {
@@ -783,6 +810,9 @@ private: // Pipelines
 		postProcessingRenderPass.DestroyFrameBuffers(renderingDevice);
 		postProcessingRenderPass.Destroy(renderingDevice);
 		
+		// Compute
+		histogramComputeShader.DestroyPipeline(renderingDevice);
+		
 		// UI
 		for (auto* shaderPipeline : shaders["ui"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
@@ -796,6 +826,7 @@ private: // Pipelines
 		thumbnailPipelineLayout.Destroy(renderingDevice);
 		postProcessingPipelineLayout.Destroy(renderingDevice);
 		uiPipelineLayout.Destroy(renderingDevice);
+		histogramComputeLayout.Destroy(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -808,7 +839,7 @@ private: // Commands
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
 		// Gen Thumbnail
-		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetThumbnailImage(), {{.0,.0,.0,.0}});
+		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, thumbnailImage, {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
 				shaderPipeline->Execute(renderingDevice, commandBuffer);
 			}
@@ -896,6 +927,10 @@ private: // Commands
 	}
 	
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
+		// Compute
+		histogramComputeShader.SetGroupCounts(thumbnailImage.width, thumbnailImage.height, 1);
+		histogramComputeShader.Execute(renderingDevice, commandBuffer);
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicLowPriorityCompute(commandBuffer);
@@ -930,6 +965,9 @@ public: // Scene configuration
 				shader->ReadShaders();
 			}
 		}
+		
+		// Compute
+		histogramComputeShader.ReadShaders();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
