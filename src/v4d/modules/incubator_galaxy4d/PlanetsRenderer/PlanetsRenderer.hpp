@@ -281,14 +281,27 @@ public:
 	
 	// Executed before each frame
 	void FrameUpdate(Scene& scene) override {
+		scene.camera.worldPosition += glm::dvec3(planetTerrains[0]->matrix * glm::dvec4(0, -15806000, 18000000, 1));
+		scene.camera.RefreshViewMatrix();
+		
 		planetTerrainShader.viewMatrix = scene.camera.viewMatrix;
 		planetAtmosphereShader.viewMatrix = scene.camera.viewMatrix;
 		
 		// Planets
 		for (auto* planetaryTerrain : planetTerrains) {
 			std::lock_guard lock(planetaryTerrain->chunksMutex);
-			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
+			
+			// //TODO Planet rotation
+			// static v4d::Timer time(true);
+			// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/1000000000;
+			// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/30;
+			// planetaryTerrain->rotationAngle += 0.0001;
+			// planetaryTerrain->RefreshMatrix();
+			
+			// Camera position relative to planet
+			planetaryTerrain->cameraPos = glm::inverse(planetaryTerrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
 			planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos), 0.5);
+			
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
 			}

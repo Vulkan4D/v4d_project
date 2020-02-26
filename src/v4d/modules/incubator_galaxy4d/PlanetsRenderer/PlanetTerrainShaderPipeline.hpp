@@ -30,19 +30,14 @@ public:
 			if (chunk->render) {
 				
 				// Frustum culling
-				if (!camera->IsVisibleInScreen(chunk->planet->absolutePosition + chunk->centerPos, chunk->boundingDistance)) return {1,1,0};
+				if (!camera->IsVisibleInScreen(chunk->planet->matrix * glm::dvec4(chunk->centerPos, 1), chunk->boundingDistance)) return {1,1,0};
 				
-				//TODO
-				double planetRotationAngle = 0;
-				glm::dvec3 planetRotationAxis {0,1,0};
-				glm::dmat4 planetRotationMatrix = glm::rotate(glm::translate(glm::dmat4(1), chunk->planet->absolutePosition + chunk->centerPos), planetRotationAngle, planetRotationAxis);
-				
-				planetChunkPushConstant.modelViewMatrix = viewMatrix * planetRotationMatrix;
+				planetChunkPushConstant.modelViewMatrix = viewMatrix * glm::translate(chunk->planet->matrix, chunk->centerPos);
 				planetChunkPushConstant.chunkPos = chunk->centerPos;
 				planetChunkPushConstant.chunkSize = (float)chunk->chunkSize;
 				planetChunkPushConstant.isLastLevel = chunk->IsLastLevel();
 				planetChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
-				planetChunkPushConstant.northDir = glm::normalize(glm::transpose(glm::inverse(glm::dmat3(planetRotationMatrix))) * glm::dvec3(0,1,0));
+				planetChunkPushConstant.northDir = glm::normalize(glm::transpose(glm::inverse(glm::dmat3(chunk->planet->matrix))) * glm::dvec3(0,1,0));
 				
 				PushConstant(device, cmdBuffer, &planetChunkPushConstant);
 				SetData(

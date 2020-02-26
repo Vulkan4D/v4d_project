@@ -20,7 +20,7 @@
         {
             "label": "clean build all shaders",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt ; find . -type d -name 'shaders' | xargs rm -rf ; cmake .. -DCMAKE_BUILD_TYPE=Debug ; make shaders;",
+            "command": "clear; cd build && rm -f CMakeCache.txt ; find . -type d -name 'shaders' | xargs rm -rf ; cmake .. -DCMAKE_BUILD_TYPE=Debug ; make shaders -j8;",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },

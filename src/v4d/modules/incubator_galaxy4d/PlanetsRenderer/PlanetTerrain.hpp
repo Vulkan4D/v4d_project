@@ -22,10 +22,14 @@ struct PlanetTerrain {
 	float lightIntensity = 0;
 	LightSource lightSource {};
 	
+	glm::dvec3 rotationAxis {0,0,1};
+	double rotationAngle = 0;
+	glm::dmat4 matrix {1};
+	
 	PlanetAtmosphere* atmosphere = nullptr;
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 9;
+	static const int chunkSubdivisionsPerFace = 7;
 	static const int vertexSubdivisionsPerChunk = 100;
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
 	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
@@ -619,7 +623,7 @@ struct PlanetTerrain {
 			std::scoped_lock lock(stateMutex);
 			
 			// Angle Culling
-			bool chunkVisibleByAngle =
+			bool chunkVisibleByAngle = 
 				glm::dot(planet->cameraPos - centerPosLowestPoint, centerPos) > 0.0 ||
 				glm::dot(planet->cameraPos - topLeftPosLowestPoint, topLeftPos) > 0.0 ||
 				glm::dot(planet->cameraPos - topRightPosLowestPoint, topRightPos) > 0.0 ||
@@ -844,6 +848,10 @@ struct PlanetTerrain {
 		// Collect garbage
 		vertexBufferPool.CollectGarbage(device);
 		indexBufferPool.CollectGarbage(device);
+	}
+	
+	void RefreshMatrix() {
+		matrix = glm::rotate(glm::translate(glm::dmat4(1), absolutePosition), rotationAngle, rotationAxis);
 	}
 	
 };

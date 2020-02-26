@@ -35,7 +35,7 @@ public:
 		if (planets) {
 			for (auto* planet : *planets) if (planet->atmosphere) {
 				
-				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * glm::translate(glm::dmat4(1), planet->absolutePosition);
+				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * planet->matrix;
 				planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
 				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
 				planetAtmospherePushConstant.densityFactor = planet->atmosphere->densityFactor;
