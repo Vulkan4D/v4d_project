@@ -14,6 +14,7 @@ private:
 	
 	#pragma region Buffers
 	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
+	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	#pragma endregion
 	
 	#pragma region UI
@@ -22,9 +23,9 @@ private:
 	#pragma endregion
 
 	#pragma region Thumbnail/Histogram
-	float thumbnailScale = 1.0/4;
+	float thumbnailScale = 1.0/16;
 	Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-	Image histogramImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	float exposureFactor = 1;
 	#pragma endregion
 
 	#pragma region Render passes
@@ -159,8 +160,7 @@ private: // Init
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+1, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+2, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+3, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+4, &histogramImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_inputAttachment(RenderTargetGroup::GBUFFER_NB_IMAGES+5, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_inputAttachment(RenderTargetGroup::GBUFFER_NB_IMAGES+4, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -170,7 +170,7 @@ private: // Init
 		// Compute
 		auto* histogramComputeDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
 		histogramComputeDescriptorSet_0->AddBinding_imageView(0, &thumbnailImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
-		histogramComputeDescriptorSet_0->AddBinding_imageView(1, &histogramImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
+		histogramComputeDescriptorSet_0->AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
 		histogramComputeLayout.AddDescriptorSet(histogramComputeDescriptorSet_0);
 		
 		// Submodules
@@ -233,7 +233,6 @@ private: // Resources
 		// Create images
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		thumbnailImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
-		histogramImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
 		renderTargetGroup.SetRenderTarget(swapChain);
 		renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 		renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
@@ -243,7 +242,6 @@ private: // Resources
 		// Transition images
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(thumbnailImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		TransitionImageLayout(histogramImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetHistoryImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// Submodules
@@ -257,7 +255,6 @@ private: // Resources
 		// Destroy images
 		uiImage.Destroy(renderingDevice);
 		thumbnailImage.Destroy(renderingDevice);
-		histogramImage.Destroy(renderingDevice);
 		renderTargetGroup.DestroyResources(renderingDevice);
 		
 		// Submodules
@@ -270,6 +267,12 @@ private: // Resources
 		// Camera
 		cameraUniformBuffer.Allocate(renderingDevice);
 		
+		// Compute histogram
+		totalLuminance.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		totalLuminance.MapMemory(renderingDevice);
+		glm::vec4 luminance {0,0,0,1};
+		totalLuminance.WriteToMappedData(&luminance);
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->AllocateBuffers();
@@ -279,6 +282,10 @@ private: // Resources
 	void FreeBuffers() override {
 		// Camera
 		cameraUniformBuffer.Free(renderingDevice);
+		
+		// Compute histogram
+		totalLuminance.UnmapMemory(renderingDevice);
+		totalLuminance.Free(renderingDevice);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -928,7 +935,7 @@ private: // Commands
 	
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		// Compute
-		histogramComputeShader.SetGroupCounts(thumbnailImage.width, thumbnailImage.height, 1);
+		histogramComputeShader.SetGroupCounts(1, 1, 1);
 		histogramComputeShader.Execute(renderingDevice, commandBuffer);
 		
 		// Submodules
@@ -1011,6 +1018,14 @@ public: // Update
 	}
 	
 	void LowPriorityFrameUpdate() override {
+		
+		// Histogram
+		glm::vec4 luminance;
+		totalLuminance.ReadFromMappedData(&luminance);
+		if (luminance.a > 0) {
+			scene.camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
+		}
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->LowPriorityFrameUpdate();
@@ -1020,10 +1035,11 @@ public: // Update
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
 			// Submodules
-			ImGui::SetNextWindowSize({405, 264});
+			ImGui::SetNextWindowSize({405, 285});
 			ImGui::Begin("Settings and Modules");
 			ImGui::Checkbox("TXAA", &scene.camera.txaa);
 			ImGui::Checkbox("Debug G-Buffers", &scene.camera.debug);
+			ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 8);
 			for (auto* submodule : renderingSubmodules) {
 				ImGui::Separator();
 				submodule->RunImGui();

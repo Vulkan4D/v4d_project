@@ -19,8 +19,10 @@ layout(set = 1, binding = 4) uniform sampler2D litImage;
 layout(set = 1, binding = 5) uniform sampler2D depthStencilImage;
 layout(set = 1, binding = 6) uniform sampler2D historyImage; // previous frame
 layout(set = 1, binding = 7) uniform sampler2D uiImage;
-layout(set = 1, binding = 8) uniform sampler2D histogramImage;
-layout(set = 1, input_attachment_index = 0, binding = 9) uniform highp subpassInput ppImage;
+layout(set = 1, input_attachment_index = 0, binding = 8) uniform highp subpassInput ppImage;
+layout(set = 0, binding = 9) buffer Histogram {
+	vec4 totalLuminance;
+};
 
 ##################################################################
 #shader vert
@@ -99,9 +101,9 @@ void main() {
 	vec3 color = subpassLoad(ppImage).rgb;
 	vec2 uv = gl_FragCoord.st / textureSize(litImage,0).st;
 	
-	// // HDR ToneMapping (Reinhard)
-	// const float exposure = 1.0;
-	// color = vec3(1.0) - exp(-color * exposure);
+	// HDR ToneMapping (Reinhard)
+	float exposure = 1.0 / sqrt(camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
+	color = vec3(1.0) - exp(-color * clamp(exposure, 0.0001, 10));
 	
 	// Gamma correction 
 	const float gamma = 2.2;
@@ -127,13 +129,10 @@ void main() {
 				}
 			}
 		}
-		if (uv.s > 0.75 && uv.t < 0.25)
-			color = texture(histogramImage, (uv-vec2(0.75,0)) * 4).rgb;
 	}
 
 	// Final color
 	out_color = vec4(max(vec3(0),color.rgb), 1.0);
-	
 }
 
 #shader ui.frag

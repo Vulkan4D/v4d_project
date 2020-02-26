@@ -60,8 +60,6 @@ const float minStepSize = 100.0; // meters
 
 #define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
 #define MIE_BETA vec3(1e-7)
-// #define AMBIENT_BETA vec3(0.6,0.2,0.05)/200000
-#define AMBIENT_BETA vec3(0)
 #define G 0.7 /* blob around the sun */
 
 void main() {

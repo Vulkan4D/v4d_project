@@ -52,142 +52,90 @@ vec3 fresnelSchlick(float HdotV, vec3 baseReflectivity) {
 	return baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - HdotV, 5.0);
 }
 
-#define PBR
-
 void main() {
 	GBuffers gBuffers = LoadGBuffers();
 	vec3 color = vec3(0);
-	
-	#ifdef PBR
-		// PBR
-		vec3 N = normalize(gBuffers.normal);
-		vec3 V = normalize(-gBuffers.position);
-		// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
-		vec3 baseReflectivity = mix(vec3(0.04), gBuffers.albedo, max(0,gBuffers.metallic));
-		// reflectance equiation
-		// for each light {
-			// calculate per-light radiance
-			vec3 L = normalize(lightSource.viewPosition - gBuffers.position);
-			vec3 H = normalize(V + L);
-			float dist = length(lightSource.viewPosition - gBuffers.position);
-			float atten = 1.0 / (dist*dist);
-			vec3 radiance = lightSource.color * lightSource.intensity * atten;
-			// cook-torrance BRDF
-			float NdotV = max(dot(N,V), 0.000001);
-			float NdotL = max(dot(N,L), 0.000001);
-			float HdotV = max(dot(H,V), 0.0);
-			float NdotH = max(dot(N,H), 0.0);
-			//
-			float D = distributionGGX(NdotH, gBuffers.roughness); // larger the more micro-facets aligned to H (normal distribution function)
-			float G = geometrySmith(NdotV, NdotL, gBuffers.roughness); // smaller the more micro-facets shadowed by other micro-facets
-			vec3 F = fresnelSchlick(HdotV, baseReflectivity); // proportion of specular reflectance
-			vec3 FV = fresnelSchlick(NdotV, baseReflectivity); // proportion of specular reflectance
-			vec3 FL = fresnelSchlick(NdotL, baseReflectivity); // proportion of specular reflectance
-			//
-			vec3 specular = D * G * F;
-			specular /= 4.0 * NdotV * NdotL;
-			// for energy conservation, the diffuse and specular light can't be above 1.0 (unless the surface emits light); to preserve this relationship the diffuse component (kD) should equal to 1.0 - kS.
-			// vec3 kD = vec3(1.0)-F;
-			vec3 kD = (vec3(1.0)-FV) * (vec3(1.0)-FL) * 1.05;
-			// multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or a linear blend if partly metal (pure metals have no diffuse light).
-			kD *= 1.0 - max(0, gBuffers.metallic);
-			// Final lit color
-			color += (kD * gBuffers.albedo / PI + specular) * radiance * max(dot(N,L) + max(0, gBuffers.metallic/-5), 0);
-			
-			// Sub-Surface Scattering (simple rim for now)
-			// if (gBuffers.metallic < 0) {
-				float rim = pow(1.0 - NdotV, 2-gBuffers.metallic*2+NdotL) * NdotL;
-				color += -min(0,gBuffers.metallic) * radiance * rim;
-			// }
-			
-			
+
+	// PBR
+	vec3 N = normalize(gBuffers.normal);
+	vec3 V = normalize(-gBuffers.position);
+	// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
+	vec3 baseReflectivity = mix(vec3(0.04), gBuffers.albedo, max(0,gBuffers.metallic));
+	// reflectance equiation
+	// for each light { (this is done with separate draw calls for now...)
+		// calculate per-light radiance
+		vec3 L = normalize(lightSource.viewPosition - gBuffers.position);
+		vec3 H = normalize(V + L);
+		float dist = length(lightSource.viewPosition - gBuffers.position);
+		float atten = 1.0 / (dist*dist);
+		vec3 radiance = lightSource.color * lightSource.intensity * atten;
+		// cook-torrance BRDF
+		float NdotV = max(dot(N,V), 0.000001);
+		float NdotL = max(dot(N,L), 0.000001);
+		float HdotV = max(dot(H,V), 0.0);
+		float NdotH = max(dot(N,H), 0.0);
+		//
+		float D = distributionGGX(NdotH, gBuffers.roughness); // larger the more micro-facets aligned to H (normal distribution function)
+		float G = geometrySmith(NdotV, NdotL, gBuffers.roughness); // smaller the more micro-facets shadowed by other micro-facets
+		vec3 F = fresnelSchlick(HdotV, baseReflectivity); // proportion of specular reflectance
+		vec3 FV = fresnelSchlick(NdotV, baseReflectivity); // proportion of specular reflectance
+		vec3 FL = fresnelSchlick(NdotL, baseReflectivity); // proportion of specular reflectance
+		//
+		vec3 specular = D * G * F;
+		specular /= 4.0 * NdotV * NdotL;
+		// for energy conservation, the diffuse and specular light can't be above 1.0 (unless the surface emits light); to preserve this relationship the diffuse component (kD) should equal to 1.0 - kS.
+		// vec3 kD = vec3(1.0)-F;
+		vec3 kD = (vec3(1.0)-FV) * (vec3(1.0)-FL) * 1.05;
+		// multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or a linear blend if partly metal (pure metals have no diffuse light).
+		kD *= 1.0 - max(0, gBuffers.metallic);
+		// Final lit color
+		color += (kD * gBuffers.albedo / PI + specular) * radiance * max(dot(N,L) + max(0, gBuffers.metallic/-5), 0);
+		
+		// Sub-Surface Scattering (simple rim for now)
+		// if (gBuffers.metallic < 0) {
+			float rim = pow(1.0 - NdotV, 2-gBuffers.metallic*2+NdotL) * NdotL;
+			color += -min(0,gBuffers.metallic) * radiance * rim;
 		// }
 		
-		// Ambient
-		// color += gBuffers.albedo * 0.01;
-		
-		// Emission
-		color += gBuffers.emission;
-		
-	#else
-		
-		
-		/////////////////////////////
-		// Blinn-Phong
+	// }
+	
+	// Ambient
+	color += gBuffers.albedo * 0.0002;
+	
+	// Emission
+	color += gBuffers.emission;
+	
+	
+	// Shadow maps...
 
-		color = gBuffers.albedo;
-
-		// ambient
-		vec3 ambient = vec3(0);// lightSource.color * lightSource.ambientStrength;
-
-		// diffuse
-		vec3 norm = normalize(gBuffers.normal);
-		vec3 lightDir = normalize(lightSource.viewPosition - gBuffers.position);
-		float diff = max(dot(norm, lightDir), 0.0);
-		vec3 diffuse = diff * lightSource.color * (lightSource.intensity/20.0);
-
-		// specular
-		float specularStrength = 0.5;
-		vec3 viewDir = normalize(-gBuffers.position);
-		vec3 reflectDir = reflect(-lightDir, norm);
-		float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-		vec3 specular = specularStrength * spec * lightSource.color * (lightSource.intensity/30.0);
-
-	// diffuse = vec3(0.5);
-	// specular = vec3(0);
-
-		// // Attenuation (light.constant >= 1.0, light.linear ~= 0.1, light.quadratic ~= 0.05)
-		// float dist = distance(lightSource.viewPosition, gBuffers.position);
-		// float attenuation = 1.0 / (1.0/*light.constant*/ + 0.1/*light.linear*/*dist + 0.05/*light.quadratic*/*(dist*dist));
-		// ambient *= attenuation;
-		// diffuse *= attenuation;
-		// specular *= attenuation;
-		
-		
-		// //////
-		// // For Spot lights : 
-		// float innerCutOff = cos(radians(12/*degrees*/));
-		// float outerCutOff = cos(radians(18/*degrees*/));
-		// float theta = dot(lightDir, normalize(-spotLight.direction));
-		// float epsilon = (innerCutOff - outerCutOff);
-		// float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
-		// diffuse *= intensity;
-		// specular *= intensity;
-		
-		
-		
-		// Final color
-		color *= (ambient + diffuse + specular);
-
-		/////////////////////////////
+	// // Attenuation (light.constant >= 1.0, light.linear ~= 0.1, light.quadratic ~= 0.05)
+	// float dist = distance(lightSource.viewPosition, gBuffers.position);
+	// float attenuation = 1.0 / (1.0/*light.constant*/ + 0.1/*light.linear*/*dist + 0.05/*light.quadratic*/*(dist*dist));
+	// ambient *= attenuation;
+	// diffuse *= attenuation;
+	// specular *= attenuation;
 	
-	#endif
-	
-	
-	
-	
-	
-	
-	
-	// color = gBuffers.albedo * vec3(dot(gBuffers.normal, normalize(lightSource.viewPosition - gBuffers.position)));
-	
-	
-	
-	
-	
-	
+	// //////
+	// // For Spot lights : 
+	// float innerCutOff = cos(radians(12/*degrees*/));
+	// float outerCutOff = cos(radians(18/*degrees*/));
+	// float theta = dot(lightDir, normalize(-spotLight.direction));
+	// float epsilon = (innerCutOff - outerCutOff);
+	// float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+	// diffuse *= intensity;
+	// specular *= intensity;
 	
 	
 	out_color = vec4(color, gBuffers.alpha);
 }
 
-#shader transparent.frag
-void main() {
-	GBuffers gBuffers = LoadGBuffers();
-	vec3 color = gBuffers.albedo;
-	float alpha = gBuffers.alpha;
+// #shader transparent.frag
+// void main() {
+// 	GBuffers gBuffers = LoadGBuffers();
+// 	vec3 color = gBuffers.albedo;
+// 	float alpha = gBuffers.alpha;
 	
-	if (alpha < 0.01) discard;
+// 	if (alpha < 0.01) discard;
 	
-	out_color = vec4(color, alpha);
-}
+// 	out_color = vec4(color, alpha);
+// }
