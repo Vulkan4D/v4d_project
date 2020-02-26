@@ -44,7 +44,7 @@ void main() {
 	if (camera.txaa) {
 		float depth = texture(depthStencilImage, uvCurrent).r;
 		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((uv * 2 - 1), depth, 1);
-		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) - camera.historyTxaaOffset;
+		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
 		vec4 history = texture(historyImage, uvHistory);
 		
 		if (length(history.rgb) > 0) {
@@ -99,9 +99,9 @@ void main() {
 	vec3 color = subpassLoad(ppImage).rgb;
 	vec2 uv = gl_FragCoord.st / textureSize(litImage,0).st;
 	
-	// HDR ToneMapping (Reinhard)
-	const float exposure = 1.0;
-	color = vec3(1.0) - exp(-color * exposure);
+	// // HDR ToneMapping (Reinhard)
+	// const float exposure = 1.0;
+	// color = vec3(1.0) - exp(-color * exposure);
 	
 	// Gamma correction 
 	const float gamma = 2.2;

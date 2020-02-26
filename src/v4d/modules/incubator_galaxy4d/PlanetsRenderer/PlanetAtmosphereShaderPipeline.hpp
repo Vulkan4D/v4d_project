@@ -50,10 +50,11 @@ public:
 				for (int i = 0; i < NB_SUNS; ++i) {
 					if (planet->suns.size() > i) {
 						auto* sun = planet->suns[i];
+						double lightDist = glm::distance(sun->worldPosition, planet->absolutePosition);
 						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
 							// Sun direction is from planet center to sun, in view space
 							glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1)) - glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3])), 
-							sun->intensity, 
+							sun->intensity * float(1.0 / (lightDist*lightDist)), 
 							sun->color
 						);
 					} else {

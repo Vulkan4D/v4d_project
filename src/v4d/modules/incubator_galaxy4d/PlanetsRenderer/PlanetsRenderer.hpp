@@ -95,9 +95,9 @@ public:
 	
 	LightSource sun = {
 		POINT_LIGHT,
-		{0, -50000000, -20000000},
+		{0, -1.496e+11, 0},
 		{1,1,1}, // color
-		40
+		5e23f
 	};
 	
 	void LoadScene(Scene& scene) override {
@@ -272,12 +272,10 @@ public:
 				ImGui::Separator();
 				ImGui::Text("Sun");
 				static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
-				static float sunDistanceFactor = 100.0f;
 				ImGui::ColorEdit3("Color", (float*)&sun.color);
-				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1, 500);
+				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e25f);
 				ImGui::ColorEdit3("Position", (float*)&sunPosition);
-				ImGui::SliderFloat("Distance", (float*)&sunDistanceFactor, 1, 100);
-				sun.worldPosition = planet->absolutePosition + glm::dvec3(sunPosition) * double(sunDistanceFactor * planet->radius);
+				sun.worldPosition = planet->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * 1.496e+11;
 			}
 		}
 	#endif

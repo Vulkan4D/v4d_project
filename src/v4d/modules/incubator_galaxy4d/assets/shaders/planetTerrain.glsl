@@ -190,9 +190,9 @@ void main() {
 		
 		vec3 snowColor = vec3(1);
 		if (planetChunk.isLastLevel) {
-			snowColor += abs(vec3(Noise(normalsUV*46.0+11.5),Noise(normalsUV*47.0+11.5),Noise(normalsUV*43.0+16.5))/2);
-			snowColor += abs(vec3(Noise(normalsUV*98.0+38.5),Noise(normalsUV*98.0+1.5),Noise(normalsUV*90.0+82.5))/2);
-			snowColor += abs(vec3(Noise(normalsUV*746.0+11.5),Noise(normalsUV*745.0+11.5),Noise(normalsUV*744.0+16.5)));
+			snowColor -= vec3(Noise(normalsUV*86.0+11.5),Noise(normalsUV*87.0+11.5),Noise(normalsUV*83.0+16.5))/2;
+			snowColor -= vec3(Noise(normalsUV*148.0+38.5),Noise(normalsUV*148.0+1.5),Noise(normalsUV*140.0+82.5))/2;
+			snowColor += vec3(Noise(normalsUV*946.0+11.5),Noise(normalsUV*945.0+11.5),Noise(normalsUV*944.0+16.5));
 		}
 		
 		albedo = mix(albedo, snowColor, smoothstep(snowSlope, snowSlope+0.02, slope));

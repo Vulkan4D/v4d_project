@@ -112,7 +112,7 @@ void main() {
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
 		// Calculate Rayleigh and Mie phases
 		vec3 lightDir = suns[sunIndex].dir;
-		vec3 lightIntensity = suns[sunIndex].intensity;
+		vec3 lightIntensity = suns[sunIndex].intensity * 4;
 		float mu = dot(viewDir, lightDir);
 		float mumu = mu * mu;
 		float rayleighPhase = 3.0 / (50.2654824574 /* (16 * pi) */) * (1.0 + mumu);
@@ -144,7 +144,7 @@ void main() {
 				lightRayDist += lightRayStepSize;
 			}
 			
-			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x))));
+			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * planetAtmosphere.densityFactor * 2;
 			totalRayleigh += density.x * attenuation;
 			totalMie += density.y * attenuation;
 			
@@ -154,13 +154,13 @@ void main() {
 		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x)));
 		atmColor += vec3(
 			(
-				rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh color
-				+ miePhase * MIE_BETA * totalMie // mie
-				+ opticalDepth.x * (atmosphereColor/10000000.0*min(0.5, planetAtmosphere.densityFactor)*atmosphereAmbient) // ambient
+				rayleighPhase * RAYLEIGH_BETA * (planetAtmosphere.densityFactor*2) * totalRayleigh // rayleigh color
+				+ miePhase * MIE_BETA * (planetAtmosphere.densityFactor*2) * totalMie // mie
+				+ opticalDepth.x * (atmosphereColor/10000000.0*planetAtmosphere.densityFactor*atmosphereAmbient) // ambient
 			) * lightIntensity * atmosphereColor
 		);
 		atmosphereDensity += clamp(pow(length(opticalDepth), 0.01), 0, 1);
 	}
 	
-	color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity * min(0.9,planetAtmosphere.densityFactor))));
+	color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity / 2.0)));
 }

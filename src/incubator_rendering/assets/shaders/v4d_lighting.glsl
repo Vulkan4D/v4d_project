@@ -70,8 +70,8 @@ void main() {
 			vec3 L = normalize(lightSource.viewPosition - gBuffers.position);
 			vec3 H = normalize(V + L);
 			float dist = length(lightSource.viewPosition - gBuffers.position);
-			float atten = 8.0;//1.0 / (dist*dist);
-			vec3 radiance = lightSource.color * atten;
+			float atten = 1.0 / (dist*dist);
+			vec3 radiance = lightSource.color * lightSource.intensity * atten;
 			// cook-torrance BRDF
 			float NdotV = max(dot(N,V), 0.000001);
 			float NdotL = max(dot(N,L), 0.000001);
@@ -95,10 +95,10 @@ void main() {
 			color += (kD * gBuffers.albedo / PI + specular) * radiance * max(dot(N,L) + max(0, gBuffers.metallic/-5), 0);
 			
 			// Sub-Surface Scattering (simple rim for now)
-			if (gBuffers.metallic < 0) {
-				float rim = pow(1.0 - NdotV, 2-gBuffers.metallic*2+NdotL) * NdotL*2;
-				color += -gBuffers.metallic * radiance * rim;
-			}
+			// if (gBuffers.metallic < 0) {
+				float rim = pow(1.0 - NdotV, 2-gBuffers.metallic*2+NdotL) * NdotL;
+				color += -min(0,gBuffers.metallic) * radiance * rim;
+			// }
 			
 			
 		// }
