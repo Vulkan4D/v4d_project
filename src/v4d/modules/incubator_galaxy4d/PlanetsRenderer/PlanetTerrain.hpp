@@ -30,7 +30,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 7;
-	static const int vertexSubdivisionsPerChunk = 100;
+	static const int vertexSubdivisionsPerChunk = 200;
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
 	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
@@ -703,12 +703,12 @@ struct PlanetTerrain {
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
-		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 10)*15000.0;
-		height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/30000.0, 8)*4000.0;
-		if (triangleSize < 200)
-			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/50.0, 7)*4.0;
-		if (triangleSize < 4)
-			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 5)*0.5;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 10)*15000.0;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 8)*4000.0;
+		// if (triangleSize < 200)
+		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/50.0, 7)*4.0;
+		// if (triangleSize < 4)
+		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
 		return solidRadius + height;
 	}
 	
