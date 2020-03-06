@@ -97,7 +97,8 @@ class RayTracingRenderer : public v4d::graphics::Renderer {
 	PipelineLayout rayTracingPipelineLayout;
 	
 private: // Buffers	
-	Buffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	StagedBuffer uniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UBO)};
+	UBO ubo;
 	std::vector<Buffer*> stagedBuffers {};
 	
 private: // Scene objects
@@ -107,14 +108,17 @@ private: // Scene objects
 private: // Ray Tracing stuff
 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
-	ShaderBindingTable* shaderBindingTable = nullptr;
+	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen"};
 	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
+	
+	uint32_t trianglesShaderOffset;
+	uint32_t spheresShaderOffset;
 	
 	Image rayTracingStorageImage {
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 	};
-	float rayTracingImageScale = 2;
+	float rayTracingImageScale = 1;
 	
 	void RayTracingInit() {
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
@@ -382,23 +386,25 @@ private: // Ray Tracing stuff
 		}
 	}
 	void CreateRayTracingPipeline() {
-		shaderBindingTable->CreateRayTracingPipeline(renderingDevice);
+		shaderBindingTable.CreateRayTracingPipeline(renderingDevice);
 		
 		// Shader Binding Table
-		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable->GetGroups().size();
+		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable.GetGroups().size();
 		rayTracingShaderBindingTableBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-		shaderBindingTable->WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
+		shaderBindingTable.WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
 	}
 	void DestroyRayTracingPipeline() {
 		// Shader binding table
 		rayTracingShaderBindingTableBuffer.Free(renderingDevice);
 		// Ray tracing pipeline
-		shaderBindingTable->DestroyRayTracingPipeline(renderingDevice);
+		shaderBindingTable.DestroyRayTracingPipeline(renderingDevice);
 	}
 	
 private: // Renderer Configuration methods
 
 	void Init() override {
+		uniformBuffer.AddSrcDataPtr(&ubo, sizeof(UBO));
+		
 		RayTracingInit();
 		
 		// Set all device features that you may want to use, then the unsupported features will be disabled, you may check via this object later.
@@ -433,8 +439,18 @@ private: // Renderer Configuration methods
 		RayTracingInfo();
 	}
 	
-	void InitLayouts() override {}
-	void ConfigureShaders() override {}
+	void InitLayouts() override {
+		
+	}
+	void ConfigureShaders() override {
+		
+		// Ray tracing shaders
+		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
+		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
+		trianglesShaderOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
+		spheresShaderOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
+		
+	}
 
 	void CreateResources() override {
 		CreateRayTracingResources();
@@ -456,7 +472,7 @@ public: // Scene configuration methods
 		auto* descriptorSet = descriptorSets.emplace_back(new DescriptorSet(0));
 		descriptorSet->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		descriptorSet->AddBinding_imageView(1, &rayTracingStorageImage.view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
+		descriptorSet->AddBinding_uniformBuffer(2, &uniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_MISS_BIT_NV);
 		descriptorSet->AddBinding_storageBuffer(3, stagedBuffers[0], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		descriptorSet->AddBinding_storageBuffer(4, stagedBuffers[1], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		descriptorSet->AddBinding_storageBuffer(5, stagedBuffers[2], VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_INTERSECTION_BIT_NV);
@@ -536,13 +552,6 @@ public: // Scene configuration methods
 		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
 		sphereBuffer->AddSrcDataPtr(&spheresGeometry1->aabbData);
 
-		// Ray tracing shaders
-		shaderBindingTable = new ShaderBindingTable(rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen");
-		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
-		shaderBindingTable->AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
-		uint32_t trianglesShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
-		uint32_t spheresShaderOffset = shaderBindingTable->AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
-		
 		// Assign instances
 		glm::mat3x4 transform {
 			1.0f, 0.0f, 0.0f, 0.0f,
@@ -572,8 +581,6 @@ public: // Scene configuration methods
 	}
 
 	void UnloadScene() override {
-		// Shaders
-		delete shaderBindingTable;
 		
 		// Geometries
 		geometryInstances.clear();
@@ -600,7 +607,7 @@ public: // Scene configuration methods
 	}
 	
 	void ReadShaders() override {
-		shaderBindingTable->ReadShaders();
+		shaderBindingTable.ReadShaders();
 	}
 
 protected: // Graphics configuration
@@ -608,8 +615,7 @@ protected: // Graphics configuration
 		// Staged Buffers
 		AllocateBuffersStaged(graphicsQueue, stagedBuffers);
 		// Uniform buffer
-		uniformBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		uniformBuffer.MapMemory(renderingDevice);
+		uniformBuffer.Allocate(renderingDevice);
 		
 		CreateRayTracingAccelerationStructures();
 	}
@@ -623,7 +629,6 @@ protected: // Graphics configuration
 		}
 
 		// Uniform buffers
-		uniformBuffer.UnmapMemory(renderingDevice);
 		uniformBuffer.Free(renderingDevice);
 	}
 	
@@ -640,12 +645,12 @@ protected: // Graphics configuration
 private: // Commands
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
-		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable->GetPipeline());
-		shaderBindingTable->GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
+		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable.GetPipeline());
+		shaderBindingTable.GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
 		
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable->GetMissGroupOffset();
-		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable->GetHitGroupOffset();
+		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
+		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
 		
 		int width = (int)((float)swapChain->extent.width * rayTracingImageScale);
 		int height = (int)((float)swapChain->extent.height * rayTracingImageScale);
@@ -706,7 +711,6 @@ protected: // Methods executed on every frame
 		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		double time = std::chrono::duration<double, std::chrono::seconds::period>(currentTime - startTime).count();
-		UBO ubo = {};
 		// Slowly rotate the test object
 		// ubo.model = glm::rotate(glm::dmat4(1), time * glm::radians(10.0), glm::dvec3(0,0,1));
 		
@@ -725,7 +729,9 @@ protected: // Methods executed on every frame
 		ubo.time = time;
 		
 		// Update memory
-		uniformBuffer.WriteToMappedData(renderingDevice, &ubo);
+		auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+		uniformBuffer.Update(renderingDevice, cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 	}
 	
 	void LowPriorityFrameUpdate() override {}

@@ -75,6 +75,9 @@ int main() {
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
 	
+	// Needed for RayTracing
+	vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+
 	// // Needed for RayTracing
 	// vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
