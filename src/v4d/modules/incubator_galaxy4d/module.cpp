@@ -18,10 +18,9 @@ V4DMODULE void V4D_ModuleCreate() {
 	planetsRenderer = V4D_LOAD_SUBMODULE(PlanetsRenderer)
 	
 	planetsRenderer->planetTerrains.emplace_back(new PlanetTerrain{
-		24600000,
-		23950000,
+		8200000,
+		8000000,
 		10000,
-		// {0, 15806000, -18000000}
 		{0, 0, 0}
 	});
 	

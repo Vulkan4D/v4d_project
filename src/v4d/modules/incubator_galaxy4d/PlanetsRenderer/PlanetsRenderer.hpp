@@ -147,8 +147,16 @@ public:
 	// void ScorePhysicalDeviceSelection(int& score, PhysicalDevice*) override {}
 	// // after selecting rendering device and queues
 	// void Info() override {}
-	// void CreateResources() {}
-	// void DestroyResources() override {}
+	void CreateResources() {
+		for (auto* planetTerrain : planetTerrains) {
+			planetTerrain->CreateMaps(renderingDevice);
+		}
+	}
+	void DestroyResources() override {
+		for (auto* planetTerrain : planetTerrains) {
+			planetTerrain->DestroyMaps(renderingDevice);
+		}
+	}
 	// void AllocateBuffers() override {}
 	
 	void FreeBuffers() override {
@@ -266,10 +274,12 @@ public:
 				} else {
 					ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
 				}
-				ImGui::Text("Atmosphere");
-				ImGui::SliderFloat("density", &planet->atmosphere->densityFactor, 0.0f, 1.0f);
-				ImGui::ColorEdit3("color", (float*)&planet->atmosphere->color);
-				ImGui::Separator();
+				if (planet->atmosphere) {
+					ImGui::Text("Atmosphere");
+					ImGui::SliderFloat("density", &planet->atmosphere->densityFactor, 0.0f, 1.0f);
+					ImGui::ColorEdit3("color", (float*)&planet->atmosphere->color);
+					ImGui::Separator();
+				}
 				ImGui::Text("Sun");
 				static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
 				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e26f);
@@ -281,7 +291,7 @@ public:
 	
 	// Executed before each frame
 	void FrameUpdate(Scene& scene) override {
-		scene.camera.worldPosition += glm::dvec3(planetTerrains[0]->matrix * glm::dvec4(0, -15806000, 18000000, 1));
+		scene.camera.worldPosition += glm::dvec3(planetTerrains[0]->matrix * glm::dvec4(0, -12000000, 0, 1));
 		scene.camera.RefreshViewMatrix();
 		
 		planetTerrainShader.viewMatrix = scene.camera.viewMatrix;

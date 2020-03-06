@@ -29,10 +29,10 @@ struct PlanetTerrain {
 	PlanetAtmosphere* atmosphere = nullptr;
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 7;
-	static const int vertexSubdivisionsPerChunk = 200;
+	static const int chunkSubdivisionsPerFace = 1;
+	static const int vertexSubdivisionsPerChunk = 256; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0;
-	static constexpr float targetVertexSeparationInMeters = 0.3f; // approximative vertex separation in meters for the most precise level of detail
+	static constexpr float targetVertexSeparationInMeters = 0.5f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
 	static const int nbChunksPerBufferPool = 128;
 	static constexpr double garbageCollectionInterval = 20; // seconds
@@ -701,14 +701,53 @@ struct PlanetTerrain {
 	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
 	
+	#pragma region Maps
+	
+	CubeMapImage mantleMap { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R8G8B8A8_SRGB}}; // platesDir, mantleHeightFactor, surfaceHeightFactor, hotSpots
+	CubeMapImage tectonicsMap { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R8G8B8A8_SRGB}}; // divergent, convergent, transform, density
+	CubeMapImage heightMap { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R16_SINT}}; // variation from surface radius, in meters, rounded (range -32k, +32k)
+	CubeMapImage stateMap { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R8G8_UNORM}}; // volcanoesMap, liquidMap
+	
+	// temperature k, radiation rad, moisture norm, wind m/s
+	CubeMapImage weatherMapAvg { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
+	CubeMapImage weatherMapMinimum { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
+	CubeMapImage weatherMapMaximum { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
+	CubeMapImage weatherMapCurrent { VK_IMAGE_USAGE_SAMPLED_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
+	
+	void CreateMaps(Device* device, double scale = 1.0) {
+		int mapSize = std::max(64, int(scale * std::min(8000000.0, solidRadius) / 2000.0 * 3.141592654)); // 1 km / pixel (considering maximum radius of 8000km)
+		mantleMap.Create(device, mapSize/16);
+		tectonicsMap.Create(device, mapSize/8);
+		heightMap.Create(device, mapSize/2);
+		stateMap.Create(device, mapSize/4);
+		int weatherMapSize = std::max(8, int(mapSize / 100));
+		weatherMapAvg.Create(device, weatherMapSize);
+		weatherMapMinimum.Create(device, weatherMapSize);
+		weatherMapMaximum.Create(device, weatherMapSize);
+		weatherMapCurrent.Create(device, weatherMapSize);
+	}
+	
+	void DestroyMaps(Device* device) {
+		mantleMap.Destroy(device);
+		tectonicsMap.Destroy(device);
+		heightMap.Destroy(device);
+		stateMap.Destroy(device);
+		weatherMapAvg.Destroy(device);
+		weatherMapMinimum.Destroy(device);
+		weatherMapMaximum.Destroy(device);
+		weatherMapCurrent.Destroy(device);
+	}
+	
+	#pragma endregion
+	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
-		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 10)*15000.0;
-		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 8)*4000.0;
-		// if (triangleSize < 200)
-		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/50.0, 7)*4.0;
-		// if (triangleSize < 4)
-		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 10)*15000.0;
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 8)*4000.0;
+		if (triangleSize < 200)
+			height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/50.0), 7)*4.0;
+		if (triangleSize < 4)
+			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
 		return solidRadius + height;
 	}
 	
@@ -825,7 +864,7 @@ struct PlanetTerrain {
 	
 	void Optimize() {
 		// Optimize only when no chunk is being generated, camera moved at least x distance and not more than once every x seconds
-		if (PlanetTerrain::chunkGenerator->Count() > 0 || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
+		if ((PlanetTerrain::chunkGenerator && PlanetTerrain::chunkGenerator->Count() > 0) || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
 			return;
 		
 		// reset 

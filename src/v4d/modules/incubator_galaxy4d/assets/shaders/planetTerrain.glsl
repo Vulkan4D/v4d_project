@@ -114,10 +114,10 @@ RockDetail RockType_1() {
 	// Normals
 	float normalNoiseX = Noise(normalsUV*4.0+10.25) + Noise(normalsUV*10.0+20.85);
 	float normalNoiseY = Noise(normalsUV*4.0+21.5) + Noise(normalsUV*10.0+150.5);
-	if (planetChunk.isLastLevel) {
+	// if (planetChunk.isLastLevel) {
 		normalNoiseX += Noise(normalsUV*50.0+201.85);
 		normalNoiseY += Noise(normalsUV*50.0+300.5);
-	}
+	// }
 	vec3 normalNoise = ((
 		+ normalize(f_tangentX) * normalNoiseX
 		+ normalize(f_tangentY) * normalNoiseY
@@ -146,7 +146,7 @@ void main() {
 	float roughness = 0;
 	float metallic = 0;
 	
-	// dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(f_pos);
+	dvec3 posOnPlanet = dvec3(planetChunk.chunkPos) + dvec3(f_pos);
 	
 	RockDetail rocks;
 	rocks.albedo = vec3(0);
@@ -203,6 +203,15 @@ void main() {
 	}
 	
 	// May discard fragment here...
+	
+	// albedo = vec3(FastSimplexFractal(vec3(normalize(posOnPlanet)*8000000.0/1000000.0), 10)*15000.0);
+	// albedo += vec3(FastSimplexFractal(vec3(normalize(posOnPlanet)*8000000.0/30000.0), 8)*4000.0);
+	// albedo += vec3(FastSimplexFractal(vec3(normalize(posOnPlanet)*8000000.0/50.0), 7)*4.0);
+	// albedo += vec3(FastSimplexFractal(vec3(normalize(posOnPlanet)*8000000.0/6.0), 3)*0.5);
+	// albedo += 10000;
+	// roughness = 1;
+	// metallic = 0;
+	// normal = vec3(0,0,1);
 	
 	GBuffers gBuffers;
 	gBuffers.albedo = albedo;
