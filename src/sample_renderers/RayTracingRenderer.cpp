@@ -1,4 +1,3 @@
-#include "../config.hh"
 #include <v4d.h>
 
 using namespace v4d::graphics;
@@ -8,6 +7,21 @@ using namespace v4d::graphics;
 Loader vulkanLoader;
 
 std::atomic<bool> appRunning = true;
+
+#define CALCULATE_FRAMERATE(varRef) {\
+	static v4d::Timer frameTimer(true);\
+	static double elapsedTime = 0.01;\
+	static int nbFrames = 0;\
+	++nbFrames;\
+	elapsedTime = frameTimer.GetElapsedSeconds();\
+	if (elapsedTime > 1.0) {\
+		varRef = nbFrames / elapsedTime;\
+		nbFrames = 0;\
+		frameTimer.Reset();\
+	}\
+}
+
+double primaryAvgFrameRate = 0;
 
 int main() {
 	
@@ -143,27 +157,14 @@ int main() {
 
 	// Rendering Loop
 	std::thread renderingThread([&]{
-		// Frame timer
-		v4d::Timer timer(true);
-		double elapsedTime = 0;
-		int nbFrames = 0;
-		double fps = 0;
-
 		while (appRunning) {
+			CALCULATE_FRAMERATE(primaryAvgFrameRate)
 			
 			// Rendering
 			renderer->Render();
 			
-			// Frame time
-			++nbFrames;
-			elapsedTime = timer.GetElapsedMilliseconds();
-			if (elapsedTime > 1000) {
-				fps = nbFrames / elapsedTime * 1000.0;
-				// FPS counter
-				glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)fps)+" FPS").c_str());
-				nbFrames = 0;
-				timer.Reset();
-			}
+			// FPS counter
+			glfwSetWindowTitle(window->GetHandle(), (std::to_string((int)primaryAvgFrameRate)+" FPS").c_str());
 		}
 	});
 	

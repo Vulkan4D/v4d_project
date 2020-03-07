@@ -6,7 +6,7 @@ namespace v4d::graphics {
 	
 	class RenderTargetGroup {
 	public:
-		static const int GBUFFER_NB_IMAGES = 4;
+		// static const int GBUFFER_NB_IMAGES = 4;
 		
 	protected:
 		
@@ -20,20 +20,20 @@ namespace v4d::graphics {
 		Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		Image ppImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT };
 		Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-		DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		// DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 		
-		enum GBUFFER : int {
-			ALBEDO = 0, 	// rgb16_sfloat, a16_sfloat = alpha
-			NORMAL = 1, 	// rgb16_sfloat, a16_sfloat = roughness
-			EMISSION = 2, 	// rgb16_sfloat, a16_sfloat = metallic
-			POSITION = 3 	// rgb32_sfloat, a32_sfloat = dist (trueDistanceFromCamera)
-		};
-		std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
-			/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
-			/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
-			/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
-			/* POSITION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }},
-		};
+		// enum GBUFFER : int {
+		// 	ALBEDO = 0, 	// rgb16_sfloat, a16_sfloat = alpha
+		// 	NORMAL = 1, 	// rgb16_sfloat, a16_sfloat = roughness
+		// 	EMISSION = 2, 	// rgb16_sfloat, a16_sfloat = metallic
+		// 	POSITION = 3 	// rgb32_sfloat, a32_sfloat = dist (trueDistanceFromCamera)
+		// };
+		// std::array<Image, GBUFFER_NB_IMAGES> gBuffers {
+		// 	/* ALBEDO */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
+		// 	/* NORMAL */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
+		// 	/* EMISSION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }},
+		// 	/* POSITION */	Image{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }},
+		// };
 		
 	public:
 	
@@ -69,24 +69,24 @@ namespace v4d::graphics {
 			return historyImage;
 		}
 		
-		Image& GetDepthImage() {
-			return depthImage;
-		}
+		// Image& GetDepthImage() {
+		// 	return depthImage;
+		// }
 		
-		Image& GetGBuffer(int index) {
-			return gBuffers[index];
-		}
+		// Image& GetGBuffer(int index) {
+		// 	return gBuffers[index];
+		// }
 		
-		std::array<Image, GBUFFER_NB_IMAGES>& GetGBuffers() {
-			return gBuffers;
-		}
+		// std::array<Image, GBUFFER_NB_IMAGES>& GetGBuffers() {
+		// 	return gBuffers;
+		// }
 		
-		std::vector<VkClearValue> GetGBuffersClearValues() {
-			std::vector<VkClearValue> clearValues(GBUFFER_NB_IMAGES);
-			for (int i = 0; i < GBUFFER_NB_IMAGES; ++i)
-				clearValues[i] = {.0,.0,.0,.0};
-			return clearValues;
-		}
+		// std::vector<VkClearValue> GetGBuffersClearValues() {
+		// 	std::vector<VkClearValue> clearValues(GBUFFER_NB_IMAGES);
+		// 	for (int i = 0; i < GBUFFER_NB_IMAGES; ++i)
+		// 		clearValues[i] = {.0,.0,.0,.0};
+		// 	return clearValues;
+		// }
 		
 		#pragma endregion
 		
@@ -97,22 +97,22 @@ namespace v4d::graphics {
 			litImage.Create(device, rasterWidth, rasterHeight);
 			ppImage.Create(device, rasterWidth, rasterHeight);
 			historyImage.Create(device, rasterWidth, rasterHeight);
-			depthImage.Create(device, rasterWidth, rasterHeight);
+			// depthImage.Create(device, rasterWidth, rasterHeight);
 			
-			for (auto& image : gBuffers) {
-				image.Create(device, rasterWidth, rasterHeight);
-			}
+			// for (auto& image : gBuffers) {
+			// 	image.Create(device, rasterWidth, rasterHeight);
+			// }
 		}
 		
 		void DestroyResources(Device* device) {
 			litImage.Destroy(device);
 			ppImage.Destroy(device);
 			historyImage.Destroy(device);
-			depthImage.Destroy(device);
+			// depthImage.Destroy(device);
 			
-			for (auto& image : gBuffers) {
-				image.Destroy(device);
-			}
+			// for (auto& image : gBuffers) {
+			// 	image.Destroy(device);
+			// }
 		}
 		
 	};

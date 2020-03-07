@@ -1,10 +1,47 @@
 #pragma once
 #include <v4d.h>
+#include "../incubator_rendering/helpers/Geometry.hpp"
 
 #include "RenderTargetGroup.hpp"
 
 using namespace v4d::graphics;
-// using namespace v4d::graphics::vulkan::rtx;
+using namespace v4d::graphics::vulkan::rtx;
+
+struct StandardVertex { // 96 bytes
+	alignas(16) glm::vec3 pos;
+	alignas(4) int objID;
+	alignas(16) glm::vec3 normal;
+	alignas(4) int materialID;
+	alignas(16) glm::vec4 color;
+	alignas(16) glm::vec2 uv;
+	union {
+		alignas(8) glm::vec2 uv2;
+		alignas(8) glm::vec2 floatInfo2;
+		alignas(8) glm::ivec2 intInfo2;
+		alignas(8) glm::uvec2 uintInfo2;
+	};
+	union {
+		alignas(16) glm::vec3 tangent;
+		alignas(16) glm::vec3 floatInfo3;
+		alignas(16) glm::ivec3 intInfo3;
+		alignas(16) glm::uvec3 uintInfo3;
+	};
+	union {
+		alignas(4) float floatInfo;
+		alignas(4) int32_t intInfo;
+		alignas(4) uint32_t uintInfo;
+	};
+};
+
+struct TerrainVertex { // 48 bytes
+	alignas(16) glm::vec3 pos;
+	alignas(4) int objID;
+	alignas(16) glm::vec3 normal;
+	alignas(4) int materialID;
+	alignas(16) glm::vec2 uv;
+	alignas(4) float altitude;
+	alignas(4) float slope;
+};
 
 class V4DRenderer : public v4d::graphics::Renderer {
 private: 
@@ -29,26 +66,67 @@ private:
 	#pragma endregion
 
 	#pragma region Render passes
-	RenderPass	opaqueRasterPass,
-				opaqueLightingPass,
-				// transparentRasterPass,
-				// transparentLightingPass,
+	RenderPass
 				thumbnailRenderPass,
 				postProcessingRenderPass,
 				uiRenderPass;
 	#pragma endregion
-	
+		
+	#pragma region RayTracing structs
+
+	struct AccelerationStructure {
+		VkAccelerationStructureNV accelerationStructure = VK_NULL_HANDLE;
+		VkDeviceMemory memory = VK_NULL_HANDLE;
+		uint64_t handle = 0;
+		VkAccelerationStructureCreateInfoNV createInfo;
+	};
+
+	struct BottomLevelAccelerationStructure : public AccelerationStructure {
+		std::vector<Geometry*> geometries {};
+		std::vector<VkGeometryNV> rayTracingGeometries {};
+		void GenerateRayTracingGeometries() {
+			for (auto* geometry : geometries) {
+				rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
+			}
+		}
+	};
+
+	struct RayTracingGeometryInstance {
+		glm::mat3x4 transform;
+		uint32_t instanceId : 24;
+		uint32_t mask : 8;
+		uint32_t instanceOffset : 24;
+		uint32_t flags : 8; // VkGeometryInstanceFlagBitsNV
+		uint64_t accelerationStructureHandle;
+	};
+
+	struct TopLevelAccelerationStructure : public AccelerationStructure {
+		std::vector<RayTracingGeometryInstance> instances {};
+	};
+
+	struct GeometryInstance {
+		glm::mat3x4 transform;
+		uint32_t instanceId;
+		// Ray tracing
+		uint32_t rayTracingMask;
+		uint32_t rayTracingShaderHitOffset;
+		uint32_t rayTracingFlags;
+		BottomLevelAccelerationStructure* rayTracingBlas;
+		int rayTracingGeometryInstanceIndex = -1;
+	};
+
+	#pragma endregion
+
 	#pragma region Shaders
 	
-	PipelineLayout lightingPipelineLayout, thumbnailPipelineLayout, postProcessingPipelineLayout, uiPipelineLayout, histogramComputeLayout;
-	RasterShaderPipeline opaqueLightingShader {lightingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_lighting.vert",
-		"incubator_rendering/assets/shaders/v4d_lighting.opaque.frag",
-	}};
-	// RasterShaderPipeline transparentLightingShader {lightingPipelineLayout, {
-	// 	"incubator_rendering/assets/shaders/v4d_lighting.vert",
-	// 	"incubator_rendering/assets/shaders/v4d_lighting.transparent.frag",
-	// }};
+	PipelineLayout 
+		rayTracingPipelineLayout,
+		thumbnailPipelineLayout, 
+		postProcessingPipelineLayout, 
+		uiPipelineLayout, 
+		histogramComputeLayout;
+		
+	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen"};
 	RasterShaderPipeline thumbnailShader {thumbnailPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_thumbnail.vert",
 		"incubator_rendering/assets/shaders/v4d_thumbnail.frag",
@@ -75,10 +153,6 @@ private:
 	
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaders {
 		/* RenderPass_SubPass => ShadersList */
-		{"opaqueRasterization", {}},
-		// {"transparentRasterization", {}},
-		{"opaqueLighting", {&opaqueLightingShader}},
-		// {"transparentLighting", {&transparentLightingShader}},
 		{"thumbnail", {&thumbnailShader}},
 		{"postProcessing_0", {&postProcessingShader_txaa}},
 		{"postProcessing_1", {&postProcessingShader_history}},
@@ -92,19 +166,287 @@ protected:
 	Scene scene {};
 	RenderTargetGroup renderTargetGroup {};
 	std::unordered_map<std::string, Image*> images {
-		{"depthImage", &renderTargetGroup.GetDepthImage()},
-		{"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
-		{"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
-		{"gBuffer_emission", &renderTargetGroup.GetGBuffer(2)},
-		{"gBuffer_position", &renderTargetGroup.GetGBuffer(3)},
+		// {"depthImage", &renderTargetGroup.GetDepthImage()},
+		// {"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
+		// {"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
+		// {"gBuffer_emission", &renderTargetGroup.GetGBuffer(2)},
+		// {"gBuffer_position", &renderTargetGroup.GetGBuffer(3)},
 		{"litImage", &renderTargetGroup.GetLitImage()},
 		{"thumbnail", &thumbnailImage},
 		{"historyImage", &renderTargetGroup.GetHistoryImage()},
 		{"ui", &uiImage},
 	};
 	
+private: // Ray tracing stuff
+	std::vector<Geometry*> geometries {};
+	std::vector<GeometryInstance> geometryInstances {};
+	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
+	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
+	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
+	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
+	
+	void CreateRayTracingAccelerationStructures() {
+		
+		// Bottom level Acceleration structures
+		for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+			blas.GenerateRayTracingGeometries();
+			
+			blas.createInfo = {
+				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+				nullptr,// pNext
+				0,// VkDeviceSize compactedSize
+				{// VkAccelerationStructureInfoNV info
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+					nullptr,// pNext
+					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/,// flags
+					0,// instanceCount
+					(uint)blas.rayTracingGeometries.size(),// geometryCount
+					blas.rayTracingGeometries.data()// VkGeometryNV pGeometries
+				}
+			};
+			
+			if (renderingDevice->CreateAccelerationStructureNV(&blas.createInfo, nullptr, &blas.accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create bottom level acceleration structure");
+				
+			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+			memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+				
+			VkMemoryRequirements2 memoryRequirements2 {};
+			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
+			
+			VkMemoryAllocateInfo memoryAllocateInfo {
+				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+				nullptr,// pNext
+				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
+				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+			};
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &blas.memory) != VK_SUCCESS)
+				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure");
+			
+			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
+				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
+				nullptr,// pNext
+				blas.accelerationStructure,// accelerationStructure
+				blas.memory,// memory
+				0,// VkDeviceSize memoryOffset
+				0,// uint32_t deviceIndexCount
+				nullptr// pDeviceIndices
+			};
+			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
+				throw std::runtime_error("Failed to bind bottom level acceleration structure memory");
+			
+			if (renderingDevice->GetAccelerationStructureHandleNV(blas.accelerationStructure, sizeof(uint64_t), &blas.handle))
+				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
+		}
+		
+		// Geometry Instances
+		rayTracingTopLevelAccelerationStructure.instances.reserve(geometryInstances.size());
+		for (auto& instance : geometryInstances) if (instance.rayTracingBlas) {
+			instance.rayTracingGeometryInstanceIndex = (int)rayTracingTopLevelAccelerationStructure.instances.size();
+			rayTracingTopLevelAccelerationStructure.instances.push_back({
+				instance.transform,
+				instance.instanceId,
+				instance.rayTracingMask,
+				instance.rayTracingShaderHitOffset,
+				instance.rayTracingFlags,
+				instance.rayTracingBlas->handle
+			});
+		}
+		
+		{
+			// Top Level acceleration structure
+			VkAccelerationStructureCreateInfoNV accStructCreateInfo {
+				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+				nullptr,// pNext
+				0,// VkDeviceSize compactedSize
+				{// VkAccelerationStructureInfoNV info
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+					nullptr,// pNext
+					VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/, // VkGeometryInstanceFlagBitsNV flags
+					(uint)rayTracingTopLevelAccelerationStructure.instances.size(),// instanceCount
+					0,// geometryCount
+					nullptr// VkGeometryNV pGeometries
+				}
+			};
+			if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create top level acceleration structure");
+			
+			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
+				
+			VkMemoryRequirements2 memoryRequirements2 {};
+			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
+			
+			VkMemoryAllocateInfo memoryAllocateInfo {
+				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+				nullptr,// pNext
+				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
+				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+			};
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.memory) != VK_SUCCESS)
+				throw std::runtime_error("Failed to allocate memory for top level acceleration structure");
+			
+			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
+				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
+				nullptr,// pNext
+				rayTracingTopLevelAccelerationStructure.accelerationStructure,// accelerationStructure
+				rayTracingTopLevelAccelerationStructure.memory,// memory
+				0,// VkDeviceSize memoryOffset
+				0,// uint32_t deviceIndexCount
+				nullptr// const uint32_t* pDeviceIndices
+			};
+			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
+				throw std::runtime_error("Failed to bind top level acceleration structure memory");
+			
+			if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, sizeof(uint64_t), &rayTracingTopLevelAccelerationStructure.handle))
+				throw std::runtime_error("Failed to get top level acceleration structure handle");
+		}
+		
+		// Build Ray Tracing acceleration structures
+		{
+			// Instance buffer
+			Buffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
+			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
+			AllocateBufferStaged(graphicsQueue, instanceBuffer);
+			
+			VkDeviceSize allBlasReqSize = 0;
+			// RayTracing Scratch buffer
+			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
+			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+				VkMemoryRequirements2 req;
+				memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &req);
+				allBlasReqSize += req.memoryRequirements.size;
+			}
+			VkMemoryRequirements2 memoryRequirementsTopLevel;
+			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
+			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
+			// Send scratch buffer
+			const VkDeviceSize scratchBufferSize = std::max(allBlasReqSize, memoryRequirementsTopLevel.memoryRequirements.size);
+			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
+			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			
+			auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+				
+				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
+				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/;
+			
+				VkMemoryBarrier memoryBarrier {
+					VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+					nullptr,// pNext
+					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
+					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
+				};
+				
+				for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+					accelerationStructBuildInfo.geometryCount = (uint)blas.rayTracingGeometries.size();
+					accelerationStructBuildInfo.pGeometries = blas.rayTracingGeometries.data();
+					accelerationStructBuildInfo.instanceCount = 0;
+					
+					renderingDevice->CmdBuildAccelerationStructureNV(
+						cmdBuffer, 
+						&accelerationStructBuildInfo, 
+						VK_NULL_HANDLE, 
+						0, 
+						VK_FALSE, 
+						blas.accelerationStructure, 
+						VK_NULL_HANDLE, 
+						scratchBuffer.buffer, 
+						0
+					);
+					
+					renderingDevice->CmdPipelineBarrier(
+						cmdBuffer, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+						0, 
+						1, &memoryBarrier, 
+						0, 0, 
+						0, 0
+					);
+				}
+				
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+				accelerationStructBuildInfo.geometryCount = 0;
+				accelerationStructBuildInfo.pGeometries = nullptr;
+				accelerationStructBuildInfo.instanceCount = (uint)rayTracingTopLevelAccelerationStructure.instances.size();
+				
+				renderingDevice->CmdBuildAccelerationStructureNV(
+					cmdBuffer, 
+					&accelerationStructBuildInfo, 
+					instanceBuffer.buffer, 
+					0, 
+					VK_FALSE, 
+					rayTracingTopLevelAccelerationStructure.accelerationStructure, 
+					VK_NULL_HANDLE, 
+					scratchBuffer.buffer, 
+					0
+				);
+				
+				renderingDevice->CmdPipelineBarrier(
+					cmdBuffer, 
+					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+					0, 
+					1, &memoryBarrier, 
+					0, 0, 
+					0, 0
+				);
+			
+			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+			
+			scratchBuffer.Free(renderingDevice);
+			instanceBuffer.Free(renderingDevice);
+		}
+	}
+	void DestroyRayTracingAccelerationStructures() {
+		// Geometry instances
+		for (auto& instance : geometryInstances) if (instance.rayTracingBlas) {
+			instance.rayTracingGeometryInstanceIndex = -1;
+		}
+		// Acceleration Structures
+		if (rayTracingTopLevelAccelerationStructure.accelerationStructure != VK_NULL_HANDLE) {
+			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
+			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
+			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
+			rayTracingTopLevelAccelerationStructure.instances.clear();
+			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+				renderingDevice->FreeMemory(blas.memory, nullptr);
+				renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
+				blas.rayTracingGeometries.clear();
+			}
+		}
+	}
+	void CreateRayTracingPipeline() {
+		shaderBindingTable.CreateRayTracingPipeline(renderingDevice);
+		
+		// Shader Binding Table
+		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable.GetGroups().size();
+		rayTracingShaderBindingTableBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+		shaderBindingTable.WriteShaderBindingTableToBuffer(renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
+	}
+	void DestroyRayTracingPipeline() {
+		// Shader binding table
+		rayTracingShaderBindingTableBuffer.Free(renderingDevice);
+		// Ray tracing pipeline
+		shaderBindingTable.DestroyRayTracingPipeline(renderingDevice);
+	}
+	
 private: // Init
 	void Init() override {
+		// Ray Tracing
+		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
+		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
+		
 		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
 		
 		// Submodules
@@ -122,6 +464,13 @@ private: // Init
 		}
 	}
 	void Info() override {
+		// Query the ray tracing properties of the current implementation
+		rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV;
+		VkPhysicalDeviceProperties2 deviceProps2{};
+		deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		deviceProps2.pNext = &rayTracingProperties;
+		GetPhysicalDeviceProperties2(renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->SetRenderingDevice(renderingDevice);
@@ -134,17 +483,31 @@ private: // Init
 	}
 
 	void InitLayouts() override {
+		
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
 		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+		// baseDescriptorSet_0->AddBinding_uniformBuffer(1, &objBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+		// baseDescriptorSet_0->AddBinding_uniformBuffer(2+, G-Buffers, VK_SHADER_STAGE_ALL_GRAPHICS);
 		
-		// Lighting pass
-		auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-			gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &renderTargetGroup.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
-		lightingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
-		lightingPipelineLayout.AddDescriptorSet(gBuffersDescriptorSet_1);
-		lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
+		// // Lighting pass
+		// auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		// for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
+		// 	gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &renderTargetGroup.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		// lightingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
+		// lightingPipelineLayout.AddDescriptorSet(gBuffersDescriptorSet_1);
+		// lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
+		
+		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		// rayTracingDescriptorSet_1->AddBinding_imageView(0, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_accelerationStructure(1, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(2, &blockObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(3, &blockVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(4, &blockIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(5, &terrainObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(6, &terrainVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(7, &terrainIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
 		// Thumbnail Gen
 		auto* thumbnailDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
@@ -154,13 +517,13 @@ private: // Init
 		
 		// Post-Processing
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-			postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+0, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+1, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+2, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(RenderTargetGroup::GBUFFER_NB_IMAGES+3, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_inputAttachment(RenderTargetGroup::GBUFFER_NB_IMAGES+4, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_inputAttachment(2, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		// postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(4, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		// for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
+		// 	postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i+5, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -180,18 +543,7 @@ private: // Init
 	}
 	
 	void ConfigureShaders() override {
-		
-		// Lighting Passes
-		opaqueLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		opaqueLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
-		opaqueLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		opaqueLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		opaqueLightingShader.SetData(3);
-		// transparentLightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		// transparentLightingShader.depthStencilState.depthTestEnable = VK_FALSE;
-		// transparentLightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		// transparentLightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		// transparentLightingShader.SetData(3);
+		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -234,12 +586,14 @@ private: // Resources
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		thumbnailImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
 		renderTargetGroup.SetRenderTarget(swapChain);
-		renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
-		renderTargetGroup.GetDepthImage().usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+		// renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		// renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
+		// renderTargetGroup.GetDepthImage().usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+		renderTargetGroup.GetLitImage().usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		renderTargetGroup.CreateResources(renderingDevice);
 		
 		// Transition images
+		TransitionImageLayout(renderTargetGroup.GetLitImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(thumbnailImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetHistoryImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -298,7 +652,6 @@ private: // Pipelines
 	void CreatePipelines() override {
 		
 		// Pipeline layouts
-		lightingPipelineLayout.Create(renderingDevice);
 		thumbnailPipelineLayout.Create(renderingDevice);
 		postProcessingPipelineLayout.Create(renderingDevice);
 		uiPipelineLayout.Create(renderingDevice);
@@ -308,248 +661,6 @@ private: // Pipelines
 		for (auto* submodule : renderingSubmodules) {
 			submodule->CreatePipelines(images);
 		}
-		
-		{// Opaque Raster pass
-			std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
-			std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
-			for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
-				// Format
-				attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
-				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
-				// Color
-				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				// Layout
-				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-				colorAttachmentRefs[i] = {
-					opaqueRasterPass.AddAttachment(attachments[i]),
-					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-				};
-			}
-			
-			int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
-			attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
-			attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			VkAttachmentReference depthStencilAttachment {
-				opaqueRasterPass.AddAttachment(attachments[depthStencilIndex]),
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-			};
-			
-			// SubPass
-			VkSubpassDescription subpass = {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = colorAttachmentRefs.size();
-				subpass.pColorAttachments = colorAttachmentRefs.data();
-				subpass.pDepthStencilAttachment = &depthStencilAttachment;
-			opaqueRasterPass.AddSubpass(subpass);
-			
-			// prepare images
-			std::vector<Image*> images {};
-			images.reserve(attachments.size());
-			for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
-				images.push_back(&gBufferImage);
-			}
-			images.push_back(&renderTargetGroup.GetDepthImage());
-			
-			// Create the render pass
-			opaqueRasterPass.Create(renderingDevice);
-			opaqueRasterPass.CreateFrameBuffers(renderingDevice, images);
-			
-			// Shaders
-			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
-				shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), opaqueRasterPass.handle, 0);
-				for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-					shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
-				shaderPipeline->CreatePipeline(renderingDevice);
-			}
-		}
-		
-		{// Opaque Lighting pass
-			const int nbColorAttachments = 1;
-			const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
-			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
-			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
-			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
-			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
-			
-			// Color attachment
-			images[0] = &renderTargetGroup.GetLitImage();
-			attachments[0].format = renderTargetGroup.GetLitImage().format;
-			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			colorAttachmentRefs[0] = {
-				opaqueLightingPass.AddAttachment(attachments[0]),
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
-			
-			// Input attachments
-			for (int i = 0; i < nbInputAttachments; ++i) {
-				images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
-				attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
-				attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
-				attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-				attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-				attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-				attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-				inputAttachmentRefs[i] = {
-					opaqueLightingPass.AddAttachment(attachments[i+nbColorAttachments]),
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				};
-			}
-		
-			// SubPass
-			VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = colorAttachmentRefs.size();
-				subpass.pColorAttachments = colorAttachmentRefs.data();
-				subpass.inputAttachmentCount = inputAttachmentRefs.size();
-				subpass.pInputAttachments = inputAttachmentRefs.data();
-			opaqueLightingPass.AddSubpass(subpass);
-			
-			// Create the render pass
-			opaqueLightingPass.Create(renderingDevice);
-			opaqueLightingPass.CreateFrameBuffers(renderingDevice, images);
-			
-			// Shaders
-			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
-				shaderPipeline->SetRenderPass(&renderTargetGroup.GetLitImage(), opaqueLightingPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState();
-				shaderPipeline->CreatePipeline(renderingDevice);
-			}
-		}
-		
-		// {// Transparent Raster pass
-		// 	std::array<VkAttachmentDescription, RenderTargetGroup::GBUFFER_NB_IMAGES+1> attachments {};
-		// 	std::array<VkAttachmentReference, RenderTargetGroup::GBUFFER_NB_IMAGES> colorAttachmentRefs {};
-		// 	for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i) {
-		// 		// Format
-		// 		attachments[i].format = renderTargetGroup.GetGBuffer(i).format;
-		// 		attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
-		// 		// Color
-		// 		attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		// 		attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		// 		// Layout
-		// 		attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		// 		attachments[i].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		// 		colorAttachmentRefs[i] = {
-		// 			transparentRasterPass.AddAttachment(attachments[i]),
-		// 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-		// 		};
-		// 	}
-			
-		// 	int depthStencilIndex = RenderTargetGroup::GBUFFER_NB_IMAGES;
-		// 	attachments[depthStencilIndex].format = renderTargetGroup.GetDepthImage().format;
-		// 	attachments[depthStencilIndex].samples = VK_SAMPLE_COUNT_1_BIT;
-		// 	attachments[depthStencilIndex].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-		// 	attachments[depthStencilIndex].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		// 	attachments[depthStencilIndex].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-		// 	attachments[depthStencilIndex].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-		// 	attachments[depthStencilIndex].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 	attachments[depthStencilIndex].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 	VkAttachmentReference depthStencilAttachment {
-		// 		transparentRasterPass.AddAttachment(attachments[depthStencilIndex]),
-		// 		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-		// 	};
-			
-		// 	// SubPass
-		// 	VkSubpassDescription subpass = {};
-		// 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		// 		subpass.colorAttachmentCount = colorAttachmentRefs.size();
-		// 		subpass.pColorAttachments = colorAttachmentRefs.data();
-		// 		subpass.pDepthStencilAttachment = &depthStencilAttachment;
-		// 	transparentRasterPass.AddSubpass(subpass);
-			
-		// 	// prepare images
-		// 	std::vector<Image*> images {};
-		// 	images.reserve(attachments.size());
-		// 	for (auto& gBufferImage : renderTargetGroup.GetGBuffers()) {
-		// 		images.push_back(&gBufferImage);
-		// 	}
-		// 	images.push_back(&renderTargetGroup.GetDepthImage());
-			
-		// 	// Create the render pass
-		// 	transparentRasterPass.Create(renderingDevice);
-		// 	transparentRasterPass.CreateFrameBuffers(renderingDevice, images);
-			
-		// 	// Shaders
-		// 	for (auto* shaderPipeline : shaders["transparentRasterization"]) {
-		// 		shaderPipeline->SetRenderPass(&renderTargetGroup.GetGBuffer(0), transparentRasterPass.handle, 0);
-		// 		for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-		// 			shaderPipeline->AddColorBlendAttachmentState(VK_FALSE);
-		// 		shaderPipeline->CreatePipeline(renderingDevice);
-		// 	}
-		// }
-		
-		// {// Transparent Lighting pass
-		// 	const int nbColorAttachments = 1;
-		// 	const int nbInputAttachments = RenderTargetGroup::GBUFFER_NB_IMAGES;
-		// 	std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
-		// 	std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
-		// 	std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
-		// 	std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
-			
-		// 	// Color attachment
-		// 	images[0] = &renderTargetGroup.GetLitImage();
-		// 	attachments[0].format = renderTargetGroup.GetLitImage().format;
-		// 	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-		// 	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-		// 	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		// 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		// 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		// 	attachments[0].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 	attachments[0].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 	colorAttachmentRefs[0] = {
-		// 		transparentLightingPass.AddAttachment(attachments[0]),
-		// 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-		// 	};
-			
-		// 	// Input attachments
-		// 	for (int i = 0; i < nbInputAttachments; ++i) {
-		// 		images[i+nbColorAttachments] = &renderTargetGroup.GetGBuffer(i);
-		// 		attachments[i+nbColorAttachments].format = renderTargetGroup.GetGBuffer(i).format;
-		// 		attachments[i+nbColorAttachments].samples = VK_SAMPLE_COUNT_1_BIT;
-		// 		attachments[i+nbColorAttachments].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-		// 		attachments[i+nbColorAttachments].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		// 		attachments[i+nbColorAttachments].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 		attachments[i+nbColorAttachments].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 		inputAttachmentRefs[i] = {
-		// 			transparentLightingPass.AddAttachment(attachments[i+nbColorAttachments]),
-		// 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		// 		};
-		// 	}
-		
-		// 	// SubPass
-		// 	VkSubpassDescription subpass {};
-		// 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		// 		subpass.colorAttachmentCount = colorAttachmentRefs.size();
-		// 		subpass.pColorAttachments = colorAttachmentRefs.data();
-		// 		subpass.inputAttachmentCount = inputAttachmentRefs.size();
-		// 		subpass.pInputAttachments = inputAttachmentRefs.data();
-		// 	transparentLightingPass.AddSubpass(subpass);
-			
-		// 	// Create the render pass
-		// 	transparentLightingPass.Create(renderingDevice);
-		// 	transparentLightingPass.CreateFrameBuffers(renderingDevice, images);
-			
-		// 	// Shaders
-		// 	for (auto* shaderPipeline : shaders["transparentLighting"]) {
-		// 		shaderPipeline->SetRenderPass(&renderTargetGroup.GetLitImage(), transparentLightingPass.handle, 0);
-		// 		shaderPipeline->AddColorBlendAttachmentState();
-		// 		shaderPipeline->CreatePipeline(renderingDevice);
-		// 	}
-		// }
 		
 		{// Thumbnail Gen render pass
 			VkAttachmentDescription colorAttachment = {};
@@ -777,30 +888,6 @@ private: // Pipelines
 			ImGui_ImplVulkan_Shutdown();
 		#endif
 		
-		// Rasterization pipelines
-		for (ShaderPipeline* shaderPipeline : shaders["opaqueRasterization"]) {
-			shaderPipeline->DestroyPipeline(renderingDevice);
-		}
-		for (ShaderPipeline* shaderPipeline : shaders["transparentRasterization"]) {
-			shaderPipeline->DestroyPipeline(renderingDevice);
-		}
-		opaqueRasterPass.DestroyFrameBuffers(renderingDevice);
-		opaqueRasterPass.Destroy(renderingDevice);
-		// transparentRasterPass.DestroyFrameBuffers(renderingDevice);
-		// transparentRasterPass.Destroy(renderingDevice);
-		
-		// Lighting pipelines
-		for (ShaderPipeline* shaderPipeline : shaders["opaqueLighting"]) {
-			shaderPipeline->DestroyPipeline(renderingDevice);
-		}
-		for (ShaderPipeline* shaderPipeline : shaders["transparentLighting"]) {
-			shaderPipeline->DestroyPipeline(renderingDevice);
-		}
-		opaqueLightingPass.DestroyFrameBuffers(renderingDevice);
-		opaqueLightingPass.Destroy(renderingDevice);
-		// transparentLightingPass.DestroyFrameBuffers(renderingDevice);
-		// transparentLightingPass.Destroy(renderingDevice);
-		
 		// Thumbnail Gen
 		for (auto* shaderPipeline : shaders["thumbnail"]) {
 			shaderPipeline->DestroyPipeline(renderingDevice);
@@ -829,7 +916,6 @@ private: // Pipelines
 		
 		////////////////////////////
 		// Pipeline layouts
-		lightingPipelineLayout.Destroy(renderingDevice);
 		thumbnailPipelineLayout.Destroy(renderingDevice);
 		postProcessingPipelineLayout.Destroy(renderingDevice);
 		uiPipelineLayout.Destroy(renderingDevice);
@@ -877,55 +963,16 @@ private: // Commands
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
 		}
 		
-		auto gBuffersAndDepthStencilClearValues = renderTargetGroup.GetGBuffersClearValues();
-		gBuffersAndDepthStencilClearValues.push_back(VkClearValue{0.0f,0});
-		
-		// Opaque Raster pass
-		opaqueRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
-			for (auto* shaderPipeline : shaders["opaqueRasterization"]) {
-				shaderPipeline->Execute(renderingDevice, commandBuffer);
-			}
-		opaqueRasterPass.End(renderingDevice, commandBuffer);
-	
-		// Opaque Lighting pass
-		opaqueLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetLitImage(), {{.0,.0,.0,.0}});
-			for (auto* shaderPipeline : shaders["opaqueLighting"]) {
-				if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
-					for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
-						//TODO optimisation : render spheres here instead of fullscreen quads
-						shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
-					}
-				} else {
-					shaderPipeline->Execute(renderingDevice, commandBuffer);
-				}
-			}
-		opaqueLightingPass.End(renderingDevice, commandBuffer);
+		// Dynamic Prepass
+		//...
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
 		}
 		
-		// // Transparent Raster pass
-		// transparentRasterPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetGBuffer(0), gBuffersAndDepthStencilClearValues);
-		// 	for (auto* shaderPipeline : shaders["transparentRasterization"]) {
-		// 		shaderPipeline->Execute(renderingDevice, commandBuffer);
-		// 	}
-		// transparentRasterPass.End(renderingDevice, commandBuffer);
-		
-		// // Transparent Lighting pass
-		// transparentLightingPass.Begin(renderingDevice, commandBuffer, renderTargetGroup.GetLitImage());
-		// 	for (auto* shaderPipeline : shaders["transparentLighting"]) {
-		// 		if (shaderPipeline->GetPipelineLayout() == &lightingPipelineLayout) {
-		// 			for (auto[id,lightSource] : scene.lightSources) if (lightSource) {
-		// 				//TODO optimisation : render spheres here instead of fullscreen quads
-		// 				shaderPipeline->Execute(renderingDevice, commandBuffer, 1, lightSource);
-		// 			}
-		// 		} else {
-		// 			shaderPipeline->Execute(renderingDevice, commandBuffer);
-		// 		}
-		// 	}
-		// transparentLightingPass.End(renderingDevice, commandBuffer);
+		// Dynamic Post
+		//...
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
