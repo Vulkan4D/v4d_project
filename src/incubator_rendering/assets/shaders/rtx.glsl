@@ -2,16 +2,16 @@
 #extension GL_NV_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
-#include "_noise.glsl"
+#include "Camera.glsl"
 
-// // Ray Tracing Payload
-// struct RayPayload {
-// 	vec3 color;
-// 	vec3 origin;
-// 	vec3 direction;
-// 	float reflector;
-// 	float distance;
-// };
+// Ray Tracing Payload
+struct RayPayload {
+	vec3 color;
+	vec3 origin;
+	vec3 direction;
+	float reflector;
+	float distance;
+};
 
 // layout(set = 0, binding = 2) uniform UBO {
 // 	dmat4 view;
@@ -24,8 +24,8 @@
 // 	bool rtx_shadows;
 // } ubo;
 
-// layout(set = 1, binding = 0, rgba8) uniform image2D image;
-// layout(set = 1, binding = 1) uniform accelerationStructureNV topLevelAS;
+layout(set = 1, binding = 0, rgba8) uniform image2D litImage;
+layout(set = 1, binding = 1) uniform accelerationStructureNV topLevelAS;
 
 // layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
 // layout(binding = 4, set = 0) buffer Indices { uint indexBuffer[]; };
@@ -35,7 +35,7 @@
 
 #common .*rchit
 
-// layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 0) rayPayloadInNV RayPayload ray;
 // layout(location = 2) rayPayloadNV bool shadowed;
 
 // void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal, float emissive, float roughness, float specular, float metallic) {
@@ -111,19 +111,19 @@
 
 #shader rgen
 
-// layout(location = 0) rayPayloadNV RayPayload ray;
+layout(location = 0) rayPayloadNV RayPayload ray;
 
 void main() {
-	// const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
-	// const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
-	// const vec2 d = inUV * 2.0 - 1.0;
+	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
+	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
+	const vec2 d = inUV * 2.0 - 1.0;
 
-	// const vec3 target = vec4(ubo.proj * dvec4(d.x, d.y, 1, 1)).xyz;
-	// vec3 origin = vec4(ubo.view * dvec4(0,0,0,1)).xyz;
-	// vec3 direction = vec4(ubo.view * dvec4(normalize(target), 0)).xyz;
+	const vec3 target = vec4(inverse(camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz;
+	vec3 origin = vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
+	vec3 direction = vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 	
-	// vec3 finalColor = vec3(0.0);
-	// float max_distance = 10000.0;
+	vec3 finalColor = vec3(0.0);
+	float max_distance = float(camera.zfar);
 	
 	// if (ubo.rtx_reflection_max_recursion > 1) {
 	// 	float reflection = 1.0;
@@ -140,11 +140,11 @@ void main() {
 	// 		direction = ray.direction;
 	// 	}
 	// } else {
-	// 	traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
-	// 	finalColor = ray.color;
+		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
+		finalColor = ray.color;
 	// }
 	
-	// imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(finalColor, 0.0));
+	imageStore(litImage, ivec2(gl_LaunchIDNV.xy), vec4(finalColor, 1.0));
 }
 
 
@@ -152,7 +152,7 @@ void main() {
 
 #shader rchit
 
-// hitAttributeNV vec3 attribs;
+hitAttributeNV vec3 attribs;
 
 // // Vertex
 // struct Vertex {
@@ -200,6 +200,8 @@ void main() {
 	// const float metallic = v0.metallic * barycentricCoords.x + v1.metallic * barycentricCoords.y + v2.metallic * barycentricCoords.z;
 
 	// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
+	
+	ray.color = vec3(1,0,0);
 }
 
 
@@ -207,11 +209,10 @@ void main() {
 
 #shader rmiss
 
-// layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 0) rayPayloadInNV RayPayload ray;
 
 void main() {
-	// // ray.color = vec3(0.7, 0.8, 1.0);
-	// ray.color = vec3(0.0, 0.0, 0.0);
+	ray.color = vec3(0.0, 0.0, 0.0);
 }
 
 

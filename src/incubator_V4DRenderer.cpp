@@ -29,6 +29,7 @@ static std::vector<std::string> v4dModules {
 		{"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
 		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
 		{"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
+		{"incubator_rendering/assets/shaders/rtx.meta", 0},
 	};
 #endif
 

@@ -427,6 +427,7 @@ private: // Ray tracing stuff
 		}
 	}
 	void CreateRayTracingPipeline() {
+		rayTracingPipelineLayout.Create(renderingDevice);
 		shaderBindingTable.CreateRayTracingPipeline(renderingDevice);
 		
 		// Shader Binding Table
@@ -439,6 +440,7 @@ private: // Ray tracing stuff
 		rayTracingShaderBindingTableBuffer.Free(renderingDevice);
 		// Ray tracing pipeline
 		shaderBindingTable.DestroyRayTracingPipeline(renderingDevice);
+		rayTracingPipelineLayout.Destroy(renderingDevice);
 	}
 	
 private: // Init
@@ -486,7 +488,7 @@ private: // Init
 		
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		// baseDescriptorSet_0->AddBinding_uniformBuffer(1, &objBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
 		// baseDescriptorSet_0->AddBinding_uniformBuffer(2+, G-Buffers, VK_SHADER_STAGE_ALL_GRAPHICS);
 		
@@ -499,14 +501,15 @@ private: // Init
 		// lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		// rayTracingDescriptorSet_1->AddBinding_imageView(0, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_accelerationStructure(1, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(0, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(1, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(2, &blockObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(3, &blockVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(4, &blockIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(5, &terrainObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(6, &terrainVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(7, &terrainIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
 		// Thumbnail Gen
@@ -544,6 +547,7 @@ private: // Init
 	
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
+		trianglesShaderOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -631,9 +635,19 @@ private: // Resources
 		for (auto* submodule : renderingSubmodules) {
 			submodule->AllocateBuffers();
 		}
+		
+		AllocateBuffersStaged(graphicsQueue, stagedBuffers);
+		
+		CreateRayTracingAccelerationStructures();
 	}
 	
 	void FreeBuffers() override {
+		DestroyRayTracingAccelerationStructures();
+		
+		for (auto& buffer : stagedBuffers) {
+			buffer->Free(renderingDevice);
+		}
+
 		// Camera
 		cameraUniformBuffer.Free(renderingDevice);
 		
@@ -879,9 +893,11 @@ private: // Pipelines
 		// Compute
 		histogramComputeShader.CreatePipeline(renderingDevice);
 		
+		CreateRayTracingPipeline();
 	}
 	
 	void DestroyPipelines() override {
+		DestroyRayTracingPipeline();
 		
 		#ifdef _ENABLE_IMGUI
 			// ImGui
@@ -930,6 +946,24 @@ private: // Pipelines
 private: // Commands
 
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
+		
+		// Ray Tracing
+		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable.GetPipeline());
+		shaderBindingTable.GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
+		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
+		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
+		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
+		int width = (int)((float)swapChain->extent.width);
+		int height = (int)((float)swapChain->extent.height);
+		renderingDevice->CmdTraceRaysNV(
+			commandBuffer, 
+			rayTracingShaderBindingTableBuffer.buffer, 0,
+			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetMissShader, bindingStride,
+			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetHitShader, bindingStride,
+			VK_NULL_HANDLE, 0, 0,
+			width, height, 1
+		);
+		
 		
 		// Gen Thumbnail
 		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, thumbnailImage, {{.0,.0,.0,.0}});
@@ -1020,6 +1054,9 @@ public: // Scene configuration
 			}
 		}
 		
+		// Ray Tracing
+		shaderBindingTable.ReadShaders();
+		
 		// Compute
 		histogramComputeShader.ReadShaders();
 		
@@ -1029,18 +1066,120 @@ public: // Scene configuration
 		}
 	}
 	
+	std::vector<Buffer*> stagedBuffers {};
+	uint32_t trianglesShaderOffset;
+	
 	void LoadScene() override {
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->LoadScene(scene);
 		}
+		
+		Buffer* vertexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		Buffer* indexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
+		
+		
+		
+		// Add triangle geometries
+		auto* trianglesGeometry1 = new TriangleGeometry<StandardVertex>({
+			StandardVertex{/*pos*/{-0.5,-0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{ 0.5,-0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{ 0.5, 0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{-0.5, 0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			//
+			StandardVertex{/*pos*/{-0.5,-0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{ 0.5,-0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{ 0.5, 0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			StandardVertex{/*pos*/{-0.5, 0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			
+			// bottom white
+			/*  8 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/*  9 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 10 */StandardVertex{/*pos*/{ 8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 11 */StandardVertex{/*pos*/{-8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			
+			// top gray
+			/* 12 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 13 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 14 */StandardVertex{/*pos*/{ 8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 15 */StandardVertex{/*pos*/{-8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			
+			// left red
+			/* 16 */StandardVertex{/*pos*/{ 8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 17 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 18 */StandardVertex{/*pos*/{ 8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 19 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			
+			// back blue
+			/* 20 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 21 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 22 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 23 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			
+			// right green
+			/* 24 */StandardVertex{/*pos*/{-8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 25 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 26 */StandardVertex{/*pos*/{-8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+			/* 27 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
+		}, {
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
+			//
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
+		}, vertexBuffer, 0, indexBuffer, 0);
+		geometries.push_back(trianglesGeometry1);
+		
+		rayTracingBottomLevelAccelerationStructures.resize(1);
+		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
+		
+		// Assign buffer data
+		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
+		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+		
+		// Assign instances
+		glm::mat3x4 transform {
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f
+		};
+		geometryInstances.reserve(1);
+		// Triangles instance
+		geometryInstances.push_back({
+			transform,
+			0, // instanceId
+			0x1, // mask
+			trianglesShaderOffset, // instanceOffset
+			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+			&rayTracingBottomLevelAccelerationStructures[0]
+		});
 	}
 	
 	void UnloadScene() override {
+		
+		// Geometries
+		geometryInstances.clear();
+		rayTracingBottomLevelAccelerationStructures.clear();
+		for (auto* geometry : geometries) {
+			delete geometry;
+		}
+		geometries.clear();
+		
+		// Staged buffers
+		for (auto* buffer : stagedBuffers) {
+			delete buffer;
+		}
+		stagedBuffers.clear();
+		
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->UnloadScene(scene);
 		}
+		
 	}
 	
 public: // Update
