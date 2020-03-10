@@ -7,42 +7,6 @@
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
 
-struct StandardVertex { // 96 bytes
-	alignas(16) glm::vec3 pos;
-	alignas(4) int objID;
-	alignas(16) glm::vec3 normal;
-	alignas(4) int materialID;
-	alignas(16) glm::vec4 color;
-	alignas(16) glm::vec2 uv;
-	union {
-		alignas(8) glm::vec2 uv2;
-		alignas(8) glm::vec2 floatInfo2;
-		alignas(8) glm::ivec2 intInfo2;
-		alignas(8) glm::uvec2 uintInfo2;
-	};
-	union {
-		alignas(16) glm::vec3 tangent;
-		alignas(16) glm::vec3 floatInfo3;
-		alignas(16) glm::ivec3 intInfo3;
-		alignas(16) glm::uvec3 uintInfo3;
-	};
-	union {
-		alignas(4) float floatInfo;
-		alignas(4) int32_t intInfo;
-		alignas(4) uint32_t uintInfo;
-	};
-};
-
-struct TerrainVertex { // 48 bytes
-	alignas(16) glm::vec3 pos;
-	alignas(4) int objID;
-	alignas(16) glm::vec3 normal;
-	alignas(4) int materialID;
-	alignas(16) glm::vec2 uv;
-	alignas(4) float altitude;
-	alignas(4) float slope;
-};
-
 class V4DRenderer : public v4d::graphics::Renderer {
 private: 
 	using v4d::graphics::Renderer::Renderer;
@@ -78,15 +42,19 @@ private:
 		VkAccelerationStructureNV accelerationStructure = VK_NULL_HANDLE;
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		uint64_t handle = 0;
-		VkAccelerationStructureCreateInfoNV createInfo;
+		VkAccelerationStructureCreateInfoNV createInfo {};
 	};
 
 	struct BottomLevelAccelerationStructure : public AccelerationStructure {
 		std::vector<Geometry*> geometries {};
 		std::vector<VkGeometryNV> rayTracingGeometries {};
 		void GenerateRayTracingGeometries() {
-			for (auto* geometry : geometries) {
-				rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
+			if (geometries.size() != rayTracingGeometries.size()) {
+				rayTracingGeometries.clear();
+				rayTracingGeometries.reserve(geometries.size());
+				for (auto* geometry : geometries) {
+					rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
+				}
 			}
 		}
 	};
@@ -186,6 +154,7 @@ private: // Ray tracing stuff
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
 	
 	void CreateRayTracingAccelerationStructures() {
+		if (rayTracingBottomLevelAccelerationStructures.size() == 0) return;
 		
 		// Bottom level Acceleration structures
 		for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
@@ -199,12 +168,18 @@ private: // Ray tracing stuff
 					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
 					nullptr,// pNext
 					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
-					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/,// flags
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
 					0,// instanceCount
 					(uint)blas.rayTracingGeometries.size(),// geometryCount
 					blas.rayTracingGeometries.data()// VkGeometryNV pGeometries
 				}
 			};
+			
+			
+			// Destroy existing bottom level
+			if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
+			if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
+			
 			
 			if (renderingDevice->CreateAccelerationStructureNV(&blas.createInfo, nullptr, &blas.accelerationStructure) != VK_SUCCESS)
 				throw std::runtime_error("Failed to create bottom level acceleration structure");
@@ -241,6 +216,13 @@ private: // Ray tracing stuff
 			if (renderingDevice->GetAccelerationStructureHandleNV(blas.accelerationStructure, sizeof(uint64_t), &blas.handle))
 				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
 		}
+		
+	
+		// Destroy existing top level
+		if (rayTracingTopLevelAccelerationStructure.memory) renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
+		if (rayTracingTopLevelAccelerationStructure.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
+		rayTracingTopLevelAccelerationStructure.instances.clear();
+		
 		
 		// Geometry Instances
 		rayTracingTopLevelAccelerationStructure.instances.reserve(geometryInstances.size());
@@ -308,7 +290,7 @@ private: // Ray tracing stuff
 		}
 		
 		// Build Ray Tracing acceleration structures
-		{
+		if (rayTracingTopLevelAccelerationStructure.instances.size() > 0) {
 			// Instance buffer
 			Buffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
 			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
@@ -420,8 +402,8 @@ private: // Ray tracing stuff
 			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
 			rayTracingTopLevelAccelerationStructure.instances.clear();
 			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-				renderingDevice->FreeMemory(blas.memory, nullptr);
-				renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
+				if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
+				if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
 				blas.rayTracingGeometries.clear();
 			}
 		}
@@ -503,12 +485,13 @@ private: // Init
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		rayTracingDescriptorSet_1->AddBinding_imageView(0, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(1, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(2, &blockObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(3, &blockVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(4, &blockIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(5, &terrainObjBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(6, &terrainVertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		// rayTracingDescriptorSet_1->AddBinding_uniformBuffer(7, &terrainIndexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(2, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.materialBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(6, &Geometry::globalBuffers.normalBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(7, &Geometry::globalBuffers.uvBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(8, &Geometry::globalBuffers.colorBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -636,6 +619,8 @@ private: // Resources
 			submodule->AllocateBuffers();
 		}
 		
+		Geometry::globalBuffers.Allocate(renderingDevice);
+		
 		AllocateBuffersStaged(graphicsQueue, stagedBuffers);
 		
 		CreateRayTracingAccelerationStructures();
@@ -648,6 +633,8 @@ private: // Resources
 			buffer->Free(renderingDevice);
 		}
 
+		Geometry::globalBuffers.Free(renderingDevice);
+		
 		// Camera
 		cameraUniformBuffer.Free(renderingDevice);
 		
@@ -1075,87 +1062,83 @@ public: // Scene configuration
 			submodule->LoadScene(scene);
 		}
 		
-		Buffer* vertexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
-		Buffer* indexBuffer = stagedBuffers.emplace_back(new Buffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT));
 		
 		
+		// // Add triangle geometries
+		// auto* trianglesGeometry1 = new Geometry(28, 42);
+
+		// trianglesGeometry1->SetVertex(0, /*pos*/{-0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		// trianglesGeometry1->SetVertex(1, /*pos*/{ 0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		// trianglesGeometry1->SetVertex(2, /*pos*/{ 0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		// trianglesGeometry1->SetVertex(3, /*pos*/{-0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+		// //
+		// trianglesGeometry1->SetVertex(4, /*pos*/{-0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		// trianglesGeometry1->SetVertex(5, /*pos*/{ 0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		// trianglesGeometry1->SetVertex(6, /*pos*/{ 0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		// trianglesGeometry1->SetVertex(7, /*pos*/{-0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
 		
-		// Add triangle geometries
-		auto* trianglesGeometry1 = new TriangleGeometry<StandardVertex>({
-			StandardVertex{/*pos*/{-0.5,-0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{ 0.5,-0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{ 0.5, 0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{-0.5, 0.5, 0.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			//
-			StandardVertex{/*pos*/{-0.5,-0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0, 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{ 0.5,-0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{ 0.5, 0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 0.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			StandardVertex{/*pos*/{-0.5, 0.5,-0.5}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{0.0, 1.0, 1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			
-			// bottom white
-			/*  8 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/*  9 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 10 */StandardVertex{/*pos*/{ 8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 11 */StandardVertex{/*pos*/{-8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*materialID*/0, /*color*/{1.0,1.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			
-			// top gray
-			/* 12 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 13 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 14 */StandardVertex{/*pos*/{ 8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 15 */StandardVertex{/*pos*/{-8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*materialID*/0, /*color*/{0.5,0.5,0.5, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			
-			// left red
-			/* 16 */StandardVertex{/*pos*/{ 8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 17 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 18 */StandardVertex{/*pos*/{ 8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 19 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{-1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{1.0,0.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			
-			// back blue
-			/* 20 */StandardVertex{/*pos*/{ 8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 21 */StandardVertex{/*pos*/{ 8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 22 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 23 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*materialID*/0, /*color*/{0.0,0.0,1.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			
-			// right green
-			/* 24 */StandardVertex{/*pos*/{-8.0, 8.0,-2.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 25 */StandardVertex{/*pos*/{-8.0,-8.0,-2.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 26 */StandardVertex{/*pos*/{-8.0, 8.0, 4.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-			/* 27 */StandardVertex{/*pos*/{-8.0,-8.0, 4.0}, /*objID*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*materialID*/0, /*color*/{0.0,1.0,0.0, 1.0}, /*uv*/{0.0, 0.0}, /*uv2*/glm::vec2{0.0f,0.0f}, /*tangent*/glm::vec3{0.0f,0.0f,0.0f}, /*floatInfo*/0.0f},
-		}, {
-			0, 1, 2, 2, 3, 0,
-			4, 5, 6, 6, 7, 4,
-			8, 9, 10, 10, 11, 8,
-			//
-			13, 12, 14, 14, 12, 15,
-			16, 17, 18, 18, 17, 19,
-			20, 21, 22, 22, 21, 23,
-			25, 24, 26, 26, 27, 25,
-		}, vertexBuffer, 0, indexBuffer, 0);
-		geometries.push_back(trianglesGeometry1);
+		// // bottom white
+		// trianglesGeometry1->SetVertex(8, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(9, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(10, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(11, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 		
-		rayTracingBottomLevelAccelerationStructures.resize(1);
-		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
+		// // top gray
+		// trianglesGeometry1->SetVertex(12, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		// trianglesGeometry1->SetVertex(13, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		// trianglesGeometry1->SetVertex(14, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		// trianglesGeometry1->SetVertex(15, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
 		
-		// Assign buffer data
-		vertexBuffer->AddSrcDataPtr(&trianglesGeometry1->vertexData);
-		indexBuffer->AddSrcDataPtr(&trianglesGeometry1->indexData);
+		// // left red
+		// trianglesGeometry1->SetVertex(16, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(17, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(18, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(19, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
 		
-		// Assign instances
-		glm::mat3x4 transform {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f
-		};
-		geometryInstances.reserve(1);
-		// Triangles instance
-		geometryInstances.push_back({
-			transform,
-			0, // instanceId
-			0x1, // mask
-			trianglesShaderOffset, // instanceOffset
-			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-			&rayTracingBottomLevelAccelerationStructures[0]
-		});
+		// // back blue
+		// trianglesGeometry1->SetVertex(20, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(21, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(22, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		// trianglesGeometry1->SetVertex(23, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		
+		// // right green
+		// trianglesGeometry1->SetVertex(24, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(25, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(26, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		// trianglesGeometry1->SetVertex(27, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		
+		// trianglesGeometry1->SetIndices({
+		// 	0, 1, 2, 2, 3, 0,
+		// 	4, 5, 6, 6, 7, 4,
+		// 	8, 9, 10, 10, 11, 8,
+		// 	//
+		// 	13, 12, 14, 14, 12, 15,
+		// 	16, 17, 18, 18, 17, 19,
+		// 	20, 21, 22, 22, 21, 23,
+		// 	25, 24, 26, 26, 27, 25,
+		// });
+		
+		// geometries.push_back(trianglesGeometry1);
+		
+		// rayTracingBottomLevelAccelerationStructures.resize(1);
+		// rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
+		
+		// // Assign instances
+		// glm::mat3x4 transform {
+		// 	1.0f, 0.0f, 0.0f, 0.0f,
+		// 	0.0f, 1.0f, 0.0f, 0.0f,
+		// 	0.0f, 0.0f, 1.0f, 0.0f
+		// };
+		// geometryInstances.reserve(1);
+		// // Triangles instance
+		// geometryInstances.push_back({
+		// 	transform,
+		// 	2, // gl_InstanceCustomIndexNV
+		// 	0x1, // mask
+		// 	trianglesShaderOffset, // instanceOffset
+		// 	VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+		// 	&rayTracingBottomLevelAccelerationStructures[0]
+		// });
 	}
 	
 	void UnloadScene() override {

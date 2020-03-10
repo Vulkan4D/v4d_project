@@ -2,6 +2,8 @@
 #extension GL_NV_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
 
+#extension GL_EXT_buffer_reference : enable
+
 #include "Camera.glsl"
 
 // Ray Tracing Payload
@@ -24,16 +26,107 @@ struct RayPayload {
 // 	bool rtx_shadows;
 // } ubo;
 
-layout(set = 1, binding = 0, rgba8) uniform image2D litImage;
+layout(set = 1, binding = 0, rgba16f) uniform image2D litImage;
 layout(set = 1, binding = 1) uniform accelerationStructureNV topLevelAS;
+layout(set = 1, binding = 2) readonly buffer Geometries {uvec4 geometries[];};
+layout(set = 1, binding = 3) readonly buffer Indices {uint indices[];};
+layout(set = 1, binding = 4) readonly buffer VertexPositions {vec4 vertexPositions[];};
+layout(set = 1, binding = 5) readonly buffer VertexMaterials {uint vertexMaterials[];};
+layout(set = 1, binding = 6) readonly buffer VertexNormals {vec2 vertexNormals[];};
+layout(set = 1, binding = 7) readonly buffer VertexUVs {uint vertexUVs[];};
+layout(set = 1, binding = 8) readonly buffer VertexColors {uint vertexColors[];};
 
-// layout(binding = 3, set = 0) buffer Vertices { vec4 vertexBuffer[]; };
-// layout(binding = 4, set = 0) buffer Indices { uint indexBuffer[]; };
-// layout(binding = 5, set = 0) readonly buffer Spheres { vec4 sphereBuffer[]; };
+struct Vertex {
+	vec3 pos;
+	float info;
+	uint mat;
+	vec3 normal;
+	vec2 uv;
+	vec4 color;
+};
+
+vec3 UnpackNormal(in vec2 norm) {
+	vec2 fenc = norm * 4.0 - 2.0;
+	float f = dot(fenc, fenc);
+	float g = sqrt(1.0 - f / 4.0);
+	return vec3(fenc * g, 1.0 - f / 2.0);
+}
+
+vec2 UnpackUV(in uint uv) {
+	return vec2(
+		(uv & 0xffff0000) >> 16,
+		(uv & 0x0000ffff) >> 0
+	) / 65535.0;
+}
+
+vec4 UnpackColor(in uint color) {
+	return vec4(
+		(color & 0xff000000) >> 24,
+		(color & 0x00ff0000) >> 16,
+		(color & 0x0000ff00) >> 8,
+		(color & 0x000000ff) >> 0
+	) / 255.0;
+}
+
+Vertex GetVertex(uint index) {
+	Vertex v;
+	v.pos = vertexPositions[index].xyz;
+	v.info = vertexPositions[index].w;
+	v.mat = vertexMaterials[index];
+	v.normal = UnpackNormal(vertexNormals[index]);
+	v.uv = UnpackUV(vertexUVs[index]);
+	v.color = UnpackColor(vertexColors[index]);
+	return v;
+}
 
 #####################################################
 
-#common .*rchit
+#common .*rchit|.*rahit
+
+hitAttributeNV vec3 hitAttribs;
+
+struct Fragment {
+	uint indexOffset;
+	uint vertexOffset;
+	uint objectIndex;
+	uint otherIndex;
+	Vertex v0;
+	Vertex v1;
+	Vertex v2;
+	vec3 barycentricCoords;
+	vec3 hitPoint; // World space
+	vec3 pos;
+	float info;
+	vec3 normal;
+	vec2 uv;
+	vec4 color;
+};
+
+Fragment GetHitFragment(bool interpolateVertexData) {
+	Fragment f;
+	
+	f.indexOffset = geometries[gl_InstanceCustomIndexNV].x;
+	f.vertexOffset = geometries[gl_InstanceCustomIndexNV].y;
+	f.objectIndex = geometries[gl_InstanceCustomIndexNV].z;
+	f.otherIndex = geometries[gl_InstanceCustomIndexNV].w;
+	
+	f.v0 = GetVertex(indices[f.indexOffset + (3 * gl_PrimitiveID) + 0] + f.vertexOffset);
+	f.v1 = GetVertex(indices[f.indexOffset + (3 * gl_PrimitiveID) + 1] + f.vertexOffset);
+	f.v2 = GetVertex(indices[f.indexOffset + (3 * gl_PrimitiveID) + 2] + f.vertexOffset);
+	
+	f.barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
+	f.hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	
+	if (interpolateVertexData) {
+		f.pos = (f.v0.pos * f.barycentricCoords.x + f.v1.pos * f.barycentricCoords.y + f.v2.pos * f.barycentricCoords.z);
+		f.info = (f.v0.info * f.barycentricCoords.x + f.v1.info * f.barycentricCoords.y + f.v2.info * f.barycentricCoords.z);
+		f.normal = normalize(f.v0.normal * f.barycentricCoords.x + f.v1.normal * f.barycentricCoords.y + f.v2.normal * f.barycentricCoords.z);
+		f.uv = (f.v0.uv * f.barycentricCoords.x + f.v1.uv * f.barycentricCoords.y + f.v2.uv * f.barycentricCoords.z);
+		f.color = (f.v0.color * f.barycentricCoords.x + f.v1.color * f.barycentricCoords.y + f.v2.color * f.barycentricCoords.z);
+	}
+	
+	return f;
+}
 
 layout(location = 0) rayPayloadInNV RayPayload ray;
 // layout(location = 2) rayPayloadNV bool shadowed;
@@ -152,56 +245,12 @@ void main() {
 
 #shader rchit
 
-hitAttributeNV vec3 attribs;
-
-// // Vertex
-// struct Vertex {
-// 	vec3 pos;
-// 	float roughness;
-// 	vec3 normal;
-// 	float emissive;
-// 	vec4 color;
-// 	vec2 uv;
-// 	float specular;
-// 	float metallic;
-// };
-// uint vertexStructSize = 4;
-// Vertex unpackVertex(uint index) {
-// 	Vertex v;
-// 	v.pos = vertexBuffer[vertexStructSize * index + 0].xyz;
-// 	v.roughness = vertexBuffer[vertexStructSize * index + 0].w;
-// 	v.normal = vertexBuffer[vertexStructSize * index + 1].xyz;
-// 	v.emissive = vertexBuffer[vertexStructSize * index + 1].w;
-// 	v.color = vertexBuffer[vertexStructSize * index + 2];
-// 	v.uv = vertexBuffer[vertexStructSize * index + 3].xy;
-// 	v.specular = vertexBuffer[vertexStructSize * index + 3].z;
-// 	v.metallic = vertexBuffer[vertexStructSize * index + 3].w;
-// 	return v;
-// }
-
 void main() {
-	// // Hit Triangle vertices
-	// const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-	// const ivec3 index = ivec3(indexBuffer[3 * gl_PrimitiveID], indexBuffer[3 * gl_PrimitiveID + 1], indexBuffer[3 * gl_PrimitiveID + 2]);
-	// const Vertex v0 = unpackVertex(index.x);
-	// const Vertex v1 = unpackVertex(index.y);
-	// const Vertex v2 = unpackVertex(index.z);
+	Fragment fragment = GetHitFragment(true);
 	
-	// // Hit World Position
-	// const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
-	// // Hit object Position
-	// const vec3 objPoint = hitPoint - normalize(v0.pos * barycentricCoords.x + v1.pos * barycentricCoords.y + v2.pos * barycentricCoords.z);
-	// // Interpolate Vertex data
-	// const vec4 color = normalize(v0.color * barycentricCoords.x + v1.color * barycentricCoords.y + v2.color * barycentricCoords.z);
-	// const vec3 normal = normalize(v0.normal * barycentricCoords.x + v1.normal * barycentricCoords.y + v2.normal * barycentricCoords.z);
-	// const float emissive = v0.emissive * barycentricCoords.x + v1.emissive * barycentricCoords.y + v2.emissive * barycentricCoords.z;
-	// const float roughness = v0.roughness * barycentricCoords.x + v1.roughness * barycentricCoords.y + v2.roughness * barycentricCoords.z;
-	// const float specular = v0.specular * barycentricCoords.x + v1.specular * barycentricCoords.y + v2.specular * barycentricCoords.z;
-	// const float metallic = v0.metallic * barycentricCoords.x + v1.metallic * barycentricCoords.y + v2.metallic * barycentricCoords.z;
-
 	// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 	
-	ray.color = vec3(1,0,0);
+	ray.color = fragment.color.rgb;
 }
 
 
