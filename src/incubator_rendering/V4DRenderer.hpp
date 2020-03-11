@@ -156,72 +156,12 @@ private: // Ray tracing stuff
 	void CreateRayTracingAccelerationStructures() {
 		if (rayTracingBottomLevelAccelerationStructures.size() == 0) return;
 		
-		// Bottom level Acceleration structures
-		for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-			blas.GenerateRayTracingGeometries();
-			
-			blas.createInfo = {
-				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
-				nullptr,// pNext
-				0,// VkDeviceSize compactedSize
-				{// VkAccelerationStructureInfoNV info
-					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
-					nullptr,// pNext
-					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
-					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
-					0,// instanceCount
-					(uint)blas.rayTracingGeometries.size(),// geometryCount
-					blas.rayTracingGeometries.data()// VkGeometryNV pGeometries
-				}
-			};
-			
-			
-			// Destroy existing bottom level
-			if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
-			if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
-			
-			
-			if (renderingDevice->CreateAccelerationStructureNV(&blas.createInfo, nullptr, &blas.accelerationStructure) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create bottom level acceleration structure");
-				
-			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
-			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
-			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-				
-			VkMemoryRequirements2 memoryRequirements2 {};
-			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
-			
-			VkMemoryAllocateInfo memoryAllocateInfo {
-				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-				nullptr,// pNext
-				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
-				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
-			};
-			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &blas.memory) != VK_SUCCESS)
-				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure");
-			
-			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
-				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
-				nullptr,// pNext
-				blas.accelerationStructure,// accelerationStructure
-				blas.memory,// memory
-				0,// VkDeviceSize memoryOffset
-				0,// uint32_t deviceIndexCount
-				nullptr// pDeviceIndices
-			};
-			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
-				throw std::runtime_error("Failed to bind bottom level acceleration structure memory");
-			
-			if (renderingDevice->GetAccelerationStructureHandleNV(blas.accelerationStructure, sizeof(uint64_t), &blas.handle))
-				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
-		}
-		
-	
-		// Destroy existing top level
-		if (rayTracingTopLevelAccelerationStructure.memory) renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
-		if (rayTracingTopLevelAccelerationStructure.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
-		rayTracingTopLevelAccelerationStructure.instances.clear();
+		// // Destroy existing top level
+		// if (rayTracingTopLevelAccelerationStructure.memory) renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
+		// rayTracingTopLevelAccelerationStructure.memory = VK_NULL_HANDLE;
+		// if (rayTracingTopLevelAccelerationStructure.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
+		// rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
+		// rayTracingTopLevelAccelerationStructure.instances.clear();
 		
 		
 		// Geometry Instances
@@ -239,7 +179,7 @@ private: // Ray tracing stuff
 		}
 		
 		{
-			// Top Level acceleration structure
+			// Create Top Level acceleration structure
 			VkAccelerationStructureCreateInfoNV accStructCreateInfo {
 				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
 				nullptr,// pNext
@@ -248,7 +188,7 @@ private: // Ray tracing stuff
 					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
 					nullptr,// pNext
 					VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
-					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/, // VkGeometryInstanceFlagBitsNV flags
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
 					(uint)rayTracingTopLevelAccelerationStructure.instances.size(),// instanceCount
 					0,// geometryCount
 					nullptr// VkGeometryNV pGeometries
@@ -259,6 +199,7 @@ private: // Ray tracing stuff
 			
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
 			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
 				
 			VkMemoryRequirements2 memoryRequirements2 {};
@@ -296,22 +237,14 @@ private: // Ray tracing stuff
 			instanceBuffer.AddSrcDataPtr(&rayTracingTopLevelAccelerationStructure.instances);
 			AllocateBufferStaged(graphicsQueue, instanceBuffer);
 			
-			VkDeviceSize allBlasReqSize = 0;
-			// RayTracing Scratch buffer
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-				VkMemoryRequirements2 req;
-				memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
-				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &req);
-				allBlasReqSize += req.memoryRequirements.size;
-			}
-			VkMemoryRequirements2 memoryRequirementsTopLevel;
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+			VkMemoryRequirements2 memoryRequirementsTopLevel {};
 			memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
 			renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
 			// Send scratch buffer
-			const VkDeviceSize scratchBufferSize = std::max(allBlasReqSize, memoryRequirementsTopLevel.memoryRequirements.size);
+			const VkDeviceSize scratchBufferSize = memoryRequirementsTopLevel.memoryRequirements.size;
 			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, scratchBufferSize);
 			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			
@@ -319,44 +252,7 @@ private: // Ray tracing stuff
 				
 				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
 				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV /*| VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV*/;
-			
-				VkMemoryBarrier memoryBarrier {
-					VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-					nullptr,// pNext
-					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
-					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
-				};
-				
-				for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-					accelerationStructBuildInfo.geometryCount = (uint)blas.rayTracingGeometries.size();
-					accelerationStructBuildInfo.pGeometries = blas.rayTracingGeometries.data();
-					accelerationStructBuildInfo.instanceCount = 0;
-					
-					renderingDevice->CmdBuildAccelerationStructureNV(
-						cmdBuffer, 
-						&accelerationStructBuildInfo, 
-						VK_NULL_HANDLE, 
-						0, 
-						VK_FALSE, 
-						blas.accelerationStructure, 
-						VK_NULL_HANDLE, 
-						scratchBuffer.buffer, 
-						0
-					);
-					
-					renderingDevice->CmdPipelineBarrier(
-						cmdBuffer, 
-						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-						VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-						0, 
-						1, &memoryBarrier, 
-						0, 0, 
-						0, 0
-					);
-				}
-				
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
 				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
 				accelerationStructBuildInfo.geometryCount = 0;
 				accelerationStructBuildInfo.pGeometries = nullptr;
@@ -374,15 +270,22 @@ private: // Ray tracing stuff
 					0
 				);
 				
-				renderingDevice->CmdPipelineBarrier(
-					cmdBuffer, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					0, 
-					1, &memoryBarrier, 
-					0, 0, 
-					0, 0
-				);
+				// VkMemoryBarrier memoryBarrier {
+				// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				// 	nullptr,// pNext
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
+				// };
+				
+				// renderingDevice->CmdPipelineBarrier(
+				// 	cmdBuffer, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	0, 
+				// 	1, &memoryBarrier, 
+				// 	0, 0, 
+				// 	0, 0
+				// );
 			
 			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 			
@@ -401,11 +304,6 @@ private: // Ray tracing stuff
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
 			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
 			rayTracingTopLevelAccelerationStructure.instances.clear();
-			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-				if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
-				if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
-				blas.rayTracingGeometries.clear();
-			}
 		}
 	}
 	void CreateRayTracingPipeline() {
@@ -621,18 +519,14 @@ private: // Resources
 		
 		Geometry::globalBuffers.Allocate(renderingDevice);
 		
-		AllocateBuffersStaged(graphicsQueue, stagedBuffers);
-		
 		CreateRayTracingAccelerationStructures();
 	}
 	
 	void FreeBuffers() override {
+		UnloadTestObjects();
+
 		DestroyRayTracingAccelerationStructures();
 		
-		for (auto& buffer : stagedBuffers) {
-			buffer->Free(renderingDevice);
-		}
-
 		Geometry::globalBuffers.Free(renderingDevice);
 		
 		// Camera
@@ -951,7 +845,6 @@ private: // Commands
 			width, height, 1
 		);
 		
-		
 		// Gen Thumbnail
 		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, thumbnailImage, {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
@@ -1053,7 +946,6 @@ public: // Scene configuration
 		}
 	}
 	
-	std::vector<Buffer*> stagedBuffers {};
 	uint32_t trianglesShaderOffset;
 	
 	void LoadScene() override {
@@ -1061,113 +953,21 @@ public: // Scene configuration
 		for (auto* submodule : renderingSubmodules) {
 			submodule->LoadScene(scene);
 		}
-		
-		
-		
-		// // Add triangle geometries
-		// auto* trianglesGeometry1 = new Geometry(28, 42);
-
-		// trianglesGeometry1->SetVertex(0, /*pos*/{-0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-		// trianglesGeometry1->SetVertex(1, /*pos*/{ 0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-		// trianglesGeometry1->SetVertex(2, /*pos*/{ 0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-		// trianglesGeometry1->SetVertex(3, /*pos*/{-0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-		// //
-		// trianglesGeometry1->SetVertex(4, /*pos*/{-0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-		// trianglesGeometry1->SetVertex(5, /*pos*/{ 0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-		// trianglesGeometry1->SetVertex(6, /*pos*/{ 0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-		// trianglesGeometry1->SetVertex(7, /*pos*/{-0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-		
-		// // bottom white
-		// trianglesGeometry1->SetVertex(8, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(9, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(10, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(11, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		
-		// // top gray
-		// trianglesGeometry1->SetVertex(12, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		// trianglesGeometry1->SetVertex(13, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		// trianglesGeometry1->SetVertex(14, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		// trianglesGeometry1->SetVertex(15, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		
-		// // left red
-		// trianglesGeometry1->SetVertex(16, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(17, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(18, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(19, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		
-		// // back blue
-		// trianglesGeometry1->SetVertex(20, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(21, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(22, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		// trianglesGeometry1->SetVertex(23, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		
-		// // right green
-		// trianglesGeometry1->SetVertex(24, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(25, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(26, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		// trianglesGeometry1->SetVertex(27, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		
-		// trianglesGeometry1->SetIndices({
-		// 	0, 1, 2, 2, 3, 0,
-		// 	4, 5, 6, 6, 7, 4,
-		// 	8, 9, 10, 10, 11, 8,
-		// 	//
-		// 	13, 12, 14, 14, 12, 15,
-		// 	16, 17, 18, 18, 17, 19,
-		// 	20, 21, 22, 22, 21, 23,
-		// 	25, 24, 26, 26, 27, 25,
-		// });
-		
-		// geometries.push_back(trianglesGeometry1);
-		
-		// rayTracingBottomLevelAccelerationStructures.resize(1);
-		// rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
-		
-		// // Assign instances
-		// glm::mat3x4 transform {
-		// 	1.0f, 0.0f, 0.0f, 0.0f,
-		// 	0.0f, 1.0f, 0.0f, 0.0f,
-		// 	0.0f, 0.0f, 1.0f, 0.0f
-		// };
-		// geometryInstances.reserve(1);
-		// // Triangles instance
-		// geometryInstances.push_back({
-		// 	transform,
-		// 	2, // gl_InstanceCustomIndexNV
-		// 	0x1, // mask
-		// 	trianglesShaderOffset, // instanceOffset
-		// 	VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-		// 	&rayTracingBottomLevelAccelerationStructures[0]
-		// });
 	}
 	
 	void UnloadScene() override {
-		
-		// Geometries
-		geometryInstances.clear();
-		rayTracingBottomLevelAccelerationStructures.clear();
-		for (auto* geometry : geometries) {
-			delete geometry;
-		}
-		geometries.clear();
-		
-		// Staged buffers
-		for (auto* buffer : stagedBuffers) {
-			delete buffer;
-		}
-		stagedBuffers.clear();
-		
-		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->UnloadScene(scene);
 		}
-		
 	}
 	
 public: // Update
 	
 	void FrameUpdate(uint imageIndex) override {
+		
+		// if (!testObjectsLoaded) LoadTestObjects();
+		
 		
 		// Reset scene information
 		scene.camera.width = swapChain->extent.width;
@@ -1216,5 +1016,224 @@ public: // Update
 			ImGui::End();
 		}
 	#endif
+	
+public: // tests
+	
+	bool testObjectsLoaded = false;
+	
+	void LoadTestObjects() {
+		
+		// Add triangle geometries
+		auto* trianglesGeometry1 = new Geometry(28, 42);
+		trianglesGeometry1->MapStagingBuffers();
+		
+		trianglesGeometry1->SetVertex(0, /*pos*/{-0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		trianglesGeometry1->SetVertex(1, /*pos*/{ 0.5,-0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		trianglesGeometry1->SetVertex(2, /*pos*/{ 0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		trianglesGeometry1->SetVertex(3, /*pos*/{-0.5, 0.5, 0.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+		//
+		trianglesGeometry1->SetVertex(4, /*pos*/{-0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		trianglesGeometry1->SetVertex(5, /*pos*/{ 0.5,-0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		trianglesGeometry1->SetVertex(6, /*pos*/{ 0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		trianglesGeometry1->SetVertex(7, /*pos*/{-0.5, 0.5,-0.5}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+		
+		// bottom white
+		trianglesGeometry1->SetVertex(8, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(9, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(10, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(11, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		
+		// top gray
+		trianglesGeometry1->SetVertex(12, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		trianglesGeometry1->SetVertex(13, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		trianglesGeometry1->SetVertex(14, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		trianglesGeometry1->SetVertex(15, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		
+		// left red
+		trianglesGeometry1->SetVertex(16, /*pos*/{ 8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(17, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(18, /*pos*/{ 8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(19, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		
+		// back blue
+		trianglesGeometry1->SetVertex(20, /*pos*/{ 8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(21, /*pos*/{ 8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(22, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		trianglesGeometry1->SetVertex(23, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		
+		// right green
+		trianglesGeometry1->SetVertex(24, /*pos*/{-8.0, 8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(25, /*pos*/{-8.0,-8.0,-2.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(26, /*pos*/{-8.0, 8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		trianglesGeometry1->SetVertex(27, /*pos*/{-8.0,-8.0, 4.0}, /*info*/0.0f, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		
+		trianglesGeometry1->SetIndices({
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
+			//
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
+		});
+		
+		geometries.push_back(trianglesGeometry1);
+		
+		rayTracingBottomLevelAccelerationStructures.resize(1);
+		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(trianglesGeometry1);
+		
+		// Assign instances
+		glm::mat3x4 transform {
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f
+		};
+		geometryInstances.reserve(1);
+		// Triangles instance
+		geometryInstances.push_back({
+			transform,
+			2, // gl_InstanceCustomIndexNV
+			0x1, // mask
+			trianglesShaderOffset, // instanceOffset
+			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+			&rayTracingBottomLevelAccelerationStructures[0]
+		});
+		
+		{
+			auto& blas = rayTracingBottomLevelAccelerationStructures[0];
+			blas.GenerateRayTracingGeometries();
+			
+			// Create bottom level acceleration structure
+			blas.createInfo = {
+				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+				nullptr,// pNext
+				0,// VkDeviceSize compactedSize
+				{// VkAccelerationStructureInfoNV info
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+					nullptr,// pNext
+					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
+					0,// instanceCount
+					(uint)blas.rayTracingGeometries.size(),// geometryCount
+					blas.rayTracingGeometries.data()// VkGeometryNV pGeometries
+				}
+			};
+			if (renderingDevice->CreateAccelerationStructureNV(&blas.createInfo, nullptr, &blas.accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create bottom level acceleration structure");
+				
+			// Allocate and bind memory for bottom level acceleration structure
+			VkMemoryRequirements2 memoryRequirementsBlasObject {};
+			{
+				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+				memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
+				memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBlasObject);
+			}
+			VkMemoryAllocateInfo memoryAllocateInfo {
+				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+				nullptr,// pNext
+				memoryRequirementsBlasObject.memoryRequirements.size,// VkDeviceSize allocationSize
+				renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirementsBlasObject.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+			};
+			if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &blas.memory) != VK_SUCCESS)
+				throw std::runtime_error("Failed to allocate memory for bottom level acceleration structure");
+			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
+				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
+				nullptr,// pNext
+				blas.accelerationStructure,// accelerationStructure
+				blas.memory,// memory
+				0,// VkDeviceSize memoryOffset
+				0,// uint32_t deviceIndexCount
+				nullptr// pDeviceIndices
+			};
+			if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
+				throw std::runtime_error("Failed to bind bottom level acceleration structure memory");
+				
+			// Scratch buffer
+			VkMemoryRequirements2 memoryRequirementsBlasScratchBuffer {};
+			{
+				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+				memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+				memoryRequirementsInfo.accelerationStructure = blas.accelerationStructure;
+				renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBlasScratchBuffer);
+			}
+			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, memoryRequirementsBlasScratchBuffer.memoryRequirements.size);
+			scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			
+			// Build bottom level acceleration structure
+			auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+				
+				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
+				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
+			
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+				accelerationStructBuildInfo.geometryCount = (uint)blas.rayTracingGeometries.size();
+				accelerationStructBuildInfo.pGeometries = blas.rayTracingGeometries.data();
+				accelerationStructBuildInfo.instanceCount = 0;
+				
+				renderingDevice->CmdBuildAccelerationStructureNV(
+					cmdBuffer, 
+					&accelerationStructBuildInfo, 
+					VK_NULL_HANDLE, 
+					0, 
+					VK_FALSE, 
+					blas.accelerationStructure, 
+					VK_NULL_HANDLE, 
+					scratchBuffer.buffer, 
+					0
+				);
+				
+				// VkMemoryBarrier memoryBarrier {
+				// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				// 	nullptr,// pNext
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
+				// };
+				// renderingDevice->CmdPipelineBarrier(
+				// 	cmdBuffer, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	0, 
+				// 	1, &memoryBarrier, 
+				// 	0, 0, 
+				// 	0, 0
+				// );
+			
+			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+			scratchBuffer.Free(renderingDevice);
+			
+			// Get bottom level acceleration structure handle for use in top level instances
+			if (renderingDevice->GetAccelerationStructureHandleNV(blas.accelerationStructure, sizeof(uint64_t), &blas.handle))
+				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
+		}
+		
+		CreateRayTracingAccelerationStructures();
+		
+		testObjectsLoaded = true;
+		LOG("Loaded test objects")
+	}
+	
+	void UnloadTestObjects() {
+		if (testObjectsLoaded) {
+			testObjectsLoaded = false;
+			
+			geometryInstances.clear();
+			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
+				if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
+				if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
+				blas.rayTracingGeometries.clear();
+			}
+			rayTracingBottomLevelAccelerationStructures.clear();
+			for (auto* geometry : geometries) {
+				delete geometry;
+			}
+			geometries.clear();
+		}
+	}
+	
 	
 };

@@ -427,7 +427,7 @@ public:
 		
 		triangleGeometry.geometry.triangles.vertexOffset = (VkDeviceSize)(vertexOffset*sizeof(VertexBuffer_T));
 		triangleGeometry.geometry.triangles.vertexCount = vertexCount;
-		triangleGeometry.geometry.triangles.vertexStride = sizeof(glm::vec4);
+		triangleGeometry.geometry.triangles.vertexStride = sizeof(VertexBuffer_T);
 		triangleGeometry.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
 		triangleGeometry.geometry.triangles.indexOffset = (VkDeviceSize)(indexOffset*sizeof(IndexBuffer_T));
 		triangleGeometry.geometry.triangles.indexCount = indexCount;
@@ -444,6 +444,10 @@ public:
 	
 	Geometry(uint32_t vertexCount, uint32_t indexCount) : vertexCount(vertexCount), indexCount(indexCount) {
 		globalBuffers.AddGeometry(this);
+	}
+	
+	~Geometry() {
+		globalBuffers.RemoveGeometry(this);
 	}
 	
 	void MapStagingBuffers() {

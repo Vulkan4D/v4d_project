@@ -250,7 +250,9 @@ void main() {
 	
 	// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 	
-	ray.color = fragment.color.rgb;
+	// ray.color = fragment.color.rgb;
+	
+	ray.color = vec3(1,0,0);
 }
 
 
