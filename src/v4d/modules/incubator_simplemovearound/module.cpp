@@ -10,6 +10,7 @@
 #include <v4d.h>
 
 struct PlayerView {
+	std::mutex mu;
 	double camSpeed = 2.0, mouseSensitivity = 1.0, tiltSpeed = 2.0;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
@@ -39,6 +40,8 @@ public:
 				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
+			std::lock_guard lock(player->mu);
+			
 			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
 			switch (key) {
 				
@@ -72,6 +75,7 @@ public:
 				&& !ImGui::IsAnyWindowFocused()
 			#endif
 		) {
+			std::lock_guard lock(player->mu);
 			player->camSpeed *= (1+y/10);
 		}
 	}
@@ -101,6 +105,8 @@ public:
 		
 		// Camera Movements
 		double camSpeedMult = glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_SHIFT)? 4.0 : (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_ALT)? 0.25 : 1.0);
+		
+		std::lock_guard lock(player->mu);
 		
 		player->velocity = glm::dvec3{0};
 		
@@ -194,16 +200,21 @@ public:
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() override {
+			std::lock_guard lock(player->mu);
+			
 			// ImGui::SetNextWindowSizeConstraints({380,90},{380,90});
 			// ImGui::Begin("Inputs");
 			ImGui::Text("Inputs");
+			ImGui::Text("Player Position %.2f, %.2f, %.2f", player->worldPosition.x, player->worldPosition.y, player->worldPosition.z);
 			float speed = (float)glm::length(player->velocity);
 			if (speed < 1.0) {
 				ImGui::Text("Movement speed: %d mm/s", (int)std::ceil(speed*1000.0));
 			} else if (speed < 1000.0) {
 				ImGui::Text("Movement speed: %d m/s (%d kph, %d mph)", (int)std::ceil(speed), (int)std::round(speed*3.6), (int)std::round(speed*2.23694));
+			} else if (speed < 5000.0) {
+				ImGui::Text("Movement speed: %.1f km/s (%d kph, %d mph)", speed/1000.0, (int)std::round(speed*3.6), (int)std::round(speed*2.23694));
 			} else {
-				ImGui::Text("Movement speed: %d km/s (%d kph, %d mph)", (int)std::ceil(speed/1000.0), (int)std::round(speed*3.6), (int)std::round(speed*2.23694));
+				ImGui::Text("Movement speed: %d km/s", (int)std::round(speed/1000.0));
 			}
 			ImGui::Text("Mouse look");
 			ImGui::SliderFloat("Smoothness", &player->flyCamSmoothness, 0.0f, 100.0f);
@@ -213,6 +224,7 @@ public:
 	#endif
 	
 	void FrameUpdate(v4d::graphics::Scene& scene) override {
+		std::lock_guard lock(player->mu);
 		scene.camera.MakeViewMatrix(player->worldPosition, player->viewForward, player->viewUp);
 	}
 };

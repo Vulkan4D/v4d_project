@@ -1,5 +1,9 @@
 #include <v4d.h>
 
+// Settings file
+#include "settings.hh"
+auto settings = ProjectSettings::Instance("settings.ini", 1000);
+
 using namespace v4d::graphics;
 
 #define APPLICATION_NAME "V4D Test"
@@ -63,6 +67,9 @@ double inputAvgFrameRate = 0;
 }
 
 int main() {
+	// Load settings
+	settings->Load();
+
 	// SET_CPU_AFFINITY(0)
 	
 	// Core & Modules
@@ -72,15 +79,19 @@ int main() {
 	// Input Submodules
 	auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
 	
+	// Validation layers
+	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_GOOGLE_threading");
+	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_GOOGLE_unique_objects");
+	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_core_validation");
+	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_object_tracker");
+	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_parameter_validation");
+	
 	// Vulkan
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
 	
 	// Needed for RayTracing
 	vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-	// // Needed for RayTracing
-	// vulkanLoader.requiredInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 	// Create Window and Init Vulkan
 	Window* window = new Window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT);
