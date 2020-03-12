@@ -49,6 +49,8 @@ private:
 		std::vector<Geometry*> geometries {};
 		std::vector<VkGeometryNV> rayTracingGeometries {};
 		
+		bool built = false;
+		
 		void GenerateRayTracingGeometries() {
 			if (geometries.size() != rayTracingGeometries.size()) {
 				rayTracingGeometries.clear();
@@ -118,7 +120,7 @@ private:
 			{
 				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-				memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+				memoryRequirementsInfo.type = built? VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV : VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
 				memoryRequirementsInfo.accelerationStructure = accelerationStructure;
 				device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBlasScratchBuffer);
 			}
@@ -141,7 +143,7 @@ private:
 					&accelerationStructBuildInfo, 
 					VK_NULL_HANDLE, 
 					0, 
-					accelerationStructure? VK_TRUE : VK_FALSE, 
+					built? VK_TRUE : VK_FALSE, 
 					accelerationStructure, 
 					accelerationStructure, 
 					scratchBuffer.buffer, 
@@ -166,6 +168,8 @@ private:
 			
 			device->EndSingleTimeCommands(queue, cmdBuffer);
 			scratchBuffer.Free(device);
+			
+			built = true;
 		}
 	};
 
@@ -181,6 +185,8 @@ private:
 	struct TopLevelAccelerationStructure : public AccelerationStructure {
 		std::vector<RayTracingGeometryInstance> instances {};
 		
+		bool built = false;
+		
 		void Build(Device* device, Queue& queue) {
 			// if (instances.size() == 0) return;
 			
@@ -194,7 +200,7 @@ private:
 			
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+			memoryRequirementsInfo.type = built? VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV : VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
 			VkMemoryRequirements2 memoryRequirementsTopLevel {};
 			memoryRequirementsInfo.accelerationStructure = accelerationStructure;
 			device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
@@ -218,7 +224,7 @@ private:
 						&accelerationStructBuildInfo, 
 						instanceBuffer.deviceLocalBuffer.buffer, 
 						0, 
-						accelerationStructure? VK_TRUE : VK_FALSE, 
+						built ? VK_TRUE : VK_FALSE, 
 						accelerationStructure, 
 						accelerationStructure, 
 						scratchBuffer.buffer, 
@@ -244,6 +250,8 @@ private:
 				
 				device->EndSingleTimeCommands(queue, cmdBuffer);
 			}
+			
+			built = true;
 			
 			scratchBuffer.Free(device);
 			instanceBuffer.Free(device);
@@ -383,6 +391,7 @@ private: // Ray tracing stuff
 			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
 			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
 			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
+			rayTracingTopLevelAccelerationStructure.built = false;
 		}
 	}
 	void CreateRayTracingPipeline() {
@@ -460,8 +469,8 @@ private: // Init
 		// lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		rayTracingDescriptorSet_1->AddBinding_imageView(0, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(1, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(2, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.posBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
@@ -507,7 +516,7 @@ private: // Init
 	
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
-		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit");
+		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit", "incubator_rendering/assets/shaders/rtx.rahit");
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -1071,7 +1080,7 @@ public: // Update
 		// Ray Tracing Acceleration Structure
 		rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
 		
-		// UpdateDescriptorSet(descriptorSets[1], {1});
+		// UpdateDescriptorSet(descriptorSets[1], {0});
 		
 	}
 	

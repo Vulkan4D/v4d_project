@@ -6,8 +6,8 @@
 
 #include "Camera.glsl"
 
-layout(set = 1, binding = 0, rgba16f) uniform image2D litImage;
-layout(set = 1, binding = 1) uniform accelerationStructureNV topLevelAS;
+layout(set = 1, binding = 0) uniform accelerationStructureNV topLevelAS;
+layout(set = 1, binding = 1, rgba16f) uniform image2D litImage;
 layout(set = 1, binding = 2) readonly buffer Geometries {uvec4 geometries[];};
 layout(set = 1, binding = 3) readonly buffer Indices {uint indices[];};
 layout(set = 1, binding = 4) readonly buffer VertexPositions {vec4 vertexPositions[];};
@@ -221,7 +221,7 @@ void main() {
 	vec3 direction = vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 	
 	vec3 finalColor = vec3(0);
-	float max_distance = 1000000.0;//float(camera.zfar);
+	float max_distance = float(camera.zfar);
 	
 	// if (ubo.rtx_reflection_max_recursion > 1) {
 	// 	float reflection = 1.0;
@@ -247,16 +247,24 @@ void main() {
 
 
 #############################################################
+#shader rahit
+
+void main() {
+	ignoreIntersectionNV();
+}
+
+
+#############################################################
 #shader rchit
 
 void main() {
-	// Fragment fragment = GetHitFragment(true);
-	// ray.color = fragment.color.rgb;
+	Fragment fragment = GetHitFragment(true);
+	ray.color = fragment.color.rgb;
 		
 		// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 		
 	
-	ray.color = vec3(0.0,1.0,0.0); // green
+	// ray.color = vec3(0.0,1.0,0.0); // green
 }
 
 

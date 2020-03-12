@@ -80,12 +80,11 @@ int main() {
 	auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
 	
 	// Validation layers
-	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_GOOGLE_threading");
-	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_GOOGLE_unique_objects");
-	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_core_validation");
-	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_object_tracker");
-	vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_parameter_validation");
-	
+	#ifdef _DEBUG
+		// vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+	#endif
+			
 	// Vulkan
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
