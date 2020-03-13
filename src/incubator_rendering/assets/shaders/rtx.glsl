@@ -6,6 +6,8 @@
 
 #include "Camera.glsl"
 
+const int reflection_max_recursion = 3;
+
 layout(set = 1, binding = 0) uniform accelerationStructureNV topLevelAS;
 layout(set = 1, binding = 1, rgba16f) uniform image2D litImage;
 layout(set = 1, binding = 2) readonly buffer Geometries {uvec4 geometries[];};
@@ -15,6 +17,7 @@ layout(set = 1, binding = 5) readonly buffer VertexMaterials {uint vertexMateria
 layout(set = 1, binding = 6) readonly buffer VertexNormals {vec2 vertexNormals[];};
 layout(set = 1, binding = 7) readonly buffer VertexUVs {uint vertexUVs[];};
 layout(set = 1, binding = 8) readonly buffer VertexColors {uint vertexColors[];};
+layout(set = 1, binding = 9, r32f) uniform image2D depthImage;
 
 // Ray Tracing Payload
 struct RayPayload {
@@ -22,7 +25,7 @@ struct RayPayload {
 	// vec3 origin;
 	// vec3 direction;
 	// float reflector;
-	// float distance;
+	float distance;
 };
  
 struct Vertex {
@@ -167,7 +170,7 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 		// 	//TODO opacity
 			
 		// 	// Reflections
-		// 	if (ubo.rtx_reflection_max_recursion > 1) {
+		// 	if (reflection_max_recursion > 1) {
 		// 		ray.distance = gl_RayTmaxNV;
 		// 		ray.origin = hitPoint + normal * 0.001f;
 		// 		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
@@ -215,17 +218,17 @@ void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
 	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
 	const vec2 d = inUV * 2.0 - 1.0;
-
 	const vec3 target = vec4(inverse(camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz;
-	vec3 origin = vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
-	vec3 direction = vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
+	
+	vec3 origin = vec3(0); //vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
+	vec3 direction = normalize(target); //vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 	
 	vec3 finalColor = vec3(0);
 	float max_distance = float(camera.zfar);
 	
-	// if (ubo.rtx_reflection_max_recursion > 1) {
+	// if (reflection_max_recursion > 1) {
 	// 	float reflection = 1.0;
-	// 	for (int i = 0; i < ubo.rtx_reflection_max_recursion; i++) {
+	// 	for (int i = 0; i < reflection_max_recursion; i++) {
 	// 		ray.reflector = 0.0;
 	// 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
 	// 		finalColor = mix(finalColor, ray.color, reflection);
@@ -242,16 +245,27 @@ void main() {
 		finalColor = ray.color;
 	// }
 	
+	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
+	imageStore(depthImage, ivec2(gl_LaunchIDNV.xy), vec4(depth));
+	
+	// finalColor = vec3(ray.distance);
+	// finalColor = vec3(depth);
 	imageStore(litImage, ivec2(gl_LaunchIDNV.xy), vec4(finalColor, 1.0));
+	
 }
 
 
-#############################################################
-#shader rahit
+// #############################################################
+// #shader rahit
 
-void main() {
-	ignoreIntersectionNV();
-}
+// void main() {
+// 	// Fragment fragment = GetHitFragment(true);
+// 	// if (fragment.color.a < 0.01) {
+// 	// 	ignoreIntersectionNV();
+// 	// } else {
+// 	// 	ray.color = mix(ray.color, fragment.color.rgb, fragment.color.a);
+// 	// }
+// }
 
 
 #############################################################
@@ -259,12 +273,11 @@ void main() {
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	ray.color = fragment.color.rgb;
 		
-		// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
-		
+	// 	// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 	
-	// ray.color = vec3(0.0,1.0,0.0); // green
+	ray.color = fragment.color.rgb;
+	ray.distance = gl_HitTNV;
 }
 
 
@@ -273,6 +286,7 @@ void main() {
 
 void main() {
 	ray.color = vec3(1.0, 0.0, 1.0); // pink
+	ray.distance = 0;
 }
 
 

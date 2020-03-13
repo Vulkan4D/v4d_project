@@ -21,6 +21,7 @@ namespace v4d::graphics {
 		Image ppImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 		Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 		// DepthStencilImage depthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+		Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
 		
 		// enum GBUFFER : int {
 		// 	ALBEDO = 0, 	// rgb16_sfloat, a16_sfloat = alpha
@@ -69,9 +70,9 @@ namespace v4d::graphics {
 			return historyImage;
 		}
 		
-		// Image& GetDepthImage() {
-		// 	return depthImage;
-		// }
+		Image& GetDepthImage() {
+			return depthImage;
+		}
 		
 		// Image& GetGBuffer(int index) {
 		// 	return gBuffers[index];
@@ -97,7 +98,7 @@ namespace v4d::graphics {
 			litImage.Create(device, rasterWidth, rasterHeight);
 			ppImage.Create(device, rasterWidth, rasterHeight);
 			historyImage.Create(device, rasterWidth, rasterHeight);
-			// depthImage.Create(device, rasterWidth, rasterHeight);
+			depthImage.Create(device, rasterWidth, rasterHeight);
 			
 			// for (auto& image : gBuffers) {
 			// 	image.Create(device, rasterWidth, rasterHeight);
@@ -108,7 +109,7 @@ namespace v4d::graphics {
 			litImage.Destroy(device);
 			ppImage.Destroy(device);
 			historyImage.Destroy(device);
-			// depthImage.Destroy(device);
+			depthImage.Destroy(device);
 			
 			// for (auto& image : gBuffers) {
 			// 	image.Destroy(device);

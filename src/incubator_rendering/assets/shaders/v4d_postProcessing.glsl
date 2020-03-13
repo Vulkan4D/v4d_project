@@ -5,7 +5,6 @@ precision highp float;
 precision highp sampler2D;
 
 #include "Camera.glsl"
-#include "_v4d_baseDescriptorSet.glsl"
 
 #common .*frag
 
@@ -15,7 +14,7 @@ layout(set = 1, binding = 0) uniform sampler2D litImage;
 layout(set = 1, binding = 1) uniform sampler2D uiImage;
 layout(set = 1, input_attachment_index = 0, binding = 2) uniform highp subpassInput ppImage;
 layout(set = 1, binding = 3) uniform sampler2D historyImage; // previous frame
-// layout(set = 1, binding = 4) uniform sampler2D depthStencilImage;
+layout(set = 1, binding = 4) uniform sampler2D depthImage;
 // layout(set = 1, binding = 5) uniform sampler2D gBuffer_albedo;
 // layout(set = 1, binding = 6) uniform sampler2D gBuffer_normal;
 // layout(set = 1, binding = 7) uniform sampler2D gBuffer_emission;
@@ -40,57 +39,57 @@ void main() {
 	vec4 lit = texture(litImage, uvCurrent);
 	out_color = lit;
 	
-	// if (camera.txaa) {
-	// 	float depth = texture(depthStencilImage, uvCurrent).r;
-	// 	vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((uv * 2 - 1), depth, 1);
-	// 	vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
-	// 	vec4 history = texture(historyImage, uvHistory);
+	if (camera.txaa) {
+		float depth = texture(depthImage, uvCurrent).r;
+		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((uv * 2 - 1), depth, 1);
+		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
+		vec4 history = texture(historyImage, uvHistory);
 		
-	// 	if (length(history.rgb) > 0) {
-	// 		vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 0)).rgb;
-	// 		vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, 1)).rgb;
-	// 		vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
-	// 		vec3 nearColor3 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
-	// 		vec3 nearColor4 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 1)).rgb;
-	// 		vec3 nearColor5 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 1)).rgb;
-	// 		vec3 nearColor6 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
-	// 		vec3 nearColor7 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
+		if (length(history.rgb) > 0) {
+			vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 0)).rgb;
+			vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, 1)).rgb;
+			vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
+			vec3 nearColor3 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
+			vec3 nearColor4 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 1)).rgb;
+			vec3 nearColor5 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 1)).rgb;
+			vec3 nearColor6 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
+			vec3 nearColor7 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
 			
-	// 		vec3 m1 = nearColor0
-	// 				+ nearColor1
-	// 				+ nearColor2
-	// 				+ nearColor3
-	// 				+ nearColor4
-	// 				+ nearColor5
-	// 				+ nearColor6
-	// 				+ nearColor7
-	// 		;
-	// 		vec3 m2 = nearColor0*nearColor0
-	// 				+ nearColor1*nearColor1 
-	// 				+ nearColor2*nearColor2
-	// 				+ nearColor3*nearColor3
-	// 				+ nearColor4*nearColor4
-	// 				+ nearColor5*nearColor5
-	// 				+ nearColor6*nearColor6
-	// 				+ nearColor7*nearColor7
-	// 		;
+			vec3 m1 = nearColor0
+					+ nearColor1
+					+ nearColor2
+					+ nearColor3
+					+ nearColor4
+					+ nearColor5
+					+ nearColor6
+					+ nearColor7
+			;
+			vec3 m2 = nearColor0*nearColor0
+					+ nearColor1*nearColor1 
+					+ nearColor2*nearColor2
+					+ nearColor3*nearColor3
+					+ nearColor4*nearColor4
+					+ nearColor5*nearColor5
+					+ nearColor6*nearColor6
+					+ nearColor7*nearColor7
+			;
 
-	// 		vec3 mu = m1 / 8.0;
-	// 		vec3 sigma = sqrt(m2 / 8.0 - mu * mu);
+			vec3 mu = m1 / 8.0;
+			vec3 sigma = sqrt(m2 / 8.0 - mu * mu);
 
-	// 		float variance_clipping_gamma = 2.0;
-	// 		vec3 boxMin = mu - variance_clipping_gamma * sigma;
-	// 		vec3 boxMax = mu + variance_clipping_gamma * sigma;
-	// 		history.rgb = clamp(history.rgb, boxMin, boxMax);
+			float variance_clipping_gamma = 2.0;
+			vec3 boxMin = mu - variance_clipping_gamma * sigma;
+			vec3 boxMax = mu + variance_clipping_gamma * sigma;
+			history.rgb = clamp(history.rgb, boxMin, boxMax);
 			
-	// 		out_color = vec4(mix(history.rgb, lit.rgb, 1.0/8.0), lit.a);
-	// 	}
-	// }
+			out_color = vec4(mix(history.rgb, lit.rgb, 1.0/8.0), lit.a);
+		}
+	}
 }
 
 #shader history.frag
 void main() {
-	// out_color = vec4(subpassLoad(ppImage).rgb * (camera.txaa?2:1), texture(depthStencilImage, uv).r);
+	out_color = subpassLoad(ppImage).rgba;
 }
 
 #shader hdr.frag

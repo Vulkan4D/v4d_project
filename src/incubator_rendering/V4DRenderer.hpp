@@ -1,11 +1,12 @@
 #pragma once
 #include <v4d.h>
-#include "../incubator_rendering/helpers/Geometry.hpp"
 
 #include "RenderTargetGroup.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
+
+const uint32_t MAX_RAY_TRACING_GEOMETRIES = 100000;
 
 class V4DRenderer : public v4d::graphics::Renderer {
 private: 
@@ -46,42 +47,20 @@ private:
 	};
 
 	struct BottomLevelAccelerationStructure : public AccelerationStructure {
-		std::vector<Geometry*> geometries {};
 		std::vector<VkGeometryNV> rayTracingGeometries {};
 		
 		bool built = false;
 		
-		void GenerateRayTracingGeometries() {
-			if (geometries.size() != rayTracingGeometries.size()) {
-				rayTracingGeometries.clear();
-				rayTracingGeometries.reserve(geometries.size());
-				for (auto* geometry : geometries) {
-					rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
-				}
-			}
-		}
-		
-		void Build(Device* device, Queue& queue) {
-			GenerateRayTracingGeometries();
+		void Build(Device* device, Queue& queue, const std::vector<Geometry*>& geometries) {
 			
-			// Create bottom level acceleration structure
-			createInfo = {
-				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
-				nullptr,// pNext
-				0,// VkDeviceSize compactedSize
-				{// VkAccelerationStructureInfoNV info
-					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
-					nullptr,// pNext
-					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
-					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
-					0,// instanceCount
-					(uint)rayTracingGeometries.size(),// geometryCount
-					rayTracingGeometries.data()// VkGeometryNV pGeometries
-				}
-			};
-			if (device->CreateAccelerationStructureNV(&createInfo, nullptr, &accelerationStructure) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create bottom level acceleration structure");
-				
+			rayTracingGeometries.clear();
+			rayTracingGeometries.reserve(geometries.size());
+			for (auto* geometry : geometries) {
+				rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
+			}
+			
+			if (accelerationStructure == VK_NULL_HANDLE) Create(device);
+			
 			// Allocate and bind memory for bottom level acceleration structure
 			VkMemoryRequirements2 memoryRequirementsBlasObject {};
 			{
@@ -171,6 +150,34 @@ private:
 			
 			built = true;
 		}
+		
+		void Create(Device* device) {
+			createInfo = {
+				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+				nullptr,// pNext
+				0,// VkDeviceSize compactedSize
+				{// VkAccelerationStructureInfoNV info
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+					nullptr,// pNext
+					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
+					0,// instanceCount
+					(uint)rayTracingGeometries.size(),// geometryCount
+					rayTracingGeometries.data()// VkGeometryNV pGeometries
+				}
+			};
+			
+			if (device->CreateAccelerationStructureNV(&createInfo, nullptr, &accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create bottom level acceleration structure");
+		}
+		
+		void Destroy(Device* device) {
+			if (memory) device->FreeMemory(memory, nullptr);
+			if (accelerationStructure) device->DestroyAccelerationStructureNV(accelerationStructure, nullptr);
+			rayTracingGeometries.clear();
+			built = false;
+		}
+		
 	};
 
 	struct RayTracingGeometryInstance {
@@ -311,7 +318,7 @@ protected:
 	Scene scene {};
 	RenderTargetGroup renderTargetGroup {};
 	std::unordered_map<std::string, Image*> images {
-		// {"depthImage", &renderTargetGroup.GetDepthImage()},
+		{"depthImage", &renderTargetGroup.GetDepthImage()},
 		// {"gBuffer_albedo", &renderTargetGroup.GetGBuffer(0)},
 		// {"gBuffer_normal", &renderTargetGroup.GetGBuffer(1)},
 		// {"gBuffer_emission", &renderTargetGroup.GetGBuffer(2)},
@@ -340,7 +347,7 @@ private: // Ray tracing stuff
 				nullptr,// pNext
 				VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
 				VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-				1/*(uint)rayTracingTopLevelAccelerationStructure.instances.size()*/,//TODO instanceCount
+				std::min(MAX_RAY_TRACING_GEOMETRIES, (uint32_t)rayTracingProperties.maxInstanceCount),// instanceCount
 				0,// geometryCount
 				nullptr// VkGeometryNV pGeometries
 			}
@@ -457,8 +464,6 @@ private: // Init
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
 		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		// baseDescriptorSet_0->AddBinding_uniformBuffer(1, &objBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
-		// baseDescriptorSet_0->AddBinding_uniformBuffer(2+, G-Buffers, VK_SHADER_STAGE_ALL_GRAPHICS);
 		
 		// // Lighting pass
 		// auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
@@ -478,6 +483,7 @@ private: // Init
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(6, &Geometry::globalBuffers.normalBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(7, &Geometry::globalBuffers.uvBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(8, &Geometry::globalBuffers.colorBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(9, &renderTargetGroup.GetDepthImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -493,7 +499,7 @@ private: // Init
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_inputAttachment(2, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		// postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(4, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(4, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		// for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
 		// 	postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i+5, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
@@ -516,7 +522,7 @@ private: // Init
 	
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
-		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit", "incubator_rendering/assets/shaders/rtx.rahit");
+		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -570,6 +576,7 @@ private: // Resources
 		TransitionImageLayout(uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(thumbnailImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		TransitionImageLayout(renderTargetGroup.GetHistoryImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(renderTargetGroup.GetDepthImage(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -916,6 +923,23 @@ private: // Commands
 
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		
+		// Ray Tracing
+		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable.GetPipeline());
+		shaderBindingTable.GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
+		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
+		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
+		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
+		int width = (int)((float)swapChain->extent.width);
+		int height = (int)((float)swapChain->extent.height);
+		renderingDevice->CmdTraceRaysNV(
+			commandBuffer, 
+			rayTracingShaderBindingTableBuffer.buffer, 0,
+			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetMissShader, bindingStride,
+			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetHitShader, bindingStride,
+			VK_NULL_HANDLE, 0, 0,
+			width, height, 1
+		);
+		
 		// Gen Thumbnail
 		thumbnailRenderPass.Begin(renderingDevice, commandBuffer, thumbnailImage, {{.0,.0,.0,.0}});
 			for (auto* shaderPipeline : shaders["thumbnail"]) {
@@ -943,44 +967,15 @@ private: // Commands
 		
 		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
 		
-		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
 		}
 		
-		
-		// Dynamic Prepass
-		//...
-		
-		
-		// Ray Tracing
-		renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV, shaderBindingTable.GetPipeline());
-		shaderBindingTable.GetPipelineLayout()->Bind(renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_NV);
-		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
-		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
-		int width = (int)((float)swapChain->extent.width);
-		int height = (int)((float)swapChain->extent.height);
-		renderingDevice->CmdTraceRaysNV(
-			commandBuffer, 
-			rayTracingShaderBindingTableBuffer.buffer, 0,
-			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetMissShader, bindingStride,
-			rayTracingShaderBindingTableBuffer.buffer, bindingOffsetHitShader, bindingStride,
-			VK_NULL_HANDLE, 0, 0,
-			width, height, 1
-		);
-		
-		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
 		}
-		
-		
-		// Dynamic Post
-		//...
-		
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -1046,6 +1041,62 @@ public: // Scene configuration
 		for (auto* submodule : renderingSubmodules) {
 			submodule->LoadScene(scene);
 		}
+		
+		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = [](ObjectInstance* obj){
+			auto* geom1 = obj->AddGeometry(28, 42);
+			
+			geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+			geom1->SetVertex(1,  /*pos*/{ 5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+			geom1->SetVertex(2,  /*pos*/{ 5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+			geom1->SetVertex(3,  /*pos*/{-5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+			//
+			geom1->SetVertex(4,  /*pos*/{-5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+			geom1->SetVertex(5,  /*pos*/{ 5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+			geom1->SetVertex(6,  /*pos*/{ 5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+			geom1->SetVertex(7,  /*pos*/{-5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+			
+			// bottom white
+			geom1->SetVertex(8,  /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			geom1->SetVertex(9,  /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			geom1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			geom1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			
+			// top gray
+			geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+			geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+			geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+			geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+			
+			// left red
+			geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+			geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+			geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+			geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+			
+			// back blue
+			geom1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+			geom1->SetVertex(21, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+			geom1->SetVertex(22, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+			geom1->SetVertex(23, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+			
+			// right green
+			geom1->SetVertex(24, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+			geom1->SetVertex(25, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+			geom1->SetVertex(26, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+			geom1->SetVertex(27, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+			
+			geom1->SetIndices({
+				0, 1, 2, 2, 3, 0,
+				4, 5, 6, 6, 7, 4,
+				8, 9, 10, 10, 11, 8,
+				//
+				13, 12, 14, 14, 12, 15,
+				16, 17, 18, 18, 17, 19,
+				20, 21, 22, 22, 21, 23,
+				25, 24, 26, 26, 27, 25,
+			});
+			
+		};
 	}
 	
 	void UnloadScene() override {
@@ -1059,12 +1110,12 @@ public: // Update
 	
 	void FrameUpdate(uint imageIndex) override {
 		
-		if (!testObjectsLoaded) LoadTestObjects();
-		
 		// Reset scene information
 		scene.camera.width = swapChain->extent.width;
 		scene.camera.height = swapChain->extent.height;
 		scene.camera.RefreshProjectionMatrix();
+		
+		if (!testObjectsLoaded) LoadTestObjects();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -1077,10 +1128,13 @@ public: // Update
 			lightSource->viewDirection = glm::transpose(glm::inverse(glm::mat3(scene.camera.viewMatrix))) * lightSource->worldDirection;
 		}
 		
+		// Update object transforms in acceleration structure
+		for (auto* obj : scene.objectInstances) if (obj->rayTracingInstanceIndex != -1) {
+			rayTracingTopLevelAccelerationStructure.instances[obj->rayTracingInstanceIndex].transform = obj->GetViewTransform(scene.camera.viewMatrix);
+		}
+		
 		// Ray Tracing Acceleration Structure
 		rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
-		
-		// UpdateDescriptorSet(descriptorSets[1], {0});
 		
 	}
 	
@@ -1118,107 +1172,52 @@ public: // Update
 public: // tests
 	
 	bool testObjectsLoaded = false;
-	Geometry* test1 = nullptr;
 	
 	void LoadTestObjects() {
-		
-		// Add triangle geometries
-		test1 = new Geometry(28, 42);
-		
-		test1->SetVertex(0,  /*pos*/{-5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-		test1->SetVertex(1,  /*pos*/{ 5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-		test1->SetVertex(2,  /*pos*/{ 5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-		test1->SetVertex(3,  /*pos*/{-5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-		//
-		test1->SetVertex(4,  /*pos*/{-5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-		test1->SetVertex(5,  /*pos*/{ 5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-		test1->SetVertex(6,  /*pos*/{ 5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-		test1->SetVertex(7,  /*pos*/{-5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-		
-		// bottom white
-		test1->SetVertex(8,  /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		test1->SetVertex(9,  /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		test1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		test1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-		
-		// top gray
-		test1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		test1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		test1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		test1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		
-		// left red
-		test1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		test1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		test1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		test1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		
-		// back blue
-		test1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		test1->SetVertex(21, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		test1->SetVertex(22, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		test1->SetVertex(23, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-		
-		// right green
-		test1->SetVertex(24, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		test1->SetVertex(25, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		test1->SetVertex(26, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		test1->SetVertex(27, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-		
-		test1->SetIndices({
-			0, 1, 2, 2, 3, 0,
-			4, 5, 6, 6, 7, 4,
-			8, 9, 10, 10, 11, 8,
-			//
-			13, 12, 14, 14, 12, 15,
-			16, 17, 18, 18, 17, 19,
-			20, 21, 22, 22, 21, 23,
-			25, 24, 26, 26, 27, 25,
-		});
-		
-		auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
-			test1->Push(renderingDevice, cmdBuffer);
-		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
-		
-		rayTracingBottomLevelAccelerationStructures.resize(1);
-		rayTracingBottomLevelAccelerationStructures[0].geometries.reserve(1);
-		rayTracingBottomLevelAccelerationStructures[0].geometries.push_back(test1);
-		rayTracingBottomLevelAccelerationStructures[0].Build(renderingDevice, graphicsQueue);
-		
-		// Assign instances
-		glm::mat3x4 transform {
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f
-		};
-		rayTracingTopLevelAccelerationStructure.instances.reserve(1);
-		rayTracingTopLevelAccelerationStructure.instances.push_back({
-			transform,
-			test1->geometryOffset, // gl_InstanceCustomIndexNV
-			0x1, //TODO mask
-			rayTracingStandardHitOffset, // instanceOffset
-			VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-			rayTracingBottomLevelAccelerationStructures[0].handle
-		});
-		
-		testObjectsLoaded = true;
-		LOG("Loaded test objects")
+		if (!testObjectsLoaded) {
+			// Generate geometries and send to GPU
+			auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+				for (auto* obj : scene.objectInstances) {
+					obj->PushGeometries(renderingDevice, cmdBuffer);
+				}
+			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+			
+			rayTracingBottomLevelAccelerationStructures.reserve(scene.objectInstances.size());
+			rayTracingTopLevelAccelerationStructure.instances.reserve(scene.objectInstances.size());
+			for (auto* obj : scene.objectInstances) {
+				auto& blas = rayTracingBottomLevelAccelerationStructures.emplace_back();
+				blas.Build(renderingDevice, graphicsQueue, obj->geometries);
+				obj->rayTracingInstanceIndex = rayTracingTopLevelAccelerationStructure.instances.size();
+				rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingGeometryInstance{
+					obj->GetViewTransform(scene.camera.viewMatrix),
+					(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
+					obj->rayTracingMask, //TODO mask
+					rayTracingStandardHitOffset, // instanceOffset
+					VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+					blas.handle
+				});
+			}
+			
+			testObjectsLoaded = true;
+			LOG("Loaded test objects")
+		}
 	}
 	
 	void UnloadTestObjects() {
 		if (testObjectsLoaded) {
 			testObjectsLoaded = false;
+
+			for (auto* obj : scene.objectInstances) {
+				obj->rayTracingInstanceIndex = -1;
+				obj->RemoveGeometries();
+			}
 			
 			rayTracingTopLevelAccelerationStructure.instances.clear();
 			
-			for (auto& blas : rayTracingBottomLevelAccelerationStructures) {
-				if (blas.memory) renderingDevice->FreeMemory(blas.memory, nullptr);
-				if (blas.accelerationStructure) renderingDevice->DestroyAccelerationStructureNV(blas.accelerationStructure, nullptr);
-				blas.rayTracingGeometries.clear();
+			for (auto blas : rayTracingBottomLevelAccelerationStructures) {
+				blas.Destroy(renderingDevice);
 			}
 			rayTracingBottomLevelAccelerationStructures.clear();
-			
-			delete test1;
 		}
 	}
 	

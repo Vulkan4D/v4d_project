@@ -9,6 +9,7 @@ option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
 option(USE_CCACHE "Use ccache" ON)
 option(ENABLE_IMGUI "Enable ImGUI" ON)
+option(ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
 
 ###########################################################################################
 
@@ -46,12 +47,9 @@ else()
 	# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wshadow")
 endif()
 
-
-# set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-# set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-
-# string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address")
-
+if(ADDRESS_SANITIZER)
+	string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-omit-frame-pointer -fsanitize=address")
+endif()
 
 # CCACHE
 if(USE_CCACHE)
