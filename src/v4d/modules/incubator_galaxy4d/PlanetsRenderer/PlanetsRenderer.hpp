@@ -93,16 +93,16 @@ public:
 		planetAtmosphereShader.ReadShaders();
 	}
 	
-	LightSource sun = {
-		POINT_LIGHT,
-		{0, -1.496e+11, 0},
-		{1,1,1}, // color
-		1e24f
-	};
+	// LightSource sun = {
+	// 	POINT_LIGHT,
+	// 	{0, -1.496e+11, 0},
+	// 	{1,1,1}, // color
+	// 	1e24f
+	// };
 	
 	void LoadScene(Scene& scene) override {
 		// Sun(s)
-		scene.lightSources["sun"] = &sun;
+		// scene.lightSources["sun"] = &sun;
 		
 		planetTerrainShader.camera = &scene.camera;
 		
@@ -118,7 +118,7 @@ public:
 			// 	// Sun(s)
 			// 	scene.lightSources["sun"] = &planetaryTerrain->lightSource;
 			// }
-			planetaryTerrain->suns = {&sun};
+			// planetaryTerrain->suns = {&sun};
 			planetaryTerrain->cameraPos = glm::dvec3(scene.camera.worldPosition) - planetaryTerrain->absolutePosition;
 			for (auto* chunk : planetaryTerrain->chunks) {
 				chunk->BeforeRender(renderingDevice, transferQueue);
@@ -127,14 +127,14 @@ public:
 	}
 	
 	void UnloadScene(Scene& scene) override {
-		// Planets
-		for (auto* planetaryTerrain : planetTerrains) {
-			if (planetaryTerrain->lightIntensity > 0) {
-				// Sun(s)
-				scene.lightSources["sun"] = nullptr;
-				scene.lightSources.erase("sun");
-			}
-		}
+		// // Planets
+		// for (auto* planetaryTerrain : planetTerrains) {
+		// 	if (planetaryTerrain->lightIntensity > 0) {
+		// 		// Sun(s)
+		// 		scene.lightSources["sun"] = nullptr;
+		// 		scene.lightSources.erase("sun");
+		// 	}
+		// }
 		
 		// Chunks Generator
 		if (PlanetTerrain::chunkGenerator) {
@@ -280,11 +280,11 @@ public:
 					ImGui::ColorEdit3("color", (float*)&planet->atmosphere->color);
 					ImGui::Separator();
 				}
-				ImGui::Text("Sun");
-				static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
-				ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e26f);
-				ImGui::ColorEdit3("Position", (float*)&sunPosition);
-				sun.worldPosition = planet->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * 1.496e+11;
+				// ImGui::Text("Sun");
+				// static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
+				// ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e26f);
+				// ImGui::ColorEdit3("Position", (float*)&sunPosition);
+				// sun.worldPosition = planet->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * 1.496e+11;
 			}
 		}
 	#endif

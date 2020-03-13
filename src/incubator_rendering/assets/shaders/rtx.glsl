@@ -1,13 +1,22 @@
 #version 460
 #extension GL_NV_ray_tracing : require
 #extension GL_EXT_nonuniform_qualifier : enable
-
 #extension GL_EXT_buffer_reference : enable
 
+// Settings
+const bool shadowsEnabled = true;
+const float radianceThreshold = 1e-10;
+// const int reflection_max_recursion = 3;
+
+// Descriptor Set 0
 #include "Camera.glsl"
+layout(set = 0, binding = 1) readonly buffer ActiveLights {
+	uint activeLights;
+	uint lights[];
+};
+layout(set = 0, binding = 2) readonly buffer Lights {float lightSources[];};
 
-const int reflection_max_recursion = 3;
-
+// Descriptor Set 1
 layout(set = 1, binding = 0) uniform accelerationStructureNV topLevelAS;
 layout(set = 1, binding = 1, rgba16f) uniform image2D litImage;
 layout(set = 1, binding = 2) readonly buffer Geometries {uvec4 geometries[];};
@@ -22,10 +31,10 @@ layout(set = 1, binding = 9, r32f) uniform image2D depthImage;
 // Ray Tracing Payload
 struct RayPayload {
 	vec3 color;
-	// vec3 origin;
-	// vec3 direction;
-	// float reflector;
+	vec3 origin;
+	vec3 direction;
 	float distance;
+	// float reflector;
 };
  
 struct Vertex {
@@ -59,6 +68,28 @@ vec4 UnpackColor(in uint color) {
 		(color & 0x000000ff) >> 0
 	) / 255.0;
 }
+
+struct LightSource {
+	vec3 position;
+	float intensity;
+	vec3 color;
+	uint type;
+	uint attributes;
+	float radius;
+};
+
+LightSource GetLight (uint i) {
+	LightSource light;
+	light.position = vec3(lightSources[i*8 + 0], lightSources[i*8 + 1], lightSources[i*8 + 2]);
+	light.intensity = lightSources[i*8 + 3];
+	vec4 c = UnpackColor(floatBitsToUint(lightSources[i*8 + 4]));
+	light.color = c.rgb;
+	light.type = floatBitsToUint(lightSources[i*8 + 4]) & 0x000000ff;
+	light.attributes = floatBitsToUint(lightSources[i*8 + 5]);
+	light.radius = lightSources[i*8 + 6];
+	// light._unused_ = lightSources[i*8 + 7];
+	return light;
+};
 
 Vertex GetVertex(uint index) {
 	Vertex v;
@@ -129,54 +160,105 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 	return f;
 }
 
-		// layout(set = 0, binding = 2) uniform UBO {
-		// 	dmat4 view;
-		// 	dmat4 proj;
-		//     dvec4 light;
-		// 	vec3 ambient;
-		// 	double time;
-		// 	int samplesPerPixel;
-		// 	int rtx_reflection_max_recursion;
-		// 	bool rtx_shadows;
-		// } ubo;
+layout(location = 2) rayPayloadNV bool shadowed;
 
-		// layout(location = 2) rayPayloadNV bool shadowed;
+vec3 ViewSpaceNormal(vec3 normal) {
+	return normalize(transpose(inverse(mat3(camera.viewMatrix))) * normal);
+}
 
-		// void ApplyStandardShading(vec3 hitPoint, vec3 objPoint, vec4 color, vec3 normal, float emissive, float roughness, float specular, float metallic) {
-			
-		// 	// Roughness
-		// 	if (roughness > 0.0) {
-		// 		float n1 = 1.0 + noise(objPoint.xy * 1000.0 * min(4.0, roughness) + 134.455, 3) * roughness / 2.0;
-		// 		float n2 = 1.0 + noise(objPoint.yz * 1000.0 * min(4.0, roughness) + 2.5478787, 3) * roughness / 2.0;
-		// 		float n3 = 1.0 + noise(objPoint.xz * 1000.0 * min(4.0, roughness) + -124.785, 3) * roughness / 2.0;
-		// 		normal = normalize(normal * vec3(n1, n2, n3)/2.0);
-		// 	}
-			
-		// 	// Basic shading from light angle
-		// 	vec3 lightVector = normalize(vec3(ubo.light.xyz) - hitPoint);
-		// 	const float dot_product = max(dot(lightVector, normal), 0.0);
-		// 	const float shade = pow(dot_product, specular);
-		// 	ray.color = mix(ubo.ambient, max(ubo.ambient, color.rgb * float(ubo.light.w)), shade);
-			
-		// 	// Receive Shadows
-		// 	if (shade > 0.0 && ubo.rtx_shadows) {
-		// 		shadowed = true;
-		// 		traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, lightVector, length(vec3(ubo.light.xyz) - hitPoint), 2);
-		// 		if (shadowed) {
-		// 			ray.color = ubo.ambient;
-		// 		}
-		// 	}
-			
-		// 	//TODO opacity
-			
-		// 	// Reflections
-		// 	if (reflection_max_recursion > 1) {
-		// 		ray.distance = gl_RayTmaxNV;
-		// 		ray.origin = hitPoint + normal * 0.001f;
-		// 		ray.direction = reflect(gl_WorldRayDirectionNV, normal);
-		// 		ray.reflector = metallic;
-		// 	}
-		// }
+const float PI = 3.1415926543;
+
+// PBR formulas
+float distributionGGX(float NdotH, float roughness) {
+	float a = roughness*roughness;
+	float a2 = a*a;
+	float denom = NdotH*NdotH * (a2 - 1.0) + 1.0;
+	denom = PI * denom*denom;
+	return a2 / max(denom, 0.0000001);
+}
+float geometrySmith(float NdotV, float NdotL, float roughness) {
+	float r = roughness + 1.0;
+	float k = (r*r) / 8.0;
+	float ggx1 = NdotV / (NdotV * (1.0 - k) + k);
+	float ggx2 = NdotL / (NdotL * (1.0 - k) + k);
+	return ggx1 * ggx2;
+}
+vec3 fresnelSchlick(float HdotV, vec3 baseReflectivity) {
+	// baseReflectivity in range 0 to 1
+	// returns range baseReflectivity to 1
+	// increases as HdotV decreases (more reflectivity when surface viewed at larger angles)
+	return baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - HdotV, 5.0);
+}
+
+void ApplyStandardShading(vec3 hitPoint, vec3 color, vec3 normal, float roughness, float metallic) {
+	vec3 viewSpaceNormal = ViewSpaceNormal(normal);
+	
+	// PBR lighting
+	vec3 N = normalize(viewSpaceNormal);
+	vec3 V = normalize(-hitPoint);
+	// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
+	vec3 baseReflectivity = mix(vec3(0.04), color, max(0,metallic));
+	
+	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
+		LightSource light = GetLight(lights[lightIndex]);
+		
+		// Calculate light radiance at distance
+		float dist = length(light.position - hitPoint);
+		vec3 radiance = light.color * light.intensity * (1.0 / (dist*dist));
+		
+		if (length(radiance) > radianceThreshold) {
+			if (shadowsEnabled) {
+				shadowed = true;
+				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, normalize(light.position - hitPoint), length(light.position - hitPoint), 2);
+			}
+			if (!shadowsEnabled || !shadowed) {
+				// cook-torrance BRDF
+				vec3 L = normalize(light.position - hitPoint);
+				vec3 H = normalize(V + L);
+				float NdotV = max(dot(N,V), 0.000001);
+				float NdotL = max(dot(N,L), 0.000001);
+				float HdotV = max(dot(H,V), 0.0);
+				float NdotH = max(dot(N,H), 0.0);
+				//
+				float D = distributionGGX(NdotH, roughness); // larger the more micro-facets aligned to H (normal distribution function)
+				float G = geometrySmith(NdotV, NdotL, roughness); // smaller the more micro-facets shadowed by other micro-facets
+				vec3 F = fresnelSchlick(HdotV, baseReflectivity); // proportion of specular reflectance
+				vec3 FV = fresnelSchlick(NdotV, baseReflectivity); // proportion of specular reflectance
+				vec3 FL = fresnelSchlick(NdotL, baseReflectivity); // proportion of specular reflectance
+				//
+				vec3 specular = D * G * F;
+				specular /= 4.0 * NdotV * NdotL;
+				// for energy conservation, the diffuse and specular light can't be above 1.0 (unless the surface emits light); to preserve this relationship the diffuse component (kD) should equal to 1.0 - kS.
+				// vec3 kD = vec3(1.0)-F;
+				vec3 kD = (vec3(1.0)-FV) * (vec3(1.0)-FL) * 1.05;
+				// multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or a linear blend if partly metal (pure metals have no diffuse light).
+				kD *= 1.0 - max(0, metallic);
+				// Final lit color
+				ray.color += (kD * color / PI + specular) * radiance * max(dot(N,L) + max(0, metallic/-5), 0);
+				
+				// Sub-Surface Scattering (simple rim for now)
+				// if (metallic < 0) {
+					float rim = pow(1.0 - NdotV, 2-metallic*2+NdotL) * NdotL;
+					ray.color += -min(0,metallic) * radiance * rim;
+				// }
+			}
+		}
+	}
+	
+	
+	//TODO opacity
+	
+	
+	// // Reflections
+	// if (reflection_max_recursion > 1) {
+	// 	ray.origin = hitPoint + viewSpaceNormal * 0.001f;
+	// 	ray.direction = reflect(gl_WorldRayDirectionNV, viewSpaceNormal);
+	// 	// ray.reflector = clamp(metallic - roughness, 0, 1);
+	// }
+	
+	
+	ray.distance = gl_HitTNV;
+}
 
 
 				// #####################################################
@@ -225,6 +307,7 @@ void main() {
 	
 	vec3 finalColor = vec3(0);
 	float max_distance = float(camera.zfar);
+	ray.color = vec3(0);
 	
 	// if (reflection_max_recursion > 1) {
 	// 	float reflection = 1.0;
@@ -246,12 +329,10 @@ void main() {
 	// }
 	
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
-	imageStore(depthImage, ivec2(gl_LaunchIDNV.xy), vec4(depth));
 	
-	// finalColor = vec3(ray.distance);
-	// finalColor = vec3(depth);
-	imageStore(litImage, ivec2(gl_LaunchIDNV.xy), vec4(finalColor, 1.0));
-	
+	ivec2 coords = ivec2(gl_LaunchIDNV.xy);
+	imageStore(depthImage, coords, vec4(depth, 0,0,0));
+	imageStore(litImage, coords, vec4(finalColor, 1.0));
 }
 
 
@@ -273,11 +354,11 @@ void main() {
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-		
-	// 	// ApplyStandardShading(hitPoint, objPoint, color, normal, emissive, roughness, specular, metallic);
 	
-	ray.color = fragment.color.rgb;
-	ray.distance = gl_HitTNV;
+	ApplyStandardShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
+	
+	// ray.color = fragment.color.rgb;
+	// ray.distance = gl_HitTNV;
 }
 
 
@@ -285,76 +366,76 @@ void main() {
 #shader rmiss
 
 void main() {
-	ray.color = vec3(1.0, 0.0, 1.0); // pink
+	ray.color = vec3(0);
 	ray.distance = 0;
+}
+
+
+#############################################################
+
+#shader shadow.rmiss
+
+layout(location = 2) rayPayloadInNV bool shadowed;
+
+void main() {
+	shadowed = false;
 }
 
 
 		// #############################################################
 
-		// #shader shadow.rmiss
+		// #shader sphere.rint
 
-		// // layout(location = 2) rayPayloadInNV bool shadowed;
+		// // hitAttributeNV Sphere attribs;
 
 		// void main() {
-		// 	// shadowed = false;
+		// 	// // const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
+		// 	// const Sphere sphere = unpackSphere(gl_PrimitiveID);
+		// 	// const vec3 origin = gl_WorldRayOriginNV;
+		// 	// const vec3 direction = gl_WorldRayDirectionNV;
+		// 	// const float tMin = gl_RayTminNV;
+		// 	// const float tMax = gl_RayTmaxNV;
+		
+		// 	// const vec3 oc = origin - sphere.pos;
+		// 	// const float a = dot(direction, direction);
+		// 	// const float b = dot(oc, direction);
+		// 	// const float c = dot(oc, oc) - sphere.radius * sphere.radius;
+		// 	// const float discriminant = b * b - a * c;
+
+		// 	// if (discriminant >= 0) {
+		// 	// 	const float discriminantSqrt = sqrt(discriminant);
+		// 	// 	const float t1 = (-b - discriminantSqrt) / a;
+		// 	// 	const float t2 = (-b + discriminantSqrt) / a;
+
+		// 	// 	if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
+		// 	// 		attribs = sphere;
+		// 	// 		reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
+		// 	// 	}
+		// 	// }
+		// 	}
+
+
+		// #############################################################
+
+		// #shader sphere.rchit
+
+		// // hitAttributeNV Sphere sphere;
+
+		// void main() {
+		// 	// // Hit World Position
+		// 	// const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+		// 	// // Hit object Position
+		// 	// const vec3 objPoint = hitPoint - sphere.pos;
+		// 	// // Normal
+		// 	// const vec3 normal = objPoint / sphere.radius;
+		
+		// 	// // if (sphere.metallic == 0.0) {
+		// 	// // 	float r = (snoise(vec4(objPoint, ubo.time / 60.0) * 10.0, 30) / 2.0 + 0.5) * 1.5;
+		// 	// // 	float g = (snoise(vec4(objPoint, ubo.time / 60.0) * 5.0, 20) / 2.0 + 0.5) * min(r, 0.9);
+		// 	// // 	float b = (snoise(vec4(objPoint, ubo.time / 60.0) * 15.0, 20) / 2.0 + 0.5) * min(g, 0.7);
+		// 	// // 	ray.color = vec3(max(r + g + b, 0.3), min(r - 0.2, max(g, b + 0.3)), b) * 1.8;
+		// 	// // } else {
+		// 	// ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.emissive, sphere.roughness, sphere.specular, sphere.metallic);
+		// 	// // }
 		// }
-
-
-				// #############################################################
-
-				// #shader sphere.rint
-
-				// // hitAttributeNV Sphere attribs;
-
-				// void main() {
-				// 	// // const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
-				// 	// const Sphere sphere = unpackSphere(gl_PrimitiveID);
-				// 	// const vec3 origin = gl_WorldRayOriginNV;
-				// 	// const vec3 direction = gl_WorldRayDirectionNV;
-				// 	// const float tMin = gl_RayTminNV;
-				// 	// const float tMax = gl_RayTmaxNV;
-				
-				// 	// const vec3 oc = origin - sphere.pos;
-				// 	// const float a = dot(direction, direction);
-				// 	// const float b = dot(oc, direction);
-				// 	// const float c = dot(oc, oc) - sphere.radius * sphere.radius;
-				// 	// const float discriminant = b * b - a * c;
-
-				// 	// if (discriminant >= 0) {
-				// 	// 	const float discriminantSqrt = sqrt(discriminant);
-				// 	// 	const float t1 = (-b - discriminantSqrt) / a;
-				// 	// 	const float t2 = (-b + discriminantSqrt) / a;
-
-				// 	// 	if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
-				// 	// 		attribs = sphere;
-				// 	// 		reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
-				// 	// 	}
-				// 	// }
-				// 	}
-
-
-				// #############################################################
-
-				// #shader sphere.rchit
-
-				// // hitAttributeNV Sphere sphere;
-
-				// void main() {
-				// 	// // Hit World Position
-				// 	// const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
-				// 	// // Hit object Position
-				// 	// const vec3 objPoint = hitPoint - sphere.pos;
-				// 	// // Normal
-				// 	// const vec3 normal = objPoint / sphere.radius;
-				
-				// 	// // if (sphere.metallic == 0.0) {
-				// 	// // 	float r = (snoise(vec4(objPoint, ubo.time / 60.0) * 10.0, 30) / 2.0 + 0.5) * 1.5;
-				// 	// // 	float g = (snoise(vec4(objPoint, ubo.time / 60.0) * 5.0, 20) / 2.0 + 0.5) * min(r, 0.9);
-				// 	// // 	float b = (snoise(vec4(objPoint, ubo.time / 60.0) * 15.0, 20) / 2.0 + 0.5) * min(g, 0.7);
-				// 	// // 	ray.color = vec3(max(r + g + b, 0.3), min(r - 0.2, max(g, b + 0.3)), b) * 1.8;
-				// 	// // } else {
-				// 	// ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.emissive, sphere.roughness, sphere.specular, sphere.metallic);
-				// 	// // }
-				// }
 

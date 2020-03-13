@@ -7,6 +7,7 @@ using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
 
 const uint32_t MAX_RAY_TRACING_GEOMETRIES = 100000;
+const uint32_t MAX_ACTIVE_LIGHTS = 256;
 
 class V4DRenderer : public v4d::graphics::Renderer {
 private: 
@@ -16,6 +17,7 @@ private:
 	
 	#pragma region Buffers
 	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
+	StagedBuffer activeLightsUniformBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(uint32_t) + sizeof(uint32_t)*MAX_ACTIVE_LIGHTS};
 	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	#pragma endregion
 	
@@ -463,15 +465,9 @@ private: // Init
 		
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		
-		// // Lighting pass
-		// auto* gBuffersDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		// for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-		// 	gBuffersDescriptorSet_1->AddBinding_inputAttachment(i, &renderTargetGroup.GetGBuffer(i).view, VK_SHADER_STAGE_FRAGMENT_BIT);
-		// lightingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
-		// lightingPipelineLayout.AddDescriptorSet(gBuffersDescriptorSet_1);
-		// lightingPipelineLayout.AddPushConstant<LightSource>(VK_SHADER_STAGE_FRAGMENT_BIT);
+		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_storageBuffer(1, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
@@ -500,8 +496,6 @@ private: // Init
 		postProcessingDescriptorSet_1->AddBinding_inputAttachment(2, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(4, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		// for (int i = 0; i < RenderTargetGroup::GBUFFER_NB_IMAGES; ++i)
-		// 	postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(i+5, &renderTargetGroup.GetGBuffer(i), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		postProcessingPipelineLayout.AddDescriptorSet(postProcessingDescriptorSet_1);
 		
@@ -522,6 +516,7 @@ private: // Init
 	
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
+		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
 		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
 		
 		// Thumbnail Gen
@@ -565,9 +560,6 @@ private: // Resources
 		uiImage.Create(renderingDevice, uiWidth, uiHeight);
 		thumbnailImage.Create(renderingDevice, thumbnailWidth, thumbnailHeight, {renderTargetGroup.GetLitImage().format});
 		renderTargetGroup.SetRenderTarget(swapChain);
-		// renderTargetGroup.GetDepthImage().viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		// renderTargetGroup.GetDepthImage().preferredFormats = {VK_FORMAT_D32_SFLOAT};
-		// renderTargetGroup.GetDepthImage().usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		renderTargetGroup.GetLitImage().usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 		renderTargetGroup.CreateResources(renderingDevice);
 		
@@ -602,8 +594,9 @@ private: // Resources
 	}
 	
 	void AllocateBuffers() override {
-		// Camera
+		// Uniform Buffers
 		cameraUniformBuffer.Allocate(renderingDevice);
+		activeLightsUniformBuffer.Allocate(renderingDevice);
 		
 		// Compute histogram
 		totalLuminance.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
@@ -624,8 +617,9 @@ private: // Resources
 
 		Geometry::globalBuffers.Free(renderingDevice);
 		
-		// Camera
+		// Uniform Buffers
 		cameraUniformBuffer.Free(renderingDevice);
+		activeLightsUniformBuffer.Free(renderingDevice);
 		
 		// Compute histogram
 		totalLuminance.UnmapMemory(renderingDevice);
@@ -967,6 +961,22 @@ private: // Commands
 		
 		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
 		
+		// Use all lights for now
+		uint32_t nbActiveLights = 0;
+		uint32_t activeLights[MAX_ACTIVE_LIGHTS];
+		for (auto* obj : scene.objectInstances) {
+			for (auto* lightSource : obj->lightSources) {
+				lightSource->viewSpacePosition = scene.camera.viewMatrix * obj->transform * glm::dvec4(lightSource->position, 1);
+				Geometry::globalBuffers.WriteLightSource(lightSource);
+				activeLights[nbActiveLights++] = lightSource->lightOffset;
+			}
+		}
+		activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
+		activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*nbActiveLights);
+		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer);
+		activeLightsUniformBuffer.ResetSrcData();
+		Geometry::globalBuffers.PushLightSources(renderingDevice, commandBuffer);
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
@@ -1042,7 +1052,9 @@ public: // Scene configuration
 			submodule->LoadScene(scene);
 		}
 		
-		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = [](ObjectInstance* obj){
+		scene.objectInstances.emplace_back(new ObjectInstance())->generateFunc = [](ObjectInstance* obj){
+			obj->AddLightSource({10,20,10}, 10000);
+			
 			auto* geom1 = obj->AddGeometry(28, 42);
 			
 			geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
@@ -1120,12 +1132,6 @@ public: // Update
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->FrameUpdate(scene);
-		}
-		
-		// Light sources
-		for (auto[id,lightSource] : scene.lightSources) {
-			lightSource->viewPosition = scene.camera.viewMatrix * glm::dvec4(lightSource->worldPosition, 1);
-			lightSource->viewDirection = glm::transpose(glm::inverse(glm::mat3(scene.camera.viewMatrix))) * lightSource->worldDirection;
 		}
 		
 		// Update object transforms in acceleration structure
@@ -1209,7 +1215,7 @@ public: // tests
 
 			for (auto* obj : scene.objectInstances) {
 				obj->rayTracingInstanceIndex = -1;
-				obj->RemoveGeometries();
+				obj->Clear();
 			}
 			
 			rayTracingTopLevelAccelerationStructure.instances.clear();

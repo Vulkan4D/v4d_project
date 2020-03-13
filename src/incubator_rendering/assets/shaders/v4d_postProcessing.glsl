@@ -6,6 +6,8 @@ precision highp sampler2D;
 
 #include "Camera.glsl"
 
+const bool humanEyeExposure = true; // otherwise, use full range
+
 #common .*frag
 
 layout(location = 0) in vec2 uv;
@@ -98,8 +100,16 @@ void main() {
 	vec2 uv = gl_FragCoord.st / textureSize(litImage,0).st;
 	
 	// HDR ToneMapping (Reinhard)
-	float exposure = 1.0 / sqrt(camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
-	color = vec3(1.0) - exp(-color * clamp(exposure, 0.0001, 10));
+	float exposure;
+	if (humanEyeExposure) {
+		// Human Eye Exposure
+		exposure = 1.0 / sqrt(camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
+		color = vec3(1.0) - exp(-color * clamp(exposure, 0.0001, 10));
+	} else {
+		// Full range Exposure
+		exposure = 1.0 / (camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
+		color = vec3(1.0) - exp(-color * clamp(exposure, 1e-100, 1e100));
+	}
 	
 	// Gamma correction 
 	const float gamma = 2.2;

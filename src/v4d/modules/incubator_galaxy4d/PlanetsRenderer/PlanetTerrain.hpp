@@ -384,7 +384,7 @@ struct PlanetTerrain {
 			// Normals and textures
 			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
 				for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
-					uint32 currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
 					Vertex& point = vertices[currentIndex];
 					
 					glm::vec3 tangentX, tangentY;

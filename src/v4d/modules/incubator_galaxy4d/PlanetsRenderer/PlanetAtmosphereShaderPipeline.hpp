@@ -31,46 +31,46 @@ public:
 	
 	using RasterShaderPipeline::Execute;
 	void Execute(Device* device, VkCommandBuffer cmdBuffer) override {
-		Bind(device, cmdBuffer);
-		if (planets) {
-			for (auto* planet : *planets) if (planet->atmosphere) {
+		// Bind(device, cmdBuffer);
+		// if (planets) {
+		// 	for (auto* planet : *planets) if (planet->atmosphere) {
 				
-				planetAtmospherePushConstant.modelViewMatrix = viewMatrix * planet->matrix;
-				planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
-				planetAtmospherePushConstant.outerRadius = (float)planet->radius;
-				planetAtmospherePushConstant.densityFactor = planet->atmosphere->densityFactor;
+		// 		planetAtmospherePushConstant.modelViewMatrix = viewMatrix * planet->matrix;
+		// 		planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
+		// 		planetAtmospherePushConstant.outerRadius = (float)planet->radius;
+		// 		planetAtmospherePushConstant.densityFactor = planet->atmosphere->densityFactor;
 				
-				planetAtmospherePushConstant.color = CompactIVec4ToUint(
-					(uint)(planet->atmosphere->color.r*255),
-					(uint)(planet->atmosphere->color.g*255),
-					(uint)(planet->atmosphere->color.b*255),
-					0 // ambient
-				);
+		// 		planetAtmospherePushConstant.color = CompactIVec4ToUint(
+		// 			(uint)(planet->atmosphere->color.r*255),
+		// 			(uint)(planet->atmosphere->color.g*255),
+		// 			(uint)(planet->atmosphere->color.b*255),
+		// 			0 // ambient
+		// 		);
 				
-				for (int i = 0; i < NB_SUNS; ++i) {
-					if (planet->suns.size() > i) {
-						auto* sun = planet->suns[i];
-						double lightDist = glm::distance(sun->worldPosition, planet->absolutePosition);
-						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
-							// Sun direction is from planet center to sun, in view space
-							glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1)) - glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3])), 
-							sun->intensity * float(1.0 / (lightDist*lightDist)), 
-							sun->color
-						);
-					} else {
-						planetAtmospherePushConstant.suns[i] = {0,0,0,0};
-					}
-				}
+		// 		for (int i = 0; i < NB_SUNS; ++i) {
+		// 			if (planet->suns.size() > i) {
+		// 				auto* sun = planet->suns[i];
+		// 				double lightDist = glm::distance(sun->worldPosition, planet->absolutePosition);
+		// 				planetAtmospherePushConstant.suns[i] = CompactSunInfo(
+		// 					// Sun direction is from planet center to sun, in view space
+		// 					glm::normalize(glm::dvec3(viewMatrix * glm::dvec4(sun->worldPosition, 1)) - glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3])), 
+		// 					sun->intensity * float(1.0 / (lightDist*lightDist)), 
+		// 					sun->color
+		// 				);
+		// 			} else {
+		// 				planetAtmospherePushConstant.suns[i] = {0,0,0,0};
+		// 			}
+		// 		}
 				
-				PushConstant(device, cmdBuffer, &planetAtmospherePushConstant);
-				SetData(
-					&planet->atmosphere->vertexBuffer.deviceLocalBuffer,
-					&planet->atmosphere->indexBuffer.deviceLocalBuffer,
-					PlanetAtmosphere::nbIndices
-				);
-				Render(device, cmdBuffer);
-			}
-		}
+		// 		PushConstant(device, cmdBuffer, &planetAtmospherePushConstant);
+		// 		SetData(
+		// 			&planet->atmosphere->vertexBuffer.deviceLocalBuffer,
+		// 			&planet->atmosphere->indexBuffer.deviceLocalBuffer,
+		// 			PlanetAtmosphere::nbIndices
+		// 		);
+		// 		Render(device, cmdBuffer);
+		// 	}
+		// }
 	}
 
 };
