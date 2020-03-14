@@ -9,6 +9,63 @@ using namespace v4d::graphics::vulkan::rtx;
 const uint32_t MAX_RAY_TRACING_GEOMETRIES = 100000;
 const uint32_t MAX_ACTIVE_LIGHTS = 256;
 
+void CreateTestBox(ObjectInstance* obj) {
+	
+		auto* geom1 = obj->AddGeometry(28, 42);
+		
+		geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, -2.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		geom1->SetVertex(1,  /*pos*/{ 5.0,-5.0, -2.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		geom1->SetVertex(2,  /*pos*/{ 5.0, 5.0, -2.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		geom1->SetVertex(3,  /*pos*/{-5.0, 5.0, -2.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+		//
+		geom1->SetVertex(4,  /*pos*/{-5.0,-5.0,-8.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
+		geom1->SetVertex(5,  /*pos*/{ 5.0,-5.0,-8.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
+		geom1->SetVertex(6,  /*pos*/{ 5.0, 5.0,-8.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
+		geom1->SetVertex(7,  /*pos*/{-5.0, 5.0,-8.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
+		
+		// bottom white
+		geom1->SetVertex(8,  /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		geom1->SetVertex(9,  /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		geom1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		geom1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+		
+		// top gray
+		geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		
+		// left red
+		geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		
+		// back blue
+		geom1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		geom1->SetVertex(21, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		geom1->SetVertex(22, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		geom1->SetVertex(23, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
+		
+		// right green
+		geom1->SetVertex(24, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		geom1->SetVertex(25, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		geom1->SetVertex(26, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		geom1->SetVertex(27, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
+		
+		geom1->SetIndices({
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4,
+			8, 9, 10, 10, 11, 8,
+			//
+			13, 12, 14, 14, 12, 15,
+			16, 17, 18, 18, 17, 19,
+			20, 21, 22, 22, 21, 23,
+			25, 24, 26, 26, 27, 25,
+		});
+		
+}
+
 class V4DRenderer : public v4d::graphics::Renderer {
 private: 
 	using v4d::graphics::Renderer::Renderer;
@@ -17,7 +74,9 @@ private:
 	
 	#pragma region Buffers
 	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
-	StagedBuffer activeLightsUniformBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(uint32_t) + sizeof(uint32_t)*MAX_ACTIVE_LIGHTS};
+	StagedBuffer activeLightsUniformBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+		uint32_t nbActiveLights = 0;
+		uint32_t activeLights[MAX_ACTIVE_LIGHTS];
 	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	#pragma endregion
 	
@@ -427,6 +486,8 @@ private: // Init
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
 		
 		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
+		activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
+		activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*MAX_ACTIVE_LIGHTS);
 		
 		// Submodules
 		renderingSubmodules = v4d::modules::GetSubmodules<v4d::modules::Rendering>();
@@ -466,20 +527,21 @@ private: // Init
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
 		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		baseDescriptorSet_0->AddBinding_storageBuffer(1, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		baseDescriptorSet_0->AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_storageBuffer(3, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(2, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.posBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.materialBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(6, &Geometry::globalBuffers.normalBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(7, &Geometry::globalBuffers.uvBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(8, &Geometry::globalBuffers.colorBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_imageView(9, &renderTargetGroup.GetDepthImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.posBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(6, &Geometry::globalBuffers.materialBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(7, &Geometry::globalBuffers.normalBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(8, &Geometry::globalBuffers.uvBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(9, &Geometry::globalBuffers.colorBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -613,7 +675,18 @@ private: // Resources
 	}
 	
 	void FreeBuffers() override {
-		UnloadTestObjects();
+	
+		// Scene Objects
+		for (auto* obj : scene.objectInstances) {
+			obj->ClearGeometries();
+		}
+		
+		// Ray Tracing
+		rayTracingTopLevelAccelerationStructure.instances.clear();
+		for (auto blas : rayTracingBottomLevelAccelerationStructures) {
+			blas.Destroy(renderingDevice);
+		}
+		rayTracingBottomLevelAccelerationStructures.clear();
 
 		Geometry::globalBuffers.Free(renderingDevice);
 		
@@ -959,24 +1032,6 @@ private: // Commands
 	
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
-		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
-		
-		// Use all lights for now
-		uint32_t nbActiveLights = 0;
-		uint32_t activeLights[MAX_ACTIVE_LIGHTS];
-		for (auto* obj : scene.objectInstances) {
-			for (auto* lightSource : obj->lightSources) {
-				lightSource->viewSpacePosition = scene.camera.viewMatrix * obj->transform * glm::dvec4(lightSource->position, 1);
-				Geometry::globalBuffers.WriteLightSource(lightSource);
-				activeLights[nbActiveLights++] = lightSource->lightOffset;
-			}
-		}
-		activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
-		activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*nbActiveLights);
-		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer);
-		activeLightsUniformBuffer.ResetSrcData();
-		Geometry::globalBuffers.PushLightSources(renderingDevice, commandBuffer);
-		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
@@ -1052,63 +1107,20 @@ public: // Scene configuration
 			submodule->LoadScene(scene);
 		}
 		
-		scene.objectInstances.emplace_back(new ObjectInstance())->generateFunc = [](ObjectInstance* obj){
-			obj->AddLightSource({10,20,10}, 10000);
-			
-			auto* geom1 = obj->AddGeometry(28, 42);
-			
-			geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-			geom1->SetVertex(1,  /*pos*/{ 5.0,-5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-			geom1->SetVertex(2,  /*pos*/{ 5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-			geom1->SetVertex(3,  /*pos*/{-5.0, 5.0, 0.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-			//
-			geom1->SetVertex(4,  /*pos*/{-5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-			geom1->SetVertex(5,  /*pos*/{ 5.0,-5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-			geom1->SetVertex(6,  /*pos*/{ 5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-			geom1->SetVertex(7,  /*pos*/{-5.0, 5.0,-5.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-			
-			// bottom white
-			geom1->SetVertex(8,  /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			geom1->SetVertex(9,  /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			geom1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			geom1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			
-			// top gray
-			geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-			geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-			geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-			geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-			
-			// left red
-			geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-			geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-			geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-			geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-			
-			// back blue
-			geom1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-			geom1->SetVertex(21, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-			geom1->SetVertex(22, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-			geom1->SetVertex(23, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-			
-			// right green
-			geom1->SetVertex(24, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-			geom1->SetVertex(25, /*pos*/{-80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-			geom1->SetVertex(26, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-			geom1->SetVertex(27, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-			
-			geom1->SetIndices({
-				0, 1, 2, 2, 3, 0,
-				4, 5, 6, 6, 7, 4,
-				8, 9, 10, 10, 11, 8,
-				//
-				13, 12, 14, 14, 12, 15,
-				16, 17, 18, 18, 17, 19,
-				20, 21, 22, 22, 21, 23,
-				25, 24, 26, 26, 27, 25,
-			});
-			
-		};
+		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = CreateTestBox;
+		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = CreateTestBox;
+		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = CreateTestBox;
+		
+		scene.objectInstances[0]->AddLightSource({10,2000,10}, 100000000, {1,1,1}, 1, 0, 20.0f);
+		scene.objectInstances[0]->AddLightSource({10,20,40}, 10000, {1,1,1}, 1, 0, 2.0f);
+		scene.objectInstances[1]->AddLightSource({10,30,10}, 10000, {1,1,1}, 1, 0, 1.0f);
+		scene.objectInstances[2]->AddLightSource({10,20,15}, 10000, {1,1,1}, 1, 0, 1.0f);
+		scene.objectInstances[0]->transform = glm::rotate( glm::translate(glm::dmat4(1), {0,250,-30}) , glm::radians(180.0), {0.0,0.0,1.0});
+		scene.objectInstances[1]->transform = glm::rotate( glm::translate(glm::dmat4(1), {200,250,-30}) , glm::radians(120.0), {0.0,0.0,1.0});
+		scene.objectInstances[2]->transform = glm::rotate( glm::translate(glm::dmat4(1), {-200,250,-30}) , glm::radians(-120.0), {0.0,0.0,1.0});
+		
+		rayTracingBottomLevelAccelerationStructures.reserve(scene.objectInstances.size());
+		rayTracingTopLevelAccelerationStructure.instances.reserve(scene.objectInstances.size());
 	}
 	
 	void UnloadScene() override {
@@ -1122,26 +1134,74 @@ public: // Update
 	
 	void FrameUpdate(uint imageIndex) override {
 		
-		// Reset scene information
+		// Reset camera information
 		scene.camera.width = swapChain->extent.width;
 		scene.camera.height = swapChain->extent.height;
 		scene.camera.RefreshProjectionMatrix();
-		
-		if (!testObjectsLoaded) LoadTestObjects();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->FrameUpdate(scene);
 		}
 		
-		// Update object transforms in acceleration structure
-		for (auto* obj : scene.objectInstances) if (obj->rayTracingInstanceIndex != -1) {
-			rayTracingTopLevelAccelerationStructure.instances[obj->rayTracingInstanceIndex].transform = obj->GetViewTransform(scene.camera.viewMatrix);
+		// Update object transforms and light sources (Use all lights for now)
+		nbActiveLights = 0;
+		for (auto* obj : scene.objectInstances) {
+			obj->WriteMatrices(scene.camera.viewMatrix);
+			for (auto* lightSource : obj->lightSources) {
+				activeLights[nbActiveLights++] = lightSource->lightOffset;
+			}
 		}
 		
-		// Ray Tracing Acceleration Structure
-		rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
+		// Transfer data to rendering device
+		auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			cameraUniformBuffer.Update(renderingDevice, cmdBuffer);
+			activeLightsUniformBuffer.Update(renderingDevice, cmdBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
+			Geometry::globalBuffers.PushObjects(renderingDevice, cmdBuffer);
+			Geometry::globalBuffers.PushLights(renderingDevice, cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 		
+		// Ray Tracing Acceleration Structure
+		bool accelerationStructureDirty = false;
+		for (auto* obj : scene.objectInstances) {
+			// Geometry
+			if (obj->geometriesDirty) {
+				BottomLevelAccelerationStructure* blas;
+				if (obj->rayTracingBlasIndex == -1) {
+					obj->rayTracingBlasIndex = rayTracingBottomLevelAccelerationStructures.size();
+					blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+				} else {
+					blas = &rayTracingBottomLevelAccelerationStructures[obj->rayTracingBlasIndex];
+				}
+				
+				auto cmdBuffer = BeginSingleTimeCommands(transferQueue);
+					obj->PushGeometries(renderingDevice, cmdBuffer);
+				EndSingleTimeCommands(transferQueue, cmdBuffer);
+				
+				blas->Build(renderingDevice, graphicsQueue, obj->geometries);
+				accelerationStructureDirty = true;
+				
+				// Instance
+				if (obj->rayTracingInstanceIndex == -1) {
+					obj->rayTracingInstanceIndex = rayTracingTopLevelAccelerationStructure.instances.size();
+					rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingGeometryInstance{
+						obj->rayTracingModelViewMatrix,
+						(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
+						obj->rayTracingMask, //TODO mask
+						rayTracingStandardHitOffset, // instanceOffset
+						VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+						blas->handle
+					});
+				}
+			}
+			if (obj->rayTracingInstanceIndex != -1) {
+				rayTracingTopLevelAccelerationStructure.instances[obj->rayTracingInstanceIndex].transform = obj->rayTracingModelViewMatrix;
+				accelerationStructureDirty = true;
+			}
+		}
+		if (accelerationStructureDirty) {
+			rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
+		}
 	}
 	
 	void LowPriorityFrameUpdate() override {
@@ -1174,58 +1234,5 @@ public: // Update
 			ImGui::End();
 		}
 	#endif
-	
-public: // tests
-	
-	bool testObjectsLoaded = false;
-	
-	void LoadTestObjects() {
-		if (!testObjectsLoaded) {
-			// Generate geometries and send to GPU
-			auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
-				for (auto* obj : scene.objectInstances) {
-					obj->PushGeometries(renderingDevice, cmdBuffer);
-				}
-			EndSingleTimeCommands(graphicsQueue, cmdBuffer);
-			
-			rayTracingBottomLevelAccelerationStructures.reserve(scene.objectInstances.size());
-			rayTracingTopLevelAccelerationStructure.instances.reserve(scene.objectInstances.size());
-			for (auto* obj : scene.objectInstances) {
-				auto& blas = rayTracingBottomLevelAccelerationStructures.emplace_back();
-				blas.Build(renderingDevice, graphicsQueue, obj->geometries);
-				obj->rayTracingInstanceIndex = rayTracingTopLevelAccelerationStructure.instances.size();
-				rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingGeometryInstance{
-					obj->GetViewTransform(scene.camera.viewMatrix),
-					(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
-					obj->rayTracingMask, //TODO mask
-					rayTracingStandardHitOffset, // instanceOffset
-					VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-					blas.handle
-				});
-			}
-			
-			testObjectsLoaded = true;
-			LOG("Loaded test objects")
-		}
-	}
-	
-	void UnloadTestObjects() {
-		if (testObjectsLoaded) {
-			testObjectsLoaded = false;
 
-			for (auto* obj : scene.objectInstances) {
-				obj->rayTracingInstanceIndex = -1;
-				obj->Clear();
-			}
-			
-			rayTracingTopLevelAccelerationStructure.instances.clear();
-			
-			for (auto blas : rayTracingBottomLevelAccelerationStructures) {
-				blas.Destroy(renderingDevice);
-			}
-			rayTracingBottomLevelAccelerationStructures.clear();
-		}
-	}
-	
-	
 };

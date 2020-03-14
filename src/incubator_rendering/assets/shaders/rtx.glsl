@@ -8,25 +8,31 @@ const bool shadowsEnabled = true;
 const float radianceThreshold = 1e-10;
 // const int reflection_max_recursion = 3;
 
+struct ObjectInstance {
+	mat4 modelViewMatrix;
+	// mat3 normalMatrix; // This does not work... need to do more debugging...
+};
+
 // Descriptor Set 0
 #include "Camera.glsl"
-layout(set = 0, binding = 1) readonly buffer ActiveLights {
+layout(set = 0, binding = 1) readonly buffer ObjectInstances {ObjectInstance objectInstances[];};
+layout(set = 0, binding = 2) readonly buffer LightSources {float lightSources[];};
+layout(set = 0, binding = 3) readonly buffer ActiveLights {
 	uint activeLights;
-	uint lights[];
+	uint lightIndices[];
 };
-layout(set = 0, binding = 2) readonly buffer Lights {float lightSources[];};
 
 // Descriptor Set 1
 layout(set = 1, binding = 0) uniform accelerationStructureNV topLevelAS;
 layout(set = 1, binding = 1, rgba16f) uniform image2D litImage;
-layout(set = 1, binding = 2) readonly buffer Geometries {uvec4 geometries[];};
-layout(set = 1, binding = 3) readonly buffer Indices {uint indices[];};
-layout(set = 1, binding = 4) readonly buffer VertexPositions {vec4 vertexPositions[];};
-layout(set = 1, binding = 5) readonly buffer VertexMaterials {uint vertexMaterials[];};
-layout(set = 1, binding = 6) readonly buffer VertexNormals {vec2 vertexNormals[];};
-layout(set = 1, binding = 7) readonly buffer VertexUVs {uint vertexUVs[];};
-layout(set = 1, binding = 8) readonly buffer VertexColors {uint vertexColors[];};
-layout(set = 1, binding = 9, r32f) uniform image2D depthImage;
+layout(set = 1, binding = 2, r32f) uniform image2D depthImage;
+layout(set = 1, binding = 3) readonly buffer Geometries {uvec4 geometries[];};
+layout(set = 1, binding = 4) readonly buffer Indices {uint indices[];};
+layout(set = 1, binding = 5) readonly buffer VertexPositions {vec4 vertexPositions[];};
+layout(set = 1, binding = 6) readonly buffer VertexMaterials {uint vertexMaterials[];};
+layout(set = 1, binding = 7) readonly buffer VertexNormals {vec2 vertexNormals[];};
+layout(set = 1, binding = 8) readonly buffer VertexUVs {uint vertexUVs[];};
+layout(set = 1, binding = 9) readonly buffer VertexColors {uint vertexColors[];};
 
 // Ray Tracing Payload
 struct RayPayload {
@@ -126,7 +132,8 @@ struct Fragment {
 	Vertex v1;
 	Vertex v2;
 	vec3 barycentricCoords;
-	vec3 hitPoint; // World space
+	vec3 hitPoint;
+	// Interpolated values
 	vec3 pos;
 	float info;
 	vec3 normal;
@@ -153,6 +160,7 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 		f.pos = (f.v0.pos * f.barycentricCoords.x + f.v1.pos * f.barycentricCoords.y + f.v2.pos * f.barycentricCoords.z);
 		f.info = (f.v0.info * f.barycentricCoords.x + f.v1.info * f.barycentricCoords.y + f.v2.info * f.barycentricCoords.z);
 		f.normal = normalize(f.v0.normal * f.barycentricCoords.x + f.v1.normal * f.barycentricCoords.y + f.v2.normal * f.barycentricCoords.z);
+		f.normal = normalize(transpose(inverse(mat3(objectInstances[f.objectIndex].modelViewMatrix))) * f.normal);
 		f.uv = (f.v0.uv * f.barycentricCoords.x + f.v1.uv * f.barycentricCoords.y + f.v2.uv * f.barycentricCoords.z);
 		f.color = (f.v0.color * f.barycentricCoords.x + f.v1.color * f.barycentricCoords.y + f.v2.color * f.barycentricCoords.z);
 	}
@@ -161,10 +169,6 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 }
 
 layout(location = 2) rayPayloadNV bool shadowed;
-
-vec3 ViewSpaceNormal(vec3 normal) {
-	return normalize(transpose(inverse(mat3(camera.viewMatrix))) * normal);
-}
 
 const float PI = 3.1415926543;
 
@@ -190,17 +194,19 @@ vec3 fresnelSchlick(float HdotV, vec3 baseReflectivity) {
 	return baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - HdotV, 5.0);
 }
 
-void ApplyStandardShading(vec3 hitPoint, vec3 color, vec3 normal, float roughness, float metallic) {
-	vec3 viewSpaceNormal = ViewSpaceNormal(normal);
-	
+vec3 ViewSpaceNormal(vec3 normal) {
+	return normalize(transpose(inverse(mat3(camera.viewMatrix))) * normal);
+}
+
+void ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughness, float metallic) {
 	// PBR lighting
-	vec3 N = normalize(viewSpaceNormal);
+	vec3 N = normal;
 	vec3 V = normalize(-hitPoint);
 	// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
-	vec3 baseReflectivity = mix(vec3(0.04), color, max(0,metallic));
+	vec3 baseReflectivity = mix(vec3(0.04), albedo, max(0,metallic));
 	
 	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
-		LightSource light = GetLight(lights[lightIndex]);
+		LightSource light = GetLight(lightIndices[lightIndex]);
 		
 		// Calculate light radiance at distance
 		float dist = length(light.position - hitPoint);
@@ -209,7 +215,7 @@ void ApplyStandardShading(vec3 hitPoint, vec3 color, vec3 normal, float roughnes
 		if (length(radiance) > radianceThreshold) {
 			if (shadowsEnabled) {
 				shadowed = true;
-				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, normalize(light.position - hitPoint), length(light.position - hitPoint), 2);
+				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, normalize(light.position - hitPoint), length(light.position - hitPoint) - light.radius, 2);
 			}
 			if (!shadowsEnabled || !shadowed) {
 				// cook-torrance BRDF
@@ -234,7 +240,7 @@ void ApplyStandardShading(vec3 hitPoint, vec3 color, vec3 normal, float roughnes
 				// multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or a linear blend if partly metal (pure metals have no diffuse light).
 				kD *= 1.0 - max(0, metallic);
 				// Final lit color
-				ray.color += (kD * color / PI + specular) * radiance * max(dot(N,L) + max(0, metallic/-5), 0);
+				ray.color += (kD * albedo / PI + specular) * radiance * max(dot(N,L) + max(0, metallic/-5), 0);
 				
 				// Sub-Surface Scattering (simple rim for now)
 				// if (metallic < 0) {
@@ -251,8 +257,8 @@ void ApplyStandardShading(vec3 hitPoint, vec3 color, vec3 normal, float roughnes
 	
 	// // Reflections
 	// if (reflection_max_recursion > 1) {
-	// 	ray.origin = hitPoint + viewSpaceNormal * 0.001f;
-	// 	ray.direction = reflect(gl_WorldRayDirectionNV, viewSpaceNormal);
+	// 	ray.origin = hitPoint + normal * 0.001f;
+	// 	ray.direction = reflect(gl_WorldRayDirectionNV, normal);
 	// 	// ray.reflector = clamp(metallic - roughness, 0, 1);
 	// }
 	
@@ -305,7 +311,6 @@ void main() {
 	vec3 origin = vec3(0); //vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
 	vec3 direction = normalize(target); //vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 	
-	vec3 finalColor = vec3(0);
 	float max_distance = float(camera.zfar);
 	ray.color = vec3(0);
 	
@@ -325,14 +330,33 @@ void main() {
 	// 	}
 	// } else {
 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
-		finalColor = ray.color;
 	// }
+	
+	// Manual ray-intersection for light spheres (possibly faster than using traceNV if the number of sphere lights is very low)
+	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
+		LightSource light = GetLight(lightIndices[lightIndex]);
+		float dist = length(light.position - origin);
+		if ((dist < ray.distance || ray.distance == 0) && light.radius > 0.0) {
+			vec3 oc = origin - light.position;
+			if (dot(normalize(oc), direction) < 0) {
+				float a = dot(direction, direction);
+				float b = 2.0 * dot(oc, direction);
+				float c = dot(oc,oc) - light.radius*light.radius;
+				float discriminent = b*b - 4*a*c;
+				if (discriminent > 0) {
+					float d = discriminent / light.radius*light.radius*4.0;
+					ray.color += mix(vec3(0), light.color*pow(light.intensity, 0.5/light.radius), d);
+					ray.distance = dist;
+				}
+			}
+		}
+	}
 	
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
 	
 	ivec2 coords = ivec2(gl_LaunchIDNV.xy);
 	imageStore(depthImage, coords, vec4(depth, 0,0,0));
-	imageStore(litImage, coords, vec4(finalColor, 1.0));
+	imageStore(litImage, coords, vec4(ray.color, 1.0));
 }
 
 
@@ -354,11 +378,7 @@ void main() {
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	
 	ApplyStandardShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
-	
-	// ray.color = fragment.color.rgb;
-	// ray.distance = gl_HitTNV;
 }
 
 
