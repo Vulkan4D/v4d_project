@@ -8,6 +8,8 @@ const bool shadowsEnabled = true;
 const float radianceThreshold = 1e-10;
 // const int reflection_max_recursion = 3;
 
+#define NormalBuffer_T vec4 // or pack into vec2 ???
+
 struct ObjectInstance {
 	mat4 modelViewMatrix;
 	// mat3 normalMatrix; // This does not work... need to do more debugging...
@@ -30,7 +32,7 @@ layout(set = 1, binding = 3) readonly buffer Geometries {uvec4 geometries[];};
 layout(set = 1, binding = 4) readonly buffer Indices {uint indices[];};
 layout(set = 1, binding = 5) readonly buffer VertexPositions {vec4 vertexPositions[];};
 layout(set = 1, binding = 6) readonly buffer VertexMaterials {uint vertexMaterials[];};
-layout(set = 1, binding = 7) readonly buffer VertexNormals {vec2 vertexNormals[];};
+layout(set = 1, binding = 7) readonly buffer VertexNormals {NormalBuffer_T vertexNormals[];};
 layout(set = 1, binding = 8) readonly buffer VertexUVs {uint vertexUVs[];};
 layout(set = 1, binding = 9) readonly buffer VertexColors {uint vertexColors[];};
 
@@ -40,6 +42,7 @@ struct RayPayload {
 	vec3 origin;
 	vec3 direction;
 	float distance;
+	float opacity;
 	// float reflector;
 };
  
@@ -57,6 +60,12 @@ vec3 UnpackNormal(in vec2 norm) {
 	float f = dot(fenc, fenc);
 	float g = sqrt(1.0 - f / 4.0);
 	return vec3(fenc * g, 1.0 - f / 2.0);
+}
+vec3 UnpackNormal(in vec4 norm) {
+	return norm.xyz;
+}
+vec3 UnpackNormal(in vec3 norm) {
+	return norm;
 }
 
 vec2 UnpackUV(in uint uv) {
@@ -168,6 +177,9 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 	return f;
 }
 
+#####################################################
+#common .*rchit
+
 layout(location = 2) rayPayloadNV bool shadowed;
 
 const float PI = 3.1415926543;
@@ -198,7 +210,14 @@ vec3 ViewSpaceNormal(vec3 normal) {
 	return normalize(transpose(inverse(mat3(camera.viewMatrix))) * normal);
 }
 
-void ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughness, float metallic) {
+vec3 ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughness, float metallic) {
+	vec3 color = vec3(0);
+	
+	// Black backfaces
+	if (dot(normal, gl_WorldRayDirectionNV) > 0) {
+		return color;
+	}
+	
 	// PBR lighting
 	vec3 N = normal;
 	vec3 V = normalize(-hitPoint);
@@ -240,20 +259,16 @@ void ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughne
 				// multiply kD by the inverse metalness such that only non-metals have diffuse lighting, or a linear blend if partly metal (pure metals have no diffuse light).
 				kD *= 1.0 - max(0, metallic);
 				// Final lit color
-				ray.color += (kD * albedo / PI + specular) * radiance * max(dot(N,L) + max(0, metallic/-5), 0);
+				color += (kD * albedo / PI + specular) * radiance * max(dot(N,L) + max(0, metallic/-5), 0);
 				
 				// Sub-Surface Scattering (simple rim for now)
 				// if (metallic < 0) {
 					float rim = pow(1.0 - NdotV, 2-metallic*2+NdotL) * NdotL;
-					ray.color += -min(0,metallic) * radiance * rim;
+					color += -min(0,metallic) * radiance * rim;
 				// }
 			}
 		}
 	}
-	
-	
-	//TODO opacity
-	
 	
 	// // Reflections
 	// if (reflection_max_recursion > 1) {
@@ -262,41 +277,8 @@ void ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughne
 	// 	// ray.reflector = clamp(metallic - roughness, 0, 1);
 	// }
 	
-	
-	ray.distance = gl_HitTNV;
+	return color;
 }
-
-
-				// #####################################################
-
-				// #common sphere.*
-
-				// 		// // Sphere
-				// 		// struct Sphere {
-				// 		// 	float emissive;
-				// 		// 	float roughness;
-				// 		// 	vec3 pos;
-				// 		// 	float radius;
-				// 		// 	vec4 color;
-				// 		// 	float specular;
-				// 		// 	float metallic;
-				// 		// 	float refraction;
-				// 		// 	float density;
-				// 		// };
-				// 		// uint sphereStructSize = 5;
-				// 		// Sphere unpackSphere(uint index) {
-				// 		// 	Sphere s;
-				// 		// 	s.emissive = sphereBuffer[sphereStructSize * index + 1].z;
-				// 		// 	s.roughness = sphereBuffer[sphereStructSize * index + 1].w;
-				// 		// 	s.pos = sphereBuffer[sphereStructSize * index + 2].xyz;
-				// 		// 	s.radius = sphereBuffer[sphereStructSize * index + 2].w;
-				// 		// 	s.color = sphereBuffer[sphereStructSize * index + 3];
-				// 		// 	s.specular = sphereBuffer[sphereStructSize * index + 4].x;
-				// 		// 	s.metallic = sphereBuffer[sphereStructSize * index + 4].y;
-				// 		// 	s.refraction = sphereBuffer[sphereStructSize * index + 4].z;
-				// 		// 	s.density = sphereBuffer[sphereStructSize * index + 4].w;
-				// 		// 	return s;
-				// 		// }
 
 
 #############################################################
@@ -311,8 +293,9 @@ void main() {
 	vec3 origin = vec3(0); //vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
 	vec3 direction = normalize(target); //vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 	
-	float max_distance = float(camera.zfar);
 	ray.color = vec3(0);
+	ray.opacity = 0;
+	ray.distance = 0;
 	
 	// if (reflection_max_recursion > 1) {
 	// 	float reflection = 1.0;
@@ -329,21 +312,25 @@ void main() {
 	// 		direction = ray.direction;
 	// 	}
 	// } else {
-		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
+		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
 	// }
 	
 	// Manual ray-intersection for light spheres (possibly faster than using traceNV if the number of sphere lights is very low)
 	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
 		LightSource light = GetLight(lightIndices[lightIndex]);
-		float dist = length(light.position - origin);
-		if ((dist < ray.distance || ray.distance == 0) && light.radius > 0.0) {
+		float dist = length(light.position - origin) - light.radius;
+		if (dist <= 0) {
+			ray.color += light.color*light.intensity;
+			ray.distance = 0;
+		} else if ((dist < ray.distance || ray.distance == 0) && light.radius > 0.0) {
 			vec3 oc = origin - light.position;
 			if (dot(normalize(oc), direction) < 0) {
 				float a = dot(direction, direction);
 				float b = 2.0 * dot(oc, direction);
 				float c = dot(oc,oc) - light.radius*light.radius;
 				float discriminent = b*b - 4*a*c;
-				if (discriminent > 0) {
+				dist = (-b - sqrt(discriminent)) / (2.0*a);
+				if ((dist < ray.distance || ray.distance == 0) && discriminent >= 0) {
 					float d = discriminent / light.radius*light.radius*4.0;
 					ray.color += mix(vec3(0), light.color*pow(light.intensity, 0.5/light.radius), d);
 					ray.distance = dist;
@@ -360,17 +347,19 @@ void main() {
 }
 
 
-// #############################################################
-// #shader rahit
+#############################################################
+#shader rahit
 
-// void main() {
-// 	// Fragment fragment = GetHitFragment(true);
-// 	// if (fragment.color.a < 0.01) {
-// 	// 	ignoreIntersectionNV();
-// 	// } else {
-// 	// 	ray.color = mix(ray.color, fragment.color.rgb, fragment.color.a);
-// 	// }
-// }
+void main() {
+	// Fragment fragment = GetHitFragment(true);
+	// if (fragment.color.a < 0.99) {
+	// 	ray.color += fragment.color.rgb * fragment.color.a;
+	// }
+	
+	// ignoreIntersectionNV();
+	
+	// ray.color += fragment.color.rgb * fragment.color.a;
+}
 
 
 #############################################################
@@ -378,7 +367,19 @@ void main() {
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	ApplyStandardShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
+	
+	vec3 color = ApplyStandardShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
+	
+	// Transparency ?
+		// if (ray.opacity < 0.9 && fragment.color.a < 0.99) {
+		// 	traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, fragment.hitPoint, float(camera.znear), ray.direction, float(camera.zfar), 0);
+		// }
+		// ray.color = mix(ray.color, color, fragment.color.a);
+		// ray.opacity += fragment.color.a;
+	// or
+		ray.color = color;
+	
+	ray.distance = gl_HitTNV;
 }
 
 
@@ -386,8 +387,7 @@ void main() {
 #shader rmiss
 
 void main() {
-	ray.color = vec3(0);
-	ray.distance = 0;
+	//... may return a background color if other than black
 }
 
 

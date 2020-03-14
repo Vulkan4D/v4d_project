@@ -29,17 +29,17 @@ void CreateTestBox(ObjectInstance* obj) {
 		geom1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 		geom1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 		
-		// top gray
-		geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
-		geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.5,0.5,0.5, 1.0});
+		// top yellow
+		geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
+		geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
+		geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
+		geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
 		
 		// left red
-		geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
-		geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 1.0});
+		geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
+		geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
+		geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
+		geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
 		
 		// back blue
 		geom1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0, /*info*/0.0f}, /*material*/0, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
@@ -579,7 +579,7 @@ private: // Init
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
-		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
+		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" , "incubator_rendering/assets/shaders/rtx.rahit" );
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -1112,6 +1112,7 @@ public: // Scene configuration
 		scene.objectInstances.emplace_back(new ObjectInstance())->generateGeometriesFunc = CreateTestBox;
 		
 		scene.objectInstances[0]->AddLightSource({10,2000,10}, 100000000, {1,1,1}, 1, 0, 20.0f);
+		scene.objectInstances[0]->AddLightSource({10,500,1000}, 1000000000, {1,1,1}, 1, 0, 200.0f);
 		scene.objectInstances[0]->AddLightSource({10,20,40}, 10000, {1,1,1}, 1, 0, 2.0f);
 		scene.objectInstances[1]->AddLightSource({10,30,10}, 10000, {1,1,1}, 1, 0, 1.0f);
 		scene.objectInstances[2]->AddLightSource({10,20,15}, 10000, {1,1,1}, 1, 0, 1.0f);
