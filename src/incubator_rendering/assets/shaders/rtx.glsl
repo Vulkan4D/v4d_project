@@ -31,10 +31,8 @@ layout(set = 1, binding = 2, r32f) uniform image2D depthImage;
 layout(set = 1, binding = 3) readonly buffer Geometries {uvec4 geometries[];};
 layout(set = 1, binding = 4) readonly buffer Indices {uint indices[];};
 layout(set = 1, binding = 5) readonly buffer VertexPositions {vec4 vertexPositions[];};
-layout(set = 1, binding = 6) readonly buffer VertexMaterials {uint vertexMaterials[];};
-layout(set = 1, binding = 7) readonly buffer VertexNormals {NormalBuffer_T vertexNormals[];};
-layout(set = 1, binding = 8) readonly buffer VertexUVs {uint vertexUVs[];};
-layout(set = 1, binding = 9) readonly buffer VertexColors {uint vertexColors[];};
+layout(set = 1, binding = 6) readonly buffer VertexNormals {NormalBuffer_T vertexNormals[];};
+layout(set = 1, binding = 7) readonly buffer VertexColors {uint vertexColors[];};
 
 // Ray Tracing Payload
 struct RayPayload {
@@ -48,8 +46,6 @@ struct RayPayload {
  
 struct Vertex {
 	vec3 pos;
-	float info;
-	uint mat;
 	vec3 normal;
 	vec2 uv;
 	vec4 color;
@@ -68,10 +64,11 @@ vec3 UnpackNormal(in vec3 norm) {
 	return norm;
 }
 
-vec2 UnpackUV(in uint uv) {
+vec2 UnpackUV(in float uv) {
+	uint packed = floatBitsToUint(uv);
 	return vec2(
-		(uv & 0xffff0000) >> 16,
-		(uv & 0x0000ffff) >> 0
+		(packed & 0xffff0000) >> 16,
+		(packed & 0x0000ffff) >> 0
 	) / 65535.0;
 }
 
@@ -109,10 +106,8 @@ LightSource GetLight (uint i) {
 Vertex GetVertex(uint index) {
 	Vertex v;
 	v.pos = vertexPositions[index].xyz;
-	v.info = vertexPositions[index].w;
-	v.mat = vertexMaterials[index];
+	v.uv = UnpackUV(vertexPositions[index].w);
 	v.normal = UnpackNormal(vertexNormals[index]);
-	v.uv = UnpackUV(vertexUVs[index]);
 	v.color = UnpackColor(vertexColors[index]);
 	return v;
 }
@@ -144,7 +139,6 @@ struct Fragment {
 	vec3 hitPoint;
 	// Interpolated values
 	vec3 pos;
-	float info;
 	vec3 normal;
 	vec2 uv;
 	vec4 color;
@@ -167,7 +161,6 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 	
 	if (interpolateVertexData) {
 		f.pos = (f.v0.pos * f.barycentricCoords.x + f.v1.pos * f.barycentricCoords.y + f.v2.pos * f.barycentricCoords.z);
-		f.info = (f.v0.info * f.barycentricCoords.x + f.v1.info * f.barycentricCoords.y + f.v2.info * f.barycentricCoords.z);
 		f.normal = normalize(f.v0.normal * f.barycentricCoords.x + f.v1.normal * f.barycentricCoords.y + f.v2.normal * f.barycentricCoords.z);
 		f.normal = normalize(transpose(inverse(mat3(objectInstances[f.objectIndex].modelViewMatrix))) * f.normal);
 		f.uv = (f.v0.uv * f.barycentricCoords.x + f.v1.uv * f.barycentricCoords.y + f.v2.uv * f.barycentricCoords.z);
