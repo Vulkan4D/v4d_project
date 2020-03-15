@@ -31,8 +31,6 @@ layout(set = 1, binding = 2, r32f) uniform image2D depthImage;
 layout(set = 1, binding = 3) readonly buffer Geometries {uvec4 geometries[];};
 layout(set = 1, binding = 4) readonly buffer Indices {uint indices[];};
 layout(set = 1, binding = 5) readonly buffer VertexPositions {vec4 vertexPositions[];};
-layout(set = 1, binding = 6) readonly buffer VertexNormals {NormalBuffer_T vertexNormals[];};
-layout(set = 1, binding = 7) readonly buffer VertexColors {uint vertexColors[];};
 
 // Ray Tracing Payload
 struct RayPayload {
@@ -51,20 +49,14 @@ struct Vertex {
 	vec4 color;
 };
 
-vec3 UnpackNormal(in vec2 norm) {
-	vec2 fenc = norm * 4.0 - 2.0;
-	float f = dot(fenc, fenc);
-	float g = sqrt(1.0 - f / 4.0);
-	return vec3(fenc * g, 1.0 - f / 2.0);
-}
-vec3 UnpackNormal(in vec4 norm) {
-	return norm.xyz;
-}
-vec3 UnpackNormal(in vec3 norm) {
-	return norm;
-}
+// vec3 UnpackNormal(in vec2 norm) {
+// 	vec2 fenc = norm * 4.0 - 2.0;
+// 	float f = dot(fenc, fenc);
+// 	float g = sqrt(1.0 - f / 4.0);
+// 	return vec3(fenc * g, 1.0 - f / 2.0);
+// }
 
-vec2 UnpackUV(in float uv) {
+vec2 UnpackUVfromFloat(in float uv) {
 	uint packed = floatBitsToUint(uv);
 	return vec2(
 		(packed & 0xffff0000) >> 16,
@@ -72,7 +64,24 @@ vec2 UnpackUV(in float uv) {
 	) / 65535.0;
 }
 
-vec4 UnpackColor(in uint color) {
+vec2 UnpackUVfromUint(in uint uv) {
+	return vec2(
+		(uv & 0xffff0000) >> 16,
+		(uv & 0x0000ffff) >> 0
+	) / 65535.0;
+}
+
+vec4 UnpackColorFromFloat(in float color) {
+	uint packed = floatBitsToUint(color);
+	return vec4(
+		(packed & 0xff000000) >> 24,
+		(packed & 0x00ff0000) >> 16,
+		(packed & 0x0000ff00) >> 8,
+		(packed & 0x000000ff) >> 0
+	) / 255.0;
+}
+
+vec4 UnpackColorFromUint(in uint color) {
 	return vec4(
 		(color & 0xff000000) >> 24,
 		(color & 0x00ff0000) >> 16,
@@ -94,7 +103,7 @@ LightSource GetLight (uint i) {
 	LightSource light;
 	light.position = vec3(lightSources[i*8 + 0], lightSources[i*8 + 1], lightSources[i*8 + 2]);
 	light.intensity = lightSources[i*8 + 3];
-	vec4 c = UnpackColor(floatBitsToUint(lightSources[i*8 + 4]));
+	vec4 c = UnpackColorFromFloat(lightSources[i*8 + 4]);
 	light.color = c.rgb;
 	light.type = floatBitsToUint(lightSources[i*8 + 4]) & 0x000000ff;
 	light.attributes = floatBitsToUint(lightSources[i*8 + 5]);
@@ -105,10 +114,10 @@ LightSource GetLight (uint i) {
 
 Vertex GetVertex(uint index) {
 	Vertex v;
-	v.pos = vertexPositions[index].xyz;
-	v.uv = UnpackUV(vertexPositions[index].w);
-	v.normal = UnpackNormal(vertexNormals[index]);
-	v.color = UnpackColor(vertexColors[index]);
+	v.pos = vertexPositions[index*2].xyz;
+	v.uv = UnpackUVfromFloat(vertexPositions[index*2].w);
+	v.normal = vertexPositions[index*2+1].xyz;
+	v.color = UnpackColorFromFloat(vertexPositions[index*2+1].w);
 	return v;
 }
 
