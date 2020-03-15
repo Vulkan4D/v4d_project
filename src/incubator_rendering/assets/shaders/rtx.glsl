@@ -285,15 +285,17 @@ vec3 ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughne
 		// Calculate light radiance at distance
 		float dist = length(light.position - hitPoint);
 		vec3 radiance = light.color * light.intensity * (1.0 / (dist*dist));
+		vec3 L = normalize(light.position - hitPoint);
 		
 		if (length(radiance) > radianceThreshold) {
 			if (shadowsEnabled) {
 				shadowed = true;
-				traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, 0.001, normalize(light.position - hitPoint), length(light.position - hitPoint) - light.radius, 2);
+				if (dot(L, normal) > 0) {
+					traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 2);
+				}
 			}
 			if (!shadowsEnabled || !shadowed) {
 				// cook-torrance BRDF
-				vec3 L = normalize(light.position - hitPoint);
 				vec3 H = normalize(V + L);
 				float NdotV = max(dot(N,V), 0.000001);
 				float NdotL = max(dot(N,L), 0.000001);
