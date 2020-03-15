@@ -337,8 +337,6 @@ private:
 		uiPipelineLayout, 
 		histogramComputeLayout;
 		
-	uint32_t rayTracingStandardHitOffset;
-	
 	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen"};
 	RasterShaderPipeline thumbnailShader {thumbnailPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_thumbnail.vert",
@@ -526,8 +524,8 @@ private: // Init
 		
 		// Base descriptor set containing CameraUBO and such, almost all shaders should use it
 		auto* baseDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		baseDescriptorSet_0->AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		baseDescriptorSet_0->AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		baseDescriptorSet_0->AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		baseDescriptorSet_0->AddBinding_storageBuffer(3, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		
@@ -535,9 +533,9 @@ private: // Init
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -575,7 +573,8 @@ private: // Init
 	void ConfigureShaders() override {
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
 		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
-		rayTracingStandardHitOffset = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" , "incubator_rendering/assets/shaders/rtx.rahit" );
+		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
+		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 		
 		// Thumbnail Gen
 		thumbnailShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -1116,6 +1115,11 @@ public: // Scene configuration
 		scene.objectInstances[1]->transform = glm::rotate( glm::translate(glm::dmat4(1), {200,250,-30}) , glm::radians(120.0), {0.0,0.0,1.0});
 		scene.objectInstances[2]->transform = glm::rotate( glm::translate(glm::dmat4(1), {-200,250,-30}) , glm::radians(-120.0), {0.0,0.0,1.0});
 		
+		scene.objectInstances.emplace_back(new ObjectInstance("sphere"))->generateGeometriesFunc = [](ObjectInstance* obj){
+			obj->SetSphereGeometry(50, {1,0,0, 1});
+		};
+		scene.objectInstances[3]->transform = glm::translate(glm::dmat4(1), {60,300,500});
+		
 		rayTracingBottomLevelAccelerationStructures.reserve(scene.objectInstances.size());
 		rayTracingTopLevelAccelerationStructure.instances.reserve(scene.objectInstances.size());
 	}
@@ -1185,7 +1189,7 @@ public: // Update
 						obj->rayTracingModelViewMatrix,
 						(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
 						obj->rayTracingMask, //TODO mask
-						rayTracingStandardHitOffset, // instanceOffset
+						Geometry::rayTracingShaderOffsets[obj->objectType], // instanceOffset
 						VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
 						blas->handle
 					});

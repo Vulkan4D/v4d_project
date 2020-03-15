@@ -10,15 +10,10 @@ const float radianceThreshold = 1e-10;
 
 #define NormalBuffer_T vec4 // or pack into vec2 ???
 
-struct ObjectInstance {
-	mat4 modelViewMatrix;
-	// mat3 normalMatrix; // This does not work... need to do more debugging...
-};
-
 // Descriptor Set 0
 #include "Camera.glsl"
-layout(set = 0, binding = 1) readonly buffer ObjectInstances {ObjectInstance objectInstances[];};
-layout(set = 0, binding = 2) readonly buffer LightSources {float lightSources[];};
+layout(set = 0, binding = 1) readonly buffer ObjectBuffer {mat4 objectInstances[];};
+layout(set = 0, binding = 2) readonly buffer LightBuffer {float lightSources[];};
 layout(set = 0, binding = 3) readonly buffer ActiveLights {
 	uint activeLights;
 	uint lightIndices[];
@@ -28,9 +23,9 @@ layout(set = 0, binding = 3) readonly buffer ActiveLights {
 layout(set = 1, binding = 0) uniform accelerationStructureNV topLevelAS;
 layout(set = 1, binding = 1, rgba16f) uniform image2D litImage;
 layout(set = 1, binding = 2, r32f) uniform image2D depthImage;
-layout(set = 1, binding = 3) readonly buffer Geometries {uvec4 geometries[];};
-layout(set = 1, binding = 4) readonly buffer Indices {uint indices[];};
-layout(set = 1, binding = 5) readonly buffer VertexPositions {vec4 vertexPositions[];};
+layout(set = 1, binding = 3) readonly buffer GeometryBuffer {uvec4 geometries[];};
+layout(set = 1, binding = 4) readonly buffer IndexBuffer {uint indices[];};
+layout(set = 1, binding = 5) readonly buffer VertexBuffer {vec4 vertices[];};
 
 // Ray Tracing Payload
 struct RayPayload {
@@ -40,13 +35,6 @@ struct RayPayload {
 	float distance;
 	float opacity;
 	// float reflector;
-};
- 
-struct Vertex {
-	vec3 pos;
-	vec3 normal;
-	vec2 uv;
-	vec4 color;
 };
 
 // vec3 UnpackNormal(in vec2 norm) {
@@ -97,6 +85,7 @@ struct LightSource {
 	uint type;
 	uint attributes;
 	float radius;
+	float custom1;
 };
 
 LightSource GetLight (uint i) {
@@ -108,17 +97,77 @@ LightSource GetLight (uint i) {
 	light.type = floatBitsToUint(lightSources[i*8 + 4]) & 0x000000ff;
 	light.attributes = floatBitsToUint(lightSources[i*8 + 5]);
 	light.radius = lightSources[i*8 + 6];
-	// light._unused_ = lightSources[i*8 + 7];
+	light.custom1 = lightSources[i*8 + 7];
 	return light;
+};
+
+struct ObjectInstance {
+	mat4 modelViewMatrix;
+	mat3 normalMatrix;
+	vec3 position;
+	vec3 custom3;
+	vec4 custom4;
+};
+
+ObjectInstance GetObjectInstance(uint index) {
+	ObjectInstance obj;
+	obj.modelViewMatrix = objectInstances[index*2];
+	mat4 secondMatrix = objectInstances[index*2+1];
+	obj.normalMatrix = mat3(
+		secondMatrix[0].xyz,
+		vec3(secondMatrix[0].w, secondMatrix[1].x, secondMatrix[1].y),
+		vec3(secondMatrix[1].z, secondMatrix[1].w, secondMatrix[2].x)
+	);
+	obj.position = obj.modelViewMatrix[3].xyz;
+	obj.custom3 = secondMatrix[2].yzw;
+	obj.custom4 = objectInstances[index*2+1][3];
+	return obj;
+}
+
+struct Vertex {
+	vec3 pos;
+	vec4 color;
+	vec3 normal;
+	vec2 uv;
 };
 
 Vertex GetVertex(uint index) {
 	Vertex v;
-	v.pos = vertexPositions[index*2].xyz;
-	v.uv = UnpackUVfromFloat(vertexPositions[index*2].w);
-	v.normal = vertexPositions[index*2+1].xyz;
-	v.color = UnpackColorFromFloat(vertexPositions[index*2+1].w);
+	v.pos = vertices[index*2].xyz;
+	v.color = UnpackColorFromFloat(vertices[index*2].w);
+	v.normal = vertices[index*2+1].xyz;
+	v.uv = UnpackUVfromFloat(vertices[index*2+1].w);
 	return v;
+}
+
+struct ProceduralGeometry {
+	uint vertexOffset;
+	uint objectIndex;
+	uint material;
+	
+	vec3 aabbMin;
+	vec3 aabbMax;
+	vec4 color;
+	float custom1;
+	
+	ObjectInstance objectInstance;
+};
+
+ProceduralGeometry GetProceduralGeometry(uint geometryIndex) {
+	ProceduralGeometry geom;
+	
+	geom.vertexOffset = geometries[geometryIndex].y;
+	geom.objectIndex = geometries[geometryIndex].z;
+	geom.material = geometries[geometryIndex].w;
+	
+	geom.aabbMin = vertices[geom.vertexOffset*2].xyz;
+	geom.aabbMax = vec3(vertices[geom.vertexOffset*2].w, vertices[geom.vertexOffset*2+1].xy);
+	geom.color = UnpackColorFromFloat(vertices[geom.vertexOffset*2+1].z);
+	geom.custom1 = vertices[geom.vertexOffset*2+1].w;
+	
+	geom.objectInstance = GetObjectInstance(geom.objectIndex);
+	
+	return geom;
 }
 
 #####################################################
@@ -140,7 +189,8 @@ struct Fragment {
 	uint indexOffset;
 	uint vertexOffset;
 	uint objectIndex;
-	uint otherIndex;
+	uint material;
+	ObjectInstance objectInstance;
 	Vertex v0;
 	Vertex v1;
 	Vertex v2;
@@ -159,7 +209,9 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 	f.indexOffset = geometries[gl_InstanceCustomIndexNV].x;
 	f.vertexOffset = geometries[gl_InstanceCustomIndexNV].y;
 	f.objectIndex = geometries[gl_InstanceCustomIndexNV].z;
-	f.otherIndex = geometries[gl_InstanceCustomIndexNV].w;
+	f.material = geometries[gl_InstanceCustomIndexNV].w;
+	
+	f.objectInstance = GetObjectInstance(f.objectIndex);
 	
 	f.v0 = GetVertex(indices[f.indexOffset + (3 * gl_PrimitiveID) + 0] + f.vertexOffset);
 	f.v1 = GetVertex(indices[f.indexOffset + (3 * gl_PrimitiveID) + 1] + f.vertexOffset);
@@ -171,7 +223,8 @@ Fragment GetHitFragment(bool interpolateVertexData) {
 	if (interpolateVertexData) {
 		f.pos = (f.v0.pos * f.barycentricCoords.x + f.v1.pos * f.barycentricCoords.y + f.v2.pos * f.barycentricCoords.z);
 		f.normal = normalize(f.v0.normal * f.barycentricCoords.x + f.v1.normal * f.barycentricCoords.y + f.v2.normal * f.barycentricCoords.z);
-		f.normal = normalize(transpose(inverse(mat3(objectInstances[f.objectIndex].modelViewMatrix))) * f.normal);
+		// f.normal = normalize(transpose(inverse(mat3(f.objectInstance.modelViewMatrix))) * f.normal);
+		f.normal = normalize(f.objectInstance.normalMatrix * f.normal);
 		f.uv = (f.v0.uv * f.barycentricCoords.x + f.v1.uv * f.barycentricCoords.y + f.v2.uv * f.barycentricCoords.z);
 		f.color = (f.v0.color * f.barycentricCoords.x + f.v1.color * f.barycentricCoords.y + f.v2.color * f.barycentricCoords.z);
 	}
@@ -404,60 +457,56 @@ void main() {
 }
 
 
-		// #############################################################
+#############################################################
+#shader sphere.rint
 
-		// #shader sphere.rint
+hitAttributeNV ProceduralGeometry sphereGeomAttr;
 
-		// // hitAttributeNV Sphere attribs;
+void main() {
+	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexNV);
+	vec3 spherePosition = geom.objectInstance.position;
+	float sphereRadius = geom.aabbMax.x;
+	
+	const vec3 origin = gl_WorldRayOriginNV;
+	const vec3 direction = gl_WorldRayDirectionNV;
+	const float tMin = gl_RayTminNV;
+	const float tMax = gl_RayTmaxNV;
 
-		// void main() {
-		// 	// // const Sphere sphere = unpackSphere(gl_InstanceCustomIndexNV);
-		// 	// const Sphere sphere = unpackSphere(gl_PrimitiveID);
-		// 	// const vec3 origin = gl_WorldRayOriginNV;
-		// 	// const vec3 direction = gl_WorldRayDirectionNV;
-		// 	// const float tMin = gl_RayTminNV;
-		// 	// const float tMax = gl_RayTmaxNV;
-		
-		// 	// const vec3 oc = origin - sphere.pos;
-		// 	// const float a = dot(direction, direction);
-		// 	// const float b = dot(oc, direction);
-		// 	// const float c = dot(oc, oc) - sphere.radius * sphere.radius;
-		// 	// const float discriminant = b * b - a * c;
+	const vec3 oc = origin - spherePosition;
+	const float a = dot(direction, direction);
+	const float b = dot(oc, direction);
+	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
+	const float discriminant = b * b - a * c;
 
-		// 	// if (discriminant >= 0) {
-		// 	// 	const float discriminantSqrt = sqrt(discriminant);
-		// 	// 	const float t1 = (-b - discriminantSqrt) / a;
-		// 	// 	const float t2 = (-b + discriminantSqrt) / a;
+	if (discriminant >= 0) {
+		const float discriminantSqrt = sqrt(discriminant);
+		const float t1 = (-b - discriminantSqrt) / a;
+		const float t2 = (-b + discriminantSqrt) / a;
 
-		// 	// 	if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
-		// 	// 		attribs = sphere;
-		// 	// 		reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
-		// 	// 	}
-		// 	// }
-		// 	}
+		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
+			sphereGeomAttr = geom;
+			reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
+		}
+	}
+}
 
 
-		// #############################################################
+#############################################################
+#shader sphere.rchit
 
-		// #shader sphere.rchit
+hitAttributeNV ProceduralGeometry sphereGeomAttr;
 
-		// // hitAttributeNV Sphere sphere;
-
-		// void main() {
-		// 	// // Hit World Position
-		// 	// const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
-		// 	// // Hit object Position
-		// 	// const vec3 objPoint = hitPoint - sphere.pos;
-		// 	// // Normal
-		// 	// const vec3 normal = objPoint / sphere.radius;
-		
-		// 	// // if (sphere.metallic == 0.0) {
-		// 	// // 	float r = (snoise(vec4(objPoint, ubo.time / 60.0) * 10.0, 30) / 2.0 + 0.5) * 1.5;
-		// 	// // 	float g = (snoise(vec4(objPoint, ubo.time / 60.0) * 5.0, 20) / 2.0 + 0.5) * min(r, 0.9);
-		// 	// // 	float b = (snoise(vec4(objPoint, ubo.time / 60.0) * 15.0, 20) / 2.0 + 0.5) * min(g, 0.7);
-		// 	// // 	ray.color = vec3(max(r + g + b, 0.3), min(r - 0.2, max(g, b + 0.3)), b) * 1.8;
-		// 	// // } else {
-		// 	// ApplyStandardShading(hitPoint, objPoint, sphere.color, normal, sphere.emissive, sphere.roughness, sphere.specular, sphere.metallic);
-		// 	// // }
-		// }
+void main() {
+	vec3 spherePosition = sphereGeomAttr.objectInstance.position;
+	float sphereRadius = sphereGeomAttr.aabbMax.x;
+	
+	// Hit World Position
+	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	const vec3 normal = normalize(hitPoint - spherePosition);
+	
+	vec3 color = ApplyStandardShading(hitPoint, sphereGeomAttr.color.rgb, normal, /*roughness*/0.5, /*metallic*/0.0);
+	
+	ray.color = color;
+	ray.distance = gl_HitTNV;
+}
 
