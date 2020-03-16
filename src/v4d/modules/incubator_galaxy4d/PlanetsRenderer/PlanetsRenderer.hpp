@@ -55,7 +55,7 @@ public:
 		}
 	}
 	
-	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
+	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, v4d::graphics::vulkan::rtx::ShaderBindingTable*) override {
 		
 		// Terrain
 		shaders["opaqueRasterization"].push_back(&planetTerrainShader);

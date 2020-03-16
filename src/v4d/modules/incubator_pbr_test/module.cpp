@@ -105,7 +105,7 @@ struct PbrRenderer : v4d::modules::Rendering {
 		pipelineLayout.AddDescriptorSet(descriptorSets[0]);
 	}
 	
-	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders) override {
+	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, v4d::graphics::vulkan::rtx::ShaderBindingTable*) override {
 		shaders["opaqueRasterization"].push_back(&pbrObjectShader);
 		pbrObjectShader.AddVertexInputBinding(sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX, Vertex::GetInputAttributes());
 		pbrObjectShader.SetData(&vertexBuffer, &indexBuffer, indices.size());

@@ -8,7 +8,7 @@ const bool shadowsEnabled = true;
 const float radianceThreshold = 1e-10;
 // const int reflection_max_recursion = 3;
 
-#define NormalBuffer_T vec4 // or pack into vec2 ???
+// #define RENDER_LIGHT_SPHERES_MANUALLY_IN_RGEN
 
 // Descriptor Set 0
 #include "Camera.glsl"
@@ -36,6 +36,15 @@ struct RayPayload {
 	float opacity;
 	// float reflector;
 };
+
+#define SOLID 0x01
+#define LIQUID 0x02
+#define CLOUD 0x04
+#define PARTICLE 0x08
+#define TRANSPARENT 0x10
+#define CUTOUT 0x20
+#define CELESTIAL 0x40
+#define EMITTER 0x80
 
 // vec3 UnpackNormal(in vec2 norm) {
 // 	vec2 fenc = norm * 4.0 - 2.0;
@@ -279,8 +288,8 @@ vec3 ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughne
 	// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
 	vec3 baseReflectivity = mix(vec3(0.04), albedo, max(0,metallic));
 	
-	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
-		LightSource light = GetLight(lightIndices[lightIndex]);
+	for (int activeLightIndex = 0; activeLightIndex < activeLights; activeLightIndex++) {
+		LightSource light = GetLight(lightIndices[activeLightIndex]);
 		
 		// Calculate light radiance at distance
 		float dist = length(light.position - hitPoint);
@@ -291,7 +300,7 @@ vec3 ApplyStandardShading(vec3 hitPoint, vec3 albedo, vec3 normal, float roughne
 			if (shadowsEnabled) {
 				shadowed = true;
 				if (dot(L, normal) > 0) {
-					traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, 0xFF, 0, 0, 1, hitPoint, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 2);
+					traceNV(topLevelAS, gl_RayFlagsTerminateOnFirstHitNV | gl_RayFlagsOpaqueNV | gl_RayFlagsSkipClosestHitShaderNV, SOLID, 0, 0, 1, hitPoint, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 2);
 				}
 			}
 			if (!shadowsEnabled || !shadowed) {
@@ -349,6 +358,11 @@ void main() {
 	
 	vec3 origin = vec3(0); //vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
 	vec3 direction = normalize(target); //vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
+
+	int traceMask = SOLID|LIQUID|CLOUD|PARTICLE|TRANSPARENT|CUTOUT|CELESTIAL;
+	#ifndef RENDER_LIGHT_SPHERES_MANUALLY_IN_RGEN
+		traceMask |= EMITTER;
+	#endif
 	
 	ray.color = vec3(0);
 	ray.opacity = 0;
@@ -358,7 +372,7 @@ void main() {
 	// 	float reflection = 1.0;
 	// 	for (int i = 0; i < reflection_max_recursion; i++) {
 	// 		ray.reflector = 0.0;
-	// 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
+	// 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, traceMask, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
 	// 		finalColor = mix(finalColor, ray.color, reflection);
 	// 		if (ray.reflector <= 0.0) break;
 	// 		reflection *= ray.reflector;
@@ -369,32 +383,34 @@ void main() {
 	// 		direction = ray.direction;
 	// 	}
 	// } else {
-		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
+		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, traceMask, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
 	// }
 	
-	// Manual ray-intersection for light spheres (possibly faster than using traceNV if the number of sphere lights is very low)
-	for (int lightIndex = 0; lightIndex < activeLights; lightIndex++) {
-		LightSource light = GetLight(lightIndices[lightIndex]);
-		float dist = length(light.position - origin) - light.radius;
-		if (dist <= 0) {
-			ray.color += light.color*light.intensity;
-			ray.distance = 0;
-		} else if ((dist < ray.distance || ray.distance == 0) && light.radius > 0.0) {
-			vec3 oc = origin - light.position;
-			if (dot(normalize(oc), direction) < 0) {
-				float a = dot(direction, direction);
-				float b = 2.0 * dot(oc, direction);
-				float c = dot(oc,oc) - light.radius*light.radius;
-				float discriminent = b*b - 4*a*c;
-				dist = (-b - sqrt(discriminent)) / (2.0*a);
-				if ((dist < ray.distance || ray.distance == 0) && discriminent >= 0) {
-					float d = discriminent / light.radius*light.radius*4.0;
-					ray.color += mix(vec3(0), light.color*pow(light.intensity, 0.5/light.radius), d);
-					ray.distance = dist;
+	#ifdef RENDER_LIGHT_SPHERES_MANUALLY_IN_RGEN
+		// Manual ray-intersection for light spheres
+		for (int activeLightIndex = 0; activeLightIndex < activeLights; activeLightIndex++) {
+			LightSource light = GetLight(lightIndices[activeLightIndex]);
+			float dist = length(light.position - origin) - light.radius;
+			if (dist <= 0) {
+				ray.color += light.color*light.intensity;
+				ray.distance = 0;
+			} else if ((dist < ray.distance || ray.distance == 0) && light.radius > 0.0) {
+				vec3 oc = origin - light.position;
+				if (dot(normalize(oc), direction) < 0) {
+					float a = dot(direction, direction);
+					float b = 2.0 * dot(oc, direction);
+					float c = dot(oc,oc) - light.radius*light.radius;
+					float discriminent = b*b - 4*a*c;
+					dist = (-b - sqrt(discriminent)) / (2.0*a);
+					if ((dist < ray.distance || ray.distance == 0) && discriminent >= 0) {
+						float d = discriminent / light.radius*light.radius*4.0;
+						ray.color += mix(vec3(0), light.color*pow(light.intensity, 0.5/light.radius), d);
+						ray.distance = dist;
+					}
 				}
 			}
 		}
-	}
+	#endif
 	
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
 	
@@ -509,6 +525,22 @@ void main() {
 	vec3 color = ApplyStandardShading(hitPoint, sphereGeomAttr.color.rgb, normal, /*roughness*/0.5, /*metallic*/0.0);
 	
 	ray.color = color;
+	ray.distance = gl_HitTNV;
+}
+
+
+#############################################################
+#shader light.rchit
+
+hitAttributeNV ProceduralGeometry sphereGeomAttr;
+
+void main() {
+	LightSource light = GetLight(sphereGeomAttr.material);
+	if (sphereGeomAttr.color.a > 0) {
+		ray.color = sphereGeomAttr.color.rgb * sphereGeomAttr.color.a * light.intensity/gl_HitTNV/gl_HitTNV;
+	} else {
+		ray.color = light.color * light.intensity/gl_HitTNV;
+	}
 	ray.distance = gl_HitTNV;
 }
 
