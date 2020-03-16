@@ -17,7 +17,8 @@ using namespace v4d::graphics;
 static std::vector<std::string> v4dModules {
 	"incubator_simplemovearound",
 	// "incubator_galaxy4d",
-	"test1",
+	// "test1",
+	"test_planets_rtx",
 };
 
 #if defined(_DEBUG) && defined(_LINUX)
@@ -34,6 +35,7 @@ static std::vector<std::string> v4dModules {
 		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
 		{"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
 		{"incubator_rendering/assets/shaders/rtx.meta", 0},
+		{"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
 	};
 #endif
 
