@@ -148,14 +148,10 @@ public:
 	// // after selecting rendering device and queues
 	// void Info() override {}
 	void CreateResources() {
-		for (auto* planetTerrain : planetTerrains) {
-			planetTerrain->CreateMaps(renderingDevice);
-		}
+		
 	}
 	void DestroyResources() override {
-		for (auto* planetTerrain : planetTerrains) {
-			planetTerrain->DestroyMaps(renderingDevice);
-		}
+		
 	}
 	// void AllocateBuffers() override {}
 	
