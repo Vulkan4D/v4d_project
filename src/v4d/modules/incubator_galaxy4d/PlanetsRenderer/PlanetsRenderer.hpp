@@ -34,7 +34,7 @@ public:
 	// // Executed when calling InitRenderer() on the main Renderer
 	// void Init() override {}
 	
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images) override {
+	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
 		// auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		auto* atmosphereDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		
@@ -42,7 +42,7 @@ public:
 		// planetTerrainPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
 		planetTerrainPipelineLayout.AddPushConstant<PlanetTerrainShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
-		atmosphereDescriptorSet_1->AddBinding_inputAttachment(0, &images["gBuffer_position"]->view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		atmosphereDescriptorSet_1->AddBinding_inputAttachment(0, images["gBuffer_position"], VK_SHADER_STAGE_FRAGMENT_BIT);
 		planetAtmospherePipelineLayout.AddDescriptorSet(descriptorSets[0]);
 		planetAtmospherePipelineLayout.AddDescriptorSet(atmosphereDescriptorSet_1);
 		planetAtmospherePipelineLayout.AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);

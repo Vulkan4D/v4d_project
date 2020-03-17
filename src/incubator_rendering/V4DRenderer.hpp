@@ -474,8 +474,8 @@ private: // Init
 		
 		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
-		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage().view, VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_RAYGEN_BIT_NV);
+		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
@@ -492,7 +492,7 @@ private: // Init
 		auto* postProcessingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(0, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-		postProcessingDescriptorSet_1->AddBinding_inputAttachment(2, &renderTargetGroup.GetPpImage().view, VK_SHADER_STAGE_FRAGMENT_BIT);
+		postProcessingDescriptorSet_1->AddBinding_inputAttachment(2, &renderTargetGroup.GetPpImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(3, &renderTargetGroup.GetHistoryImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingDescriptorSet_1->AddBinding_combinedImageSampler(4, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		postProcessingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
@@ -503,13 +503,13 @@ private: // Init
 		
 		// Compute
 		auto* histogramComputeDescriptorSet_0 = descriptorSets.emplace_back(new DescriptorSet(0));
-		histogramComputeDescriptorSet_0->AddBinding_imageView(0, &thumbnailImage.view, VK_SHADER_STAGE_COMPUTE_BIT);
+		histogramComputeDescriptorSet_0->AddBinding_imageView(0, &thumbnailImage, VK_SHADER_STAGE_COMPUTE_BIT);
 		histogramComputeDescriptorSet_0->AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
 		histogramComputeLayout.AddDescriptorSet(histogramComputeDescriptorSet_0);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->InitLayouts(descriptorSets, images);
+			submodule->InitLayouts(descriptorSets, images, &rayTracingPipelineLayout);
 		}
 	}
 	

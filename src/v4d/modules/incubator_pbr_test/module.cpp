@@ -101,7 +101,7 @@ struct PbrRenderer : v4d::modules::Rendering {
 		indexBuffer.AddSrcDataPtr(indices.data(), indices.size() * sizeof(uint32_t));
 	}
 	
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images) override {
+	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
 		pipelineLayout.AddDescriptorSet(descriptorSets[0]);
 	}
 	
