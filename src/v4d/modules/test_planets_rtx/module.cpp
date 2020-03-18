@@ -28,7 +28,7 @@ struct MapGenPushConstant {
 	int planetIndex;
 } mapGenPushConstant;
 
-DescriptorSet *mapsGenDescriptorSet, *mapsSamplerDescriptorSet;
+DescriptorSet *mapsGenDescriptorSet, *mapsSamplerDescriptorSet, *planetsDescriptorSet;
 
 #define MAX_PLANETS 1
 
@@ -37,6 +37,11 @@ Image tectonicsMaps[MAX_PLANETS];
 Image heightMaps[MAX_PLANETS];
 Image volcanoesMaps[MAX_PLANETS];
 Image liquidsMaps[MAX_PLANETS];
+
+struct PlanetBuffer {
+	glm::dmat4 viewToPlanetPosMatrix {1};
+};
+StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuffer)*MAX_PLANETS};
 
 #pragma endregion
 
@@ -54,7 +59,7 @@ struct Planet {
 	
 	CubeMapImage mantleMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}}; // platesDir, mantleHeightFactor, surfaceHeightFactor, hotSpots
 	CubeMapImage tectonicsMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}}; // divergent, convergent, transform, density
-	CubeMapImage heightMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R16_SFLOAT}}; // variation from surface radius, in meters, rounded (range -32k, +32k)
+	CubeMapImage heightMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32_SFLOAT}}; // variation from surface radius, in meters, rounded (range -32k, +32k)
 	CubeMapImage volcanoesMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_UNORM}}; // volcanoesMap
 	CubeMapImage liquidsMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_UNORM}}; // liquidMap
 	
@@ -69,7 +74,7 @@ struct Planet {
 		// max image width : 12566
 		mantleMap.Create(device, mapSize/16); // max 785 px = 57 MB
 		tectonicsMap.Create(device, mapSize/8); // max 1570 px = 226 MB
-		heightMap.Create(device, mapSize/2); // max 6283 px = 1807 MB
+		heightMap.Create(device, mapSize/2); // max 6283 px = 3614 MB
 		volcanoesMap.Create(device, mapSize/4); // max 3141 px = 57 MB
 		liquidsMap.Create(device, mapSize/4); // max 3141 px = 57 MB
 		int weatherMapSize = std::max(8, int(mapSize / 100)); // max 125 px = 1.5 MB x4
@@ -98,19 +103,19 @@ struct Planet {
 		
 		/*First Pass*/
 	
-		mantleMapGen.SetGroupCounts(mantleMap.width, mantleMap.width, mantleMap.arrayLayers);
+		mantleMapGen.SetGroupCounts(mantleMap.width, mantleMap.height, mantleMap.arrayLayers);
 		mantleMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 		
-		tectonicsMapGen.SetGroupCounts(tectonicsMap.width, tectonicsMap.width, tectonicsMap.arrayLayers);
+		tectonicsMapGen.SetGroupCounts(tectonicsMap.width, tectonicsMap.height, tectonicsMap.arrayLayers);
 		tectonicsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 		
-		heightMapGen.SetGroupCounts(heightMap.width, heightMap.width, heightMap.arrayLayers);
+		heightMapGen.SetGroupCounts(heightMap.width, heightMap.height, heightMap.arrayLayers);
 		heightMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 		
-		volcanoesMapGen.SetGroupCounts(volcanoesMap.width, volcanoesMap.width, volcanoesMap.arrayLayers);
+		volcanoesMapGen.SetGroupCounts(volcanoesMap.width, volcanoesMap.height, volcanoesMap.arrayLayers);
 		volcanoesMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 		
-		liquidsMapGen.SetGroupCounts(liquidsMap.width, liquidsMap.width, liquidsMap.arrayLayers);
+		liquidsMapGen.SetGroupCounts(liquidsMap.width, liquidsMap.height, liquidsMap.arrayLayers);
 		liquidsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 		
 		// Need pipeline barrier before other passes
@@ -135,11 +140,13 @@ public:
 	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>&, PipelineLayout* rayTracingPipelineLayout) override {
 		
 		mapsGenDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(1));
-		mapsSamplerDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(2));
+		planetsDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(2));
+		mapsSamplerDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(3));
 		planetsMapGen.AddDescriptorSet(descriptorSets[0]);
 		planetsMapGen.AddDescriptorSet(mapsGenDescriptorSet);
 		planetsMapGen.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 		rayTracingPipelineLayout->AddDescriptorSet(mapsSamplerDescriptorSet);
+		rayTracingPipelineLayout->AddDescriptorSet(planetsDescriptorSet);
 		
 		mapsGenDescriptorSet->AddBinding_imageView_array(0, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		mapsGenDescriptorSet->AddBinding_imageView_array(1, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
@@ -153,6 +160,7 @@ public:
 		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(3, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(4, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		
+		planetsDescriptorSet->AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 	}
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
 		Geometry::rayTracingShaderOffsets["planet"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.rchit", "", "modules/test_planets_rtx/assets/shaders/planets.rint");
@@ -171,11 +179,11 @@ public:
 		
 		planet.CreateMaps(renderingDevice);
 		
-		renderer->TransitionImageLayout(planet.mantleMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, planet.mantleMap.arrayLayers);
-		renderer->TransitionImageLayout(planet.tectonicsMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, planet.tectonicsMap.arrayLayers);
-		renderer->TransitionImageLayout(planet.heightMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, planet.heightMap.arrayLayers);
-		renderer->TransitionImageLayout(planet.volcanoesMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, planet.volcanoesMap.arrayLayers);
-		renderer->TransitionImageLayout(planet.liquidsMap.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 1, planet.liquidsMap.arrayLayers);
+		renderer->TransitionImageLayout(planet.mantleMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		renderer->TransitionImageLayout(planet.tectonicsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		renderer->TransitionImageLayout(planet.heightMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		renderer->TransitionImageLayout(planet.volcanoesMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		renderer->TransitionImageLayout(planet.liquidsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// Set Maps
 		mantleMaps[0] = planet.mantleMap;
@@ -189,10 +197,10 @@ public:
 		planet.DestroyMaps(renderingDevice);
 	}
 	void AllocateBuffers() override {
-		
+		planetsBuffer.Allocate(renderingDevice);
 	}
 	void FreeBuffers() override {
-		
+		planetsBuffer.Free(renderingDevice);
 	}
 	void CreatePipelines(std::unordered_map<std::string, Image*>&) override {
 		planetsMapGen.Create(renderingDevice);
@@ -218,24 +226,36 @@ public:
 		
 		// Light source
 		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(20, 100000000);
+			obj->SetSphereLightSource(20, 1e15f);
 		}, {10,-1000,300});
 		
 		// Planet
 		scene.objectInstances.emplace_back(new ObjectInstance("planet"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereGeometry(200, {1,0,0, 1}, 0/*planet index*/);
-		}, {0,400,0});
+			obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
+		}, {0,planet.solidRadius*2,0});
 		
 	}
 
 	// Frame Update
-	void FrameUpdate(Scene&) override {
-		
+	void FrameUpdate(Scene& scene) override {
+		// for each planet
+			int planetIndex = 0;
+			auto* planetBuffer = &((PlanetBuffer*)(planetsBuffer.stagingBuffer.data))[planetIndex];
+			planetBuffer->viewToPlanetPosMatrix = glm::inverse(scene.camera.viewMatrix * scene.objectInstances[1]->GetWorldTransform());
+			scene.objectInstances[1]->SetObjectCustomData(glm::normalize(glm::transpose(glm::inverse(glm::dmat3(scene.objectInstances[1]->GetWorldTransform()))) * glm::dvec3(0,1,0)));
+		//
+		auto cmdBuffer = renderer->BeginSingleTimeCommands(*graphicsQueue);
+		planetsBuffer.Update(renderingDevice, cmdBuffer);
+		renderer->EndSingleTimeCommands(*graphicsQueue, cmdBuffer);
 	}
 	void LowPriorityFrameUpdate() override {
 		
 	}
 	
+	// Render frame
+	void RunDynamicGraphicsTop(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>&) {
+		
+	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		if (!planet.mapsGenerated) {
 			// renderer->UpdateDescriptorSet(mapsGenDescriptorSet, {0,1,2,3,4});
