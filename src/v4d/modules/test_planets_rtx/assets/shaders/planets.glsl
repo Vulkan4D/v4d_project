@@ -85,7 +85,7 @@ void main() {
 }
 
 #############################################################
-#shader rint
+#shader raymarching.rint
 
 #include "rtx_base.glsl"
 hitAttributeNV ProceduralGeometry geom;
@@ -147,7 +147,7 @@ void main() {
 }
 
 #############################################################
-#shader rchit
+#shader raymarching.rchit
 
 #include "rtx_base.glsl"
 hitAttributeNV ProceduralGeometry geom;
@@ -208,6 +208,33 @@ void main() {
 	// if (gl_HitTNV < 1.0) color = vec4(1,0,0,1);
 	
 	ray.color = color.rgb;
+	ray.distance = gl_HitTNV;
+}
+
+
+#############################################################
+#shader terrain.rchit
+
+#include "rtx_base.glsl"
+hitAttributeNV vec3 hitAttribs;
+layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 2) rayPayloadNV bool shadowed;
+#include "rtx_pbr.glsl"
+#include "rtx_fragment.glsl"
+
+// #include "incubator_rendering/assets/shaders/_noise.glsl"
+// #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+
+// layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
+// layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
+// layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
+// layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
+// layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
+
+void main() {
+	Fragment fragment = GetHitFragment(true);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
+	ray.color = color;
 	ray.distance = gl_HitTNV;
 }
 

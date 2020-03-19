@@ -9,6 +9,8 @@
 // V4D Core Header
 #include <v4d.h>
 
+#include "PlanetsRenderer/PlanetTerrain.hpp"
+
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
 
@@ -47,7 +49,7 @@ StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuf
 
 struct Planet {
 	double solidRadius = 8000000;
-	double atmosphereRadius = 0;
+	double atmosphereRadius = 8400000;
 	
 	#pragma region cache
 	
@@ -128,6 +130,8 @@ struct Planet {
 	
 } planet;
 
+PlanetTerrain terrain {planet.atmosphereRadius, planet.solidRadius, 20000, {0,planet.solidRadius*2,0}};
+
 class Rendering : public v4d::modules::Rendering {
 public:
 	Rendering() {}
@@ -163,7 +167,8 @@ public:
 		planetsDescriptorSet->AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 	}
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
-		Geometry::rayTracingShaderOffsets["planet"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.rchit", "", "modules/test_planets_rtx/assets/shaders/planets.rint");
+		Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.raymarching.rchit", "", "modules/test_planets_rtx/assets/shaders/planets.raymarching.rint");
+		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.terrain.rchit");
 		
 	}
 	void ReadShaders() override {
@@ -228,28 +233,67 @@ public:
 		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource(20, 1e15f);
 		}, {10,-1000,300});
+				
+						// // Planet
+						// scene.objectInstances.emplace_back(new ObjectInstance("planet_raymarching"))->Configure([](ObjectInstance* obj){
+						// 	obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
+						// }, {0,planet.solidRadius*2,0});
+				
 		
-		// Planet
-		scene.objectInstances.emplace_back(new ObjectInstance("planet"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
-		}, {0,planet.solidRadius*2,0});
 		
 	}
 
 	// Frame Update
 	void FrameUpdate(Scene& scene) override {
-		// for each planet
-			int planetIndex = 0;
-			auto* planetBuffer = &((PlanetBuffer*)(planetsBuffer.stagingBuffer.data))[planetIndex];
-			planetBuffer->viewToPlanetPosMatrix = glm::inverse(scene.camera.viewMatrix * scene.objectInstances[1]->GetWorldTransform());
-			scene.objectInstances[1]->SetObjectCustomData(glm::normalize(glm::transpose(glm::inverse(glm::dmat3(scene.objectInstances[1]->GetWorldTransform()))) * glm::dvec3(0,1,0)));
-		//
-		auto cmdBuffer = renderer->BeginSingleTimeCommands(*graphicsQueue);
-		planetsBuffer.Update(renderingDevice, cmdBuffer);
-		renderer->EndSingleTimeCommands(*graphicsQueue, cmdBuffer);
+		
+						// // for each planet
+						// 	int planetIndex = 0;
+						// 	auto* planetBuffer = &((PlanetBuffer*)(planetsBuffer.stagingBuffer.data))[planetIndex];
+						// 	planetBuffer->viewToPlanetPosMatrix = glm::inverse(scene.camera.viewMatrix * scene.objectInstances[1]->GetWorldTransform());
+						// //
+						// auto cmdBuffer = renderer->BeginSingleTimeCommands(*graphicsQueue);
+						// planetsBuffer.Update(renderingDevice, cmdBuffer);
+						// renderer->EndSingleTimeCommands(*graphicsQueue, cmdBuffer);
+				
+		
+		
+		// // Planets
+		// for (auto* planetaryTerrain : planetTerrains) {
+		// 	std::lock_guard lock(planetaryTerrain->chunksMutex);
+			
+		// 	// //TODO Planet rotation
+		// 	// static v4d::Timer time(true);
+		// 	// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/1000000000;
+		// 	// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/30;
+		// 	// planetaryTerrain->rotationAngle += 0.0001;
+		// 	// planetaryTerrain->RefreshMatrix();
+			
+		// 	// Camera position relative to planet
+		// 	planetaryTerrain->cameraPos = glm::inverse(planetaryTerrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
+		// 	planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos), 0.5);
+			
+		// 	for (auto* chunk : planetaryTerrain->chunks) {
+		// 		chunk->BeforeRender(renderingDevice, transferQueue);
+		// 	}
+			
+		// 	if (planetaryTerrain->atmosphere) {
+		// 		if (!planetaryTerrain->atmosphere->allocated) {
+		// 			auto cmdBuffer = renderingDevice->BeginSingleTimeCommands(*transferQueue);
+		// 			planetaryTerrain->atmosphere->Allocate(renderingDevice, cmdBuffer);
+		// 			renderingDevice->EndSingleTimeCommands(*transferQueue, cmdBuffer);
+		// 		}
+		// 	}
+		// }
 	}
 	void LowPriorityFrameUpdate() override {
-		
+		// for (auto* planetaryTerrain : planetTerrains) {
+		// 	std::lock_guard lock(planetaryTerrain->chunksMutex);
+		// 	for (auto* chunk : planetaryTerrain->chunks) {
+		// 		chunk->Process(renderingDevice, transferQueue);
+		// 	}
+		// 	planetaryTerrain->Optimize();
+		// }
+		// PlanetTerrain::CollectGarbage(renderingDevice);
 	}
 	
 	// Render frame
@@ -257,11 +301,11 @@ public:
 		
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
-		if (!planet.mapsGenerated) {
-			// renderer->UpdateDescriptorSet(mapsGenDescriptorSet, {0,1,2,3,4});
-			// renderer->UpdateDescriptorSet(mapsSamplerDescriptorSet, {0,1,2,3,4});
-			planet.GenerateMaps(renderingDevice, commandBuffer);
-		}
+		// if (!planet.mapsGenerated) {
+		// 	// renderer->UpdateDescriptorSet(mapsGenDescriptorSet, {0,1,2,3,4});
+		// 	// renderer->UpdateDescriptorSet(mapsSamplerDescriptorSet, {0,1,2,3,4});
+		// 	planet.GenerateMaps(renderingDevice, commandBuffer);
+		// }
 	}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer) override {
 		
