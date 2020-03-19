@@ -484,6 +484,7 @@ private: // Init
 	void Init() override {
 		// Ray Tracing
 		RequiredDeviceExtension(VK_NV_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
+		// RequiredDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME);
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
 		
 		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
