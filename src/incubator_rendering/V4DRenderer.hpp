@@ -6,7 +6,7 @@
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
 
-const uint32_t MAX_RAY_TRACING_GEOMETRIES = 100000;
+const uint32_t RAY_TRACING_TLAS_INITIAL_INSTANCES = 100000;
 const uint32_t MAX_ACTIVE_LIGHTS = 256;
 
 class V4DRenderer : public v4d::graphics::Renderer {
@@ -48,23 +48,126 @@ private:
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		uint64_t handle = 0;
 		VkAccelerationStructureCreateInfoNV createInfo {};
+		
+		bool allowUpdate = false;
+		Buffer scratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
+		bool scratchBufferAllocated = false;
+		bool built = false;
+		
+		VkDeviceSize GetMemoryRequirementsForScratchBuffer(Device* device) const {
+			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
+			VkMemoryRequirements2 memoryRequirementsBuild {};
+			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
+			memoryRequirementsInfo.accelerationStructure = accelerationStructure;
+			device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBuild);
+			if (allowUpdate) {
+				VkMemoryRequirements2 memoryRequirementsUpdate {};
+				memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV;
+				device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsUpdate);
+				return std::max(memoryRequirementsBuild.memoryRequirements.size, memoryRequirementsUpdate.memoryRequirements.size);
+			} else {
+				return memoryRequirementsBuild.memoryRequirements.size;
+			}
+		}
 	};
 
 	struct BottomLevelAccelerationStructure : public AccelerationStructure {
 		std::vector<VkGeometryNV> rayTracingGeometries {};
+		int nbGeometries = 0;
 		
-		bool built = false;
-		
-		void Build(Device* device, Queue& queue, const std::vector<Geometry*>& geometries) {
+		void Build(Device* device, Queue& queue, const std::vector<Geometry*>& geometries, bool dynamicMesh = false) {
 			
 			rayTracingGeometries.clear();
 			rayTracingGeometries.reserve(geometries.size());
 			for (auto* geometry : geometries) if (geometry->active) {
 				rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
 			}
+			if (accelerationStructure != VK_NULL_HANDLE && nbGeometries != rayTracingGeometries.size()) {
+				Destroy(device);
+			}
+			nbGeometries = rayTracingGeometries.size();
 			
 			if (accelerationStructure == VK_NULL_HANDLE) Create(device);
 			
+			// Scratch buffer
+			if (!scratchBufferAllocated) {
+				scratchBuffer.size = GetMemoryRequirementsForScratchBuffer(device);
+				scratchBuffer.Allocate(device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+				scratchBufferAllocated = true;
+			}
+			
+			// Build bottom level acceleration structure
+			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
+				
+				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
+				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV;
+				if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
+				accelerationStructBuildInfo.geometryCount = (uint)rayTracingGeometries.size();
+				accelerationStructBuildInfo.pGeometries = rayTracingGeometries.data();
+				accelerationStructBuildInfo.instanceCount = 0;
+				
+				device->CmdBuildAccelerationStructureNV(
+					cmdBuffer, 
+					&accelerationStructBuildInfo, 
+					VK_NULL_HANDLE, 
+					0, 
+					(allowUpdate && built && dynamicMesh)? VK_TRUE : VK_FALSE, 
+					accelerationStructure, 
+					accelerationStructure, 
+					scratchBuffer.buffer, 
+					0
+				);
+				
+				// VkMemoryBarrier memoryBarrier {
+				// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				// 	nullptr,// pNext
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
+				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
+				// };
+				// device->CmdPipelineBarrier(
+				// 	cmdBuffer, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
+				// 	0, 
+				// 	1, &memoryBarrier, 
+				// 	0, 0, 
+				// 	0, 0
+				// );
+			
+			device->EndSingleTimeCommands(queue, cmdBuffer);
+			
+			if (!dynamicMesh) {
+				scratchBuffer.Free(device);
+				scratchBufferAllocated = false;
+			}
+			
+			built = true;
+		}
+		
+		void Create(Device* device) {
+			uint32_t flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV;
+			if (allowUpdate) flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
+			createInfo = {
+				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
+				nullptr,// pNext
+				0,// VkDeviceSize compactedSize
+				{// VkAccelerationStructureInfoNV info
+					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
+					nullptr,// pNext
+					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
+					flags, // VkBuildAccelerationStructureFlagBitsNV flags
+					0,// instanceCount
+					(uint)rayTracingGeometries.size(),// geometryCount
+					rayTracingGeometries.data()// VkGeometryNV pGeometries
+				}
+			};
+			
+			if (device->CreateAccelerationStructureNV(&createInfo, nullptr, &accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create bottom level acceleration structure");
+				
 			// Allocate and bind memory for bottom level acceleration structure
 			VkMemoryRequirements2 memoryRequirementsBlasObject {};
 			{
@@ -98,35 +201,90 @@ private:
 			if (device->GetAccelerationStructureHandleNV(accelerationStructure, sizeof(uint64_t), &handle))
 				throw std::runtime_error("Failed to get bottom level acceleration structure handle");
 				
-			// Scratch buffer
-			VkMemoryRequirements2 memoryRequirementsBlasScratchBuffer {};
-			{
-				VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
-				memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-				memoryRequirementsInfo.type = built? VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV : VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-				memoryRequirementsInfo.accelerationStructure = accelerationStructure;
-				device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsBlasScratchBuffer);
+		}
+		
+		void Destroy(Device* device) {
+			if (memory) device->FreeMemory(memory, nullptr);
+			if (accelerationStructure) device->DestroyAccelerationStructureNV(accelerationStructure, nullptr);
+			accelerationStructure = VK_NULL_HANDLE;
+			built = false;
+			if (scratchBufferAllocated) {
+				scratchBuffer.Free(device);
+				scratchBufferAllocated = false;
 			}
-			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, memoryRequirementsBlasScratchBuffer.memoryRequirements.size);
-			scratchBuffer.Allocate(device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		}
+		
+	};
+
+	struct RayTracingGeometryInstance {
+		glm::mat3x4 transform;
+		uint32_t instanceId : 24;
+		uint32_t mask : 8;
+		uint32_t instanceOffset : 24;
+		uint32_t flags : 8; // VkGeometryInstanceFlagBitsNV
+		uint64_t accelerationStructureHandle;
+	};
+
+	struct TopLevelAccelerationStructure : public AccelerationStructure {
+		std::vector<RayTracingGeometryInstance> instances {};
+		
+		StagedBuffer instanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
+		bool instanceBufferAllocated = false;
+		uint32_t nbInstances = 0;
+		uint32_t maxInstances = RAY_TRACING_TLAS_INITIAL_INSTANCES;
+		
+		bool handleDirty = false; // to know when to update the descriptor set
+		
+		void Build(Device* device, Queue& queue, bool update = false) {
+			if (instances.size() == 0) return;
 			
-			// Build bottom level acceleration structure
+			if (instances.size() > maxInstances) {
+				LOG_WARN("Max Instances reached, recreating TLAS")
+				maxInstances = instances.size();
+				Destroy(device);
+				Create(device);
+				handleDirty = true;
+			}
+			
+			// Scratch buffer
+			if (!scratchBufferAllocated) {
+				scratchBuffer.size = GetMemoryRequirementsForScratchBuffer(device);
+				scratchBuffer.Allocate(device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+				scratchBufferAllocated = true;
+			}
+			
+			// Instance buffer
+			if (instanceBufferAllocated && nbInstances != instances.size()) {
+				instanceBuffer.Free(device);
+				instanceBufferAllocated = false;
+				built = false;
+			}
+			nbInstances = instances.size();
+			instanceBuffer.ResetSrcData();
+			instanceBuffer.AddSrcDataPtr(&instances);
+			if (!instanceBufferAllocated) {
+				instanceBuffer.Allocate(device);
+				instanceBufferAllocated = true;
+			}
+			
 			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
+				instanceBuffer.Update(device, cmdBuffer);
 				
 				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
 				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
-				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV;
-				accelerationStructBuildInfo.geometryCount = (uint)rayTracingGeometries.size();
-				accelerationStructBuildInfo.pGeometries = rayTracingGeometries.data();
-				accelerationStructBuildInfo.instanceCount = 0;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV;
+				if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
+				accelerationStructBuildInfo.geometryCount = 0;
+				accelerationStructBuildInfo.pGeometries = nullptr;
+				accelerationStructBuildInfo.instanceCount = nbInstances;
 				
 				device->CmdBuildAccelerationStructureNV(
 					cmdBuffer, 
 					&accelerationStructBuildInfo, 
-					VK_NULL_HANDLE, 
+					instanceBuffer.deviceLocalBuffer.buffer, 
 					0, 
-					built? VK_TRUE : VK_FALSE, 
+					(allowUpdate && update && built)? VK_TRUE : VK_FALSE, 
 					accelerationStructure, 
 					accelerationStructure, 
 					scratchBuffer.buffer, 
@@ -150,122 +308,80 @@ private:
 				// );
 			
 			device->EndSingleTimeCommands(queue, cmdBuffer);
-			scratchBuffer.Free(device);
 			
 			built = true;
 		}
 		
 		void Create(Device* device) {
-			createInfo = {
+			// Create Top Level acceleration structure
+			uint32_t flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV;
+			if (allowUpdate) flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
+			VkAccelerationStructureCreateInfoNV accStructCreateInfo {
 				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
 				nullptr,// pNext
 				0,// VkDeviceSize compactedSize
 				{// VkAccelerationStructureInfoNV info
 					VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
 					nullptr,// pNext
-					VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV,// type
-					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV,// flags
-					0,// instanceCount
-					(uint)rayTracingGeometries.size(),// geometryCount
-					rayTracingGeometries.data()// VkGeometryNV pGeometries
+					VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
+					flags, // VkBuildAccelerationStructureFlagBitsNV flags
+					maxInstances,// instanceCount
+					0,// geometryCount
+					nullptr// VkGeometryNV pGeometries
 				}
 			};
-			
-			if (device->CreateAccelerationStructureNV(&createInfo, nullptr, &accelerationStructure) != VK_SUCCESS)
-				throw std::runtime_error("Failed to create bottom level acceleration structure");
-		}
-		
-		void Destroy(Device* device) {
-			if (memory) device->FreeMemory(memory, nullptr);
-			if (accelerationStructure) device->DestroyAccelerationStructureNV(accelerationStructure, nullptr);
-			rayTracingGeometries.clear();
-			built = false;
-		}
-		
-	};
-
-	struct RayTracingGeometryInstance {
-		glm::mat3x4 transform;
-		uint32_t instanceId : 24;
-		uint32_t mask : 8;
-		uint32_t instanceOffset : 24;
-		uint32_t flags : 8; // VkGeometryInstanceFlagBitsNV
-		uint64_t accelerationStructureHandle;
-	};
-
-	struct TopLevelAccelerationStructure : public AccelerationStructure {
-		std::vector<RayTracingGeometryInstance> instances {};
-		
-		bool built = false;
-		
-		void Build(Device* device, Queue& queue) {
-			// if (instances.size() == 0) return;
-			
-			// Instance buffer
-			StagedBuffer instanceBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV);
-			instanceBuffer.AddSrcDataPtr(&instances);
-			instanceBuffer.Allocate(device);
-			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
-				instanceBuffer.Update(device, cmdBuffer);
-			device->EndSingleTimeCommands(queue, cmdBuffer);
+			if (device->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &accelerationStructure) != VK_SUCCESS)
+				throw std::runtime_error("Failed to create top level acceleration structure");
 			
 			VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
 			memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-			memoryRequirementsInfo.type = built? VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV : VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV;
-			VkMemoryRequirements2 memoryRequirementsTopLevel {};
+			memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
 			memoryRequirementsInfo.accelerationStructure = accelerationStructure;
-			device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirementsTopLevel);
-			// Send scratch buffer
-			Buffer scratchBuffer(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV, memoryRequirementsTopLevel.memoryRequirements.size);
-			scratchBuffer.Allocate(device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-			
-			{
-				auto cmdBuffer = device->BeginSingleTimeCommands(queue);
-					
-					VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
-					accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
-					accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV;
-					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV;
-					accelerationStructBuildInfo.geometryCount = 0;
-					accelerationStructBuildInfo.pGeometries = nullptr;
-					accelerationStructBuildInfo.instanceCount = (uint)instances.size();
-					
-					device->CmdBuildAccelerationStructureNV(
-						cmdBuffer, 
-						&accelerationStructBuildInfo, 
-						instanceBuffer.deviceLocalBuffer.buffer, 
-						0, 
-						built ? VK_TRUE : VK_FALSE, 
-						accelerationStructure, 
-						accelerationStructure, 
-						scratchBuffer.buffer, 
-						0
-					);
-					
-					// VkMemoryBarrier memoryBarrier {
-					// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-					// 	nullptr,// pNext
-					// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags srcAccessMask
-					// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV,// VkAccessFlags dstAccessMask
-					// };
-					
-					// device->CmdPipelineBarrier(
-					// 	cmdBuffer, 
-					// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV, 
-					// 	0, 
-					// 	1, &memoryBarrier, 
-					// 	0, 0, 
-					// 	0, 0
-					// );
 				
-				device->EndSingleTimeCommands(queue, cmdBuffer);
+			VkMemoryRequirements2 memoryRequirements2 {};
+			device->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
+			
+			VkMemoryAllocateInfo memoryAllocateInfo {
+				VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+				nullptr,// pNext
+				memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
+				device->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
+			};
+			if (device->AllocateMemory(&memoryAllocateInfo, nullptr, &memory) != VK_SUCCESS)
+				throw std::runtime_error("Failed to allocate memory for top level acceleration structure");
+			
+			VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
+				VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
+				nullptr,// pNext
+				accelerationStructure,// accelerationStructure
+				memory,// memory
+				0,// VkDeviceSize memoryOffset
+				0,// uint32_t deviceIndexCount
+				nullptr// const uint32_t* pDeviceIndices
+			};
+			if (device->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
+				throw std::runtime_error("Failed to bind top level acceleration structure memory");
+			
+			if (device->GetAccelerationStructureHandleNV(accelerationStructure, sizeof(uint64_t), &handle))
+				throw std::runtime_error("Failed to get top level acceleration structure handle");
+		}
+		
+		void Destroy(Device* device) {
+			// Acceleration Structures
+			if (accelerationStructure != VK_NULL_HANDLE) {
+				if (memory != VK_NULL_HANDLE) device->FreeMemory(memory, nullptr);
+				device->DestroyAccelerationStructureNV(accelerationStructure, nullptr);
+				accelerationStructure = VK_NULL_HANDLE;
+				built = false;
 			}
-			
-			built = true;
-			
-			scratchBuffer.Free(device);
-			instanceBuffer.Free(device);
+			if (scratchBufferAllocated) {
+				scratchBuffer.Free(device);
+				scratchBufferAllocated = false;
+			}
+			if (instanceBufferAllocated) {
+				instanceBuffer.Free(device);
+				instanceBufferAllocated = false;
+			}
 		}
 	};
 
@@ -337,72 +453,16 @@ private: // Ray tracing stuff
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
 	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_NV};
 	VkPhysicalDeviceRayTracingPropertiesNV rayTracingProperties{};
+	DescriptorSet* rayTracingDescriptorSet_1 = nullptr;
 	
 	void CreateRayTracingAccelerationStructures() {
-		// Create Top Level acceleration structure
-		VkAccelerationStructureCreateInfoNV accStructCreateInfo {
-			VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV,
-			nullptr,// pNext
-			0,// VkDeviceSize compactedSize
-			{// VkAccelerationStructureInfoNV info
-				VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV,
-				nullptr,// pNext
-				VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV,// type
-				VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_NV | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-				std::min(MAX_RAY_TRACING_GEOMETRIES, (uint32_t)rayTracingProperties.maxInstanceCount),// instanceCount
-				0,// geometryCount
-				nullptr// VkGeometryNV pGeometries
-			}
-		};
-		if (renderingDevice->CreateAccelerationStructureNV(&accStructCreateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.accelerationStructure) != VK_SUCCESS)
-			throw std::runtime_error("Failed to create top level acceleration structure");
-		
-		VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo {};
-		memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
-		memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
-		memoryRequirementsInfo.accelerationStructure = rayTracingTopLevelAccelerationStructure.accelerationStructure;
-			
-		VkMemoryRequirements2 memoryRequirements2 {};
-		renderingDevice->GetAccelerationStructureMemoryRequirementsNV(&memoryRequirementsInfo, &memoryRequirements2);
-		
-		VkMemoryAllocateInfo memoryAllocateInfo {
-			VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-			nullptr,// pNext
-			memoryRequirements2.memoryRequirements.size,// VkDeviceSize allocationSize
-			renderingDevice->GetPhysicalDevice()->FindMemoryType(memoryRequirements2.memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)// memoryTypeIndex
-		};
-		if (renderingDevice->AllocateMemory(&memoryAllocateInfo, nullptr, &rayTracingTopLevelAccelerationStructure.memory) != VK_SUCCESS)
-			throw std::runtime_error("Failed to allocate memory for top level acceleration structure");
-		
-		VkBindAccelerationStructureMemoryInfoNV accelerationStructureMemoryInfo {
-			VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV,
-			nullptr,// pNext
-			rayTracingTopLevelAccelerationStructure.accelerationStructure,// accelerationStructure
-			rayTracingTopLevelAccelerationStructure.memory,// memory
-			0,// VkDeviceSize memoryOffset
-			0,// uint32_t deviceIndexCount
-			nullptr// const uint32_t* pDeviceIndices
-		};
-		if (renderingDevice->BindAccelerationStructureMemoryNV(1, &accelerationStructureMemoryInfo) != VK_SUCCESS)
-			throw std::runtime_error("Failed to bind top level acceleration structure memory");
-		
-		if (renderingDevice->GetAccelerationStructureHandleNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, sizeof(uint64_t), &rayTracingTopLevelAccelerationStructure.handle))
-			throw std::runtime_error("Failed to get top level acceleration structure handle");
+		rayTracingTopLevelAccelerationStructure.Create(renderingDevice);
 	}
 	
 	void DestroyRayTracingAccelerationStructures() {
-		// Geometry instances
-		for (auto& instance : rayTracingTopLevelAccelerationStructure.instances) {
-			instance.accelerationStructureHandle = VK_NULL_HANDLE;
-		}
-		// Acceleration Structures
-		if (rayTracingTopLevelAccelerationStructure.accelerationStructure != VK_NULL_HANDLE) {
-			renderingDevice->FreeMemory(rayTracingTopLevelAccelerationStructure.memory, nullptr);
-			renderingDevice->DestroyAccelerationStructureNV(rayTracingTopLevelAccelerationStructure.accelerationStructure, nullptr);
-			rayTracingTopLevelAccelerationStructure.accelerationStructure = VK_NULL_HANDLE;
-			rayTracingTopLevelAccelerationStructure.built = false;
-		}
+		rayTracingTopLevelAccelerationStructure.Destroy(renderingDevice);
 	}
+	
 	void CreateRayTracingPipeline() {
 		rayTracingPipelineLayout.Create(renderingDevice);
 		shaderBindingTable.CreateRayTracingPipeline(renderingDevice);
@@ -472,7 +532,7 @@ private: // Init
 		baseDescriptorSet_0->AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		baseDescriptorSet_0->AddBinding_storageBuffer(3, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV | VK_SHADER_STAGE_ANY_HIT_BIT_NV);
 		
-		auto* rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+		rayTracingDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_RAYGEN_BIT_NV);
 		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_RAYGEN_BIT_NV);
@@ -617,9 +677,11 @@ private: // Resources
 	void FreeBuffers() override {
 	
 		// Scene Objects
-		for (auto* obj : scene.objectInstances) {
+		scene.Lock();
+		for (auto* obj : scene.objectInstances) if (obj) {
 			obj->ClearGeometries();
 		}
+		scene.Unlock();
 		
 		// Ray Tracing
 		rayTracingTopLevelAccelerationStructure.instances.clear();
@@ -1047,8 +1109,9 @@ public: // Scene configuration
 			submodule->LoadScene(scene);
 		}
 		
-		rayTracingBottomLevelAccelerationStructures.reserve(scene.objectInstances.size());
-		rayTracingTopLevelAccelerationStructure.instances.reserve(scene.objectInstances.size());
+		auto objCount = scene.GetObjectCount();
+		rayTracingBottomLevelAccelerationStructures.reserve(objCount);
+		rayTracingTopLevelAccelerationStructure.instances.reserve(objCount);
 	}
 	
 	void UnloadScene() override {
@@ -1072,9 +1135,11 @@ public: // Update
 			submodule->FrameUpdate(scene);
 		}
 		
+		scene.Lock();
+		
 		// Update object transforms and light sources (Use all lights for now)
 		nbActiveLights = 0;
-		for (auto* obj : scene.objectInstances) if (obj->IsActive()) {
+		for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
 			obj->WriteMatrices(scene.camera.viewMatrix);
 			for (auto* lightSource : obj->GetLightSources()) {
 				activeLights[nbActiveLights++] = lightSource->lightOffset;
@@ -1092,7 +1157,7 @@ public: // Update
 		// Ray Tracing Acceleration Structure
 		bool accelerationStructureDirty = false;
 		// Add/Remove/Update geometries
-		for (auto* obj : scene.objectInstances) {
+		for (auto* obj : scene.objectInstances) if (obj) {
 			// Geometry
 			if (obj->IsGeometriesDirty()) {
 				if (obj->IsActive()) obj->GenerateGeometries();
@@ -1130,7 +1195,7 @@ public: // Update
 						// Swap element position with last element, then erase last instance element
 						int lastIndex = rayTracingTopLevelAccelerationStructure.instances.size() - 1;
 						if (currIndex != lastIndex) {
-							auto lastObj = std::find_if(scene.objectInstances.begin(), scene.objectInstances.end(), [lastIndex](auto* o){return o->GetRayTracingInstanceIndex() == lastIndex;});
+							auto lastObj = std::find_if(scene.objectInstances.begin(), scene.objectInstances.end(), [lastIndex](auto* o){return o && o->GetRayTracingInstanceIndex() == lastIndex;});
 							if (lastObj != scene.objectInstances.end()) {
 								(*lastObj)->SetRayTracingInstanceIndex(currIndex);
 							}
@@ -1144,14 +1209,20 @@ public: // Update
 			}
 		}
 		// Update object transforms
-		for (auto* obj : scene.objectInstances) if (obj->IsActive()) {
+		for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
 			if (obj->GetRayTracingInstanceIndex() != -1) {
 				rayTracingTopLevelAccelerationStructure.instances[obj->GetRayTracingInstanceIndex()].transform = obj->GetRayTracingModelViewMatrix();
 				accelerationStructureDirty = true;
 			}
 		}
+		
+		scene.Unlock();
+		
 		if (accelerationStructureDirty) {
 			rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
+			// if (rayTracingTopLevelAccelerationStructure.handleDirty) {
+			// 	UpdateDescriptorSet(rayTracingDescriptorSet_1, {0}); //TODO fis this...   "You are adding vkQueueSubmit() to VkCommandBuffer *** that is invalid because bound VkDescriptorSet *** was destroyed or updated."
+			// }
 		}
 	}
 	

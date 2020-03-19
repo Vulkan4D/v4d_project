@@ -236,5 +236,8 @@ void main() {
 	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
 	ray.color = color;
 	ray.distance = gl_HitTNV;
+	
+	// ray.color = vec3(0,1,0);
+	// ray.distance = gl_HitTNV;
 }
 

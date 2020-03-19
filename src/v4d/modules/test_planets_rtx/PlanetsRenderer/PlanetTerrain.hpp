@@ -22,7 +22,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 256; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 32; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
@@ -40,6 +40,7 @@ struct PlanetTerrain {
 	#pragma endregion
 
 	// Camera
+	Scene* scene = nullptr;
 	glm::dvec3 cameraPos {0};
 	double cameraAltitudeAboveTerrain = 0;
 	
@@ -95,10 +96,6 @@ struct PlanetTerrain {
 		#pragma region States
 		std::atomic<bool> active = false;
 		std::atomic<bool> render = false;
-		std::atomic<bool> allocated = false;
-		std::atomic<bool> meshShouldGenerate = false;
-		std::atomic<bool> meshGenerated = false;
-		std::atomic<bool> meshGenerating = false;
 		std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
 		#pragma endregion
@@ -115,6 +112,7 @@ struct PlanetTerrain {
 		}
 		
 		bool ShouldAddSubChunks() {
+			// return false;
 			if (IsLastLevel()) return false;
 			return distanceFromCamera < chunkSubdivisionDistanceFactor*chunkSize;
 		}
@@ -200,7 +198,7 @@ struct PlanetTerrain {
 			}
 			subChunks.clear();
 			
-			if (meshShouldGenerate || render || allocated)
+			if (render || obj)
 				return false;
 			
 			CancelMeshGeneration();
@@ -209,14 +207,16 @@ struct PlanetTerrain {
 		}
 		
 		void CancelMeshGeneration() {
-			meshShouldGenerate = false;
+			// meshShouldGenerate = false;
 		}
 		
 		void Generate() {
 			if (!obj) {
-				obj = new ObjectInstance("planet_terrain");
+				if (!planet->scene) return;
+				obj = planet->scene->AddObjectInstance("planet_terrain");
+				obj->Disable();
 			}
-			if (!geometry) {
+			if (!geometry || obj->CountGeometries() == 0) {
 				geometry = obj->AddGeometry(nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
 			}
 			
@@ -274,15 +274,11 @@ struct PlanetTerrain {
 					}
 					
 					++genCol;
-					
-					if (!meshShouldGenerate) return;
 				}
 				
 				genCol = 0;
 				++genRow;
 			}
-			
-			if (!meshShouldGenerate) return;
 			
 			// Normals
 			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
@@ -432,17 +428,9 @@ struct PlanetTerrain {
 			}
 			
 			std::scoped_lock lock(stateMutex);
-			meshGenerated = true;
+			obj->SetGenerated();
 		}
 		
-		void FreeBuffers() {
-			if (allocated) {
-				// PlanetTerrain::vertexBufferPool.Free(vertexBufferAllocation);
-				// PlanetTerrain::indexBufferPool.Free(indexBufferAllocation);
-				allocated = false;
-			}
-		}
-	
 		void AddSubChunks() {
 			subChunks.reserve(4);
 			
@@ -491,7 +479,10 @@ struct PlanetTerrain {
 			active = false;
 			render = false;
 			CancelMeshGeneration();
-			FreeBuffers();
+			if (obj) {
+				planet->scene->RemoveObjectInstance(obj);
+				obj = nullptr;
+			}
 			if (subChunks.size() > 0) {
 				for (auto* subChunk : subChunks) {
 					subChunk->Remove();
@@ -499,7 +490,7 @@ struct PlanetTerrain {
 			}
 		}
 		
-		void Process(Device* device, Queue* transferQueue) {
+		void Process() {
 			std::scoped_lock lock(stateMutex);
 			
 			// Angle Culling
@@ -518,8 +509,8 @@ struct PlanetTerrain {
 					if (subChunks.size() == 0) AddSubChunks();
 					bool allSubchunksGenerated = true;
 					for (auto* subChunk : subChunks) {
-						subChunk->Process(device, transferQueue);
-						if (subChunk->meshShouldGenerate && !subChunk->meshGenerated) {
+						subChunk->Process();
+						if (!(subChunk->obj && subChunk->obj->IsGenerated())) {
 							allSubchunksGenerated = false;
 						}
 					}
@@ -530,25 +521,16 @@ struct PlanetTerrain {
 					if (ShouldRemoveSubChunks()) {
 						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
-							if (meshGenerated) {
+							if (obj && obj->IsGenerated()) {
 								subChunk->Remove();
 							}
 						}
-						render = true;
 					}
-					if (!allocated) {
+					if (obj && obj->IsGenerated()) {
+						render = true;
+					} else {
 						render = false;
-						meshShouldGenerate = true;
-						if (meshGenerated) {
-							// vertexBufferAllocation = PlanetTerrain::vertexBufferPool.Allocate(device, transferQueue, vertices.data());
-							// indexBufferAllocation = PlanetTerrain::indexBufferPool.Allocate(device, transferQueue, indices.data());
-							allocated = true;
-							render = true;
-						} else {
-							if (!meshGenerating) {
-								Generate();
-							}
-						}
+						Generate();
 					}
 				}
 				
@@ -558,11 +540,18 @@ struct PlanetTerrain {
 			
 		}
 		
-		void BeforeRender(Device* device, Queue* transferQueue) {
+		void BeforeRender() {
 			std::scoped_lock lock(stateMutex, subChunksMutex);
 			RefreshDistanceFromCamera();
+			if (render && obj && obj->IsGenerated()) {
+				obj->Enable();
+				obj->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
+			} else {
+				render = false;
+				if (obj) obj->Disable();
+			}
 			for (auto* subChunk : subChunks) {
-				subChunk->BeforeRender(device, transferQueue);
+				subChunk->BeforeRender();
 			}
 		}
 		
@@ -576,7 +565,7 @@ struct PlanetTerrain {
 		
 	};
 	
-	static v4d::processing::ThreadPoolPriorityQueue<Chunk*>* chunkGenerator;
+	// static v4d::processing::ThreadPoolPriorityQueue<Chunk*>* chunkGenerator;
 
 	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
@@ -670,7 +659,7 @@ struct PlanetTerrain {
 	
 	void Optimize() {
 		// Optimize only when no chunk is being generated, camera moved at least x distance and not more than once every x seconds
-		if ((PlanetTerrain::chunkGenerator && PlanetTerrain::chunkGenerator->Count() > 0) || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
+		if (false/*TODO condition=generatingChunks */ || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
 			return;
 		
 		// reset 

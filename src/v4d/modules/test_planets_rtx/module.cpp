@@ -50,6 +50,7 @@ StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuf
 struct Planet {
 	double solidRadius = 8000000;
 	double atmosphereRadius = 8400000;
+	double heightVariation = 20000;
 	
 	#pragma region cache
 	
@@ -130,7 +131,7 @@ struct Planet {
 	
 } planet;
 
-PlanetTerrain terrain {planet.atmosphereRadius, planet.solidRadius, 20000, {0,planet.solidRadius*2,0}};
+PlanetTerrain terrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.solidRadius*2,0}};
 
 class Rendering : public v4d::modules::Rendering {
 public:
@@ -230,7 +231,7 @@ public:
 	void LoadScene(Scene& scene) {
 		
 		// Light source
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
+		scene.AddObjectInstance("light")->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource(20, 1e15f);
 		}, {10,-1000,300});
 				
@@ -239,7 +240,7 @@ public:
 						// 	obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
 						// }, {0,planet.solidRadius*2,0});
 				
-		
+		terrain.scene = &scene;
 		
 	}
 
@@ -258,41 +259,36 @@ public:
 		
 		
 		// // Planets
-		// for (auto* planetaryTerrain : planetTerrains) {
-		// 	std::lock_guard lock(planetaryTerrain->chunksMutex);
+		// for (auto* terrain : planetTerrains) {
+			std::lock_guard lock(terrain.chunksMutex);
 			
-		// 	// //TODO Planet rotation
-		// 	// static v4d::Timer time(true);
-		// 	// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/1000000000;
-		// 	// // planetaryTerrain->rotationAngle = time.GetElapsedSeconds()/30;
-		// 	// planetaryTerrain->rotationAngle += 0.0001;
-		// 	// planetaryTerrain->RefreshMatrix();
+			// //TODO Planet rotation
+			// static v4d::Timer time(true);
+			// // terrain.rotationAngle = time.GetElapsedSeconds()/1000000000;
+			// // terrain.rotationAngle = time.GetElapsedSeconds()/30;
+			// terrain.rotationAngle += 0.0001;
 			
-		// 	// Camera position relative to planet
-		// 	planetaryTerrain->cameraPos = glm::inverse(planetaryTerrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
-		// 	planetaryTerrain->cameraAltitudeAboveTerrain = glm::length(planetaryTerrain->cameraPos) - planetaryTerrain->GetHeightMap(glm::normalize(planetaryTerrain->cameraPos), 0.5);
+			terrain.RefreshMatrix();
 			
-		// 	for (auto* chunk : planetaryTerrain->chunks) {
-		// 		chunk->BeforeRender(renderingDevice, transferQueue);
-		// 	}
+			// Camera position relative to planet
+			terrain.cameraPos = glm::inverse(terrain.matrix) * glm::dvec4(scene.camera.worldPosition, 1);
+			terrain.cameraAltitudeAboveTerrain = glm::length(terrain.cameraPos) - terrain.GetHeightMap(glm::normalize(terrain.cameraPos), 0.5);
 			
-		// 	if (planetaryTerrain->atmosphere) {
-		// 		if (!planetaryTerrain->atmosphere->allocated) {
-		// 			auto cmdBuffer = renderingDevice->BeginSingleTimeCommands(*transferQueue);
-		// 			planetaryTerrain->atmosphere->Allocate(renderingDevice, cmdBuffer);
-		// 			renderingDevice->EndSingleTimeCommands(*transferQueue, cmdBuffer);
-		// 		}
-		// 	}
+			for (auto* chunk : terrain.chunks) {
+				chunk->Process(); // may run this in another thread
+				chunk->BeforeRender();
+			}
+			
 		// }
 	}
 	void LowPriorityFrameUpdate() override {
-		// for (auto* planetaryTerrain : planetTerrains) {
-		// 	std::lock_guard lock(planetaryTerrain->chunksMutex);
-		// 	for (auto* chunk : planetaryTerrain->chunks) {
-		// 		chunk->Process(renderingDevice, transferQueue);
+		// // for (auto* terrain : planetTerrains) {
+		// 	std::lock_guard lock(terrain.chunksMutex);
+		// 	for (auto* chunk : terrain.chunks) {
+		// 		chunk->Process();
 		// 	}
-		// 	planetaryTerrain->Optimize();
-		// }
+		// 	terrain.Optimize();
+		// // }
 		// PlanetTerrain::CollectGarbage(renderingDevice);
 	}
 	
