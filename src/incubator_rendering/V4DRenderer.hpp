@@ -59,7 +59,7 @@ private:
 			
 			rayTracingGeometries.clear();
 			rayTracingGeometries.reserve(geometries.size());
-			for (auto* geometry : geometries) {
+			for (auto* geometry : geometries) if (geometry->active) {
 				rayTracingGeometries.push_back(geometry->GetRayTracingGeometry());
 			}
 			
@@ -1074,7 +1074,7 @@ public: // Update
 		
 		// Update object transforms and light sources (Use all lights for now)
 		nbActiveLights = 0;
-		for (auto* obj : scene.objectInstances) {
+		for (auto* obj : scene.objectInstances) if (obj->IsActive()) {
 			obj->WriteMatrices(scene.camera.viewMatrix);
 			for (auto* lightSource : obj->GetLightSources()) {
 				activeLights[nbActiveLights++] = lightSource->lightOffset;
@@ -1091,37 +1091,60 @@ public: // Update
 		
 		// Ray Tracing Acceleration Structure
 		bool accelerationStructureDirty = false;
+		// Add/Remove/Update geometries
 		for (auto* obj : scene.objectInstances) {
 			// Geometry
 			if (obj->IsGeometriesDirty()) {
-				BottomLevelAccelerationStructure* blas;
-				if (obj->GetRayTracingBlasIndex() == -1) {
-					obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
-					blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+				if (obj->IsActive()) obj->GenerateGeometries();
+				if (obj->IsActive() && obj->HasActiveGeometries()) {
+					BottomLevelAccelerationStructure* blas;
+					if (obj->GetRayTracingBlasIndex() == -1) {
+						obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
+						blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+					} else {
+						blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
+					}
+					
+					auto cmdBuffer = BeginSingleTimeCommands(transferQueue);
+						obj->PushGeometries(renderingDevice, cmdBuffer);
+					EndSingleTimeCommands(transferQueue, cmdBuffer);
+					
+					blas->Build(renderingDevice, graphicsQueue, obj->GetGeometries());
+					accelerationStructureDirty = true;
+					
+					// Instance
+					if (obj->GetRayTracingInstanceIndex() == -1) {
+						obj->SetRayTracingInstanceIndex(rayTracingTopLevelAccelerationStructure.instances.size());
+						rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingGeometryInstance{
+							obj->GetRayTracingModelViewMatrix(),
+							(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
+							obj->GetRayTracingMask(), //TODO mask
+							Geometry::rayTracingShaderOffsets[obj->GetObjectType()], // instanceOffset
+							VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
+							blas->handle
+						});
+					}
 				} else {
-					blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
-				}
-				
-				auto cmdBuffer = BeginSingleTimeCommands(transferQueue);
-					obj->PushGeometries(renderingDevice, cmdBuffer);
-				EndSingleTimeCommands(transferQueue, cmdBuffer);
-				
-				blas->Build(renderingDevice, graphicsQueue, obj->GetGeometries());
-				accelerationStructureDirty = true;
-				
-				// Instance
-				if (obj->GetRayTracingInstanceIndex() == -1) {
-					obj->SetRayTracingInstanceIndex(rayTracingTopLevelAccelerationStructure.instances.size());
-					rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingGeometryInstance{
-						obj->GetRayTracingModelViewMatrix(),
-						(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexNV
-						obj->GetRayTracingMask(), //TODO mask
-						Geometry::rayTracingShaderOffsets[obj->GetObjectType()], // instanceOffset
-						VK_GEOMETRY_INSTANCE_TRIANGLE_CULL_DISABLE_BIT_NV, // VkGeometryInstanceFlagBitsNV flags
-						blas->handle
-					});
+					// Object is Inactive
+					if (int currIndex = obj->GetRayTracingInstanceIndex(); currIndex != -1) {
+						// Swap element position with last element, then erase last instance element
+						int lastIndex = rayTracingTopLevelAccelerationStructure.instances.size() - 1;
+						if (currIndex != lastIndex) {
+							auto lastObj = std::find_if(scene.objectInstances.begin(), scene.objectInstances.end(), [lastIndex](auto* o){return o->GetRayTracingInstanceIndex() == lastIndex;});
+							if (lastObj != scene.objectInstances.end()) {
+								(*lastObj)->SetRayTracingInstanceIndex(currIndex);
+							}
+							rayTracingTopLevelAccelerationStructure.instances[currIndex] = rayTracingTopLevelAccelerationStructure.instances[lastIndex];
+						}
+						rayTracingTopLevelAccelerationStructure.instances.pop_back();
+						obj->SetRayTracingInstanceIndex(-1);
+						accelerationStructureDirty = true;
+					}
 				}
 			}
+		}
+		// Update object transforms
+		for (auto* obj : scene.objectInstances) if (obj->IsActive()) {
 			if (obj->GetRayTracingInstanceIndex() != -1) {
 				rayTracingTopLevelAccelerationStructure.instances[obj->GetRayTracingInstanceIndex()].transform = obj->GetRayTracingModelViewMatrix();
 				accelerationStructureDirty = true;
