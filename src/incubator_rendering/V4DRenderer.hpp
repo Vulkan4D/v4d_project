@@ -6,7 +6,7 @@
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
 
-const uint32_t RAY_TRACING_TLAS_INITIAL_INSTANCES = 100000;
+const uint32_t RAY_TRACING_TLAS_INITIAL_INSTANCES = 65536;
 const uint32_t MAX_ACTIVE_LIGHTS = 256;
 
 class V4DRenderer : public v4d::graphics::Renderer {
@@ -269,6 +269,8 @@ private:
 			
 			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
 				instanceBuffer.Update(device, cmdBuffer);
+			device->EndSingleTimeCommands(queue, cmdBuffer);
+			cmdBuffer = device->BeginSingleTimeCommands(queue);
 				
 				VkAccelerationStructureInfoNV accelerationStructBuildInfo {};
 				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV;
@@ -1217,12 +1219,13 @@ public: // Update
 			}
 		}
 		
+		scene.CollectGarbage();
 		scene.Unlock();
 		
 		if (accelerationStructureDirty) {
 			rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
 			// if (rayTracingTopLevelAccelerationStructure.handleDirty) {
-			// 	UpdateDescriptorSet(rayTracingDescriptorSet_1, {0}); //TODO fis this...   "You are adding vkQueueSubmit() to VkCommandBuffer *** that is invalid because bound VkDescriptorSet *** was destroyed or updated."
+			// 	UpdateDescriptorSet(rayTracingDescriptorSet_1, {0}); //TODO fix this...   "You are adding vkQueueSubmit() to VkCommandBuffer *** that is invalid because bound VkDescriptorSet *** was destroyed or updated."
 			// }
 		}
 	}

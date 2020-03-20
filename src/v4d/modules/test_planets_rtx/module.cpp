@@ -50,7 +50,7 @@ StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuf
 struct Planet {
 	double solidRadius = 8000000;
 	double atmosphereRadius = 8400000;
-	double heightVariation = 20000;
+	double heightVariation = 10000;
 	
 	#pragma region cache
 	
@@ -228,12 +228,12 @@ public:
 	}
 	
 	// Scene
-	void LoadScene(Scene& scene) {
+	void LoadScene(Scene& scene) override {
 		
 		// Light source
 		scene.AddObjectInstance("light")->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(20, 1e15f);
-		}, {10,-1000,300});
+			obj->SetSphereLightSource(700000000, 1e24f);
+		}, {10,-1.496e+11,300});
 				
 						// // Planet
 						// scene.objectInstances.emplace_back(new ObjectInstance("planet_raymarching"))->Configure([](ObjectInstance* obj){
@@ -242,6 +242,10 @@ public:
 				
 		terrain.scene = &scene;
 		
+	}
+	
+	void UnloadScene(Scene&) override {
+		terrain.scene = nullptr;
 	}
 
 	// Frame Update
@@ -275,7 +279,7 @@ public:
 			terrain.cameraAltitudeAboveTerrain = glm::length(terrain.cameraPos) - terrain.GetHeightMap(glm::normalize(terrain.cameraPos), 0.5);
 			
 			for (auto* chunk : terrain.chunks) {
-				chunk->Process(); // may run this in another thread
+				chunk->Process();
 				chunk->BeforeRender();
 			}
 			
@@ -283,10 +287,10 @@ public:
 	}
 	void LowPriorityFrameUpdate() override {
 		// // for (auto* terrain : planetTerrains) {
-		// 	std::lock_guard lock(terrain.chunksMutex);
-		// 	for (auto* chunk : terrain.chunks) {
-		// 		chunk->Process();
-		// 	}
+			// std::lock_guard lock(terrain.chunksMutex);
+			// for (auto* chunk : terrain.chunks) {
+			// 	chunk->Process();
+			// }
 		// 	terrain.Optimize();
 		// // }
 		// PlanetTerrain::CollectGarbage(renderingDevice);

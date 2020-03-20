@@ -22,7 +22,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 32; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 64; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
@@ -102,7 +102,6 @@ struct PlanetTerrain {
 		
 		#pragma region Data
 		std::vector<Chunk*> subChunks {};
-		std::mutex generatorMutex;
 		ObjectInstance* obj = nullptr;
 		Geometry* geometry = nullptr;
 		#pragma endregion
@@ -177,9 +176,7 @@ struct PlanetTerrain {
 			for (auto* subChunk : subChunks) {
 				delete subChunk;
 			}
-			subChunks.clear();
-			Remove();
-			std::lock_guard lock(generatorMutex);
+			Remove(true);
 		}
 		
 		bool Cleanup() { // bool returns whether to delete the parent as well
@@ -201,13 +198,7 @@ struct PlanetTerrain {
 			if (render || obj)
 				return false;
 			
-			CancelMeshGeneration();
-			std::lock_guard lockGenerator(generatorMutex);
 			return true;
-		}
-		
-		void CancelMeshGeneration() {
-			// meshShouldGenerate = false;
 		}
 		
 		void Generate() {
@@ -474,19 +465,18 @@ struct PlanetTerrain {
 			SortSubChunks();
 		}
 		
-		void Remove() {
+		void Remove(bool recursive) {
 			std::scoped_lock lock(stateMutex, subChunksMutex);
-			active = false;
 			render = false;
-			CancelMeshGeneration();
-			if (obj) {
+			if (obj && planet->scene) {
 				planet->scene->RemoveObjectInstance(obj);
 				obj = nullptr;
 			}
-			if (subChunks.size() > 0) {
+			if (recursive && subChunks.size() > 0) {
 				for (auto* subChunk : subChunks) {
-					subChunk->Remove();
+					subChunk->Remove(true);
 				}
+				subChunks.clear();
 			}
 		}
 		
@@ -507,23 +497,15 @@ struct PlanetTerrain {
 				if (ShouldAddSubChunks()) {
 					std::scoped_lock lock(subChunksMutex);
 					if (subChunks.size() == 0) AddSubChunks();
-					bool allSubchunksGenerated = true;
 					for (auto* subChunk : subChunks) {
 						subChunk->Process();
-						if (!(subChunk->obj && subChunk->obj->IsGenerated())) {
-							allSubchunksGenerated = false;
-						}
 					}
-					if (allSubchunksGenerated) {
-						render = false;
-					}
+					Remove(false);
 				} else {
 					if (ShouldRemoveSubChunks()) {
 						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
-							if (obj && obj->IsGenerated()) {
-								subChunk->Remove();
-							}
+							subChunk->Remove(true);
 						}
 					}
 					if (obj && obj->IsGenerated()) {
@@ -535,7 +517,7 @@ struct PlanetTerrain {
 				}
 				
 			} else {
-				Remove();
+				Remove(true);
 			}
 			
 		}
@@ -572,8 +554,8 @@ struct PlanetTerrain {
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 10)*15000.0;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 8)*4000.0;
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 5)*15000.0;
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 6)*4000.0;
 		if (triangleSize < 200)
 			height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/50.0), 7)*4.0;
 		if (triangleSize < 4)

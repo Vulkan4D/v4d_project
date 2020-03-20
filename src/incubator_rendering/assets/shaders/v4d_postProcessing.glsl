@@ -6,7 +6,7 @@ precision highp sampler2D;
 
 #include "Camera.glsl"
 
-const bool humanEyeExposure = true; // otherwise, use full range
+const bool humanEyeExposure = false; // otherwise, use full range
 
 #common .*frag
 
