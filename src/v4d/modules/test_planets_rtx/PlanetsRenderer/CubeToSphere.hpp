@@ -23,16 +23,6 @@ namespace CubeToSphere {
 				top = glm::dvec3(0, 1, 0);
 				right = glm::dvec3(1, 0, 0);
 				break;
-			case LEFT:
-				dir = glm::dvec3(-1, 0, 0);
-				top = glm::dvec3(0, -1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
-			case BOTTOM:
-				dir = glm::dvec3(0, -1, 0);
-				top = glm::dvec3(0, 0, -1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
 			case BACK:
 				dir = glm::dvec3(0, 0, -1);
 				top = glm::dvec3(0, 1, 0);
@@ -43,9 +33,19 @@ namespace CubeToSphere {
 				top = glm::dvec3(0, 1, 0);
 				right = glm::dvec3(0, 0, -1);
 				break;
+			case LEFT:
+				dir = glm::dvec3(-1, 0, 0);
+				top = glm::dvec3(0, -1, 0);
+				right = glm::dvec3(0, 0, -1);
+				break;
 			case TOP:
 				dir = glm::dvec3(0, 1, 0);
 				top = glm::dvec3(0, 0, 1);
+				right = glm::dvec3(-1, 0, 0);
+				break;
+			case BOTTOM:
+				dir = glm::dvec3(0, -1, 0);
+				top = glm::dvec3(0, 0, -1);
 				right = glm::dvec3(-1, 0, 0);
 				break;
 		}

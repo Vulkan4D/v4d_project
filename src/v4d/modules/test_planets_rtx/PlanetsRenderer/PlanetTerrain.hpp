@@ -96,6 +96,7 @@ struct PlanetTerrain {
 		#pragma region States
 		std::atomic<bool> active = false;
 		std::atomic<bool> render = false;
+		std::atomic<int> computedLevel = 0;
 		std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
 		#pragma endregion
@@ -231,6 +232,8 @@ struct PlanetTerrain {
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					vertex->pos = glm::vec4(posOnChunk, altitude - planet->solidRadius);
 					vertex->SetUV(glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), 0, 0));
+					vertex->normal = glm::normalize(pos);
+					geometry->isDirty = true;
 					genVertexIndex++;
 					
 					// Bounding distance
@@ -268,85 +271,85 @@ struct PlanetTerrain {
 				++genRow;
 			}
 			
-			// Normals
-			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
-				for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
-					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
-					auto* vertex = geometry->GetVertexPtr(currentIndex);
+			// // Normals
+			// for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
+			// 	for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+			// 		uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+			// 		auto* vertex = geometry->GetVertexPtr(currentIndex);
 					
-					glm::vec3 tangentX, tangentY;
+			// 		glm::vec3 tangentX, tangentY;
 					
-					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
-						// For full face (generate top left)
-						uint32_t topLeftIndex = currentIndex;
-						uint32_t topRightIndex = topLeftIndex+1;
-						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
+			// 		if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+			// 			// For full face (generate top left)
+			// 			uint32_t topLeftIndex = currentIndex;
+			// 			uint32_t topRightIndex = topLeftIndex+1;
+			// 			uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						
-						tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
+			// 			tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
+			// 			tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
 						
-					} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
-						// For right-most bottom-most vertex (generate bottom-most right-most)
+			// 		} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
+			// 			// For right-most bottom-most vertex (generate bottom-most right-most)
 						
-						glm::vec3 bottomLeftPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
+			// 			glm::vec3 bottomLeftPos {0};
+			// 			{
+			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+			// 				bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+			// 			}
 
-						glm::vec3 topRightPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
+			// 			glm::vec3 topRightPos {0};
+			// 			{
+			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+			// 				topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+			// 			}
 
-						tangentX = glm::normalize(topRightPos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - bottomLeftPos);
+			// 			tangentX = glm::normalize(topRightPos - vertex->pos);
+			// 			tangentY = glm::normalize(vertex->pos - bottomLeftPos);
 						
-					} else if (genCol == vertexSubdivisionsPerChunk) {
-						// For others in right col (generate top right)
-						uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
+			// 		} else if (genCol == vertexSubdivisionsPerChunk) {
+			// 			// For others in right col (generate top right)
+			// 			uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
 						
-						glm::vec3 topRightPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
+			// 			glm::vec3 topRightPos {0};
+			// 			{
+			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+			// 				topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+			// 			}
 
-						tangentX = glm::normalize(topRightPos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
+			// 			tangentX = glm::normalize(topRightPos - vertex->pos);
+			// 			tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
 						
-					} else if (genRow == vertexSubdivisionsPerChunk) {
-						// For others in bottom row (generate bottom left)
+			// 		} else if (genRow == vertexSubdivisionsPerChunk) {
+			// 			// For others in bottom row (generate bottom left)
 						
-						glm::vec3 bottomLeftPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
+			// 			glm::vec3 bottomLeftPos {0};
+			// 			{
+			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+			// 				bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+			// 			}
 
-						tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
-						tangentY = glm::normalize((vertex->pos - bottomLeftPos));
-					}
+			// 			tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
+			// 			tangentY = glm::normalize((vertex->pos - bottomLeftPos));
+			// 		}
 					
-					tangentX *= (float)rightSign;
-					tangentY *= (float)topSign;
+			// 		tangentX *= (float)rightSign;
+			// 		tangentY *= (float)topSign;
 					
-					glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
+			// 		glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
 					
-					vertex->normal = normal;
+			// 		vertex->normal = normal;
 					
-					// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
-				}
-			}
+			// 		// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
+			// 	}
+			// }
 			
 			// Skirts
 			if (useSkirts) {
@@ -417,6 +420,7 @@ struct PlanetTerrain {
 			
 			std::scoped_lock lock(stateMutex);
 			obj->SetGenerated();
+			computedLevel = 0;
 		}
 		
 		void AddSubChunks() {
@@ -465,6 +469,7 @@ struct PlanetTerrain {
 		void Remove(bool recursive) {
 			std::scoped_lock lock(stateMutex, subChunksMutex);
 			render = false;
+			computedLevel = 0;
 			if (obj && planet->scene) {
 				planet->scene->RemoveObjectInstance(obj);
 				obj = nullptr;
@@ -495,15 +500,21 @@ struct PlanetTerrain {
 				if (ShouldAddSubChunks()) {
 					std::scoped_lock lock(subChunksMutex);
 					if (subChunks.size() == 0) AddSubChunks();
+					bool allSubchunksReady = true;
 					for (auto* subChunk : subChunks) {
 						subChunk->Process();
+						if (!subChunk->obj || !subChunk->obj->IsGenerated() || subChunk->obj->IsGeometriesDirty()) {
+							allSubchunksReady = false;
+						}
 					}
-					Remove(false);
+					if (allSubchunksReady) Remove(false);
 				} else {
 					if (ShouldRemoveSubChunks()) {
-						std::scoped_lock lock(subChunksMutex);
-						for (auto* subChunk : subChunks) {
-							subChunk->Remove(true);
+						if (obj && obj->IsGenerated() && !obj->IsGeometriesDirty()) {
+							std::scoped_lock lock(subChunksMutex);
+							for (auto* subChunk : subChunks) {
+								subChunk->Remove(true);
+							}
 						}
 					}
 					if (obj && obj->IsGenerated()) {
@@ -552,12 +563,12 @@ struct PlanetTerrain {
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = 0;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 5)*15000.0;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 6)*4000.0;
-		if (triangleSize < 200)
-			height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/50.0), 7)*4.0;
-		if (triangleSize < 4)
-			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 5)*15000.0;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 6)*4000.0;
+		// if (triangleSize < 200)
+		// 	height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/50.0), 7)*4.0;
+		// if (triangleSize < 4)
+		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
 		return solidRadius + height;
 	}
 	

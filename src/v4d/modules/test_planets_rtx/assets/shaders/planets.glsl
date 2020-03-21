@@ -1,17 +1,19 @@
-#version 460 core
+#include "core.glsl"
 
 #define MAX_PLANETS 1
 
 layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
 
-float planetHeightVariation = 60000;
+float planetHeightVariation = 40000;
 
 #############################################################
 
-#common .*map.comp
+#common .*comp
 
 #include "incubator_rendering/assets/shaders/_noise.glsl"
 #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+
+#common .*map.comp
 
 layout(set = 1, binding = 0) uniform writeonly imageCube mantleMap[MAX_PLANETS];
 layout(set = 1, binding = 1) uniform writeonly imageCube tectonicsMap[MAX_PLANETS];
@@ -53,6 +55,26 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
+#common terrain.*comp
+
+layout(set = 1, binding = 3) buffer GeometryBuffer {uvec4 geometries[];};
+layout(set = 1, binding = 4) buffer IndexBuffer {uint indices[];};
+layout(set = 1, binding = 5) buffer VertexBuffer {vec4 vertices[];};
+
+// layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
+// layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
+layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
+// layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
+// layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
+
+layout(std430, push_constant) uniform TerrainChunk{
+	int planetIndex;
+	int chunkGeometryOffset;
+	float solidRadius;
+	int vertexSubdivisionsPerChunk;
+	int face;
+	ivec3 chunkPosition;
+};
 
 #############################################################
 
@@ -70,7 +92,7 @@ void main() {
 #shader height.map.comp
 void main() {
 	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
-	float height = FastSimplexFractal(dir*20, 6);
+	float height = FastSimplexFractal(dir*20, 6) / 2 + 0.5;
 	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height*planetHeightVariation));
 }
 
@@ -158,13 +180,13 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 #include "incubator_rendering/assets/shaders/_noise.glsl"
 #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
-uint planetIndex = geom.material;
-
 layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
 layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
 layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
 layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
 layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
+
+uint planetIndex = geom.material;
 
 void main() {
 	// vec3 spherePosition = geom.objectInstance.position;
@@ -213,6 +235,183 @@ void main() {
 
 
 #############################################################
+#shader terrain.vertexpos.comp
+
+vec3 GetVertexPos(uint index) {
+	return vertices[index*2].xyz;
+}
+
+void SetVertexPos(uint index, vec3 pos) {
+	vertices[index*2].xyz = pos;
+}
+
+void main() {
+	// float solidRadius;
+	// samplerCube heightMap[planetIndex]
+	// layout(set = 1, binding = 5) buffer VertexBuffer {vec4 vertices[];};
+	// ivec3 chunkPosition;
+	
+	uint vertexOffset = geometries[chunkGeometryOffset].y;
+	// objectIndex = geometries[chunkGeometryOffset].z;
+	// material = geometries[chunkGeometryOffset].w;
+	
+	uint genRow = gl_GlobalInvocationID.x;
+	uint genCol = gl_GlobalInvocationID.y;
+	uint currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol + vertexOffset;
+	
+	dvec3 vertexPos = dvec3(GetVertexPos(currentIndex)) + dvec3(chunkPosition);
+	dvec3 normalizedPos = normalize(vertexPos);
+	
+	vertexPos = normalizedPos * (solidRadius + double(texture(heightMap[planetIndex], vec3(normalizedPos)).r));
+	
+	SetVertexPos(currentIndex, vec3(vertexPos - dvec3(chunkPosition)));
+}
+
+
+#############################################################
+#shader terrain.vertexnormal.comp
+
+vec3 GetVertexPos(uint index) {
+	return vertices[index*2].xyz;
+}
+
+void SetVertexNormal(uint index, vec3 normal) {
+	vertices[index*2+1].xyz = normal;
+}
+
+void GetFaceVectors(int face, out vec3 dir, out vec3 top, out vec3 right) {
+	switch (face) {
+		case 0:
+			dir = vec3(0, 0, 1);
+			top = vec3(0, 1, 0);
+			right = vec3(1, 0, 0);
+			break;
+		case 1:
+			dir = vec3(0, 0, -1);
+			top = vec3(0, 1, 0);
+			right = vec3(-1, 0, 0);
+			break;
+		case 2:
+			dir = vec3(1, 0, 0);
+			top = vec3(0, 1, 0);
+			right = vec3(0, 0, -1);
+			break;
+		case 3:
+			dir = vec3(-1, 0, 0);
+			top = vec3(0, -1, 0);
+			right = vec3(0, 0, -1);
+			break;
+		case 4:
+			dir = vec3(0, 1, 0);
+			top = vec3(0, 0, 1);
+			right = vec3(-1, 0, 0);
+			break;
+		case 5:
+			dir = vec3(0, -1, 0);
+			top = vec3(0, 0, -1);
+			right = vec3(-1, 0, 0);
+			break;
+	}
+}
+
+void main() {
+	uint vertexOffset = geometries[chunkGeometryOffset].y;
+	
+	uint genRow = gl_GlobalInvocationID.x;
+	uint genCol = gl_GlobalInvocationID.y;
+	uint currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol + vertexOffset;
+	vec3 vertexPos = GetVertexPos(currentIndex);
+	
+	vec3 tangentX;
+	vec3 tangentY;
+	
+	if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+		// For full face (generate top left)
+		uint topLeftIndex = currentIndex;
+		uint topRightIndex = topLeftIndex+1;
+		uint bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol + vertexOffset;
+		
+		tangentX = normalize(GetVertexPos(topRightIndex) - vertexPos);
+		tangentY = normalize(vertexPos - GetVertexPos(bottomLeftIndex));
+		
+	} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
+		// For right-most bottom-most vertex (generate bottom-most right-most)
+		
+		// vec3 bottomLeftPos {0};
+		// {
+		// 	dvec3 topOffset = mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+		// 	dvec3 rightOffset = mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+		// 	dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+		// 	bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+		// }
+
+		// vec3 topRightPos {0};
+		// {
+		// 	dvec3 topOffset = mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+		// 	dvec3 rightOffset = mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+		// 	dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+		// 	topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+		// }
+
+		// tangentX = normalize(topRightPos - vertexPos);
+		// tangentY = normalize(vertexPos - bottomLeftPos);
+		
+		tangentX = normalize(vertexPos - GetVertexPos(currentIndex-1));
+		tangentY = normalize(GetVertexPos(currentIndex-vertexSubdivisionsPerChunk-1) - vertexPos);
+		
+	} else if (genCol == vertexSubdivisionsPerChunk) {
+		// For others in right col (generate top right)
+		// uint bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
+		
+		// vec3 topRightPos {0};
+		// {
+		// 	dvec3 topOffset = mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+		// 	dvec3 rightOffset = mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+		// 	dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+		// 	topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+		// }
+
+		// tangentX = normalize(topRightPos - vertexPos);
+		// tangentY = normalize(vertexPos - GetVertexPos(bottomRightIndex));
+		
+		tangentX = normalize(vertexPos - GetVertexPos(currentIndex-1));
+		tangentY = normalize(vertexPos - GetVertexPos(currentIndex+vertexSubdivisionsPerChunk+1));
+		
+	} else if (genRow == vertexSubdivisionsPerChunk) {
+		// For others in bottom row (generate bottom left)
+		
+		// vec3 bottomLeftPos {0};
+		// {
+		// 	dvec3 topOffset = mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+		// 	dvec3 rightOffset = mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+		// 	dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+		// 	bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+		// }
+
+		// tangentX = normalize(GetVertexPos(currentIndex+1) - vertexPos);
+		// tangentY = normalize((vertexPos - bottomLeftPos));
+		
+		tangentX = normalize(GetVertexPos(currentIndex+1) - vertexPos);
+		tangentY = normalize(GetVertexPos(currentIndex-vertexSubdivisionsPerChunk-1) - vertexPos);
+		
+	}
+
+	vec3 faceDir, topDir, rightDir;
+	GetFaceVectors(face, faceDir, topDir, rightDir);
+	float topSign = topDir.x + topDir.y + topDir.z;
+	float rightSign = rightDir.x + rightDir.y + rightDir.z;
+	
+	tangentX *= rightSign;
+	tangentY *= topSign;
+	
+	vec3 normal = normalize(cross(tangentX, tangentY));
+	
+	SetVertexNormal(currentIndex, normal);
+	
+	// slope = (float) max(0.0, dot(dvec3(normal), normalize(centerPos + dvec3(vertexPos))));
+}
+
+#############################################################
 #shader terrain.rchit
 
 #include "rtx_base.glsl"
@@ -240,4 +439,3 @@ void main() {
 	// ray.color = vec3(0,1,0);
 	// ray.distance = gl_HitTEXT;
 }
-

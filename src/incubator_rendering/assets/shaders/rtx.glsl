@@ -1,4 +1,4 @@
-#version 460
+#include "core.glsl"
 #include "rtx_base.glsl"
 
 #############################################################

@@ -79,7 +79,7 @@ private:
 	struct BottomLevelAccelerationStructure : public AccelerationStructure {
 		int nbGeometries = 0;
 		
-		void Build(Device* device, Queue& queue, const std::vector<Geometry*>& geometries, bool dynamicMesh = false) {
+		void Build(Device* device, VkCommandBuffer cmdBuffer, const std::vector<Geometry*>& geometries, bool dynamicMesh = false) {
 			
 			rayTracingGeometries.clear();
 			rayTracingGeometriesCreate.clear();
@@ -142,42 +142,38 @@ private:
 			}
 			
 			// Build bottom level acceleration structure
-			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
+			const VkAccelerationStructureGeometryKHR* ppGeometries = rayTracingGeometries.data();
+			const VkAccelerationStructureBuildOffsetInfoKHR* pGeometriesOffsets = rayTracingGeometriesBuild.data();
 			
-				const VkAccelerationStructureGeometryKHR* ppGeometries = rayTracingGeometries.data();
-				const VkAccelerationStructureBuildOffsetInfoKHR* pGeometriesOffsets = rayTracingGeometriesBuild.data();
-				
-				VkAccelerationStructureBuildGeometryInfoKHR accelerationStructBuildInfo {};
-					accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-					accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-					if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-					accelerationStructBuildInfo.update = (allowUpdate && built && dynamicMesh)? VK_TRUE : VK_FALSE;
-					accelerationStructBuildInfo.srcAccelerationStructure = accelerationStructure;
-					accelerationStructBuildInfo.dstAccelerationStructure = accelerationStructure;
-					accelerationStructBuildInfo.geometryCount = (uint)rayTracingGeometries.size();
-					accelerationStructBuildInfo.ppGeometries = &ppGeometries;
-					accelerationStructBuildInfo.geometryArrayOfPointers = VK_FALSE;
-					accelerationStructBuildInfo.scratchData = device->GetBufferDeviceOrHostAddress(scratchBuffer.buffer);
-				device->CmdBuildAccelerationStructureKHR(cmdBuffer, 1, &accelerationStructBuildInfo, &pGeometriesOffsets);
-				
-				// VkMemoryBarrier memoryBarrier {
-				// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				// 	nullptr,// pNext
-				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
-				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
-				// };
-				// device->CmdPipelineBarrier(
-				// 	cmdBuffer, 
-				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				// 	0, 
-				// 	1, &memoryBarrier, 
-				// 	0, 0, 
-				// 	0, 0
-				// );
+			VkAccelerationStructureBuildGeometryInfoKHR accelerationStructBuildInfo {};
+				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+				if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+				accelerationStructBuildInfo.update = (allowUpdate && built && dynamicMesh)? VK_TRUE : VK_FALSE;
+				accelerationStructBuildInfo.srcAccelerationStructure = accelerationStructure;
+				accelerationStructBuildInfo.dstAccelerationStructure = accelerationStructure;
+				accelerationStructBuildInfo.geometryCount = (uint)rayTracingGeometries.size();
+				accelerationStructBuildInfo.ppGeometries = &ppGeometries;
+				accelerationStructBuildInfo.geometryArrayOfPointers = VK_FALSE;
+				accelerationStructBuildInfo.scratchData = device->GetBufferDeviceOrHostAddress(scratchBuffer.buffer);
+			device->CmdBuildAccelerationStructureKHR(cmdBuffer, 1, &accelerationStructBuildInfo, &pGeometriesOffsets);
 			
-			device->EndSingleTimeCommands(queue, cmdBuffer);
+			// VkMemoryBarrier memoryBarrier {
+			// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+			// 	nullptr,// pNext
+			// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
+			// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+			// };
+			// device->CmdPipelineBarrier(
+			// 	cmdBuffer, 
+			// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+			// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+			// 	0, 
+			// 	1, &memoryBarrier, 
+			// 	0, 0, 
+			// 	0, 0
+			// );
 			
 			if (!dynamicMesh) {
 				scratchBuffer.Free(device);
@@ -275,7 +271,7 @@ private:
 		
 		bool handleDirty = false; // to know when to update the descriptor set
 		
-		void Build(Device* device, Queue& queue, bool update = false) {
+		void Build(Device* device, VkCommandBuffer cmdBuffer, bool update = false) {
 			if (instances.size() == 0) return;
 			
 			if (instances.size() > maxInstances) {
@@ -321,47 +317,42 @@ private:
 					geometryInfo.geometry.instances.data = device->GetBufferDeviceOrHostAddressConst(instanceBuffer.deviceLocalBuffer.buffer);
 				rayTracingGeometries[0] = geometryInfo;
 			}
+		
+			instanceBuffer.Update(device, cmdBuffer);
+		
+			const VkAccelerationStructureGeometryKHR* ppGeometries = rayTracingGeometries.data();
+			const VkAccelerationStructureBuildOffsetInfoKHR* pGeometriesOffsets = rayTracingGeometriesBuild.data();
+		
+			VkAccelerationStructureBuildGeometryInfoKHR accelerationStructBuildInfo {};
+				accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+				accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+				accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+				if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+				accelerationStructBuildInfo.update = (allowUpdate && built && update)? VK_TRUE : VK_FALSE;
+				accelerationStructBuildInfo.srcAccelerationStructure = accelerationStructure;
+				accelerationStructBuildInfo.dstAccelerationStructure = accelerationStructure;
+				accelerationStructBuildInfo.geometryCount = 1;
+				accelerationStructBuildInfo.ppGeometries = &ppGeometries;
+				accelerationStructBuildInfo.geometryArrayOfPointers = VK_FALSE;
+				accelerationStructBuildInfo.scratchData = device->GetBufferDeviceOrHostAddress(scratchBuffer.buffer);
+			device->CmdBuildAccelerationStructureKHR(cmdBuffer, 1, &accelerationStructBuildInfo, &pGeometriesOffsets);
 			
-			auto cmdBuffer = device->BeginSingleTimeCommands(queue);
-				instanceBuffer.Update(device, cmdBuffer);
-			device->EndSingleTimeCommands(queue, cmdBuffer);
-			cmdBuffer = device->BeginSingleTimeCommands(queue);
-			
-				const VkAccelerationStructureGeometryKHR* ppGeometries = rayTracingGeometries.data();
-				const VkAccelerationStructureBuildOffsetInfoKHR* pGeometriesOffsets = rayTracingGeometriesBuild.data();
-			
-				VkAccelerationStructureBuildGeometryInfoKHR accelerationStructBuildInfo {};
-					accelerationStructBuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-					accelerationStructBuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-					accelerationStructBuildInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-					if (allowUpdate) accelerationStructBuildInfo.flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-					accelerationStructBuildInfo.update = (allowUpdate && built && update)? VK_TRUE : VK_FALSE;
-					accelerationStructBuildInfo.srcAccelerationStructure = accelerationStructure;
-					accelerationStructBuildInfo.dstAccelerationStructure = accelerationStructure;
-					accelerationStructBuildInfo.geometryCount = 1;
-					accelerationStructBuildInfo.ppGeometries = &ppGeometries;
-					accelerationStructBuildInfo.geometryArrayOfPointers = VK_FALSE;
-					accelerationStructBuildInfo.scratchData = device->GetBufferDeviceOrHostAddress(scratchBuffer.buffer);
-				device->CmdBuildAccelerationStructureKHR(cmdBuffer, 1, &accelerationStructBuildInfo, &pGeometriesOffsets);
-				
-				// VkMemoryBarrier memoryBarrier {
-				// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				// 	nullptr,// pNext
-				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
-				// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
-				// };
-				// device->CmdPipelineBarrier(
-				// 	cmdBuffer, 
-				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				// 	0, 
-				// 	1, &memoryBarrier, 
-				// 	0, 0, 
-				// 	0, 0
-				// );
-			
-			device->EndSingleTimeCommands(queue, cmdBuffer);
-			
+			// VkMemoryBarrier memoryBarrier {
+			// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+			// 	nullptr,// pNext
+			// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
+			// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+			// };
+			// device->CmdPipelineBarrier(
+			// 	cmdBuffer, 
+			// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+			// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+			// 	0, 
+			// 	1, &memoryBarrier, 
+			// 	0, 0, 
+			// 	0, 0
+			// );
+		
 			built = true;
 		}
 		
@@ -552,7 +543,6 @@ private: // Init
 	void Init() override {
 		// Ray Tracing
 		RequiredDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME); // NVidia's RayTracing extension
-		// RequiredDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME);
 		RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
 		
 		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
@@ -605,9 +595,9 @@ private: // Init
 		rayTracingDescriptorSet_1->AddBinding_accelerationStructure(0, &rayTracingTopLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -740,7 +730,7 @@ private: // Resources
 			submodule->AllocateBuffers();
 		}
 		
-		Geometry::globalBuffers.Allocate(renderingDevice);
+		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
 	}
 	
 	void FreeBuffers() override {
@@ -1107,6 +1097,27 @@ private: // Commands
 	
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
 		
+		// VkMemoryBarrier memoryBarrier {
+		// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+		// 	nullptr,// pNext
+		// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
+		// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+		// };
+		// renderingDevice->CmdPipelineBarrier(
+		// 	commandBuffer, 
+		// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+		// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+		// 	0, 
+		// 	1, &memoryBarrier, 
+		// 	0, 0, 
+		// 	0, 0
+		// );
+		
+		rayTracingTopLevelAccelerationStructure.Build(renderingDevice, commandBuffer);
+		// if (rayTracingTopLevelAccelerationStructure.handleDirty) {
+		// 	UpdateDescriptorSet(rayTracingDescriptorSet_1, {0}); //TODO fix this...   "You are adding vkQueueSubmit() to VkCommandBuffer *** that is invalid because bound VkDescriptorSet *** was destroyed or updated."
+		// }
+		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicGraphicsTop(commandBuffer, images);
@@ -1133,6 +1144,7 @@ private: // Commands
 		for (auto* submodule : renderingSubmodules) {
 			submodule->RunDynamicLowPriorityCompute(commandBuffer);
 		}
+		
 	}
 	
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
@@ -1195,7 +1207,7 @@ public: // Scene configuration
 	}
 	
 public: // Update
-	
+
 	void FrameUpdate(uint imageIndex) override {
 		
 		// Reset camera information
@@ -1227,8 +1239,35 @@ public: // Update
 			Geometry::globalBuffers.PushLights(renderingDevice, cmdBuffer);
 		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 		
-		// Ray Tracing Acceleration Structure
-		bool accelerationStructureDirty = false;
+		// Ray Tracing Top Level Acceleration Structure
+		// Update object transforms
+		for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
+			if (obj->GetRayTracingInstanceIndex() != -1) {
+				rayTracingTopLevelAccelerationStructure.instances[obj->GetRayTracingInstanceIndex()].transform = obj->GetRayTracingModelViewMatrix();
+			}
+		}
+		
+		scene.CollectGarbage();
+		scene.Unlock();
+	}
+	
+	void LowPriorityFrameUpdate() override {
+		
+		// Histogram
+		glm::vec4 luminance;
+		totalLuminance.ReadFromMappedData(&luminance);
+		if (luminance.a > 0) {
+			scene.camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
+		}
+		
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->LowPriorityFrameUpdate();
+		}
+		
+		scene.Lock();
+		
+		// Ray Tracing Bottom Level Acceleration Structures
 		// Add/Remove/Update geometries
 		for (auto* obj : scene.objectInstances) if (obj) {
 			// Geometry
@@ -1243,12 +1282,45 @@ public: // Update
 						blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
 					}
 					
-					auto cmdBuffer = BeginSingleTimeCommands(transferQueue);
+					auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
 						obj->PushGeometries(renderingDevice, cmdBuffer);
-					EndSingleTimeCommands(transferQueue, cmdBuffer);
+					// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
 					
-					blas->Build(renderingDevice, graphicsQueue, obj->GetGeometries());
-					accelerationStructureDirty = true;
+					// int totalVertices, totalIndices;
+					// obj->GetGeometriesTotals(&totalVertices, &totalIndices);
+					// VkBufferMemoryBarrier barriers[3] {{},{},{}};
+					// 	// vertices
+					// 	barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 	barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 	barriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 	barriers[0].offset = obj->GetFirstGeometryVertexOffset() * sizeof(Geometry::VertexBuffer_T);
+					// 	barriers[0].size = totalVertices * sizeof(Geometry::VertexBuffer_T);
+					// 	barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
+					// 	// indices
+					// 	barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 	barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 	barriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 	barriers[1].offset = obj->GetFirstGeometryIndexOffset() * sizeof(Geometry::IndexBuffer_T);
+					// 	barriers[1].size = totalIndices * sizeof(Geometry::IndexBuffer_T);
+					// 	barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
+					// 	// geometryInfos
+					// 	barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 	barriers[2].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 	barriers[2].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 	barriers[2].offset = obj->GetFirstGeometryOffset() * sizeof(Geometry::GeometryBuffer_T);
+					// 	barriers[2].size = sizeof(Geometry::GeometryBuffer_T);
+					// 	barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 	barriers[2].buffer = Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer.buffer;
+					// renderingDevice->CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 3, barriers, 0, nullptr);
+					
+					// cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
+						blas->Build(renderingDevice, cmdBuffer, obj->GetGeometries());
+					EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
 					
 					// Instance
 					if (obj->GetRayTracingInstanceIndex() == -1) {
@@ -1256,7 +1328,7 @@ public: // Update
 						rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingBLASInstance{
 							obj->GetRayTracingModelViewMatrix(),
 							(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexKHR
-							obj->GetRayTracingMask(), //TODO mask
+							obj->GetRayTracingMask(),
 							Geometry::rayTracingShaderOffsets[obj->GetObjectType()], // shaderInstanceOffset
 							VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR, // VkGeometryInstanceFlagsKHR flags
 							blas->handle
@@ -1276,43 +1348,13 @@ public: // Update
 						}
 						rayTracingTopLevelAccelerationStructure.instances.pop_back();
 						obj->SetRayTracingInstanceIndex(-1);
-						accelerationStructureDirty = true;
 					}
 				}
 			}
 		}
-		// Update object transforms
-		for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
-			if (obj->GetRayTracingInstanceIndex() != -1) {
-				rayTracingTopLevelAccelerationStructure.instances[obj->GetRayTracingInstanceIndex()].transform = obj->GetRayTracingModelViewMatrix();
-				accelerationStructureDirty = true;
-			}
-		}
 		
-		scene.CollectGarbage();
 		scene.Unlock();
 		
-		if (accelerationStructureDirty) {
-			rayTracingTopLevelAccelerationStructure.Build(renderingDevice, graphicsQueue);
-			// if (rayTracingTopLevelAccelerationStructure.handleDirty) {
-			// 	UpdateDescriptorSet(rayTracingDescriptorSet_1, {0}); //TODO fix this...   "You are adding vkQueueSubmit() to VkCommandBuffer *** that is invalid because bound VkDescriptorSet *** was destroyed or updated."
-			// }
-		}
-	}
-	
-	void LowPriorityFrameUpdate() override {
-		
-		// Histogram
-		glm::vec4 luminance;
-		totalLuminance.ReadFromMappedData(&luminance);
-		if (luminance.a > 0) {
-			scene.camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
-		}
-		
-		// Submodules
-		for (auto* submodule : renderingSubmodules) {
-			submodule->LowPriorityFrameUpdate();
-		}
 	}
 	
 	#ifdef _ENABLE_IMGUI
