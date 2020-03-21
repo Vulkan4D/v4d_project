@@ -1239,6 +1239,42 @@ public: // Update
 			Geometry::globalBuffers.PushLights(renderingDevice, cmdBuffer);
 		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 		
+		// Ray Tracing Bottom Level Acceleration Structures
+		// Add/Remove/Update geometries
+		for (auto* obj : scene.objectInstances) if (obj) {
+			// Geometry
+			if (obj->IsActive() && obj->HasActiveGeometries()) {
+				// If object is active, has a BLAS ready but not yet in TLAS
+				if (obj->GetRayTracingBlasIndex() != -1 && obj->GetRayTracingInstanceIndex() == -1) {
+					// Add Instance
+					obj->SetRayTracingInstanceIndex(rayTracingTopLevelAccelerationStructure.instances.size());
+					rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingBLASInstance{
+						obj->GetRayTracingModelViewMatrix(),
+						(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexKHR
+						obj->GetRayTracingMask(),
+						Geometry::rayTracingShaderOffsets[obj->GetObjectType()], // shaderInstanceOffset
+						VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR, // VkGeometryInstanceFlagsKHR flags
+						rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()].handle
+					});
+				}
+			} else {
+				// Object is Inactive, remove instance
+				if (int currIndex = obj->GetRayTracingInstanceIndex(); currIndex != -1) {
+					// Swap element position with last element, then erase last instance element
+					int lastIndex = rayTracingTopLevelAccelerationStructure.instances.size() - 1;
+					if (currIndex != lastIndex) {
+						auto lastObj = std::find_if(scene.objectInstances.begin(), scene.objectInstances.end(), [lastIndex](auto* o){return o && o->GetRayTracingInstanceIndex() == lastIndex;});
+						if (lastObj != scene.objectInstances.end()) {
+							(*lastObj)->SetRayTracingInstanceIndex(currIndex);
+						}
+						rayTracingTopLevelAccelerationStructure.instances[currIndex] = rayTracingTopLevelAccelerationStructure.instances[lastIndex];
+					}
+					rayTracingTopLevelAccelerationStructure.instances.pop_back();
+					obj->SetRayTracingInstanceIndex(-1);
+				}
+			}
+		}
+		
 		// Ray Tracing Top Level Acceleration Structure
 		// Update object transforms
 		for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
@@ -1271,21 +1307,12 @@ public: // Update
 		// Add/Remove/Update geometries
 		for (auto* obj : scene.objectInstances) if (obj) {
 			// Geometry
-			if (obj->IsGeometriesDirty()) {
-				if (obj->IsActive()) obj->GenerateGeometries();
-				if (obj->IsActive() && obj->HasActiveGeometries()) {
-					BottomLevelAccelerationStructure* blas;
-					if (obj->GetRayTracingBlasIndex() == -1) {
-						obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
-						blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
-					} else {
-						blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
-					}
-					
-					auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
-						obj->PushGeometries(renderingDevice, cmdBuffer);
-					// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
-					
+			if (obj->IsGeometriesDirty() && obj->IsActive()) {
+				obj->GenerateGeometries();
+				
+				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
+					obj->PushGeometries(renderingDevice, cmdBuffer);
+			
 					// int totalVertices, totalIndices;
 					// obj->GetGeometriesTotals(&totalVertices, &totalIndices);
 					// VkBufferMemoryBarrier barriers[3] {{},{},{}};
@@ -1318,41 +1345,18 @@ public: // Update
 					// 	barriers[2].buffer = Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer.buffer;
 					// renderingDevice->CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 3, barriers, 0, nullptr);
 					
-					// cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
-						blas->Build(renderingDevice, cmdBuffer, obj->GetGeometries());
-					EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
-					
-					// Instance
-					if (obj->GetRayTracingInstanceIndex() == -1) {
-						obj->SetRayTracingInstanceIndex(rayTracingTopLevelAccelerationStructure.instances.size());
-						rayTracingTopLevelAccelerationStructure.instances.emplace_back(RayTracingBLASInstance{
-							obj->GetRayTracingModelViewMatrix(),
-							(uint32_t)obj->GetFirstGeometryOffset(), // gl_InstanceCustomIndexKHR
-							obj->GetRayTracingMask(),
-							Geometry::rayTracingShaderOffsets[obj->GetObjectType()], // shaderInstanceOffset
-							VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR, // VkGeometryInstanceFlagsKHR flags
-							blas->handle
-						});
+					BottomLevelAccelerationStructure* blas;
+					if (obj->GetRayTracingBlasIndex() == -1) {
+						obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
+						blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+					} else {
+						blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
 					}
-				} else {
-					// Object is Inactive
-					if (int currIndex = obj->GetRayTracingInstanceIndex(); currIndex != -1) {
-						// Swap element position with last element, then erase last instance element
-						int lastIndex = rayTracingTopLevelAccelerationStructure.instances.size() - 1;
-						if (currIndex != lastIndex) {
-							auto lastObj = std::find_if(scene.objectInstances.begin(), scene.objectInstances.end(), [lastIndex](auto* o){return o && o->GetRayTracingInstanceIndex() == lastIndex;});
-							if (lastObj != scene.objectInstances.end()) {
-								(*lastObj)->SetRayTracingInstanceIndex(currIndex);
-							}
-							rayTracingTopLevelAccelerationStructure.instances[currIndex] = rayTracingTopLevelAccelerationStructure.instances[lastIndex];
-						}
-						rayTracingTopLevelAccelerationStructure.instances.pop_back();
-						obj->SetRayTracingInstanceIndex(-1);
-					}
-				}
+					blas->Build(renderingDevice, cmdBuffer, obj->GetGeometries());
+				EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
 			}
 		}
-		
+
 		scene.Unlock();
 		
 	}
