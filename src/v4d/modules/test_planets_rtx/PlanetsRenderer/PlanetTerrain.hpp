@@ -173,9 +173,6 @@ struct PlanetTerrain {
 		}
 		
 		~Chunk() {
-			for (auto* subChunk : subChunks) {
-				delete subChunk;
-			}
 			Remove(true);
 		}
 		
@@ -475,6 +472,7 @@ struct PlanetTerrain {
 			if (recursive && subChunks.size() > 0) {
 				for (auto* subChunk : subChunks) {
 					subChunk->Remove(true);
+					delete subChunk;
 				}
 				subChunks.clear();
 			}
