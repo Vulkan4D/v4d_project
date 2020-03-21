@@ -88,7 +88,7 @@ void main() {
 #shader raymarching.rint
 
 #include "rtx_base.glsl"
-hitAttributeNV ProceduralGeometry geom;
+hitAttributeEXT ProceduralGeometry geom;
 
 layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
 
@@ -101,14 +101,14 @@ double dlengthSquared(dvec3 v) {
 }
 
 void main() {
-	geom = GetProceduralGeometry(gl_InstanceCustomIndexNV);
+	geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
 	vec3 spherePosition = geom.objectInstance.position;
 	float sphereRadius = geom.aabbMax.x;
 	uint planetIndex = geom.material;
 	
-	const vec3 direction = gl_WorldRayDirectionNV;
-	const float tMin = gl_RayTminNV;
-	const float tMax = gl_RayTmaxNV;
+	const vec3 direction = gl_WorldRayDirectionEXT;
+	const float tMin = gl_RayTminEXT;
+	const float tMax = gl_RayTmaxEXT;
 
 	const vec3 oc = -spherePosition;
 	const float a = dot(direction, direction);
@@ -121,14 +121,14 @@ void main() {
 		const float t1 = (-b - discriminantSqrt) / a;
 		const float t2 = (-b + discriminantSqrt) / a;
 		if ((tMin <= t1 && t1 < tMax)    ||(tMin <= t2 && t2 < tMax)   ) {
-			vec3 start = gl_WorldRayDirectionNV * t1;
+			vec3 start = gl_WorldRayDirectionEXT * t1;
 			// if (!(tMin <= t1 && t1 < tMax)) start = vec3(0);
 			double dist = 0;
 			if (!(tMin <= t1 && t1 < tMax)) dist = length(start);
 			double stepSize = max(0.01, t1 * 0.001);
 			for (int i = 0; i < 200; ++i) {
 				dist += stepSize;
-				dvec3 hitPoint = dvec3(start) + (dvec3(gl_WorldRayDirectionNV) * dist);
+				dvec3 hitPoint = dvec3(start) + (dvec3(gl_WorldRayDirectionEXT) * dist);
 				dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
 				// vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
 				if (length(vec3(planetPos)) > sphereRadius) return;
@@ -141,7 +141,7 @@ void main() {
 					stepSize = clamp(alt * 0.5, t1 * 0.01, planetHeightVariation/4);
 				}
 			}
-			reportIntersectionNV(float(double(t1)+dist), 0);
+			reportIntersectionEXT(float(double(t1)+dist), 0);
 		}
 	}
 }
@@ -150,9 +150,9 @@ void main() {
 #shader raymarching.rchit
 
 #include "rtx_base.glsl"
-hitAttributeNV ProceduralGeometry geom;
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
+hitAttributeEXT ProceduralGeometry geom;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 2) rayPayloadEXT bool shadowed;
 #include "rtx_pbr.glsl"
 
 #include "incubator_rendering/assets/shaders/_noise.glsl"
@@ -171,7 +171,7 @@ void main() {
 	// float sphereRadius = geom.aabbMax.x;
 	
 	// Hit World Position
-	const vec3 hitPoint = gl_WorldRayDirectionNV * gl_HitTNV;
+	const vec3 hitPoint = gl_WorldRayDirectionEXT * gl_HitTEXT;
 	const dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
 	// const vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
 	
@@ -203,12 +203,12 @@ void main() {
 	// vec4 color = vec4(texture(heightMap[planetIndex], vec3(planetPos)).r / planetHeightVariation / 2.0 + 0.5);
 	// vec4 color = texture(mantleMap[planetIndex], normalize(planetPos));
 	
-	// if (gl_HitTNV < 10000) color = mix(color, vec4(float(FastSimplexFractal(planetPos/50.0, 2)/2.0+0.5)), smoothstep(10000, 0, gl_HitTNV));
+	// if (gl_HitTEXT < 10000) color = mix(color, vec4(float(FastSimplexFractal(planetPos/50.0, 2)/2.0+0.5)), smoothstep(10000, 0, gl_HitTEXT));
 	
-	// if (gl_HitTNV < 1.0) color = vec4(1,0,0,1);
+	// if (gl_HitTEXT < 1.0) color = vec4(1,0,0,1);
 	
 	ray.color = color.rgb;
-	ray.distance = gl_HitTNV;
+	ray.distance = gl_HitTEXT;
 }
 
 
@@ -216,9 +216,9 @@ void main() {
 #shader terrain.rchit
 
 #include "rtx_base.glsl"
-hitAttributeNV vec3 hitAttribs;
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
+hitAttributeEXT vec3 hitAttribs;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 2) rayPayloadEXT bool shadowed;
 #include "rtx_pbr.glsl"
 #include "rtx_fragment.glsl"
 
@@ -235,9 +235,9 @@ void main() {
 	Fragment fragment = GetHitFragment(true);
 	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
 	ray.color = color;
-	ray.distance = gl_HitTNV;
+	ray.distance = gl_HitTEXT;
 	
 	// ray.color = vec3(0,1,0);
-	// ray.distance = gl_HitTNV;
+	// ray.distance = gl_HitTEXT;
 }
 

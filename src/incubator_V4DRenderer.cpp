@@ -17,8 +17,8 @@ using namespace v4d::graphics;
 static std::vector<std::string> v4dModules {
 	"incubator_simplemovearound",
 	// "incubator_galaxy4d",
-	// "test1",
-	"test_planets_rtx",
+	"test1",
+	// "test_planets_rtx",
 };
 
 #if defined(_DEBUG) && defined(_LINUX)
@@ -83,10 +83,9 @@ int main() {
 	
 	// Validation layers
 	#ifdef _DEBUG
-		// vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_LUNARG_standard_validation");
-		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+		// vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	#endif
-			
+	
 	// Vulkan
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");

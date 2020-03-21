@@ -159,13 +159,13 @@ public:
 		mapsGenDescriptorSet->AddBinding_imageView_array(3, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		mapsGenDescriptorSet->AddBinding_imageView_array(4, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(0, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(1, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(2, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(3, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(4, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(0, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(1, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(2, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(3, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(4, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		
-		planetsDescriptorSet->AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_NV | VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV);
+		planetsDescriptorSet->AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 	}
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
 		Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.raymarching.rchit", "", "modules/test_planets_rtx/assets/shaders/planets.raymarching.rint");

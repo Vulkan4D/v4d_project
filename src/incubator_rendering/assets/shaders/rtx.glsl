@@ -4,11 +4,11 @@
 #############################################################
 #shader rgen
 
-layout(location = 0) rayPayloadNV RayPayload ray;
+layout(location = 0) rayPayloadEXT RayPayload ray;
 
 void main() {
-	const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
-	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
+	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
 	const vec2 d = inUV * 2.0 - 1.0;
 	const vec3 target = vec4(inverse(camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz;
 	
@@ -28,7 +28,7 @@ void main() {
 	// 	float reflection = 1.0;
 	// 	for (int i = 0; i < reflection_max_recursion; i++) {
 	// 		ray.reflector = 0.0;
-	// 		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, traceMask, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
+	// 		traceEXT(topLevelAS, gl_RayFlagsOpaqueEXT, traceMask, 0, 0, 0, origin, 0.001, direction, max_distance, 0);
 	// 		finalColor = mix(finalColor, ray.color, reflection);
 	// 		if (ray.reflector <= 0.0) break;
 	// 		reflection *= ray.reflector;
@@ -39,7 +39,7 @@ void main() {
 	// 		direction = ray.direction;
 	// 	}
 	// } else {
-		traceNV(topLevelAS, gl_RayFlagsOpaqueNV, traceMask, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, traceMask, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
 	// }
 	
 	#ifdef RENDER_LIGHT_SPHERES_MANUALLY_IN_RGEN
@@ -70,7 +70,7 @@ void main() {
 	
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
 	
-	ivec2 coords = ivec2(gl_LaunchIDNV.xy);
+	ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
 	imageStore(depthImage, coords, vec4(depth, 0,0,0));
 	imageStore(litImage, coords, vec4(ray.color, 1.0));
 }
@@ -79,8 +79,8 @@ void main() {
 #############################################################
 #shader rahit
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
-hitAttributeNV vec3 hitAttribs;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+hitAttributeEXT vec3 hitAttribs;
 
 void main() {
 	// Fragment fragment = GetHitFragment(true);
@@ -88,7 +88,7 @@ void main() {
 	// 	ray.color += fragment.color.rgb * fragment.color.a;
 	// }
 	
-	// ignoreIntersectionNV();
+	// ignoreIntersectionEXT();
 	
 	// ray.color += fragment.color.rgb * fragment.color.a;
 }
@@ -97,10 +97,10 @@ void main() {
 #############################################################
 #shader rchit
 
-hitAttributeNV vec3 hitAttribs;
+hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 2) rayPayloadEXT bool shadowed;
 
 #include "rtx_fragment.glsl"
 #include "rtx_pbr.glsl"
@@ -112,21 +112,21 @@ void main() {
 	
 	// Transparency ?
 		// if (ray.opacity < 0.9 && fragment.color.a < 0.99) {
-		// 	traceNV(topLevelAS, gl_RayFlagsOpaqueNV, 0xff, 0, 0, 0, fragment.hitPoint, float(camera.znear), ray.direction, float(camera.zfar), 0);
+		// 	traceEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, fragment.hitPoint, float(camera.znear), ray.direction, float(camera.zfar), 0);
 		// }
 		// ray.color = mix(ray.color, color, fragment.color.a);
 		// ray.opacity += fragment.color.a;
 	// or
 		ray.color = color;
 	
-	ray.distance = gl_HitTNV;
+	ray.distance = gl_HitTEXT;
 }
 
 
 #############################################################
 #shader rmiss
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
 
 void main() {
 	//... may return a background color if other than black
@@ -137,7 +137,7 @@ void main() {
 
 #shader shadow.rmiss
 
-layout(location = 2) rayPayloadInNV bool shadowed;
+layout(location = 2) rayPayloadInEXT bool shadowed;
 
 void main() {
 	shadowed = false;
@@ -147,17 +147,17 @@ void main() {
 #############################################################
 #shader sphere.rint
 
-hitAttributeNV ProceduralGeometry sphereGeomAttr;
+hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
 void main() {
-	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexNV);
+	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
 	vec3 spherePosition = geom.objectInstance.position;
 	float sphereRadius = geom.aabbMax.x;
 	
-	const vec3 origin = gl_WorldRayOriginNV;
-	const vec3 direction = gl_WorldRayDirectionNV;
-	const float tMin = gl_RayTminNV;
-	const float tMax = gl_RayTmaxNV;
+	const vec3 origin = gl_WorldRayOriginEXT;
+	const vec3 direction = gl_WorldRayDirectionEXT;
+	const float tMin = gl_RayTminEXT;
+	const float tMax = gl_RayTmaxEXT;
 
 	const vec3 oc = origin - spherePosition;
 	const float a = dot(direction, direction);
@@ -172,7 +172,7 @@ void main() {
 
 		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
 			sphereGeomAttr = geom;
-			reportIntersectionNV((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
+			reportIntersectionEXT((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
 		}
 	}
 }
@@ -181,10 +181,10 @@ void main() {
 #############################################################
 #shader sphere.rchit
 
-hitAttributeNV ProceduralGeometry sphereGeomAttr;
+hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 2) rayPayloadEXT bool shadowed;
 
 #include "rtx_pbr.glsl"
 
@@ -193,31 +193,31 @@ void main() {
 	float sphereRadius = sphereGeomAttr.aabbMax.x;
 	
 	// Hit World Position
-	const vec3 hitPoint = gl_WorldRayOriginNV + gl_WorldRayDirectionNV * gl_HitTNV;
+	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	const vec3 normal = normalize(hitPoint - spherePosition);
 	
 	vec3 color = ApplyPBRShading(hitPoint, sphereGeomAttr.color.rgb, normal, /*roughness*/0.5, /*metallic*/0.0);
 	
 	ray.color = color;
-	ray.distance = gl_HitTNV;
+	ray.distance = gl_HitTEXT;
 }
 
 
 #############################################################
 #shader light.rchit
 
-hitAttributeNV ProceduralGeometry sphereGeomAttr;
+hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
-layout(location = 0) rayPayloadInNV RayPayload ray;
-layout(location = 2) rayPayloadNV bool shadowed;
+layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 2) rayPayloadEXT bool shadowed;
 
 void main() {
 	LightSource light = GetLight(sphereGeomAttr.material);
 	if (sphereGeomAttr.color.a > 0) {
-		ray.color = sphereGeomAttr.color.rgb * sphereGeomAttr.color.a * light.intensity/gl_HitTNV/gl_HitTNV;
+		ray.color = sphereGeomAttr.color.rgb * sphereGeomAttr.color.a * light.intensity/gl_HitTEXT/gl_HitTEXT;
 	} else {
-		ray.color = light.color * light.intensity/gl_HitTNV;
+		ray.color = light.color * light.intensity/gl_HitTEXT;
 	}
-	ray.distance = gl_HitTNV;
+	ray.distance = gl_HitTEXT;
 }
 
