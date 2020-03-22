@@ -22,7 +22,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 64; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 128; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
@@ -86,10 +86,16 @@ struct PlanetTerrain {
 		glm::dvec3 bottomLeftPosLowestPoint {0};
 		glm::dvec3 bottomRightPosLowestPoint {0};
 		glm::dvec3 centerPosHighestPoint {0};
+		float uvMultX = 1;
+		float uvMultY = 1;
+		float uvOffsetX = 0;
+		float uvOffsetY = 0;
 		double chunkSize = 0;
 		double triangleSize = 0;
-		double heightAtCenter = 0;
+		// double heightAtCenter = 0;
 		double boundingDistance = 0;
+		double lowestAltitude = 0;
+		double highestAltitude = 0;
 		std::atomic<double> distanceFromCamera = 0;
 		#pragma endregion
 		
@@ -149,14 +155,16 @@ struct PlanetTerrain {
 			bottom = (bottomLeft + bottomRight) / 2.0;
 			
 			//TODO maybe optimize these, get the actual altitudes instead of potential extrimities
-			double lowestAltitude = planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0);
-			double highestAltitude = planet->solidRadius + planet->heightVariation;
+			lowestAltitude = planet->solidRadius - glm::max(chunkSize/2.0, planet->heightVariation*2.0);
+			highestAltitude = planet->solidRadius + planet->heightVariation;
 			
 			centerPos = CubeToSphere::Spherify(center, face);
 			centerPosLowestPoint = centerPos * lowestAltitude;
 			centerPosHighestPoint = centerPos * highestAltitude;
-			heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
-			centerPos = glm::round(centerPos * heightAtCenter);
+			// heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
+			// centerPos = glm::round(centerPos * heightAtCenter);
+			centerPos = glm::round(centerPos * planet->solidRadius);
+			
 			topLeftPos = CubeToSphere::Spherify(topLeft, face);
 			topLeftPosLowestPoint = topLeftPos * lowestAltitude;
 			topLeftPos *= planet->GetHeightMap(topLeftPos, triangleSize);
@@ -199,6 +207,21 @@ struct PlanetTerrain {
 			return true;
 		}
 		
+		uint32_t topLeftVertexIndex = 0;
+		uint32_t topRightVertexIndex = vertexSubdivisionsPerChunk;
+		uint32_t bottomLeftVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk;
+		uint32_t bottomRightVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk + vertexSubdivisionsPerChunk;
+		
+		void RefreshVertices() {
+			if (obj && obj->IsGenerated()) {
+				topLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(topLeftVertexIndex)->pos);
+				topRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(topRightVertexIndex)->pos);
+				bottomLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(bottomLeftVertexIndex)->pos);
+				bottomRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(bottomRightVertexIndex)->pos);
+				RefreshDistanceFromCamera();
+			}
+		}
+		
 		void Generate() {
 			if (!obj) {
 				if (!planet->scene) return;
@@ -208,6 +231,8 @@ struct PlanetTerrain {
 			if (!geometry || obj->CountGeometries() == 0) {
 				geometry = obj->AddGeometry(nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
 			}
+			
+			obj->SetObjectCustomData({0,0,0}, {uvMultX, uvMultY, uvOffsetX, uvOffsetY});
 			
 			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
 			double topSign = topDir.x + topDir.y + topDir.z;
@@ -230,9 +255,9 @@ struct PlanetTerrain {
 					double altitude = planet->GetHeightMap(pos, triangleSize);
 					glm::dvec3 posOnChunk = pos * altitude - centerPos;
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
-					vertex->pos = glm::vec4(posOnChunk, altitude - planet->solidRadius);
-					vertex->SetUV(glm::vec4(glm::vec2(genCol, genRow) / float(vertexSubdivisionsPerChunk), 0, 0));
-					vertex->normal = glm::normalize(pos);
+					vertex->pos = posOnChunk;
+					vertex->SetUV(glm::vec2(rightSign<0?(vertexSubdivisionsPerChunk-genCol):genCol, topSign<0?(vertexSubdivisionsPerChunk-genRow):genRow) / float(vertexSubdivisionsPerChunk));
+					vertex->normal = pos; // already normalized
 					geometry->isDirty = true;
 					genVertexIndex++;
 					
@@ -426,42 +451,73 @@ struct PlanetTerrain {
 		void AddSubChunks() {
 			subChunks.reserve(4);
 			
-			subChunks.emplace_back(new Chunk{
-				planet,
-				face,
-				level+1,
-				topLeft,
-				top,
-				left,
-				center
-			});
-			subChunks.emplace_back(new Chunk{
-				planet,
-				face,
-				level+1,
-				top,
-				topRight,
-				center,
-				right
-			});
-			subChunks.emplace_back(new Chunk{
-				planet,
-				face,
-				level+1,
-				left,
-				center,
-				bottomLeft,
-				bottom
-			});
-			subChunks.emplace_back(new Chunk{
-				planet,
-				face,
-				level+1,
-				center,
-				right,
-				bottom,
-				bottomRight
-			});
+			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+			double topSign = topDir.x + topDir.y + topDir.z;
+			double rightSign = rightDir.x + rightDir.y + rightDir.z;
+			
+			{// Top Left
+				Chunk* sub = subChunks.emplace_back(new Chunk{
+					planet,
+					face,
+					level+1,
+					topLeft,
+					top,
+					left,
+					center
+				});
+				sub->uvMultX = uvMultX/2;
+				sub->uvMultY = uvMultY/2;
+				sub->uvOffsetX = uvOffsetX;
+				sub->uvOffsetY = uvOffsetY;
+			}
+			
+			{// Top Right
+				Chunk* sub = subChunks.emplace_back(new Chunk{
+					planet,
+					face,
+					level+1,
+					top,
+					topRight,
+					center,
+					right
+				});
+				sub->uvMultX = uvMultX/2;
+				sub->uvMultY = uvMultY/2;
+				sub->uvOffsetX = uvOffsetX+uvMultX/2;
+				sub->uvOffsetY = uvOffsetY;
+			}
+			
+			{// Bottom Left
+				Chunk* sub = subChunks.emplace_back(new Chunk{
+					planet,
+					face,
+					level+1,
+					left,
+					center,
+					bottomLeft,
+					bottom
+				});
+				sub->uvMultX = uvMultX/2;
+				sub->uvMultY = uvMultY/2;
+				sub->uvOffsetX = uvOffsetX;
+				sub->uvOffsetY = uvOffsetY+uvMultY/2;
+			}
+			
+			{// Bottom Right
+				Chunk* sub = subChunks.emplace_back(new Chunk{
+					planet,
+					face,
+					level+1,
+					center,
+					right,
+					bottom,
+					bottomRight
+				});
+				sub->uvMultX = uvMultX/2;
+				sub->uvMultY = uvMultY/2;
+				sub->uvOffsetX = uvOffsetX+uvMultX/2;
+				sub->uvOffsetY = uvOffsetY+uvMultY/2;
+			}
 			
 			SortSubChunks();
 		}
@@ -609,7 +665,7 @@ struct PlanetTerrain {
 					double leftOffset =		col*2 - chunkSubdivisionsPerFace;
 					double rightOffset =	col*2 - chunkSubdivisionsPerFace + 2;
 					
-					chunks.emplace_back(new Chunk{
+					auto* chunk = chunks.emplace_back(new Chunk{
 						this,
 						face,
 						0,
@@ -618,6 +674,10 @@ struct PlanetTerrain {
 						faceDir + topDir*bottomOffset 	+ rightDir*leftOffset,
 						faceDir + topDir*bottomOffset 	+ rightDir*rightOffset
 					});
+					chunk->uvOffsetX = col/chunkSubdivisionsPerFace;
+					chunk->uvOffsetY = row/chunkSubdivisionsPerFace;
+					chunk->uvMultX = 1.0/chunkSubdivisionsPerFace;
+					chunk->uvMultY = 1.0/chunkSubdivisionsPerFace;
 				}
 			}
 		}

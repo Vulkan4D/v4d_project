@@ -2,9 +2,8 @@
 
 #define MAX_PLANETS 1
 
-layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
-
-float planetHeightVariation = 40000;
+// layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
+layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
 
 #############################################################
 
@@ -15,14 +14,16 @@ float planetHeightVariation = 40000;
 
 #common .*map.comp
 
-layout(set = 1, binding = 0) uniform writeonly imageCube mantleMap[MAX_PLANETS];
-layout(set = 1, binding = 1) uniform writeonly imageCube tectonicsMap[MAX_PLANETS];
-layout(set = 1, binding = 2) uniform writeonly imageCube heightMap[MAX_PLANETS];
-layout(set = 1, binding = 3) uniform writeonly imageCube volcanoesMap[MAX_PLANETS];
-layout(set = 1, binding = 4) uniform writeonly imageCube liquidsMap[MAX_PLANETS];
+layout(set = 1, binding = 0, rgba32f) uniform image2D bumpMap[1];
+layout(set = 1, binding = 1) uniform writeonly imageCube mantleMap[MAX_PLANETS];
+layout(set = 1, binding = 2) uniform writeonly imageCube tectonicsMap[MAX_PLANETS];
+layout(set = 1, binding = 3) uniform writeonly imageCube heightMap[MAX_PLANETS];
+layout(set = 1, binding = 4) uniform writeonly imageCube volcanoesMap[MAX_PLANETS];
+layout(set = 1, binding = 5) uniform writeonly imageCube liquidsMap[MAX_PLANETS];
 
 layout(std430, push_constant) uniform Planet{
 	int planetIndex;
+	float planetHeightVariation;
 };
 
 vec3 GetCubeDirection(writeonly imageCube image) {
@@ -55,28 +56,71 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
+#common terrain.*comp|terrain.rchit
+
+layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
+layout(set = 2, binding = 1) uniform samplerCube mantleMap[MAX_PLANETS];
+layout(set = 2, binding = 2) uniform samplerCube tectonicsMap[MAX_PLANETS];
+layout(set = 2, binding = 3) uniform samplerCube heightMap[MAX_PLANETS];
+layout(set = 2, binding = 4) uniform samplerCube volcanoesMap[MAX_PLANETS];
+layout(set = 2, binding = 5) uniform samplerCube liquidsMap[MAX_PLANETS];
+
+vec4 GetBumpMap(vec2 uv) {
+	return texture(bumpMap[0], uv) + texture(bumpMap[0], uv*20)/2 + texture(bumpMap[0], uv*200)/10 + texture(bumpMap[0], uv*4000)/100;
+}
+
 #common terrain.*comp
 
 layout(set = 1, binding = 3) buffer GeometryBuffer {uvec4 geometries[];};
 layout(set = 1, binding = 4) buffer IndexBuffer {uint indices[];};
 layout(set = 1, binding = 5) buffer VertexBuffer {vec4 vertices[];};
 
-// layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
-// layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
-layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
-// layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
-// layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
-
 layout(std430, push_constant) uniform TerrainChunk{
 	int planetIndex;
 	int chunkGeometryOffset;
 	float solidRadius;
 	int vertexSubdivisionsPerChunk;
-	int face;
+	vec2 uvMult;
+	vec2 uvOffset;
 	ivec3 chunkPosition;
+	int face;
 };
 
 #############################################################
+
+#shader bump.altitude.map.comp
+void main() {
+	vec2 size = vec2(imageSize(bumpMap[0]).xy);
+	float mult = 40;
+	float noiseOffset = 2331.43;
+	vec2 coords1 = abs((vec2(gl_GlobalInvocationID.xy) / size - 0.5) * 2.0); // -1 to +1
+	vec2 coords2 = abs((vec2(gl_GlobalInvocationID.yx) / size - 0.5) * 2.0);
+	float altitude1 = FastSimplexFractal(vec3(coords1 * mult, noiseOffset), 12);
+	float altitude2 = FastSimplexFractal(vec3(coords2 * mult, noiseOffset), 12);
+	float altitude = mix(altitude1, altitude2, min(1.0,coords1.x+coords1.y)/2.0) / 2.0 + 0.5;
+	imageStore(bumpMap[0], ivec2(gl_GlobalInvocationID.xy), vec4(0,0,0, altitude));
+}
+
+#shader bump.normals.map.comp
+void main() {
+	ivec2 size = ivec2(imageSize(bumpMap[0]).xy);
+	ivec2 center = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 top = ivec2(gl_GlobalInvocationID.xy) + ivec2(0, -1);
+	ivec2 bottom = ivec2(gl_GlobalInvocationID.xy) + ivec2(0, +1);
+	ivec2 right = ivec2(gl_GlobalInvocationID.xy) + ivec2(+1, 0);
+	ivec2 left = ivec2(gl_GlobalInvocationID.xy) + ivec2(-1, 0);
+	if (bottom.y >= size.y) bottom.y = 0;
+	if (right.x >= size.x) right.x = 0;
+	if (top.y < 0) top.y = size.y-1;
+	if (left.x < 0) left.x = size.x-1;
+	float altitude = imageLoad(bumpMap[0], ivec2(gl_GlobalInvocationID.xy)).a;
+	float altitudeTop = imageLoad(bumpMap[0], top).a;
+	float altitudeBottom = imageLoad(bumpMap[0], bottom).a;
+	float altitudeRight = imageLoad(bumpMap[0], right).a;
+	float altitudeLeft = imageLoad(bumpMap[0], left).a;
+	vec3 normal = normalize(vec3(2*(altitudeRight-altitudeLeft), 2*(altitudeBottom-altitudeTop), 4));
+	imageStore(bumpMap[0], ivec2(gl_GlobalInvocationID.xy), vec4(normal, altitude));
+}
 
 #shader mantle.map.comp
 void main() {
@@ -93,6 +137,7 @@ void main() {
 void main() {
 	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
 	float height = FastSimplexFractal(dir*20, 6) / 2 + 0.5;
+	// height = 0;
 	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height*planetHeightVariation));
 }
 
@@ -106,132 +151,133 @@ void main() {
 	imageStore(liquidsMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(0));
 }
 
-#############################################################
-#shader raymarching.rint
+// #############################################################
+// #shader raymarching.rint
 
-#include "rtx_base.glsl"
-hitAttributeEXT ProceduralGeometry geom;
+// #include "rtx_base.glsl"
+// hitAttributeEXT ProceduralGeometry geom;
 
-layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
+// layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
 
-double dlength(dvec3 v) {
-	return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-}
+// double dlength(dvec3 v) {
+// 	return sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+// }
 
-double dlengthSquared(dvec3 v) {
-	return (v.x*v.x + v.y*v.y + v.z*v.z);
-}
+// double dlengthSquared(dvec3 v) {
+// 	return (v.x*v.x + v.y*v.y + v.z*v.z);
+// }
 
-void main() {
-	geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
-	vec3 spherePosition = geom.objectInstance.position;
-	float sphereRadius = geom.aabbMax.x;
-	uint planetIndex = geom.material;
+// void main() {
+// 	geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
+// 	vec3 spherePosition = geom.objectInstance.position;
+// 	float sphereRadius = geom.aabbMax.x;
+// 	uint planetIndex = geom.material;
 	
-	const vec3 direction = gl_WorldRayDirectionEXT;
-	const float tMin = gl_RayTminEXT;
-	const float tMax = gl_RayTmaxEXT;
+// 	const vec3 direction = gl_WorldRayDirectionEXT;
+// 	const float tMin = gl_RayTminEXT;
+// 	const float tMax = gl_RayTmaxEXT;
 
-	const vec3 oc = -spherePosition;
-	const float a = dot(direction, direction);
-	const float b = dot(oc, direction);
-	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
-	const float discriminant = b * b - a * c;
+// 	const vec3 oc = -spherePosition;
+// 	const float a = dot(direction, direction);
+// 	const float b = dot(oc, direction);
+// 	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
+// 	const float discriminant = b * b - a * c;
 
-	if (discriminant >= 0) {
-		const float discriminantSqrt = sqrt(discriminant);
-		const float t1 = (-b - discriminantSqrt) / a;
-		const float t2 = (-b + discriminantSqrt) / a;
-		if ((tMin <= t1 && t1 < tMax)    ||(tMin <= t2 && t2 < tMax)   ) {
-			vec3 start = gl_WorldRayDirectionEXT * t1;
-			// if (!(tMin <= t1 && t1 < tMax)) start = vec3(0);
-			double dist = 0;
-			if (!(tMin <= t1 && t1 < tMax)) dist = length(start);
-			double stepSize = max(0.01, t1 * 0.001);
-			for (int i = 0; i < 200; ++i) {
-				dist += stepSize;
-				dvec3 hitPoint = dvec3(start) + (dvec3(gl_WorldRayDirectionEXT) * dist);
-				dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
-				// vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
-				if (length(vec3(planetPos)) > sphereRadius) return;
-				double sampledTexture = double(texture(heightMap[planetIndex], vec3(planetPos)).r);
-				double heightMap = double(sphereRadius) - double(planetHeightVariation) + sampledTexture;
-				double alt = dlength(planetPos) - heightMap;
-				if (alt < 0.01) {
-					break;
-				} else {
-					stepSize = clamp(alt * 0.5, t1 * 0.01, planetHeightVariation/4);
-				}
-			}
-			reportIntersectionEXT(float(double(t1)+dist), 0);
-		}
-	}
-}
+// 	if (discriminant >= 0) {
+// 		const float discriminantSqrt = sqrt(discriminant);
+// 		const float t1 = (-b - discriminantSqrt) / a;
+// 		const float t2 = (-b + discriminantSqrt) / a;
+// 		if ((tMin <= t1 && t1 < tMax)    ||(tMin <= t2 && t2 < tMax)   ) {
+// 			vec3 start = gl_WorldRayDirectionEXT * t1;
+// 			// if (!(tMin <= t1 && t1 < tMax)) start = vec3(0);
+// 			double dist = 0;
+// 			if (!(tMin <= t1 && t1 < tMax)) dist = length(start);
+// 			double stepSize = max(0.01, t1 * 0.001);
+// 			for (int i = 0; i < 200; ++i) {
+// 				dist += stepSize;
+// 				dvec3 hitPoint = dvec3(start) + (dvec3(gl_WorldRayDirectionEXT) * dist);
+// 				dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
+// 				// vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
+// 				if (length(vec3(planetPos)) > sphereRadius) return;
+// 				double sampledTexture = double(texture(heightMap[planetIndex], vec3(planetPos)).r);
+// 				double heightMap = double(sphereRadius) - double(planetHeightVariation) + sampledTexture;
+// 				double alt = dlength(planetPos) - heightMap;
+// 				if (alt < 0.01) {
+// 					break;
+// 				} else {
+// 					stepSize = clamp(alt * 0.5, t1 * 0.01, planetHeightVariation/4);
+// 				}
+// 			}
+// 			reportIntersectionEXT(float(double(t1)+dist), 0);
+// 		}
+// 	}
+// }
 
-#############################################################
-#shader raymarching.rchit
+// #############################################################
+// #shader raymarching.rchit
 
-#include "rtx_base.glsl"
-hitAttributeEXT ProceduralGeometry geom;
-layout(location = 0) rayPayloadInEXT RayPayload ray;
-layout(location = 2) rayPayloadEXT bool shadowed;
-#include "rtx_pbr.glsl"
+// #include "rtx_base.glsl"
+// hitAttributeEXT ProceduralGeometry geom;
+// layout(location = 0) rayPayloadInEXT RayPayload ray;
+// layout(location = 2) rayPayloadEXT bool shadowed;
+// #include "rtx_pbr.glsl"
 
-#include "incubator_rendering/assets/shaders/_noise.glsl"
-#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+// #include "incubator_rendering/assets/shaders/_noise.glsl"
+// #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
-layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
-layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
-layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
-layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
-layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
+// layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
+// layout(set = 2, binding = 1) uniform samplerCube mantleMap[MAX_PLANETS];
+// layout(set = 2, binding = 2) uniform samplerCube tectonicsMap[MAX_PLANETS];
+// layout(set = 2, binding = 3) uniform samplerCube heightMap[MAX_PLANETS];
+// layout(set = 2, binding = 4) uniform samplerCube volcanoesMap[MAX_PLANETS];
+// layout(set = 2, binding = 5) uniform samplerCube liquidsMap[MAX_PLANETS];
 
-uint planetIndex = geom.material;
+// uint planetIndex = geom.material;
 
-void main() {
-	// vec3 spherePosition = geom.objectInstance.position;
-	// float sphereRadius = geom.aabbMax.x;
+// void main() {
+// 	// vec3 spherePosition = geom.objectInstance.position;
+// 	// float sphereRadius = geom.aabbMax.x;
 	
-	// Hit World Position
-	const vec3 hitPoint = gl_WorldRayDirectionEXT * gl_HitTEXT;
-	const dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
-	// const vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
-	
-	
-	vec3 pos0 = vec3(planetPos);
-	vec3 tangentX = normalize(cross(vec3(0,0,1), normalize(pos0)));
-	vec3 tangentY = normalize(cross(normalize(pos0), tangentX));
-	vec3 posR = normalize(pos0+tangentX*10);
-	vec3 posL = normalize(pos0-tangentX*10);
-	vec3 posU = normalize(pos0+tangentY*10);
-	vec3 posD = normalize(pos0-tangentY*10);
-	
-	float height = texture(heightMap[planetIndex], pos0).r;
-	posR *= texture(heightMap[planetIndex], posR).r;
-	posL *= texture(heightMap[planetIndex], posL).r;
-	posU *= texture(heightMap[planetIndex], posU).r;
-	posD *= texture(heightMap[planetIndex], posD).r;
-	
-	vec3 line1 = posR - posL;
-	vec3 line2 = posU - posD;
-	
-	vec3 normal = geom.objectInstance.normalMatrix * normalize(mix(normalize(pos0), normalize(cross(line1, line2)),0.2));
-	
-	vec3 c = vec3(height / planetHeightVariation / 2.0 + 0.5);
-	
-	vec3 color = ApplyPBRShading(hitPoint, c, normal, /*roughness*/0.5, /*metallic*/0.0);
+// 	// Hit World Position
+// 	const vec3 hitPoint = gl_WorldRayDirectionEXT * gl_HitTEXT;
+// 	const dvec3 planetPos = (planets[planetIndex] * dvec4(hitPoint, 1)).xyz;
+// 	// const vec3 planetPos = vec4(inverse(geom.objectInstance.modelViewMatrix) * vec4(hitPoint, 1)).xyz;
 	
 	
-	// vec4 color = vec4(texture(heightMap[planetIndex], vec3(planetPos)).r / planetHeightVariation / 2.0 + 0.5);
-	// vec4 color = texture(mantleMap[planetIndex], normalize(planetPos));
+// 	vec3 pos0 = vec3(planetPos);
+// 	vec3 tangentX = normalize(cross(vec3(0,0,1), normalize(pos0)));
+// 	vec3 tangentY = normalize(cross(normalize(pos0), tangentX));
+// 	vec3 posR = normalize(pos0+tangentX*10);
+// 	vec3 posL = normalize(pos0-tangentX*10);
+// 	vec3 posU = normalize(pos0+tangentY*10);
+// 	vec3 posD = normalize(pos0-tangentY*10);
 	
-	// if (gl_HitTEXT < 10000) color = mix(color, vec4(float(FastSimplexFractal(planetPos/50.0, 2)/2.0+0.5)), smoothstep(10000, 0, gl_HitTEXT));
+// 	float height = texture(heightMap[planetIndex], pos0).r;
+// 	posR *= texture(heightMap[planetIndex], posR).r;
+// 	posL *= texture(heightMap[planetIndex], posL).r;
+// 	posU *= texture(heightMap[planetIndex], posU).r;
+// 	posD *= texture(heightMap[planetIndex], posD).r;
 	
-	// if (gl_HitTEXT < 1.0) color = vec4(1,0,0,1);
+// 	vec3 line1 = posR - posL;
+// 	vec3 line2 = posU - posD;
 	
-	ray.color = color.rgb;
-	ray.distance = gl_HitTEXT;
-}
+// 	vec3 normal = geom.objectInstance.normalMatrix * normalize(mix(normalize(pos0), normalize(cross(line1, line2)),0.2));
+	
+// 	vec3 c = vec3(height / planetHeightVariation / 2.0 + 0.5);
+	
+// 	vec3 color = ApplyPBRShading(hitPoint, c, normal, /*roughness*/0.5, /*metallic*/0.0);
+	
+	
+// 	// vec4 color = vec4(texture(heightMap[planetIndex], vec3(planetPos)).r / planetHeightVariation / 2.0 + 0.5);
+// 	// vec4 color = texture(mantleMap[planetIndex], normalize(planetPos));
+	
+// 	// if (gl_HitTEXT < 10000) color = mix(color, vec4(float(FastSimplexFractal(planetPos/50.0, 2)/2.0+0.5)), smoothstep(10000, 0, gl_HitTEXT));
+	
+// 	// if (gl_HitTEXT < 1.0) color = vec4(1,0,0,1);
+	
+// 	ray.color = color.rgb;
+// 	ray.distance = gl_HitTEXT;
+// }
 
 
 #############################################################
@@ -239,6 +285,10 @@ void main() {
 
 vec3 GetVertexPos(uint index) {
 	return vertices[index*2].xyz;
+}
+
+vec2 GetVertexUV(uint index) {
+	return UnpackUVfromFloat(vertices[index*2+1].w);
 }
 
 void SetVertexPos(uint index, vec3 pos) {
@@ -262,7 +312,10 @@ void main() {
 	dvec3 vertexPos = dvec3(GetVertexPos(currentIndex)) + dvec3(chunkPosition);
 	dvec3 normalizedPos = normalize(vertexPos);
 	
-	vertexPos = normalizedPos * (solidRadius + double(texture(heightMap[planetIndex], vec3(normalizedPos)).r));
+	double mainHeightMap = double(texture(heightMap[planetIndex], vec3(normalizedPos)).r);
+	vec2 uv = (GetVertexUV(currentIndex)*uvMult+uvOffset);
+	// mainHeightMap += GetBumpMap(uv).a * 1000;
+	vertexPos = normalizedPos * (solidRadius + mainHeightMap);
 	
 	SetVertexPos(currentIndex, vec3(vertexPos - dvec3(chunkPosition)));
 }
@@ -424,18 +477,26 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 // #include "incubator_rendering/assets/shaders/_noise.glsl"
 // #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
-// layout(set = 2, binding = 0) uniform samplerCube mantleMap[MAX_PLANETS];
-// layout(set = 2, binding = 1) uniform samplerCube tectonicsMap[MAX_PLANETS];
-// layout(set = 2, binding = 2) uniform samplerCube heightMap[MAX_PLANETS];
-// layout(set = 2, binding = 3) uniform samplerCube volcanoesMap[MAX_PLANETS];
-// layout(set = 2, binding = 4) uniform samplerCube liquidsMap[MAX_PLANETS];
-
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.normal, /*roughness*/0.5, /*metallic*/0.0);
+	uint planetIndex = fragment.material;
+	vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
+	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
+	vec2 uvMult = fragment.objectInstance.custom4.xy;
+	vec2 uvOffset = fragment.objectInstance.custom4.zw;
+	vec2 uv = (fragment.uv*uvMult+uvOffset);
+	vec4 bump = GetBumpMap(uv);
+	vec3 normal = normalize(TBN * bump.xyz);
+	
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, /*height*/bump.a*1000, /*roughness*/0.5, /*metallic*/0.0);
 	ray.color = color;
 	ray.distance = gl_HitTEXT;
 	
-	// ray.color = vec3(0,1,0);
+	// ray.color = vec3(uv.xy, 0);
+	
+	// // ray.color = vec3(texture(bumpMap[0], fragment.uv).rgb);
+	// ray.color = vec3(texture(bumpMap[0], uv).rgb);
+	// ray.color = tangentX;
 	// ray.distance = gl_HitTEXT;
 }
