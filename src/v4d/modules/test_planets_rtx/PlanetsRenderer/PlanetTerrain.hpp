@@ -22,7 +22,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 128; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
 	static const size_t chunkGeneratorNbThreads = 4;
@@ -55,7 +55,7 @@ struct PlanetTerrain {
 	int renderedChunks = 0;
 	
 	struct Chunk {
-	
+		
 		#pragma region Constructor arguments
 		PlanetTerrain* planet;
 		CubeToSphere::FACE face;
@@ -92,7 +92,7 @@ struct PlanetTerrain {
 		float uvOffsetY = 0;
 		double chunkSize = 0;
 		double triangleSize = 0;
-		// double heightAtCenter = 0;
+		double heightAtCenter = 0;
 		double boundingDistance = 0;
 		double lowestAltitude = 0;
 		double highestAltitude = 0;
@@ -110,7 +110,7 @@ struct PlanetTerrain {
 		#pragma region Data
 		std::vector<Chunk*> subChunks {};
 		ObjectInstance* obj = nullptr;
-		Geometry* geometry = nullptr;
+		std::shared_ptr<Geometry> geometry = nullptr;
 		#pragma endregion
 		
 		bool IsLastLevel() {
@@ -124,7 +124,6 @@ struct PlanetTerrain {
 		}
 		
 		bool ShouldRemoveSubChunks() {
-			if (IsLastLevel()) return false;
 			return distanceFromCamera > chunkSubdivisionDistanceFactor*chunkSize * 1.5;
 		}
 		
@@ -161,9 +160,9 @@ struct PlanetTerrain {
 			centerPos = CubeToSphere::Spherify(center, face);
 			centerPosLowestPoint = centerPos * lowestAltitude;
 			centerPosHighestPoint = centerPos * highestAltitude;
-			// heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
-			// centerPos = glm::round(centerPos * heightAtCenter);
-			centerPos = glm::round(centerPos * planet->solidRadius);
+			heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
+			centerPos = glm::round(centerPos * heightAtCenter);
+			// centerPos = glm::round(centerPos * planet->solidRadius);
 			
 			topLeftPos = CubeToSphere::Spherify(topLeft, face);
 			topLeftPosLowestPoint = topLeftPos * lowestAltitude;
@@ -214,10 +213,10 @@ struct PlanetTerrain {
 		
 		void RefreshVertices() {
 			if (obj && obj->IsGenerated()) {
-				topLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(topLeftVertexIndex)->pos);
-				topRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(topRightVertexIndex)->pos);
-				bottomLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(bottomLeftVertexIndex)->pos);
-				bottomRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0]->GetVertexPtr(bottomRightVertexIndex)->pos);
+				topLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(topLeftVertexIndex)->pos);
+				topRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(topRightVertexIndex)->pos);
+				bottomLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(bottomLeftVertexIndex)->pos);
+				bottomRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(bottomRightVertexIndex)->pos);
 				RefreshDistanceFromCamera();
 			}
 		}
@@ -225,11 +224,11 @@ struct PlanetTerrain {
 		void Generate() {
 			if (!obj) {
 				if (!planet->scene) return;
-				obj = planet->scene->AddObjectInstance("planet_terrain");
+				obj = planet->scene->AddObjectInstance();
 				obj->Disable();
 			}
 			if (!geometry || obj->CountGeometries() == 0) {
-				geometry = obj->AddGeometry(nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
+				geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
 			}
 			
 			obj->SetObjectCustomData({0,0,0}, {uvMultX, uvMultY, uvOffsetX, uvOffsetY});
@@ -256,8 +255,14 @@ struct PlanetTerrain {
 					glm::dvec3 posOnChunk = pos * altitude - centerPos;
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					vertex->pos = posOnChunk;
-					vertex->SetUV(glm::vec2(rightSign<0?(vertexSubdivisionsPerChunk-genCol):genCol, topSign<0?(vertexSubdivisionsPerChunk-genRow):genRow) / float(vertexSubdivisionsPerChunk));
+					// UV
+					vertex->SetUV(glm::vec2(
+						rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
+						topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow
+					) / float(vertexSubdivisionsPerChunk));
+					// Normal
 					vertex->normal = pos; // already normalized
+					
 					geometry->isDirty = true;
 					genVertexIndex++;
 					
@@ -381,8 +386,11 @@ struct PlanetTerrain {
 				int firstSkirtIndex = genVertexIndex;
 				auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 					int skirtIndex = genVertexIndex++;
-					*geometry->GetVertexPtr(skirtIndex) = *geometry->GetVertexPtr(pointIndex);
-					geometry->GetVertexPtr(skirtIndex)->pos -= glm::vec3(glm::normalize(centerPos)*chunkSize/double(vertexSubdivisionsPerChunk)*2.0);
+					
+					auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
+					*skirtVertex = *geometry->GetVertexPtr(pointIndex);
+					skirtVertex->pos -= glm::normalize(centerPos)*(chunkSize/double(vertexSubdivisionsPerChunk)*2.0 + planet->heightVariation);
+					
 					if (topSign == rightSign) {
 						geometry->SetIndex(genIndexIndex++, pointIndex);
 						geometry->SetIndex(genIndexIndex++, skirtIndex);
@@ -450,10 +458,6 @@ struct PlanetTerrain {
 		
 		void AddSubChunks() {
 			subChunks.reserve(4);
-			
-			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
-			double topSign = topDir.x + topDir.y + topDir.z;
-			double rightSign = rightDir.x + rightDir.y + rightDir.z;
 			
 			{// Top Left
 				Chunk* sub = subChunks.emplace_back(new Chunk{
@@ -559,25 +563,23 @@ struct PlanetTerrain {
 					bool allSubchunksReady = true;
 					for (auto* subChunk : subChunks) {
 						subChunk->Process();
-						if (!subChunk->obj || !subChunk->obj->IsGenerated() || subChunk->obj->IsGeometriesDirty()) {
+						if (!subChunk->obj || !subChunk->obj->IsGenerated() || !subChunk->geometry->active) {
 							allSubchunksReady = false;
 						}
 					}
 					if (allSubchunksReady) Remove(false);
 				} else {
+					render = true;
 					if (ShouldRemoveSubChunks()) {
-						if (obj && obj->IsGenerated() && !obj->IsGeometriesDirty()) {
+						if (obj && obj->IsGenerated() && geometry->active) {
 							std::scoped_lock lock(subChunksMutex);
 							for (auto* subChunk : subChunks) {
 								subChunk->Remove(true);
 							}
+						} else {
+							render = false;
+							if (!obj || !obj->IsGenerated()) Generate();
 						}
-					}
-					if (obj && obj->IsGenerated()) {
-						render = true;
-					} else {
-						render = false;
-						Generate();
 					}
 				}
 				
@@ -618,14 +620,13 @@ struct PlanetTerrain {
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
-		double height = 0;
-		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/1000000.0), 5)*15000.0;
-		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/30000.0), 6)*4000.0;
+		double height = solidRadius;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/10000.0), 5)*1000.0;
 		// if (triangleSize < 200)
-		// 	height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/50.0), 7)*4.0;
+		// 	height += v4d::noise::SimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
 		// if (triangleSize < 4)
-		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/6.0, 3)*0.5;
-		return solidRadius + height;
+		// 	height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/5.0, 2);
+		return height;
 	}
 	
 	double GetSolidCirconference() {
@@ -743,8 +744,6 @@ struct PlanetTerrain {
 
 // Buffer pools
 v4d::Timer PlanetTerrain::lastGarbageCollectionTime {true};
-// PlanetTerrain::ChunkVertexBufferPool PlanetTerrain::vertexBufferPool {};
-// PlanetTerrain::ChunkIndexBufferPool PlanetTerrain::indexBufferPool {};
 
 // // Chunk Generator thread pool
 // v4d::processing::ThreadPoolPriorityQueue<PlanetTerrain::Chunk*>* PlanetTerrain::chunkGenerator = nullptr;

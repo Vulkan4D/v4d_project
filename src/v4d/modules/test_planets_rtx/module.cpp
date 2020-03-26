@@ -44,7 +44,7 @@ struct TerrainChunkPushConstant {
 	alignas(4) int face;
 } terrainChunkPushConstant;
 
-DescriptorSet *mapsGenDescriptorSet, *mapsSamplerDescriptorSet, *planetsDescriptorSet;
+DescriptorSet mapsGenDescriptorSet, mapsSamplerDescriptorSet, planetsDescriptorSet;
 
 #define MAX_PLANETS 1
 
@@ -125,7 +125,7 @@ struct Planet {
 	void GenerateMaps(Device* device, VkCommandBuffer commandBuffer) {
 		if (!mapsGenerated) {
 			mapGenPushConstant.planetIndex = 0;
-			mapGenPushConstant.planetHeightVariation = heightVariation;
+			mapGenPushConstant.planetHeightVariation = (float)heightVariation;
 			
 			/*First Pass*/
 		
@@ -179,7 +179,7 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 			}
 		}
 		
-		if (chunk->render && chunk->obj && chunk->obj->IsGenerated()) {
+		if (chunk->obj && chunk->obj->IsGenerated()) {
 			if (chunk->computedLevel == 0) {
 				terrainChunkPushConstant.chunkGeometryOffset = chunk->obj->GetFirstGeometryOffset();
 				terrainChunkPushConstant.chunkPosition = chunk->centerPos;
@@ -199,7 +199,11 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 					barrier.size = PlanetTerrain::nbVerticesPerChunk * sizeof(Geometry::VertexBuffer_T);
 					barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					barrier.buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
+					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+						barrier.buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
+					#else
+						barrier.buffer = Geometry::globalBuffers.vertexBuffer.buffer;
+					#endif
 				device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &barrier, 0, nullptr);
 				
 				// Compute normals
@@ -209,14 +213,17 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 				chunk->computedLevel++;
 				chunk->obj->SetGeometriesDirty();
 				
-				// Pull some vertices
-				chunk->obj->GetGeometries()[0]->Pull(device, commandBuffer, Geometry::GlobalGeometryBuffers::BUFFER_VERTEX);
-			
+				// pull computed vertices
+				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					chunk->obj->GetGeometries()[0]->Pull(device, commandBuffer, Geometry::GlobalGeometryBuffers::BUFFER_VERTEX);
+				#endif
 			} else {
 				chunk->RefreshVertices();
+				if (chunk->obj->IsGeometriesDirty()) {
+					if (chunk->geometry->blas) chunk->geometry->blas->built = false;
+					chunk->geometry->active = true;
+				}
 			}
-		} else {
-			chunk->RefreshVertices();
 		}
 	}
 }
@@ -230,36 +237,36 @@ public:
 	void Init() override {
 		
 	}
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>&, PipelineLayout* rayTracingPipelineLayout) override {
+	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>&, PipelineLayout* rayTracingPipelineLayout) override {
 		
-		mapsGenDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(1));
-		planetsDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(2));
-		mapsSamplerDescriptorSet = descriptorSets.emplace_back(new DescriptorSet(3));
-		planetsMapGenLayout.AddDescriptorSet(descriptorSets[0]);
-		planetsMapGenLayout.AddDescriptorSet(mapsGenDescriptorSet);
+		descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
+		descriptorSets["planets"] = &planetsDescriptorSet;
+		descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;
+		planetsMapGenLayout.AddDescriptorSet(descriptorSets["0_base"]);
+		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
-		rayTracingPipelineLayout->AddDescriptorSet(mapsSamplerDescriptorSet);
-		rayTracingPipelineLayout->AddDescriptorSet(planetsDescriptorSet);
+		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		rayTracingPipelineLayout->AddDescriptorSet(&planetsDescriptorSet);
 		
-		mapsGenDescriptorSet->AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet->AddBinding_imageView_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet->AddBinding_imageView_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet->AddBinding_imageView_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet->AddBinding_imageView_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet->AddBinding_imageView_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsSamplerDescriptorSet->AddBinding_combinedImageSampler_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 		
-		planetsDescriptorSet->AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		planetsDescriptorSet.AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		
-		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets[0]);
-		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets[1]);
-		terrainVertexComputeLayout.AddDescriptorSet(mapsSamplerDescriptorSet);
+		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets["0_base"]);
+		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets["1_rayTracing"]);
+		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
 		// terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
 		terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 	}
@@ -352,8 +359,8 @@ public:
 	void LoadScene(Scene& scene) override {
 		
 		// Light source
-		scene.AddObjectInstance("light")->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(700000000, 1e24f);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 700000000, 1e24f);
 		}, {10,-1.496e+11,300});
 				
 						// // Planet
@@ -407,6 +414,10 @@ public:
 	}
 	void LowPriorityFrameUpdate() override {
 		// for each planet
+			std::lock_guard lock(terrain.chunksMutex);
+			for (auto* chunk : terrain.chunks) {
+				chunk->Process(); // need to process after compute, because we will compute on next lowPriority frame, because otherwise the computed geometries get overridden by the ones in the staging buffer
+			}
 			// terrain.Optimize();
 		//
 		// PlanetTerrain::CollectGarbage(renderingDevice);
@@ -458,7 +469,6 @@ public:
 			std::lock_guard lock(terrain.chunksMutex);
 			for (auto* chunk : terrain.chunks) {
 				ComputeChunkVertices(renderingDevice, commandBuffer, chunk);
-				chunk->Process(); // need to process after compute, because we will compute on next lowPriority frame, because otherwise the computed geometries get overridden by the ones in the staging buffer
 			}
 		//
 	}

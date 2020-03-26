@@ -14,7 +14,7 @@ using namespace v4d::graphics::vulkan::rtx;
 
 void CreateTestBox(ObjectInstance* obj) {
 
-	auto* geom1 = obj->AddGeometry(28, 42);
+	auto geom1 = obj->AddGeometry(28, 42);
 	
 	geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
 	geom1->SetVertex(1,  /*pos*/{ 5.0,-5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
@@ -82,34 +82,33 @@ public:
 	#endif
 	
 	virtual void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
-		// Geometry::rayTracingShaderOffsets["planet"] = shaderBindingTable->AddHitShader("planet.rchit", "", "planet.rint");
-		
+				
 	}
 	
 	void LoadScene(Scene& scene) {
 		
-		scene.objectInstances.emplace_back(new ObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);
-		scene.objectInstances.emplace_back(new ObjectInstance())->Configure(CreateTestBox, {200,250,-30}, 120.0);
-		scene.objectInstances.emplace_back(new ObjectInstance())->Configure(CreateTestBox, {-200,250,-30}, -120.0);
+		scene.AddObjectInstance()->Configure(CreateTestBox, {0,250,-30}, 180.0);
+		scene.AddObjectInstance()->Configure(CreateTestBox, {200,250,-30}, 120.0);
+		scene.AddObjectInstance()->Configure(CreateTestBox, {-200,250,-30}, -120.0);
 		
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(20, 10000000);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(200, 100000000);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 200, 100000000);
 		}, {10,-500,1000});
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(2, 10000);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 2, 10000);
 		}, {10,270,10});
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(1, 10000);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 1, 10000);
 		}, {210,270,-20});
-		scene.objectInstances.emplace_back(new ObjectInstance("light"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource(1, 10000);
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
-		scene.objectInstances.emplace_back(new ObjectInstance("sphere"))->Configure([](ObjectInstance* obj){
-			obj->SetSphereGeometry(50, {1,0,0, 1});
+		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
 		
 	}

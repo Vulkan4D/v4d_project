@@ -91,7 +91,11 @@ private:
 				VkAccelerationStructureGeometryKHR geometryInfo {};
 					geometryInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
 					geometryInfo.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-					auto vertexBufferAddr = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer);
+					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+						auto vertexBufferAddr = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer);
+					#else
+						auto vertexBufferAddr = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.vertexBuffer.buffer);
+					#endif
 					if (geometry->isProcedural) {
 						geometryInfo.geometryType = VK_GEOMETRY_TYPE_AABBS_KHR;
 						geometryInfo.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
@@ -104,7 +108,11 @@ private:
 						geometryInfo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
 						geometryInfo.geometry.triangles.indexType = sizeof(Geometry::IndexBuffer_T)==2? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
 						geometryInfo.geometry.triangles.vertexData = vertexBufferAddr;
-						geometryInfo.geometry.triangles.indexData = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer);
+						#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+							geometryInfo.geometry.triangles.indexData = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer);
+						#else
+							geometryInfo.geometry.triangles.indexData = device->GetBufferDeviceOrHostAddressConst(Geometry::globalBuffers.indexBuffer.buffer);
+						#endif
 						if (geometry->transformBuffer) {
 							geometryInfo.geometry.triangles.transformData = device->GetBufferDeviceOrHostAddressConst(geometry->transformBuffer->buffer);
 						}
@@ -241,8 +249,10 @@ private:
 		
 		void Destroy(Device* device) {
 			if (memory) device->FreeMemory(memory, nullptr);
+			memory = VK_NULL_HANDLE;
 			if (accelerationStructure) device->DestroyAccelerationStructureKHR(accelerationStructure, nullptr);
 			accelerationStructure = VK_NULL_HANDLE;
+			handle = 0;
 			built = false;
 			if (scratchBufferAllocated) {
 				scratchBuffer.Free(device);
@@ -507,8 +517,10 @@ protected:
 	};
 	
 private: // Ray tracing stuff
-	// std::vector<Geometry*> geometries {};
+	std::queue<BottomLevelAccelerationStructure*> blasQueue;
+	std::mutex blasQueueMutex;
 	std::vector<BottomLevelAccelerationStructure> rayTracingBottomLevelAccelerationStructures {};
+	std::queue<int> blasIndexPool {};
 	TopLevelAccelerationStructure rayTracingTopLevelAccelerationStructure {};
 	Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR};
 	VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties{};
@@ -596,8 +608,13 @@ private: // Init
 		rayTracingDescriptorSet_1->AddBinding_imageView(1, &renderTargetGroup.GetLitImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		rayTracingDescriptorSet_1->AddBinding_imageView(2, &renderTargetGroup.GetDepthImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		rayTracingDescriptorSet_1->AddBinding_storageBuffer(3, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+			rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+			rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		#else
+			rayTracingDescriptorSet_1->AddBinding_storageBuffer(4, &Geometry::globalBuffers.indexBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+			rayTracingDescriptorSet_1->AddBinding_storageBuffer(5, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
+		#endif
 		rayTracingPipelineLayout.AddDescriptorSet(baseDescriptorSet_0);
 		rayTracingPipelineLayout.AddDescriptorSet(rayTracingDescriptorSet_1);
 		
@@ -977,18 +994,18 @@ private: // Pipelines
 		#ifdef _ENABLE_IMGUI
 			{// ImGui
 				ImGui_ImplVulkan_InitInfo init_info {};
-				init_info.Instance = GetHandle();
-				init_info.PhysicalDevice = renderingDevice->GetPhysicalDevice()->GetHandle();
-				init_info.Device = renderingDevice->GetHandle();
-				init_info.QueueFamily = graphicsQueue.familyIndex;
-				init_info.Queue = graphicsQueue.handle;
-				init_info.DescriptorPool = descriptorPool;
-				init_info.MinImageCount = swapChain->images.size();
-				init_info.ImageCount = swapChain->images.size();
+					init_info.Instance = GetHandle();
+					init_info.PhysicalDevice = renderingDevice->GetPhysicalDevice()->GetHandle();
+					init_info.Device = renderingDevice->GetHandle();
+					init_info.QueueFamily = graphicsQueue.familyIndex;
+					init_info.Queue = graphicsQueue.handle;
+					init_info.DescriptorPool = descriptorPool;
+					init_info.MinImageCount = swapChain->images.size();
+					init_info.ImageCount = swapChain->images.size();
 				ImGui_ImplVulkan_Init(&init_info, uiRenderPass.handle);
 				// Font Upload
 				auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
-				ImGui_ImplVulkan_CreateFontsTexture(cmdBuffer);
+					ImGui_ImplVulkan_CreateFontsTexture(cmdBuffer);
 				EndSingleTimeCommands(graphicsQueue, cmdBuffer);
 				ImGui_ImplVulkan_DestroyFontUploadObjects();
 			}
@@ -1271,6 +1288,11 @@ public: // Update
 					}
 					rayTracingTopLevelAccelerationStructure.instances.pop_back();
 					obj->SetRayTracingInstanceIndex(-1);
+					if (auto blasIndex = obj->GetRayTracingBlasIndex(); blasIndex != -1) {
+						rayTracingBottomLevelAccelerationStructures[blasIndex].Destroy(renderingDevice);
+						obj->SetRayTracingBlasIndex(-1);
+						blasIndexPool.push(blasIndex);
+					}
 				}
 			}
 		}
@@ -1311,44 +1333,57 @@ public: // Update
 				obj->GenerateGeometries();
 				
 				auto cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
+				
 					obj->PushGeometries(renderingDevice, cmdBuffer);
-			
-					// int totalVertices, totalIndices;
-					// obj->GetGeometriesTotals(&totalVertices, &totalIndices);
-					// VkBufferMemoryBarrier barriers[3] {{},{},{}};
-					// 	// vertices
-					// 	barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					// 	barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-					// 	barriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-					// 	barriers[0].offset = obj->GetFirstGeometryVertexOffset() * sizeof(Geometry::VertexBuffer_T);
-					// 	barriers[0].size = totalVertices * sizeof(Geometry::VertexBuffer_T);
-					// 	barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
-					// 	// indices
-					// 	barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					// 	barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-					// 	barriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-					// 	barriers[1].offset = obj->GetFirstGeometryIndexOffset() * sizeof(Geometry::IndexBuffer_T);
-					// 	barriers[1].size = totalIndices * sizeof(Geometry::IndexBuffer_T);
-					// 	barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
-					// 	// geometryInfos
-					// 	barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					// 	barriers[2].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-					// 	barriers[2].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-					// 	barriers[2].offset = obj->GetFirstGeometryOffset() * sizeof(Geometry::GeometryBuffer_T);
-					// 	barriers[2].size = sizeof(Geometry::GeometryBuffer_T);
-					// 	barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					// 	barriers[2].buffer = Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer.buffer;
-					// renderingDevice->CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 3, barriers, 0, nullptr);
+					
+				// EndSingleTimeCommands(lowPriorityComputeQueue, cmdBuffer);
+				
+				// cmdBuffer = BeginSingleTimeCommands(lowPriorityComputeQueue);
+				
+					// #ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					// 	int totalVertices, totalIndices;
+					// 	obj->GetGeometriesTotals(&totalVertices, &totalIndices);
+					// 	VkBufferMemoryBarrier barriers[3] {{},{},{}};
+					// 		// vertices
+					// 		barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 		barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 		barriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 		barriers[0].offset = obj->GetFirstGeometryVertexOffset() * sizeof(Geometry::VertexBuffer_T);
+					// 		barriers[0].size = totalVertices * sizeof(Geometry::VertexBuffer_T);
+					// 		barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
+					// 		// indices
+					// 		barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 		barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 		barriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 		barriers[1].offset = obj->GetFirstGeometryIndexOffset() * sizeof(Geometry::IndexBuffer_T);
+					// 		barriers[1].size = totalIndices * sizeof(Geometry::IndexBuffer_T);
+					// 		barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
+					// 		// geometryInfos
+					// 		barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					// 		barriers[2].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+					// 		barriers[2].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					// 		barriers[2].offset = obj->GetFirstGeometryOffset() * sizeof(Geometry::GeometryBuffer_T);
+					// 		barriers[2].size = sizeof(Geometry::GeometryBuffer_T);
+					// 		barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					// 		barriers[2].buffer = Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer.buffer;
+					// 	renderingDevice->CmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 3, barriers, 0, nullptr);
+					// #endif
 					
 					BottomLevelAccelerationStructure* blas;
 					if (obj->GetRayTracingBlasIndex() == -1) {
-						obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
-						blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+						if (blasIndexPool.size() == 0) {
+							obj->SetRayTracingBlasIndex(rayTracingBottomLevelAccelerationStructures.size());
+							blas = &rayTracingBottomLevelAccelerationStructures.emplace_back();
+						} else {
+							int blasIndex = blasIndexPool.front();blasIndexPool.pop();
+							obj->SetRayTracingBlasIndex(blasIndex);
+							blas = &rayTracingBottomLevelAccelerationStructures[blasIndex];
+						}
 					} else {
 						blas = &rayTracingBottomLevelAccelerationStructures[obj->GetRayTracingBlasIndex()];
 					}

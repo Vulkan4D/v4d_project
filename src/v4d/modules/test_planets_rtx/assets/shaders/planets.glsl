@@ -296,11 +296,6 @@ void SetVertexPos(uint index, vec3 pos) {
 }
 
 void main() {
-	// float solidRadius;
-	// samplerCube heightMap[planetIndex]
-	// layout(set = 1, binding = 5) buffer VertexBuffer {vec4 vertices[];};
-	// ivec3 chunkPosition;
-	
 	uint vertexOffset = geometries[chunkGeometryOffset].y;
 	// objectIndex = geometries[chunkGeometryOffset].z;
 	// material = geometries[chunkGeometryOffset].w;
@@ -312,10 +307,14 @@ void main() {
 	dvec3 vertexPos = dvec3(GetVertexPos(currentIndex)) + dvec3(chunkPosition);
 	dvec3 normalizedPos = normalize(vertexPos);
 	
-	double mainHeightMap = double(texture(heightMap[planetIndex], vec3(normalizedPos)).r);
-	vec2 uv = (GetVertexUV(currentIndex)*uvMult+uvOffset);
-	// mainHeightMap += GetBumpMap(uv).a * 1000;
-	vertexPos = normalizedPos * (solidRadius + mainHeightMap);
+	// double mainHeightMap = double(texture(heightMap[planetIndex], vec3(normalizedPos)).r);
+	double secondaryHeightMap = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5)*20000.0;
+	secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/10000.0, 5)*1000.0;
+	// if (triangleSize < 200)
+		secondaryHeightMap += FastSimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
+	// if (triangleSize < 4)
+		secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/5.0, 2);
+	vertexPos += normalizedPos * (secondaryHeightMap);
 	
 	SetVertexPos(currentIndex, vec3(vertexPos - dvec3(chunkPosition)));
 }
@@ -479,17 +478,17 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	uint planetIndex = fragment.material;
-	vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
-	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
-	vec2 uvMult = fragment.objectInstance.custom4.xy;
-	vec2 uvOffset = fragment.objectInstance.custom4.zw;
-	vec2 uv = (fragment.uv*uvMult+uvOffset);
-	vec4 bump = GetBumpMap(uv);
-	vec3 normal = normalize(TBN * bump.xyz);
+	// uint planetIndex = fragment.material;
+	// vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
+	// vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	// mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
+	// vec2 uvMult = fragment.objectInstance.custom4.xy;
+	// vec2 uvOffset = fragment.objectInstance.custom4.zw;
+	// vec2 uv = (fragment.uv*uvMult+uvOffset);
+	// vec4 bump = GetBumpMap(uv);
+	// vec3 normal = normalize(TBN * bump.xyz);
 	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, /*height*/bump.a*1000, /*roughness*/0.5, /*metallic*/0.0);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
 	ray.color = color;
 	ray.distance = gl_HitTEXT;
 	

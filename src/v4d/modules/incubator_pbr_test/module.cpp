@@ -101,8 +101,8 @@ struct PbrRenderer : v4d::modules::Rendering {
 		indexBuffer.AddSrcDataPtr(indices.data(), indices.size() * sizeof(uint32_t));
 	}
 	
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
-		pipelineLayout.AddDescriptorSet(descriptorSets[0]);
+	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
+		pipelineLayout.AddDescriptorSet(descriptorSets["base"]);
 	}
 	
 	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, v4d::graphics::vulkan::rtx::ShaderBindingTable*) override {

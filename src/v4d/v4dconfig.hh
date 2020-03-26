@@ -8,3 +8,7 @@ namespace VkFunctions {}
 #else
 	#define XVK_IMPORT
 #endif
+
+// #define V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+
+// #define VULKAN_VALIDATION_ABORT_ON_ERROR

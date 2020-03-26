@@ -1,8 +1,8 @@
 #version 460 core
 #shader comp
 
-layout(set = 0, binding = 0, rgba16f) uniform readonly image2D thumbnail;
-layout(set = 0, binding = 1) buffer writeonly OutputData {
+layout(set = 1, binding = 0, rgba16f) uniform readonly image2D thumbnail;
+layout(set = 1, binding = 1) buffer writeonly OutputData {
 	vec4 totalLuminance;
 };
 

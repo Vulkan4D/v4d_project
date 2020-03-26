@@ -23,6 +23,7 @@ class PlanetsRenderer : public v4d::modules::Rendering {
 		"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.frag",
 	}};
 	RenderPass	atmospherePass;
+	DescriptorSet atmosphereDescriptorSet_1;
 	#pragma endregion
 	
 public:
@@ -34,17 +35,15 @@ public:
 	// // Executed when calling InitRenderer() on the main Renderer
 	// void Init() override {}
 	
-	void InitLayouts(std::vector<DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
-		// auto* planetDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
-		auto* atmosphereDescriptorSet_1 = descriptorSets.emplace_back(new DescriptorSet(1));
+	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
+		descriptorSets["atmosphere"] = &atmosphereDescriptorSet_1;
 		
-		planetTerrainPipelineLayout.AddDescriptorSet(descriptorSets[0]);
-		// planetTerrainPipelineLayout.AddDescriptorSet(planetDescriptorSet_1);
+		planetTerrainPipelineLayout.AddDescriptorSet(descriptorSets["base"]);
 		planetTerrainPipelineLayout.AddPushConstant<PlanetTerrainShaderPipeline::PlanetChunkPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
-		atmosphereDescriptorSet_1->AddBinding_inputAttachment(0, images["gBuffer_position"], VK_SHADER_STAGE_FRAGMENT_BIT);
-		planetAtmospherePipelineLayout.AddDescriptorSet(descriptorSets[0]);
-		planetAtmospherePipelineLayout.AddDescriptorSet(atmosphereDescriptorSet_1);
+		atmosphereDescriptorSet_1.AddBinding_inputAttachment(0, images["gBuffer_position"], VK_SHADER_STAGE_FRAGMENT_BIT);
+		planetAtmospherePipelineLayout.AddDescriptorSet(descriptorSets[""]);
+		planetAtmospherePipelineLayout.AddDescriptorSet(&atmosphereDescriptorSet_1);
 		planetAtmospherePipelineLayout.AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		if (sizeof(PlanetTerrainShaderPipeline::PlanetChunkPushConstant) > 128) {

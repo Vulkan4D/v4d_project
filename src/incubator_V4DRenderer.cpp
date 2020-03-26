@@ -12,7 +12,7 @@ using namespace v4d::graphics;
 #define WINDOW_HEIGHT 720
 #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
 
-#include "incubator_rendering/V4DRenderer.hpp"
+#include "incubator_rendering/V4DRenderer2.hpp"
 
 static std::vector<std::string> v4dModules {
 	"incubator_simplemovearound",
@@ -83,7 +83,7 @@ int main() {
 	
 	// Validation layers
 	#ifdef _DEBUG
-		// vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	#endif
 	
 	// Vulkan
@@ -108,7 +108,7 @@ int main() {
 	#endif
 	
 	// Create Renderer (and Vulkan Instance)
-	auto* renderer = new V4DRenderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
+	auto* renderer = new V4DRenderer2(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
 	// Load renderer
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
@@ -192,7 +192,7 @@ int main() {
 				// Main info UI
 				ImGui::SetNextWindowPos({20,0});
 				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
-				ImGui::Begin("Vulkan4D: V4DRenderer (Incubator)");
+				ImGui::Begin("Vulkan4D: V4DRenderer2 (Incubator)");
 				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
 				ImGui::Text("Secondary rendering thread & UI : %.1f FPS", secondaryAvgFrameRate);
 				ImGui::Text("Input thread : %.1f FPS", inputAvgFrameRate);
