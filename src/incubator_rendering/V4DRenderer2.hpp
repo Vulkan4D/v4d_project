@@ -139,6 +139,7 @@ private: // Ray Tracing
 	Buffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
 	RayTracingBLASInstance* rayTracingInstances = nullptr;
 	uint32_t nbRayTracingInstances = 0;
+	Buffer scratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
 	
 	void CreateRayTracingResources() {
 		topLevelAccelerationStructure.AssignTopLevel();
@@ -208,40 +209,61 @@ private: // Ray Tracing
 		);
 	}
 	
-	void BuildRayTracingAccelerationStructures(Device* device, VkCommandBuffer commandBuffer) {
+	void BuildBottomLevelRayTracingAccelerationStructures(Device* device, VkCommandBuffer commandBuffer) {
 		// Build all new/updated bottom levels
 		{
 			std::lock_guard lock(blasBuildQueueMutex);
 			if (blasQueueBuildGeometryInfos.size() > 0) {
 				
-				for (int i = 0; i < blasQueueBuildGeometryInfos.size(); ++i) device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &blasQueueBuildGeometryInfos[i], &blasQueueBuildOffsetInfos[i]);
-				// device->CmdBuildAccelerationStructureKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildOffsetInfos.data());
-				
+				device->CmdBuildAccelerationStructureKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildOffsetInfos.data());
 				blasQueueBuildGeometryInfos.clear();
 				blasQueueBuildOffsetInfos.clear();
+				
+				
+				// static std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos_swap {};
+				// static std::vector<VkAccelerationStructureBuildOffsetInfoKHR*> blasQueueBuildOffsetInfos_swap {};
+				// blasQueueBuildGeometryInfos_swap.clear();
+				// blasQueueBuildOffsetInfos_swap.clear();
+				// blasQueueBuildGeometryInfos_swap.swap(blasQueueBuildGeometryInfos);
+				// blasQueueBuildOffsetInfos_swap.swap(blasQueueBuildOffsetInfos);
+				// device->CmdBuildAccelerationStructureKHR(commandBuffer, blasQueueBuildGeometryInfos_swap.size(), blasQueueBuildGeometryInfos_swap.data(), blasQueueBuildOffsetInfos_swap.data());
+				
+				
+				// for (int i = 0; i < blasQueueBuildGeometryInfos.size(); ++i) {
+				// 	device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &blasQueueBuildGeometryInfos[i], &blasQueueBuildOffsetInfos[i]);
+				// 	EndSingleTimeCommands(graphicsQueue, commandBuffer);
+				// 	commandBuffer = BeginSingleTimeCommands(graphicsQueue);
+				// }
+				// blasQueueBuildGeometryInfos.clear();
+				// blasQueueBuildOffsetInfos.clear();
+				
+				
 			}
 		}
 		
-		VkMemoryBarrier memoryBarrier {
-			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-			nullptr,// pNext
-			VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
-			VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
-		};
-		device->CmdPipelineBarrier(
-			commandBuffer, 
-			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-			0, 
-			1, &memoryBarrier, 
-			0, 0, 
-			0, 0
-		);
+		// VkMemoryBarrier memoryBarrier {
+		// 	VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+		// 	nullptr,// pNext
+		// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
+		// 	VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+		// };
+		// device->CmdPipelineBarrier(
+		// 	commandBuffer, 
+		// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+		// 	VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+		// 	0, 
+		// 	1, &memoryBarrier, 
+		// 	0, 0, 
+		// 	0, 0
+		// );
 		
-		// Build top level
+	}
+	
+	void BuildTopLevelRayTracingAccelerationStructure(Device* device, VkCommandBuffer commandBuffer) {
+		std::lock_guard lock(rayTracingInstanceMutex);
+		static const VkAccelerationStructureBuildOffsetInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildOffsetInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
-		const VkAccelerationStructureBuildOffsetInfoKHR* pGeometriesOffsets = &topLevelAccelerationStructure.buildOffsetInfo;
-		device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &pGeometriesOffsets);
+		device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
 	}
 	
 	void AddRayTracingBlasBuild(std::shared_ptr<AccelerationStructure> blas) {
@@ -251,6 +273,7 @@ private: // Ray Tracing
 	}
 	
 	void MakeRayTracingBlas(GeometryInstance* geometryInstance) {
+		std::lock_guard lock(blasBuildQueueMutex);
 		geometryInstance->geometry->blas = std::make_shared<AccelerationStructure>();
 		geometryInstance->geometry->blas->AssignBottomLevel(renderingDevice, geometryInstance->geometry);
 		geometryInstance->geometry->blas->Create(renderingDevice);
@@ -258,31 +281,35 @@ private: // Ray Tracing
 	}
 	
 	void SetRayTracingInstanceTransform(GeometryInstance* geometryInstance, const glm::mat4& transform) {
-		if (geometryInstance->rayTracingInstanceIndex == -1) return;
 		std::lock_guard lock(rayTracingInstanceMutex);
+		if (geometryInstance->rayTracingInstanceIndex == -1) return;
 		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(transform);
 	}
 	
 	void AddRayTracingInstance(GeometryInstance* geometryInstance) {
 		std::lock_guard lock(rayTracingInstanceMutex);
-		while (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
-			if (rayTracingInstances[nbRayTracingInstances].accelerationStructureHandle == 0) {
+		if (geometryInstance->rayTracingInstanceIndex != -1) return;
+		if (!geometryInstance->geometry->blas || !geometryInstance->geometry->blas->handle) return;
+		// while (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
+		// 	if (rayTracingInstances[nbRayTracingInstances].accelerationStructureHandle == 0) {
 				rayTracingInstances[nbRayTracingInstances].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 				rayTracingInstances[nbRayTracingInstances].customInstanceId = geometryInstance->geometry->geometryOffset;
 				rayTracingInstances[nbRayTracingInstances].mask = geometryInstance->geometry->rayTracingMask;
 				rayTracingInstances[nbRayTracingInstances].shaderInstanceOffset = Geometry::rayTracingShaderOffsets[geometryInstance->type];
 				rayTracingInstances[nbRayTracingInstances].flags = geometryInstance->geometry->flags;
+				rayTracingInstances[nbRayTracingInstances].transform = glm::mat3x4{0};
+				LOG(nbRayTracingInstances)
 				geometryInstance->rayTracingInstanceIndex = nbRayTracingInstances++;
-				return;
-			}
-			nbRayTracingInstances++;
-		}
-		FATAL("Exceeded maximum number of ray tracing instances")
+		// 		return;
+		// 	}
+		// 	nbRayTracingInstances++;
+		// }
+		// FATAL("Exceeded maximum number of ray tracing instances")
 	}
 	
 	void RemoveRayTracingInstance(GeometryInstance* geometryInstance) {
-		if (geometryInstance->rayTracingInstanceIndex == -1) return;
 		std::lock_guard lock(rayTracingInstanceMutex);
+		if (geometryInstance->rayTracingInstanceIndex == -1) return;
 		int lastIndex = --nbRayTracingInstances;
 		int index = geometryInstance->rayTracingInstanceIndex;
 		geometryInstance->rayTracingInstanceIndex = -1;
@@ -294,12 +321,12 @@ private: // Ray Tracing
 					for (auto& geom : obj->GetGeometries()) {
 						if (geom.rayTracingInstanceIndex == lastIndex) {
 							geom.rayTracingInstanceIndex = index;
-							goto Found;
+							goto End;
 						}
 					}
 				}
 				LOG_ERROR("Object Instance to move to deleted instance index : Not Found")
-			Found:
+			End:
 			scene.Unlock();
 		}
 	}
@@ -661,12 +688,7 @@ public: // Scene
 		activeLightsUniformBuffer.Allocate(renderingDevice);
 	}
 	void FreeSceneBuffers() {
-		// Scene Objects
-		scene.Lock();
-		for (auto* obj : scene.objectInstances) if (obj) {
-			obj->ClearGeometries();
-		}
-		scene.Unlock();
+		scene.ClenupObjectInstancesGeometries();
 		
 		// Uniform Buffers
 		cameraUniformBuffer.Free(renderingDevice);
@@ -876,7 +898,7 @@ private: // Resources overrides
 			submodule->AllocateBuffers();
 		}
 		
-		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
+		Geometry::globalBuffers.Allocate(renderingDevice/*, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex}*/);
 	}
 	void FreeBuffers() override {
 		FreeSceneBuffers();
@@ -952,6 +974,16 @@ public: // Update overrides
 			submodule->FrameUpdate(scene);
 		}
 		
+		auto cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			for (auto* submodule : renderingSubmodules) {
+				submodule->RunDynamicLowPriorityCompute(cmdBuffer);
+			}
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+		
+
+		scratchBuffer.size = 0;
+		
 		// Update object transforms and light sources (Use all lights for now)
 		scene.Lock();
 			nbActiveLights = 0;
@@ -959,6 +991,7 @@ public: // Update overrides
 				if (obj && obj->IsActive()) {
 					// Matrices
 					obj->WriteMatrices(scene.camera.viewMatrix);
+					obj->PushGeometries(renderingDevice, cmdBuffer);
 					// Light sources
 					for (auto* lightSource : obj->GetLightSources()) {
 						activeLights[nbActiveLights++] = lightSource->lightOffset;
@@ -970,6 +1003,8 @@ public: // Update overrides
 								MakeRayTracingBlas(&geom);
 							}
 							if (!geom.geometry->blas->built) {
+								geom.geometry->blas->scratchBufferOffset = scratchBuffer.size;
+								scratchBuffer.size += geom.geometry->blas->GetMemoryRequirementsForScratchBuffer(renderingDevice);
 								AddRayTracingBlasBuild(geom.geometry->blas);
 								geom.geometry->blas->built = true;
 							}
@@ -981,14 +1016,53 @@ public: // Update overrides
 							RemoveRayTracingInstance(&geom);
 						}
 					}
-				} else {
+				} else if (obj) {
 					for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
 						RemoveRayTracingInstance(&geom);
 					}
 				}
 			}
+			
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		
+		topLevelAccelerationStructure.scratchBufferOffset = scratchBuffer.size;
+		scratchBuffer.size += topLevelAccelerationStructure.GetMemoryRequirementsForScratchBuffer(renderingDevice);
+		scratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		
+		topLevelAccelerationStructure.SetScratchBuffer(renderingDevice, scratchBuffer.buffer);
+		for (auto* obj : scene.objectInstances) {
+			if (obj && obj->IsActive()) {
+				for (auto& geom : obj->GetGeometries()) {
+					if (geom.geometry->active) {
+						geom.geometry->blas->SetScratchBuffer(renderingDevice, scratchBuffer.buffer);
+					}
+				}
+			}
+		}
+		
+		cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			BuildBottomLevelRayTracingAccelerationStructures(renderingDevice, cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		
+		cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			BuildTopLevelRayTracingAccelerationStructure(renderingDevice, cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		
+		scratchBuffer.Free(renderingDevice);
+		
+		cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			cameraUniformBuffer.Update(renderingDevice, cmdBuffer);
+			activeLightsUniformBuffer.Update(renderingDevice, cmdBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
+			Geometry::globalBuffers.PushObjects(renderingDevice, cmdBuffer);
+			Geometry::globalBuffers.PushLights(renderingDevice, cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		cmdBuffer = BeginSingleTimeCommands(graphicsQueue);
+			RecordRayTracingCommands(cmdBuffer);
+		EndSingleTimeCommands(graphicsQueue, cmdBuffer);
+		
 		scene.CollectGarbage();
 		scene.Unlock();
+		
 	}
 	void LowPriorityFrameUpdate() override {
 		
@@ -1004,53 +1078,52 @@ public: // Update overrides
 	
 private: // Commands overrides
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
-		// Transfer data to rendering device
-		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
-		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
-		Geometry::globalBuffers.PushObjects(renderingDevice, commandBuffer);
-		Geometry::globalBuffers.PushLights(renderingDevice, commandBuffer);
+		// // Transfer data to rendering device
+		// cameraUniformBuffer.Update(renderingDevice, commandBuffer);
+		// activeLightsUniformBuffer.Update(renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
+		// Geometry::globalBuffers.PushObjects(renderingDevice, commandBuffer);
+		// Geometry::globalBuffers.PushLights(renderingDevice, commandBuffer);
 	
 		//TODO memory barrier between transfer and vertex shaders ?
 	
-		// Submodules
-		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicGraphicsTop(commandBuffer, images);
-		}
+		// // Submodules
+		// for (auto* submodule : renderingSubmodules) {
+		// 	submodule->RunDynamicGraphicsTop(commandBuffer, images);
+		// }
 	
-		// Ray Tracing Acceleration Structures
-		BuildRayTracingAccelerationStructures(renderingDevice, commandBuffer);
+		// Top Level Acceleration Structure
+		// BuildTopLevelRayTracingAccelerationStructure(renderingDevice, commandBuffer);
 		
-		// Submodules
-		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
-		}
+		// // Submodules
+		// for (auto* submodule : renderingSubmodules) {
+		// 	submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
+		// }
 		
-		//...
+		// //...
 		
-		// Submodules
-		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicGraphicsBottom(commandBuffer, images);
-		}
-		
+		// // Submodules
+		// for (auto* submodule : renderingSubmodules) {
+		// 	submodule->RunDynamicGraphicsBottom(commandBuffer, images);
+		// }
 	}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		RecordRayTracingCommands(commandBuffer);
+		// RecordRayTracingCommands(commandBuffer);
 		//TODO image barrier ?
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		RunDynamicPostProcessingLowPriorityCompute(commandBuffer);
 		
-		scene.Lock();
-			for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
-				obj->PushGeometries(renderingDevice, commandBuffer);
-			}
-		scene.Unlock();
+		// scene.Lock();
+		// 	for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
+		// 		obj->PushGeometries(renderingDevice, commandBuffer);
+		// 	}
+		// scene.Unlock();
 		
-		// Submodules
-		for (auto* submodule : renderingSubmodules) {
-			submodule->RunDynamicLowPriorityCompute(commandBuffer);
-		}
+		// // Submodules
+		// for (auto* submodule : renderingSubmodules) {
+		// 	submodule->RunDynamicLowPriorityCompute(commandBuffer);
+		// }
 		
 	}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {

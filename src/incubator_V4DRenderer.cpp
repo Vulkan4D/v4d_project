@@ -82,7 +82,7 @@ int main() {
 	auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
 	
 	// Validation layers
-	#ifdef _DEBUG
+	#if defined(_DEBUG) && defined(_LINUX)
 		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	#endif
 	

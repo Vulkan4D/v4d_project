@@ -66,5 +66,11 @@
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
+        {
+            "label": "Profile Incubator",
+            "type": "shell",
+            "command": "clear; cd build/debug; rm callgrind.out.*; valgrind --tool=callgrind ./incubator; kcachegrind `ls callgrind.out.*`",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+        },
     ]
 }

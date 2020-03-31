@@ -477,25 +477,27 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 // #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
 void main() {
-	Fragment fragment = GetHitFragment(true);
-	// uint planetIndex = fragment.material;
-	// vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
-	// vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	// mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
-	// vec2 uvMult = fragment.objectInstance.custom4.xy;
-	// vec2 uvOffset = fragment.objectInstance.custom4.zw;
-	// vec2 uv = (fragment.uv*uvMult+uvOffset);
-	// vec4 bump = GetBumpMap(uv);
-	// vec3 normal = normalize(TBN * bump.xyz);
+	// Fragment fragment = GetHitFragment(true);
+	// // uint planetIndex = fragment.material;
+	// // vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
+	// // vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	// // mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
+	// // vec2 uvMult = fragment.objectInstance.custom4.xy;
+	// // vec2 uvOffset = fragment.objectInstance.custom4.zw;
+	// // vec2 uv = (fragment.uv*uvMult+uvOffset);
+	// // vec4 bump = GetBumpMap(uv);
+	// // vec3 normal = normalize(TBN * bump.xyz);
 	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
-	ray.color = color;
-	ray.distance = gl_HitTEXT;
-	
-	// ray.color = vec3(uv.xy, 0);
-	
-	// // ray.color = vec3(texture(bumpMap[0], fragment.uv).rgb);
-	// ray.color = vec3(texture(bumpMap[0], uv).rgb);
-	// ray.color = tangentX;
+	// vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
+	// ray.color = color;
 	// ray.distance = gl_HitTEXT;
+	
+	// // ray.color = vec3(uv.xy, 0);
+	
+	// // // ray.color = vec3(texture(bumpMap[0], fragment.uv).rgb);
+	// // ray.color = vec3(texture(bumpMap[0], uv).rgb);
+	// // ray.color = tangentX;
+	// // ray.distance = gl_HitTEXT;
+	
+	ray.color = vec3(1);
 }
