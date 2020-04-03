@@ -72,7 +72,7 @@ int main() {
 	// Load settings
 	settings->Load();
 
-	// SET_CPU_AFFINITY(0)
+	SET_CPU_AFFINITY(0)
 	
 	// Core & Modules
 	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN ( v4dCore )
@@ -130,10 +130,9 @@ int main() {
 	
 	// Slow Loop (stuff unrelated to rendering that does not require any performance)
 	std::thread slowLoopThread([&]{
+		SET_CPU_AFFINITY(0)
 		while (appRunning) {
 			CALCULATE_FRAMERATE(slowLoopAvgFrameRate)
-			// Lower cpu priority
-			std::this_thread::yield();
 			if (!appRunning) break;
 			
 			// Auto-reload modified shaders
@@ -156,10 +155,9 @@ int main() {
 	
 	// Game Loop (stuff unrelated to rendering)
 	std::thread gameLoopThread([&]{
+		SET_CPU_AFFINITY(1)
 		while (appRunning) {
 			CALCULATE_FRAMERATE(gameLoopAvgFrameRate)
-			// Lower cpu priority
-			std::this_thread::yield();
 			if (!appRunning) break;
 			
 			//...
@@ -170,10 +168,9 @@ int main() {
 	
 	// Low-Priority Rendering Loop
 	std::thread lowPriorityRenderingThread([&]{
+		SET_CPU_AFFINITY(2)
 		while (appRunning) {
 			CALCULATE_FRAMERATE(secondaryAvgFrameRate)
-			// Lower cpu priority
-			std::this_thread::yield();
 			if (!appRunning) break;
 			
 			// ImGui
@@ -211,12 +208,13 @@ int main() {
 			
 			renderer->RenderLowPriority();
 			
-			SLEEP(20ms)
+			SLEEP(10ms)
 		}
 	});
 	
 	// Rendering Loop
 	std::thread renderingThread([&]{
+		SET_CPU_AFFINITY(3)
 		while (appRunning) {
 			CALCULATE_FRAMERATE(primaryAvgFrameRate)
 			renderer->Render();
@@ -225,6 +223,7 @@ int main() {
 	
 	// Input loop
 	while (window->IsActive()) {
+		SET_CPU_AFFINITY(0)
 		static double deltaTime = 0.01;
 		CALCULATE_FRAMERATE(inputAvgFrameRate)
 		CALCULATE_DELTATIME(deltaTime)

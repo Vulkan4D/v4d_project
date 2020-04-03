@@ -22,10 +22,10 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 64; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
-	static const size_t chunkGeneratorNbThreads = 4;
+	static const size_t chunkGeneratorNbThreads = 2;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
@@ -116,7 +116,7 @@ struct PlanetTerrain {
 		std::vector<Chunk*> subChunks {};
 		ObjectInstance* obj = nullptr;
 		std::shared_ptr<Geometry> geometry = nullptr;
-		std::mutex generatorMutex;
+		std::recursive_mutex generatorMutex;
 		#pragma endregion
 		
 		bool IsLastLevel() {
@@ -188,31 +188,6 @@ struct PlanetTerrain {
 		
 		~Chunk() {
 			Remove(true);
-			std::lock_guard lock(generatorMutex);
-		}
-		
-		bool Cleanup() { // bool returns whether to delete the parent as well
-			std::scoped_lock lock(stateMutex, subChunksMutex);
-			
-			bool mustCleanup = true;
-			for (auto* subChunk : subChunks) {
-				if (!subChunk->Cleanup()) {
-					mustCleanup = false;
-				}
-			}
-			if (!mustCleanup) return false;
-			
-			for (auto* subChunk : subChunks) {
-				delete subChunk;
-			}
-			subChunks.clear();
-			
-			if (meshShouldGenerate || render || obj)
-				return false;
-			
-			CancelMeshGeneration();
-			std::lock_guard lockGenerator(generatorMutex);
-			return true;
 		}
 		
 		uint32_t topLeftVertexIndex = 0;
@@ -231,51 +206,43 @@ struct PlanetTerrain {
 		}
 		
 		void GenerateAsync() {
+			meshShouldGenerate = true;
+			meshGenerating = true;
 			if (!chunkGenerator) {
 				chunkGenerator = new v4d::processing::ThreadPoolPriorityQueue<Chunk*> ([](Chunk* chunk){
 					std::lock_guard lock(chunk->generatorMutex);
-					if (!chunk->meshGenerated)
-						chunk->Generate();
+					chunk->Generate();
 					chunk->meshGenerating = false;
 				}, [](Chunk* a, Chunk* b) {
 					return a->distanceFromCamera > b->distanceFromCamera;
 				});
 			}
-			if (meshGenerating || meshGenerated) return;
-			std::lock_guard lock(generatorMutex);
-			meshShouldGenerate = true;
-			meshGenerating = true;
+			std::scoped_lock lock(stateMutex, generatorMutex, globalGeneratorMutex);
+			if (!meshShouldGenerate) return;
 			chunkGenerator->Enqueue(this);
 			chunkGenerator->RunThreads(chunkGeneratorNbThreads);
 		}
 		
-		void GenerateSync() {
-			if (meshGenerating || meshGenerated) return;
-			std::lock_guard lock(generatorMutex);
-			meshShouldGenerate = true;
-			meshGenerating = true;
-			Generate();
-		}
-		
-		void CancelMeshGeneration() {
-			meshShouldGenerate = false;
-		}
-		
-		int genRow = 0;
-		int genCol = 0;
-		int genVertexIndex = 0;
-		int genIndexIndex = 0;
 		void Generate() {
+			int genRow = 0;
+			int genCol = 0;
+			int genVertexIndex = 0;
+			int genIndexIndex = 0;
+			
 			if (!meshShouldGenerate) return;
-			if (!obj) {
-				if (!planet->scene) return;
-				obj = planet->scene->AddObjectInstance();
+			if (!planet->scene) return;
+			planet->scene->Lock();
+			{
+				if (!obj) {
+					obj = planet->scene->AddObjectInstance();
+				}
 				obj->Disable();
-			}
-			if (!geometry || obj->CountGeometries() == 0) {
-				geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
+				if (!geometry || obj->CountGeometries() == 0) {
+					geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
+				}
 				geometry->active = false;
 			}
+			planet->scene->Unlock();
 			
 			obj->SetObjectCustomData({0,0,0}, {uvMultX, uvMultY, uvOffsetX, uvOffsetY});
 			
@@ -336,6 +303,7 @@ struct PlanetTerrain {
 					}
 					
 					++genCol;
+					if (!meshShouldGenerate) return;
 				}
 				
 				genCol = 0;
@@ -344,95 +312,99 @@ struct PlanetTerrain {
 
 			if (!meshShouldGenerate) return;
 			
-			// // Normals
-			// for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
-			// 	for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
-			// 		uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
-			// 		auto* vertex = geometry->GetVertexPtr(currentIndex);
+			// Normals
+			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
+				for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					
-			// 		glm::vec3 tangentX, tangentY;
+					glm::vec3 tangentX, tangentY;
 					
-			// 		if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
-			// 			// For full face (generate top left)
-			// 			uint32_t topLeftIndex = currentIndex;
-			// 			uint32_t topRightIndex = topLeftIndex+1;
-			// 			uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
+					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+						// For full face (generate top left)
+						uint32_t topLeftIndex = currentIndex;
+						uint32_t topRightIndex = topLeftIndex+1;
+						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 						
-			// 			tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
-			// 			tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
+						tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
+						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
 						
-			// 		} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
-			// 			// For right-most bottom-most vertex (generate bottom-most right-most)
+					} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
+						// For right-most bottom-most vertex (generate bottom-most right-most)
 						
-			// 			glm::vec3 bottomLeftPos {0};
-			// 			{
-			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-			// 				bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-			// 			}
+						glm::vec3 bottomLeftPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+						}
 
-			// 			glm::vec3 topRightPos {0};
-			// 			{
-			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-			// 				topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-			// 			}
+						glm::vec3 topRightPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+						}
 
-			// 			tangentX = glm::normalize(topRightPos - vertex->pos);
-			// 			tangentY = glm::normalize(vertex->pos - bottomLeftPos);
+						tangentX = glm::normalize(topRightPos - vertex->pos);
+						tangentY = glm::normalize(vertex->pos - bottomLeftPos);
 						
-			// 		} else if (genCol == vertexSubdivisionsPerChunk) {
-			// 			// For others in right col (generate top right)
-			// 			uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
+					} else if (genCol == vertexSubdivisionsPerChunk) {
+						// For others in right col (generate top right)
+						uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
 						
-			// 			glm::vec3 topRightPos {0};
-			// 			{
-			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-			// 				topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-			// 			}
+						glm::vec3 topRightPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+						}
 
-			// 			tangentX = glm::normalize(topRightPos - vertex->pos);
-			// 			tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
+						tangentX = glm::normalize(topRightPos - vertex->pos);
+						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
 						
-			// 		} else if (genRow == vertexSubdivisionsPerChunk) {
-			// 			// For others in bottom row (generate bottom left)
+					} else if (genRow == vertexSubdivisionsPerChunk) {
+						// For others in bottom row (generate bottom left)
 						
-			// 			glm::vec3 bottomLeftPos {0};
-			// 			{
-			// 				glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-			// 				glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-			// 				bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-			// 			}
+						glm::vec3 bottomLeftPos {0};
+						{
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+						}
 
-			// 			tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
-			// 			tangentY = glm::normalize((vertex->pos - bottomLeftPos));
-			// 		}
+						tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
+						tangentY = glm::normalize((vertex->pos - bottomLeftPos));
+					}
 					
-			// 		tangentX *= (float)rightSign;
-			// 		tangentY *= (float)topSign;
+					tangentX *= (float)rightSign;
+					tangentY *= (float)topSign;
 					
-			// 		glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
+					glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
 					
-			// 		vertex->normal = normal;
+					vertex->normal = normal;
 					
-			// 		// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
-			// 	}
-			// }
+					// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
+							
+					if (!meshShouldGenerate) return;
+				}
+			}
+			
+			if (!meshShouldGenerate) return;
 			
 			// Skirts
 			if (useSkirts) {
 				int firstSkirtIndex = genVertexIndex;
-				auto addSkirt = [this, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
+				auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 					int skirtIndex = genVertexIndex++;
 					
 					auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
 					*skirtVertex = *geometry->GetVertexPtr(pointIndex);
-					skirtVertex->pos -= glm::normalize(centerPos)*(chunkSize/double(vertexSubdivisionsPerChunk)*2.0 + planet->heightVariation);
+					skirtVertex->pos -= glm::normalize(centerPos)*(chunkSize/double(vertexSubdivisionsPerChunk));
 					
 					if (topSign == rightSign) {
 						geometry->SetIndex(genIndexIndex++, pointIndex);
@@ -495,8 +467,9 @@ struct PlanetTerrain {
 			}
 			
 			std::scoped_lock lock(stateMutex);
+			obj->SetGeometriesDirty(false);
+			computedLevel = 0;
 			meshGenerated = true;
-			computedLevel = 1;
 		}
 		
 		void AddSubChunks() {
@@ -570,14 +543,26 @@ struct PlanetTerrain {
 		}
 		
 		void Remove(bool recursive) {
-			std::scoped_lock lock(stateMutex, subChunksMutex);
-			render = false;
-			CancelMeshGeneration();
-			computedLevel = 0;
-			if (obj && planet->scene) {
-				planet->scene->RemoveObjectInstance(obj);
-				obj = nullptr;
-				geometry = nullptr;
+			{
+				std::scoped_lock lock(stateMutex, subChunksMutex, globalGeneratorMutex);
+				meshShouldGenerate = false;
+				render = false;
+				computedLevel = 0;
+				meshGenerated = false;
+			}
+			while (meshGenerating) {
+				SLEEP(1ms)
+				std::scoped_lock waitForGenerator(generatorMutex);
+			}
+			std::scoped_lock lock(subChunksMutex);
+			if (obj) {
+				geometry->active = false;
+				obj->Disable();
+				if (planet->scene) {
+					planet->scene->RemoveObjectInstance(obj);
+					obj = nullptr;
+					geometry = nullptr;
+				}
 			}
 			if (recursive && subChunks.size() > 0) {
 				for (auto* subChunk : subChunks) {
@@ -589,8 +574,6 @@ struct PlanetTerrain {
 		}
 		
 		void Process() {
-			std::scoped_lock lock(stateMutex);
-			
 			// Angle Culling
 			bool chunkVisibleByAngle = 
 				glm::dot(planet->cameraPos - centerPosLowestPoint, centerPos) > 0.0 ||
@@ -600,6 +583,7 @@ struct PlanetTerrain {
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
 				
 			if (chunkVisibleByAngle) {
+				std::scoped_lock lock(stateMutex);
 				active = true;
 				
 				if (ShouldAddSubChunks()) {
@@ -623,9 +607,8 @@ struct PlanetTerrain {
 					} else {
 						if (!obj || !obj->IsGenerated()) {
 							render = false;
-							if (!meshGenerated && (!chunkGenerator || chunkGenerator->Count() < chunkGeneratorNbThreads*2)) {
-								// GenerateAsync();
-								GenerateSync();
+							if (!meshGenerated) {
+								GenerateAsync();
 							}
 						}
 					}
@@ -638,15 +621,19 @@ struct PlanetTerrain {
 		}
 		
 		void BeforeRender() {
-			std::scoped_lock lock(stateMutex, subChunksMutex);
-			RefreshDistanceFromCamera();
-			if (render && obj && obj->IsGenerated()) {
-				obj->Enable();
-				obj->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
-			} else {
-				render = false;
-				if (obj && computedLevel > 2) obj->Disable();
+			{
+				std::scoped_lock lock(stateMutex);
+				RefreshDistanceFromCamera();
+				if (meshGenerated && obj && obj->IsGenerated()) {
+					if (render) {
+						obj->Enable();
+						obj->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
+					} else {
+						obj->Disable();
+					}
+				}
 			}
+			std::scoped_lock lock(subChunksMutex);
 			for (auto* subChunk : subChunks) {
 				subChunk->BeforeRender();
 			}
@@ -663,17 +650,18 @@ struct PlanetTerrain {
 	};
 	
 	static v4d::processing::ThreadPoolPriorityQueue<Chunk*>* chunkGenerator;
+	static std::mutex globalGeneratorMutex;
 
 	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = solidRadius;
-		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/10000.0), 5)*1000.0;
-		// if (triangleSize < 200)
-		// 	height += v4d::noise::SimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
-		// if (triangleSize < 4)
-		// 	height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/5.0, 2);
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/10000.0), 5)*1000.0;
+		if (triangleSize < 200)
+			height += v4d::noise::SimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
+		if (triangleSize < 4)
+			height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/5.0, 2);
 		return height;
 	}
 	
@@ -795,3 +783,4 @@ v4d::Timer PlanetTerrain::lastGarbageCollectionTime {true};
 
 // Chunk Generator thread pool
 v4d::processing::ThreadPoolPriorityQueue<PlanetTerrain::Chunk*>* PlanetTerrain::chunkGenerator = nullptr;
+std::mutex PlanetTerrain::globalGeneratorMutex {};
