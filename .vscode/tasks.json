@@ -6,14 +6,21 @@
         {
             "label": "quick build",
             "type": "shell",
-            "command": "clear; cd build && cmake --build . --parallel 8",
+            "command": "clear; cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
         {
+            "label": "quick build windows & run incubator remotely",
+            "type": "shell",
+            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/run.sh debug incubator",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "test"
+        },
+        {
             "label": "cmake reset",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt ; cmake .. -DCMAKE_BUILD_TYPE=Debug",
+            "command": "clear; cd build && rm -f CMakeCache.txt debug/incubator debug/incubator.exe debug/tests debug/tests.exe debug/demo debug/demo.exe;",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
@@ -48,14 +55,7 @@
         {
             "label": "unit tests windows",
             "type": "shell",
-            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
-            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
-            "group": "test"
-        },
-        {
-            "label": "build debug windows",
-            "type": "shell",
-            "command": "clear; rm build/debug/incubator; cd build && ../crosscompile/windows/build.sh Debug && ssh WINDOWS_PC \"START /wait taskkill /f /im demo.exe\" && ssh WINDOWS_PC \"START /wait taskkill /f /im incubator.exe\" && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/",
+            "command": "clear; cd build && rm -f CMakeCache.txt && ../crosscompile/windows/build.sh Debug && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },

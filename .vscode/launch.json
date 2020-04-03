@@ -67,5 +67,43 @@
             ],
             "preLaunchTask": "quick build"
         },
+        
+        // {
+        //     "name": "Debug Incubator Windows",
+        //     "type": "gdb",
+        //     "request": "launch",
+        //     "target": "/v4d_build/debug/incubator.exe",
+        //     "cwd": "${workspaceRoot}",
+        //     "ssh": {
+        //         "host": "WINDOWS_PC",
+        //         "cwd": "/v4d_build/debug/",
+        //         "keyfile": "/home/olivier/.ssh/id_rsa",
+        //         "user": "olivier"
+        //     },
+        //     "valuesFormatting": "parseText",
+        //     "preLaunchTask": "quick build windows"
+        // },
+        
+        // {
+        //     "type": "gdb",
+        //     "request": "attach",
+        //     "name": "Debug Incubator Windows",
+        //     "executable": "incubator.exe",
+        //     "target": "PCWIN10:2000",
+        //     "remote": true,
+        //     "cwd": "${workspaceFolder}/build/debug",
+        //     "gdbpath": "x86_64-w64-mingw32-gdb",
+        //     // "preLaunchTask": "quick build windows"
+        // }
+        
+        // {
+        //     "name": "Incubator Windows",
+        //     "type": "gdb",
+        //     "request": "launch",
+        //     "target": "${workspaceFolder}/crosscompile/windows/run.sh debug incubator",
+        //     "cwd": "${workspaceFolder}/build/debug",
+        //     "preLaunchTask": "quick build windows"
+        // },
+        
     ]
 }

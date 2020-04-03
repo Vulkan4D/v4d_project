@@ -152,4 +152,5 @@
     "editor.acceptSuggestionOnCommitCharacter": false,
     "editor.acceptSuggestionOnEnter": "on",
     "editor.trimAutoWhitespace": false,
+    "cmake.configureOnOpen": true,
 }

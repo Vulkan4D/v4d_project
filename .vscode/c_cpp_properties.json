@@ -1,40 +1,36 @@
 {
-	"configurations": [
-		{
-			"name": "Linux",
-			"includePath": [
-				"${workspaceFolder}/src/v4d/core",
-				"${workspaceFolder}/src/v4d/xvk",
-				"${workspaceFolder}/src/v4d/xvk/glfw/include",
-				"${workspaceFolder}/src/Vulkan-Hpp",
-				"${workspaceFolder}/src/Vulkan-Hpp/glm",
-				"${workspaceFolder}/src/Vulkan-Hpp/glslang",
-				"${workspaceFolder}/src/Vulkan-Hpp/glfw/include",
-				"${workspaceFolder}/src/Vulkan-Hpp/Vulkan-Headers/include",
-				"${workspaceFolder}/src/openssl/include",
-				"${workspaceFolder}/src/imgui",
-				"${workspaceFolder}/src"
-			],
-			"defines": [
-				"_LINUX",
-				"_DEBUG",
-				"_RELEASE",
-				"_IN_EDITOR",
-				"_V4D_CORE",
-				"_V4D_PROJECT",
-				"_V4D_MODULE",
-				"_VULKAN_LOAD_AT_RUNTIME",
-				"_ENABLE_IMGUI",
-				"THIS_MODULE_VENDOR_ID=0",
-				"THIS_MODULE_ID=0",
-				"THIS_MODULE_REV=0",
-				"THIS_MODULE_NAME=\"\"",
-				"THIS_MODULE_DESCRIPTION=\"\""
-			],
-			"compilerPath": "/bin/g++",
-			"cppStandard": "c++17",
-			"intelliSenseMode": "gcc-x64"
-		}
-	],
-	"version": 4
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/src/v4d/core",
+                "${workspaceFolder}/src/v4d/xvk",
+                "${workspaceFolder}/src/v4d/xvk/glfw/include",
+                "${workspaceFolder}/src/openssl/include",
+                "${workspaceFolder}/src/imgui",
+                "${workspaceFolder}/src"
+            ],
+            "defines": [
+                "_LINUX",
+                "_DEBUG",
+                "_RELEASE",
+                "_IN_EDITOR",
+                "_V4D_CORE",
+                "_V4D_PROJECT",
+                "_V4D_MODULE",
+                "_VULKAN_LOAD_AT_RUNTIME",
+                "_ENABLE_IMGUI",
+                "THIS_MODULE_VENDOR_ID=0",
+                "THIS_MODULE_ID=0",
+                "THIS_MODULE_REV=0",
+                "THIS_MODULE_NAME=\"\"",
+                "THIS_MODULE_DESCRIPTION=\"\""
+            ],
+            "compilerPath": "/bin/g++",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x64",
+            "configurationProvider": "vector-of-bool.cmake-tools"
+        }
+    ],
+    "version": 4
 }
