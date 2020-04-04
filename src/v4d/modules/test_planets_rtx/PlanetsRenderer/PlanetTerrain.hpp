@@ -108,7 +108,7 @@ struct PlanetTerrain {
 		std::atomic<bool> meshGenerating = false;
 		std::atomic<bool> meshGenerated = false;
 
-		std::recursive_mutex stateMutex;
+		// std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
 		#pragma endregion
 		
@@ -448,7 +448,7 @@ struct PlanetTerrain {
 				return;
 			}
 			
-			std::scoped_lock lock(stateMutex);
+			// std::scoped_lock lock(stateMutex);
 			if (meshGenerating) {
 				obj->SetGeometriesDirty(false);
 				computedLevel = 0;
@@ -529,7 +529,7 @@ struct PlanetTerrain {
 		void Remove(bool recursive) {
 			{
 				meshGenerating = false;
-				std::scoped_lock lock(stateMutex, generatorMutex);
+				std::scoped_lock lock(/*stateMutex,*/ generatorMutex);
 				if (meshEnqueuedForGeneration) {
 					ChunkGeneratorCancel(this);
 				}
@@ -566,7 +566,6 @@ struct PlanetTerrain {
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
 				
 			if (chunkVisibleByAngle) {
-				// std::scoped_lock lock(stateMutex);
 				active = true;
 				
 				if (ShouldAddSubChunks()) {
@@ -579,7 +578,11 @@ struct PlanetTerrain {
 							allSubchunksReady = false;
 						}
 					}
-					if (allSubchunksReady) Remove(false);
+					if (allSubchunksReady) {
+						Remove(false);
+					} else if (meshEnqueuedForGeneration) {
+						ChunkGeneratorCancel(this);
+					}
 				} else {
 					render = true;
 					if (ShouldRemoveSubChunks() && obj && obj->IsGenerated() && geometry->active) {
@@ -588,7 +591,8 @@ struct PlanetTerrain {
 							subChunk->Remove(true);
 						}
 					} else {
-						if (!obj || !obj->IsGenerated()) {
+						if ((!obj || !obj->IsGenerated())) {
+							// std::scoped_lock lock(stateMutex);
 							render = false;
 							if (!meshGenerated && !meshGenerating) {
 								ChunkGeneratorEnqueue(this);
@@ -605,7 +609,7 @@ struct PlanetTerrain {
 		
 		void BeforeRender() {
 			{
-				std::scoped_lock lock(stateMutex);
+				// std::scoped_lock lock(stateMutex);
 				RefreshDistanceFromCamera();
 				if (meshGenerated && obj && obj->IsGenerated()) {
 					if (render) {
@@ -710,6 +714,7 @@ struct PlanetTerrain {
 			}
 		}
 		chunk->meshEnqueuedForGeneration = false;
+		chunk->meshGenerating = false;
 	}
 
 	std::recursive_mutex chunksMutex;
