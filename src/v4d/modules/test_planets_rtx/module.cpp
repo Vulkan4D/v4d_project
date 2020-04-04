@@ -168,7 +168,6 @@ ComputeShaderPipeline terrainVertexPosCompute {terrainVertexComputeLayout, "modu
 ComputeShaderPipeline terrainVertexNormalCompute {terrainVertexComputeLayout, "modules/test_planets_rtx/assets/shaders/planets.terrain.vertexnormal.comp"};
 
 void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk) {
-	std::scoped_lock lock(chunk->stateMutex);
 	if (chunk->active) {
 		
 		// subChunks
@@ -178,6 +177,8 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 				ComputeChunkVertices(device, commandBuffer, subChunk);
 			}
 		}
+		
+		// std::scoped_lock lock(chunk->stateMutex);
 		
 		if (chunk->obj && chunk->meshGenerated) {
 			switch (chunk->computedLevel) {
@@ -339,8 +340,13 @@ public:
 		volcanoesMaps[0] = planet.volcanoesMap;
 		liquidsMaps[0] = planet.liquidsMap;
 		
+		// Chunk Generator
+		PlanetTerrain::StartChunkGenerator();
 	}
 	void DestroyResources() override {
+		// Chunk Generator
+		PlanetTerrain::EndChunkGenerator();
+		
 		planet.DestroyMaps(renderingDevice);
 		bumpMaps[0].Destroy(renderingDevice);
 		// bumpMaps[1].Destroy(renderingDevice);
@@ -404,10 +410,6 @@ public:
 	
 	void UnloadScene(Scene&) override {
 		
-		if (PlanetTerrain::chunkGenerator) {
-			delete PlanetTerrain::chunkGenerator;
-			PlanetTerrain::chunkGenerator = nullptr;
-		}
 	}
 
 	// Frame Update
@@ -523,10 +525,9 @@ public:
 			// for each planet
 				ImGui::Separator();
 				ImGui::Text("Planet");
-				if (PlanetTerrain::chunkGenerator) {
-					ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGenerator->Count());
-					// ImGui::Text("Chunks: %d (%d active, %d rendered)", terrain->totalChunks, terrain->activeChunks, terrain->renderedChunks);
-				}
+				ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
+				// ImGui::Text("Chunks: %d (%d active, %d rendered)", terrain->totalChunks, terrain->activeChunks, terrain->renderedChunks);
+				
 				if (terrain) {
 					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
 					if (altitude < 1.0) {

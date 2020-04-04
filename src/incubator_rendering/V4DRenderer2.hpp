@@ -146,9 +146,33 @@ private: // Ray Tracing
 	void CreateRayTracingResources() {
 		topLevelAccelerationStructure.AssignTopLevel();
 		topLevelAccelerationStructure.Create(renderingDevice, true);
+		topLevelAccelerationStructure.Allocate(renderingDevice);
+		topLevelAccelerationStructure.SetInstanceBuffer(renderingDevice, rayTracingInstanceBuffer.buffer);
 	}
 	void DestroyRayTracingResources() {
+		topLevelAccelerationStructure.Free(renderingDevice);
 		topLevelAccelerationStructure.Destroy(renderingDevice);
+	}
+	
+	void AllocateRayTracingBuffers() {
+		rayTracingInstanceBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		rayTracingInstanceBuffer.MapMemory(renderingDevice);
+		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.data;
+		
+		if (AccelerationStructure::useGlobalScratchBuffer) {
+			globalScratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+			topLevelAccelerationStructure.SetGlobalScratchBuffer(renderingDevice, globalScratchBuffer.buffer);
+		}
+	}
+	void FreeRayTracingBuffers() {
+		rayTracingInstances = nullptr;
+		nbRayTracingInstances = 0;
+		rayTracingInstanceBuffer.UnmapMemory(renderingDevice);
+		rayTracingInstanceBuffer.Free(renderingDevice);
+		
+		if (AccelerationStructure::useGlobalScratchBuffer) {
+			globalScratchBuffer.Free(renderingDevice);
+		}
 	}
 	
 	void CreateRayTracingPipeline() {
@@ -169,30 +193,6 @@ private: // Ray Tracing
 		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
 		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.light.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
-	}
-	
-	void AllocateRayTracing() {
-		rayTracingInstanceBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		rayTracingInstanceBuffer.MapMemory(renderingDevice);
-		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.data;
-		topLevelAccelerationStructure.Allocate(renderingDevice);
-		topLevelAccelerationStructure.SetInstanceBuffer(renderingDevice, rayTracingInstanceBuffer.buffer);
-		
-		if (AccelerationStructure::useGlobalScratchBuffer) {
-			globalScratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
-			topLevelAccelerationStructure.SetGlobalScratchBuffer(renderingDevice, globalScratchBuffer.buffer);
-		}
-	}
-	void FreeRayTracing() {
-		rayTracingInstances = nullptr;
-		nbRayTracingInstances = 0;
-		topLevelAccelerationStructure.Free(renderingDevice);
-		rayTracingInstanceBuffer.UnmapMemory(renderingDevice);
-		rayTracingInstanceBuffer.Free(renderingDevice);
-		
-		if (AccelerationStructure::useGlobalScratchBuffer) {
-			globalScratchBuffer.Free(renderingDevice);
-		}
 	}
 	
 	void RecordRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -906,7 +906,7 @@ private: // Resources overrides
 	void AllocateBuffers() override {
 		AllocateSceneBuffers();
 		AllocatePostProcessingBuffers();
-		AllocateRayTracing();
+		AllocateRayTracingBuffers();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -918,7 +918,7 @@ private: // Resources overrides
 	void FreeBuffers() override {
 		FreeSceneBuffers();
 		FreePostProcessingBuffers();
-		FreeRayTracing();
+		FreeRayTracingBuffers();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {

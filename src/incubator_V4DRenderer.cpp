@@ -223,7 +223,6 @@ int main() {
 	
 	// Input loop
 	while (window->IsActive()) {
-		SET_CPU_AFFINITY(0)
 		static double deltaTime = 0.01;
 		CALCULATE_FRAMERATE(inputAvgFrameRate)
 		CALCULATE_DELTATIME(deltaTime)
@@ -234,7 +233,7 @@ int main() {
 			submodule->Update(deltaTime);
 		}
 		
-		SLEEP(5ms)
+		SLEEP(10ms)
 	}
 	
 	appRunning = false;

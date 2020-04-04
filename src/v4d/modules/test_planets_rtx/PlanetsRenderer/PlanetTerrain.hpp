@@ -25,7 +25,7 @@ struct PlanetTerrain {
 	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
-	static const size_t chunkGeneratorNbThreads = 2;
+	static const int chunkGeneratorNbThreads = 2;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
@@ -104,9 +104,9 @@ struct PlanetTerrain {
 		std::atomic<bool> render = false;
 		std::atomic<int> computedLevel = 0;
 
-		std::atomic<bool> meshShouldGenerate = false;
-		std::atomic<bool> meshGenerated = false;
+		std::atomic<bool> meshEnqueuedForGeneration = false;
 		std::atomic<bool> meshGenerating = false;
+		std::atomic<bool> meshGenerated = false;
 
 		std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
@@ -205,31 +205,13 @@ struct PlanetTerrain {
 			}
 		}
 		
-		void GenerateAsync() {
-			meshShouldGenerate = true;
-			meshGenerating = true;
-			if (!chunkGenerator) {
-				chunkGenerator = new v4d::processing::ThreadPoolPriorityQueue<Chunk*> ([](Chunk* chunk){
-					std::lock_guard lock(chunk->generatorMutex);
-					chunk->Generate();
-					chunk->meshGenerating = false;
-				}, [](Chunk* a, Chunk* b) {
-					return a->distanceFromCamera > b->distanceFromCamera;
-				});
-			}
-			std::scoped_lock lock(stateMutex, generatorMutex, globalGeneratorMutex);
-			if (!meshShouldGenerate) return;
-			chunkGenerator->Enqueue(this);
-			chunkGenerator->RunThreads(chunkGeneratorNbThreads);
-		}
-		
 		void Generate() {
 			int genRow = 0;
 			int genCol = 0;
 			int genVertexIndex = 0;
 			int genIndexIndex = 0;
 			
-			if (!meshShouldGenerate) return;
+			if (!meshGenerating) return;
 			if (!planet->scene) return;
 			planet->scene->Lock();
 			{
@@ -303,14 +285,14 @@ struct PlanetTerrain {
 					}
 					
 					++genCol;
-					if (!meshShouldGenerate) return;
+					if (!meshGenerating) return;
 				}
 				
 				genCol = 0;
 				++genRow;
 			}
 
-			if (!meshShouldGenerate) return;
+			if (!meshGenerating) return;
 			
 			// Normals
 			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
@@ -390,11 +372,11 @@ struct PlanetTerrain {
 					
 					// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
 							
-					if (!meshShouldGenerate) return;
+					if (!meshGenerating) return;
 				}
 			}
 			
-			if (!meshShouldGenerate) return;
+			if (!meshGenerating) return;
 			
 			// Skirts
 			if (useSkirts) {
@@ -467,9 +449,11 @@ struct PlanetTerrain {
 			}
 			
 			std::scoped_lock lock(stateMutex);
-			obj->SetGeometriesDirty(false);
-			computedLevel = 0;
-			meshGenerated = true;
+			if (meshGenerating) {
+				obj->SetGeometriesDirty(false);
+				computedLevel = 0;
+				meshGenerated = true;
+			}
 		}
 		
 		void AddSubChunks() {
@@ -544,19 +528,17 @@ struct PlanetTerrain {
 		
 		void Remove(bool recursive) {
 			{
-				std::scoped_lock lock(stateMutex, subChunksMutex, globalGeneratorMutex);
-				meshShouldGenerate = false;
+				meshGenerating = false;
+				std::scoped_lock lock(stateMutex, generatorMutex);
+				if (meshEnqueuedForGeneration) {
+					ChunkGeneratorCancel(this);
+				}
 				render = false;
 				computedLevel = 0;
 				meshGenerated = false;
 			}
-			while (meshGenerating) {
-				SLEEP(1ms)
-				std::scoped_lock waitForGenerator(generatorMutex);
-			}
-			std::scoped_lock lock(subChunksMutex);
 			if (obj) {
-				geometry->active = false;
+				if (geometry) geometry->active = false;
 				obj->Disable();
 				if (planet->scene) {
 					planet->scene->RemoveObjectInstance(obj);
@@ -564,6 +546,7 @@ struct PlanetTerrain {
 					geometry = nullptr;
 				}
 			}
+			std::scoped_lock lock(subChunksMutex);
 			if (recursive && subChunks.size() > 0) {
 				for (auto* subChunk : subChunks) {
 					subChunk->Remove(true);
@@ -583,7 +566,7 @@ struct PlanetTerrain {
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
 				
 			if (chunkVisibleByAngle) {
-				std::scoped_lock lock(stateMutex);
+				// std::scoped_lock lock(stateMutex);
 				active = true;
 				
 				if (ShouldAddSubChunks()) {
@@ -607,8 +590,8 @@ struct PlanetTerrain {
 					} else {
 						if (!obj || !obj->IsGenerated()) {
 							render = false;
-							if (!meshGenerated) {
-								GenerateAsync();
+							if (!meshGenerated && !meshGenerating) {
+								ChunkGeneratorEnqueue(this);
 							}
 						}
 					}
@@ -649,8 +632,85 @@ struct PlanetTerrain {
 		
 	};
 	
-	static v4d::processing::ThreadPoolPriorityQueue<Chunk*>* chunkGenerator;
-	static std::mutex globalGeneratorMutex;
+	// Chunk Generator
+	static std::vector<Chunk*> chunkGeneratorQueue;
+	static std::vector<std::thread> chunkGeneratorThreads;
+	static std::mutex chunkGeneratorQueueMutex;
+	static std::condition_variable chunkGeneratorEventVar;
+	static std::atomic<bool> chunkGeneratorActive;
+	static void StartChunkGenerator() {
+		chunkGeneratorActive = true;
+		chunkGeneratorThreads.reserve(chunkGeneratorNbThreads);
+		for (int i = 0; i < chunkGeneratorNbThreads; ++i) {
+			chunkGeneratorThreads.emplace_back([i](){
+				SET_CPU_AFFINITY(4+i)
+				while (chunkGeneratorActive) {
+					Chunk* chunk = nullptr;
+					double closestChunkDistance = std::numeric_limits<double>::max();
+					{
+						std::unique_lock lock(chunkGeneratorQueueMutex);
+						chunkGeneratorEventVar.wait(lock, [] {
+							return !chunkGeneratorActive || chunkGeneratorQueue.size() > 0;
+						});
+						if (!chunkGeneratorActive) return;
+						int lastIndex = chunkGeneratorQueue.size()-1;
+						int index = -1;
+						for (int i = lastIndex; i >= 0; --i) {
+							Chunk* c = chunkGeneratorQueue[i];
+							if (c && c->distanceFromCamera < closestChunkDistance) {
+								index = i;
+								chunk = c;
+								closestChunkDistance = c->distanceFromCamera;
+							}
+						}
+						if (!chunk) {
+							continue;
+						}
+						if (index != lastIndex) {
+							chunkGeneratorQueue[index] = chunkGeneratorQueue[lastIndex];
+						}
+						chunkGeneratorQueue.pop_back();
+						chunk->meshEnqueuedForGeneration = false;
+					}
+					std::lock_guard lock(chunk->generatorMutex);
+					if (chunk->meshGenerating) {
+						chunk->Generate();
+						chunk->meshGenerating = false;
+					}
+				}
+			});
+		}
+	}
+	static void EndChunkGenerator() {
+		chunkGeneratorActive = false;
+		chunkGeneratorEventVar.notify_all();
+		for (auto& thread : chunkGeneratorThreads) {
+			if (thread.joinable()) thread.join();
+		}
+		std::lock_guard lock(chunkGeneratorQueueMutex);
+		chunkGeneratorThreads.clear();
+	}
+	static void ChunkGeneratorEnqueue(Chunk* chunk) {
+		std::lock_guard lock(chunkGeneratorQueueMutex);
+		chunkGeneratorQueue.push_back(chunk);
+		chunk->meshGenerating = true;
+		chunk->meshEnqueuedForGeneration = true;
+		chunkGeneratorEventVar.notify_all();
+	}
+	static void ChunkGeneratorCancel(Chunk* chunk) {
+		std::lock_guard lock(chunkGeneratorQueueMutex);
+		int lastIndex = chunkGeneratorQueue.size()-1;
+		for (int index = 0; index < chunkGeneratorQueue.size(); ++index) {
+			if (chunkGeneratorQueue[index] == chunk) {
+				if (index != lastIndex) {
+					chunkGeneratorQueue[index] = chunkGeneratorQueue[lastIndex];
+				}
+				chunkGeneratorQueue.pop_back();
+				break;
+			}
+		}
+		chunk->meshEnqueuedForGeneration = false;
+	}
 
 	std::recursive_mutex chunksMutex;
 	std::vector<Chunk*> chunks {};
@@ -747,7 +807,7 @@ struct PlanetTerrain {
 	
 	void Optimize() {
 		// Optimize only when no chunk is being generated, camera moved at least x distance and not more than once every x seconds
-		if ((PlanetTerrain::chunkGenerator && PlanetTerrain::chunkGenerator->Count() > 0) || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
+		if ((PlanetTerrain::chunkGeneratorQueue.size() > 0) || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
 			return;
 		
 		// reset 
@@ -781,6 +841,9 @@ struct PlanetTerrain {
 // Buffer pools
 v4d::Timer PlanetTerrain::lastGarbageCollectionTime {true};
 
-// Chunk Generator thread pool
-v4d::processing::ThreadPoolPriorityQueue<PlanetTerrain::Chunk*>* PlanetTerrain::chunkGenerator = nullptr;
-std::mutex PlanetTerrain::globalGeneratorMutex {};
+// Chunk Generator
+std::vector<PlanetTerrain::Chunk*> PlanetTerrain::chunkGeneratorQueue {};
+std::vector<std::thread> PlanetTerrain::chunkGeneratorThreads {};
+std::mutex PlanetTerrain::chunkGeneratorQueueMutex {};
+std::condition_variable PlanetTerrain::chunkGeneratorEventVar {};
+std::atomic<bool> PlanetTerrain::chunkGeneratorActive = false;
