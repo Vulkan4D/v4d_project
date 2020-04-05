@@ -25,7 +25,7 @@ struct PlanetTerrain {
 	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
-	static const int chunkGeneratorNbThreads = 2;
+	static const int chunkGeneratorNbThreads = 5;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
@@ -556,7 +556,7 @@ struct PlanetTerrain {
 			}
 		}
 		
-		void Process() {
+		bool Process() {
 			// Angle Culling
 			bool chunkVisibleByAngle = 
 				glm::dot(planet->cameraPos - centerPosLowestPoint, centerPos) > 0.0 ||
@@ -565,26 +565,27 @@ struct PlanetTerrain {
 				glm::dot(planet->cameraPos - bottomLeftPosLowestPoint, bottomLeftPos) > 0.0 ||
 				glm::dot(planet->cameraPos - bottomRightPosLowestPoint, bottomRightPos) > 0.0 ;
 				
-			if (chunkVisibleByAngle) {
-				active = true;
-				
+			bool allSubchunksRendered = false;
+			
+			active = chunkVisibleByAngle;
+			render = active && meshGenerated && obj && obj->IsGenerated() && geometry->active;
+			
+			if (active) {
 				if (ShouldAddSubChunks()) {
 					std::scoped_lock lock(subChunksMutex);
 					if (subChunks.size() == 0) AddSubChunks();
-					bool allSubchunksReady = true;
+					allSubchunksRendered = true;
 					for (auto* subChunk : subChunks) {
-						subChunk->Process();
-						if (!subChunk->obj || !subChunk->obj->IsGenerated() || !subChunk->geometry->active) {
-							allSubchunksReady = false;
+						if (!subChunk->Process()) {
+							allSubchunksRendered = false;
 						}
 					}
-					if (allSubchunksReady) {
+					if (allSubchunksRendered) {
 						Remove(false);
 					} else if (meshEnqueuedForGeneration) {
 						ChunkGeneratorCancel(this);
 					}
 				} else {
-					render = true;
 					if (ShouldRemoveSubChunks() && obj && obj->IsGenerated() && geometry->active) {
 						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
@@ -593,7 +594,6 @@ struct PlanetTerrain {
 					} else {
 						if ((!obj || !obj->IsGenerated())) {
 							// std::scoped_lock lock(stateMutex);
-							render = false;
 							if (!meshGenerated && !meshGenerating) {
 								ChunkGeneratorEnqueue(this);
 							}
@@ -605,6 +605,7 @@ struct PlanetTerrain {
 				Remove(true);
 			}
 			
+			return render || allSubchunksRendered;
 		}
 		
 		void BeforeRender() {
@@ -646,8 +647,8 @@ struct PlanetTerrain {
 		chunkGeneratorActive = true;
 		chunkGeneratorThreads.reserve(chunkGeneratorNbThreads);
 		for (int i = 0; i < chunkGeneratorNbThreads; ++i) {
-			chunkGeneratorThreads.emplace_back([i](){
-				SET_CPU_AFFINITY(4+i)
+			chunkGeneratorThreads.emplace_back([threadIndex=i](){
+				SET_CPU_AFFINITY(4+threadIndex)
 				while (chunkGeneratorActive) {
 					Chunk* chunk = nullptr;
 					double closestChunkDistance = std::numeric_limits<double>::max();

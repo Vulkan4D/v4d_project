@@ -140,7 +140,8 @@ private: // Ray Tracing
 	RayTracingBLASInstance* rayTracingInstances = nullptr;
 	uint32_t nbRayTracingInstances = 0;
 	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 8*1024*1024/* 8 MB */};
-	static const bool globalScratchDynamicAdjustment = false;
+	static const bool globalScratchDynamicSize = false;
+	static const int maxBlasBuildsPerFrame = 1;
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeGeometries {};
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};
 	
@@ -277,8 +278,11 @@ private: // Ray Tracing
 	
 	void AddRayTracingBlasBuild(std::shared_ptr<AccelerationStructure> blas) {
 		std::lock_guard lock(blasBuildQueueMutex);
-		blasQueueBuildGeometryInfos.push_back(blas->buildGeometryInfo);
-		blasQueueBuildOffsetInfos.push_back(&blas->buildOffsetInfo);
+		if (blasQueueBuildGeometryInfos.size() < maxBlasBuildsPerFrame) {
+			blasQueueBuildGeometryInfos.push_back(blas->buildGeometryInfo);
+			blasQueueBuildOffsetInfos.push_back(&blas->buildOffsetInfo);
+			blas->built = true;
+		}
 	}
 	
 	void ResetRayTracingBlasBuilds() {
@@ -1021,17 +1025,16 @@ public: // Update overrides
 									// Global Scratch Buffer
 									if (AccelerationStructure::useGlobalScratchBuffer) {
 										VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementsForScratchBuffer(renderingDevice);
-										if (!globalScratchDynamicAdjustment && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
+										if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
 											continue;
 										}
 										geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
 										geom.geometry->blas->SetGlobalScratchBuffer(renderingDevice, globalScratchBuffer.buffer);
 										globalScratchBufferSize += scratchSize;
-										if (globalScratchDynamicAdjustment) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
+										if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
 									}
 									
 									AddRayTracingBlasBuild(geom.geometry->blas);
-									geom.geometry->blas->built = true;
 								}
 								if (geom.geometry->blas && geom.geometry->blas->built) {
 									if (geom.rayTracingInstanceIndex == -1) {
@@ -1054,7 +1057,7 @@ public: // Update overrides
 		scene.Unlock();
 		
 		// Global Scratch Buffer
-		if (AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicAdjustment) {
+		if (AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
 			// If current scratch buffer size is too small or more than 4x the necessary size, reallocate it
 			if (globalScratchBuffer.size < globalScratchBufferSize || globalScratchBuffer.size > globalScratchBufferSize*4) {
 				globalScratchBuffer.Free(renderingDevice);
@@ -1084,6 +1087,7 @@ public: // Update overrides
 	
 private: // Commands overrides
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
+		
 		// Transfer data to rendering device
 		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
 		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
@@ -1092,7 +1096,7 @@ private: // Commands overrides
 		for (auto[i,geometry] : activeGeometries) {
 			if (geometry) geometry->AutoPush(renderingDevice, commandBuffer);
 		}
-	
+		
 		//TODO memory barrier between transfer and vertex shaders ?
 	
 		// // Submodules
@@ -1100,7 +1104,7 @@ private: // Commands overrides
 		// 	submodule->RunDynamicGraphicsTop(commandBuffer, images);
 		// }
 	
-		// Top Level Acceleration Structure
+		// Acceleration Structures
 		BuildBottomLevelRayTracingAccelerationStructures(renderingDevice, commandBuffer);
 		BuildTopLevelRayTracingAccelerationStructure(renderingDevice, commandBuffer);
 		
