@@ -25,7 +25,7 @@ struct PlanetTerrain {
 	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
-	static const int chunkGeneratorNbThreads = 5;
+	static const int chunkGeneratorNbThreads = 2;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
