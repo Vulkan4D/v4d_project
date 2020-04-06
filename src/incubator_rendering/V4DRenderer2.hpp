@@ -139,10 +139,11 @@ private: // Ray Tracing
 	Buffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
 	RayTracingBLASInstance* rayTracingInstances = nullptr;
 	uint32_t nbRayTracingInstances = 0;
-	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 8*1024*1024/* 8 MB */};
+	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
 	static const bool globalScratchDynamicSize = false;
 	static const int maxBlasBuildsPerFrame = 1;
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeGeometries {};
+	std::vector<std::shared_ptr<AccelerationStructure>> inactiveBlas {};
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};
 	
 	void CreateRayTracingResources() {
@@ -154,6 +155,9 @@ private: // Ray Tracing
 	void DestroyRayTracingResources() {
 		topLevelAccelerationStructure.Free(renderingDevice);
 		topLevelAccelerationStructure.Destroy(renderingDevice);
+		
+		activeGeometries.clear();
+		inactiveBlas.clear();
 	}
 	
 	void AllocateRayTracingBuffers() {
@@ -161,10 +165,14 @@ private: // Ray Tracing
 		rayTracingInstanceBuffer.MapMemory(renderingDevice);
 		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.data;
 		
+		// LOG_VERBOSE("Allocated instance buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(rayTracingInstanceBuffer.buffer))
+		
 		if (AccelerationStructure::useGlobalScratchBuffer) {
 			globalScratchBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
 			topLevelAccelerationStructure.SetGlobalScratchBuffer(renderingDevice, globalScratchBuffer.buffer);
 		}
+		
+		// LOG_VERBOSE("Allocated global scratch buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(globalScratchBuffer.buffer))
 	}
 	void FreeRayTracingBuffers() {
 		rayTracingInstances = nullptr;
@@ -329,22 +337,20 @@ private: // Ray Tracing
 		rayTracingInstances[index] = rayTracingInstances[lastIndex];
 		rayTracingInstances[lastIndex].accelerationStructureHandle = 0;
 	
+		inactiveBlas.push_back(activeGeometries[index]->blas);
 		activeGeometries[index] = activeGeometries[lastIndex];
 		activeGeometries[lastIndex] = nullptr;
 		
 		if (rayTracingInstances[index].accelerationStructureHandle != 0) {
-			scene.Lock();
-				for (auto* obj : scene.objectInstances) {
-					for (auto& geom : obj->GetGeometries()) {
-						if (geom.rayTracingInstanceIndex == lastIndex) {
-							geom.rayTracingInstanceIndex = index;
-							goto End;
-						}
+			for (auto* obj : scene.objectInstances) {
+				for (auto& geom : obj->GetGeometries()) {
+					if (geom.rayTracingInstanceIndex == lastIndex) {
+						geom.rayTracingInstanceIndex = index;
+						return;
 					}
 				}
-				LOG_ERROR("Object Instance to move to deleted instance index : Not Found")
-			End:
-			scene.Unlock();
+			}
+			LOG_ERROR("Object Instance to move to deleted instance index : Not Found")
 		}
 	}
 	
@@ -919,6 +925,10 @@ private: // Resources overrides
 		}
 		
 		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
+		
+		// LOG_VERBOSE("Allocated global index buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer))
+		// LOG_VERBOSE("Allocated global vertex buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer))
+		
 	}
 	void FreeBuffers() override {
 		FreeSceneBuffers();
@@ -999,6 +1009,7 @@ public: // Update overrides
 		
 		ResetRayTracingBlasBuilds();
 		scene.CollectGarbage();
+		// inactiveBlas.clear();
 		
 		// Update object transforms and light sources (Use all lights for now)
 		scene.Lock();
@@ -1160,7 +1171,7 @@ public: // custom functions
 			// ImGui::Checkbox("Debug G-Buffers", &scene.camera.debug);
 			ImGui::Checkbox("TXAA", &scene.camera.txaa);
 			ImGui::Checkbox("Gamma correction", &scene.camera.gammaCorrection);
-			ImGui::Checkbox("HDR", &scene.camera.hdr);
+			ImGui::Checkbox("HDR Tone Mapping", &scene.camera.hdr);
 			ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 8);
 			for (auto* submodule : renderingSubmodules) {
 				ImGui::Separator();

@@ -528,8 +528,13 @@ struct PlanetTerrain {
 		
 		void Remove(bool recursive) {
 			{
-				meshGenerating = false;
-				std::scoped_lock lock(/*stateMutex,*/ generatorMutex);
+				std::unique_lock lock(/*stateMutex,*/ generatorMutex);
+				if (meshGenerating) {
+					meshGenerating = false;
+					lock.unlock();
+					std::this_thread::yield();
+					lock.lock();
+				}
 				if (meshEnqueuedForGeneration) {
 					ChunkGeneratorCancel(this);
 				}
@@ -694,6 +699,7 @@ struct PlanetTerrain {
 		}
 		std::lock_guard lock(chunkGeneratorQueueMutex);
 		chunkGeneratorThreads.clear();
+		chunkGeneratorQueue.clear();
 	}
 	static void ChunkGeneratorEnqueue(Chunk* chunk) {
 		std::lock_guard lock(chunkGeneratorQueueMutex);
