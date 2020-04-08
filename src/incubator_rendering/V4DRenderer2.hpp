@@ -141,7 +141,7 @@ private: // Ray Tracing
 	uint32_t nbRayTracingInstances = 0;
 	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
 	static const bool globalScratchDynamicSize = false;
-	static const int maxBlasBuildsPerFrame = 1;
+	static const int maxBlasBuildsPerFrame = 8;
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeGeometries {};
 	std::vector<std::shared_ptr<AccelerationStructure>> inactiveBlas {};
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};
@@ -158,6 +158,8 @@ private: // Ray Tracing
 		
 		activeGeometries.clear();
 		inactiveBlas.clear();
+		blasBuildsForGlobalScratchBufferReallocation.clear();
+		ResetRayTracingBlasBuilds();
 	}
 	
 	void AllocateRayTracingBuffers() {
@@ -282,6 +284,22 @@ private: // Ray Tracing
 		static const VkAccelerationStructureBuildOffsetInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildOffsetInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
 		device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
+	
+		VkMemoryBarrier memoryBarrier {
+			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+			nullptr,// pNext
+			VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
+			VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
+		};
+		device->CmdPipelineBarrier(
+			commandBuffer, 
+			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+			0, 
+			1, &memoryBarrier, 
+			0, 0, 
+			0, 0
+		);
 	}
 	
 	void AddRayTracingBlasBuild(std::shared_ptr<AccelerationStructure> blas) {
@@ -337,7 +355,7 @@ private: // Ray Tracing
 		rayTracingInstances[index] = rayTracingInstances[lastIndex];
 		rayTracingInstances[lastIndex].accelerationStructureHandle = 0;
 	
-		inactiveBlas.push_back(activeGeometries[index]->blas);
+		// inactiveBlas.push_back(activeGeometries[index]->blas);
 		activeGeometries[index] = activeGeometries[lastIndex];
 		activeGeometries[lastIndex] = nullptr;
 		
@@ -713,6 +731,7 @@ public: // Scene
 	void FreeSceneBuffers() {
 		scene.ClenupObjectInstancesGeometries();
 		activeGeometries.clear();
+		scene.CollectGarbage();
 		
 		// Uniform Buffers
 		cameraUniformBuffer.Free(renderingDevice);
@@ -924,6 +943,9 @@ private: // Resources overrides
 			submodule->AllocateBuffers();
 		}
 		
+		Geometry::globalBuffers.DefragmentMemory();
+		LOG("AllocatedIndices : " << Geometry::globalBuffers.nbAllocatedIndices)
+		LOG("AllocatedVertices : " << Geometry::globalBuffers.nbAllocatedVertices)
 		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
 		
 		// LOG_VERBOSE("Allocated global index buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer))
@@ -1009,7 +1031,7 @@ public: // Update overrides
 		
 		ResetRayTracingBlasBuilds();
 		scene.CollectGarbage();
-		// inactiveBlas.clear();
+		inactiveBlas.clear();
 		
 		// Update object transforms and light sources (Use all lights for now)
 		scene.Lock();
@@ -1028,7 +1050,7 @@ public: // Update overrides
 						// Geometries
 						for (auto& geom : obj->GetGeometries()) {
 							if (geom.geometry->active) {
-								if (!geom.geometry->blas && blasQueueBuildGeometryInfos.size() < maxBlasBuildsPerFrame) {
+								if (!geom.geometry->blas) {
 									MakeRayTracingBlas(&geom);
 								}
 								if (geom.geometry->blas && !geom.geometry->blas->built) {
@@ -1124,7 +1146,7 @@ private: // Commands overrides
 		// 	submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
 		// }
 		
-		// //...
+		RecordRayTracingCommands(commandBuffer);
 		
 		// // Submodules
 		// for (auto* submodule : renderingSubmodules) {
@@ -1132,8 +1154,6 @@ private: // Commands overrides
 		// }
 	}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
-		RecordRayTracingCommands(commandBuffer);
-		//TODO image barrier ?
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {

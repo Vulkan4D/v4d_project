@@ -530,9 +530,9 @@ public:
 				
 				if (terrain) {
 					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
-					if (altitude < 1.0) {
+					if (std::abs(altitude) < 1.0) {
 						ImGui::Text("Altitude above terrain: %d mm", (int)std::ceil(altitude*1000.0));
-					} else if (altitude < 1000.0) {
+					} else if (std::abs(altitude) < 1000.0) {
 						ImGui::Text("Altitude above terrain: %d m", (int)std::ceil(altitude));
 					} else {
 						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));

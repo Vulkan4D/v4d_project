@@ -24,7 +24,7 @@ struct PlanetTerrain {
 	static const int chunkSubdivisionsPerFace = 1;
 	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
-	static constexpr float targetVertexSeparationInMeters = 1.0f; // approximative vertex separation in meters for the most precise level of detail
+	static constexpr float targetVertexSeparationInMeters = 0.1f; // approximative vertex separation in meters for the most precise level of detail
 	static const int chunkGeneratorNbThreads = 2;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
@@ -532,7 +532,7 @@ struct PlanetTerrain {
 				if (meshGenerating) {
 					meshGenerating = false;
 					lock.unlock();
-					std::this_thread::yield();
+					// std::this_thread::yield();
 					lock.lock();
 				}
 				if (meshEnqueuedForGeneration) {
@@ -809,14 +809,6 @@ struct PlanetTerrain {
 		}
 	}
 	
-	void CleanupOldChunks() {
-		// std::lock_guard lock(chunksMutex);
-		
-		// for (auto* chunk : chunks) {
-		// 	chunk->Cleanup();
-		// }
-	}
-	
 	void Optimize() {
 		// Optimize only when no chunk is being generated, camera moved at least x distance and not more than once every x seconds
 		if ((PlanetTerrain::chunkGeneratorQueue.size() > 0) || glm::distance(cameraPos, lastOptimizePosition) < chunkOptimizationMinMoveDistance || lastOptimizeTime.GetElapsedSeconds() < chunkOptimizationMinTimeInterval)
@@ -827,7 +819,6 @@ struct PlanetTerrain {
 		lastOptimizeTime.Reset();
 		
 		// Optimize
-		CleanupOldChunks();
 		SortChunks();
 	}
 
@@ -839,9 +830,8 @@ struct PlanetTerrain {
 		// reset
 		lastGarbageCollectionTime.Reset();
 		
-		// // Collect garbage
-		// vertexBufferPool.CollectGarbage(device);
-		// indexBufferPool.CollectGarbage(device);
+		// Collect garbage
+		//...
 	}
 	
 	void RefreshMatrix() {

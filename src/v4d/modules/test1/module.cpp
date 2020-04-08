@@ -82,32 +82,47 @@ public:
 	#endif
 	
 	virtual void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
-				
+		
 	}
 	
-	void LoadScene(Scene& scene) {
+	Scene* scene;
+	
+	void LoadScene(Scene& scene) override {
+		this->scene = &scene;
+	}
+	
+	void FreeBuffers() override {
+		scene->ClenupObjectInstancesGeometries();
+		for (auto* obj : scene->objectInstances) if (obj) {
+			scene->RemoveObjectInstance(obj);
+		}
+	}
+	
+	void AllocateBuffers() override {
 		
-		scene.AddObjectInstance()->Configure(CreateTestBox, {0,250,-30}, 180.0);
-		scene.AddObjectInstance()->Configure(CreateTestBox, {200,250,-30}, 120.0);
-		scene.AddObjectInstance()->Configure(CreateTestBox, {-200,250,-30}, -120.0);
+		scene->AddObjectInstance()->Configure(CreateTestBox, {0,250,-30}, 180.0);
+		for (int i = 0; i < 2000; ++i)
+			scene->AddObjectInstance()->Configure(CreateTestBox, {0,500,-30 + (i*90)}, 180.0);
+		scene->AddObjectInstance()->Configure(CreateTestBox, {200,250,-30}, 120.0);
+		scene->AddObjectInstance()->Configure(CreateTestBox, {-200,250,-30}, -120.0);
 		
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 200, 100000000);
 		}, {10,-500,1000});
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 2, 10000);
 		}, {10,270,10});
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {210,270,-20});
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
 		
