@@ -108,7 +108,7 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*bump*/vec3(0), /*roughness*/0.5, /*metallic*/0.0);
 	
 	// Transparency ?
 		// if (ray.opacity < 0.9 && fragment.color.a < 0.99) {
@@ -196,7 +196,7 @@ void main() {
 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	const vec3 normal = normalize(hitPoint - spherePosition);
 	
-	vec3 color = ApplyPBRShading(hitPoint, sphereGeomAttr.color.rgb, normal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
+	vec3 color = ApplyPBRShading(hitPoint, sphereGeomAttr.color.rgb, normal, /*bump*/vec3(0), /*roughness*/0.5, /*metallic*/0.0);
 	
 	ray.color = color;
 	ray.distance = gl_HitTEXT;

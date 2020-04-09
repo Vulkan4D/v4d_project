@@ -65,10 +65,6 @@ layout(set = 2, binding = 3) uniform samplerCube heightMap[MAX_PLANETS];
 layout(set = 2, binding = 4) uniform samplerCube volcanoesMap[MAX_PLANETS];
 layout(set = 2, binding = 5) uniform samplerCube liquidsMap[MAX_PLANETS];
 
-vec4 GetBumpMap(vec2 uv) {
-	return texture(bumpMap[0], uv) + texture(bumpMap[0], uv*20)/2 + texture(bumpMap[0], uv*200)/10 + texture(bumpMap[0], uv*4000)/100;
-}
-
 #common terrain.*comp
 
 layout(set = 1, binding = 3) buffer GeometryBuffer {uvec4 geometries[];};
@@ -95,9 +91,9 @@ void main() {
 	float noiseOffset = 2331.43;
 	vec2 coords1 = abs((vec2(gl_GlobalInvocationID.xy) / size - 0.5) * 2.0); // -1 to +1
 	vec2 coords2 = abs((vec2(gl_GlobalInvocationID.yx) / size - 0.5) * 2.0);
-	float altitude1 = FastSimplexFractal(vec3(coords1 * mult, noiseOffset), 12);
-	float altitude2 = FastSimplexFractal(vec3(coords2 * mult, noiseOffset), 12);
-	float altitude = mix(altitude1, altitude2, min(1.0,coords1.x+coords1.y)/2.0) / 2.0 + 0.5;
+	float altitude1 = FastSimplexFractal(vec3(coords1 * mult, noiseOffset), 15);
+	float altitude2 = FastSimplexFractal(vec3(coords2 * mult, noiseOffset), 15);
+	float altitude = mix(altitude1, altitude2, min(1.0,coords1.x+coords1.y)/2.0);
 	imageStore(bumpMap[0], ivec2(gl_GlobalInvocationID.xy), vec4(0,0,0, altitude));
 }
 
@@ -114,11 +110,11 @@ void main() {
 	if (top.y < 0) top.y = size.y-1;
 	if (left.x < 0) left.x = size.x-1;
 	float altitude = imageLoad(bumpMap[0], ivec2(gl_GlobalInvocationID.xy)).a;
-	float altitudeTop = imageLoad(bumpMap[0], top).a;
-	float altitudeBottom = imageLoad(bumpMap[0], bottom).a;
-	float altitudeRight = imageLoad(bumpMap[0], right).a;
-	float altitudeLeft = imageLoad(bumpMap[0], left).a;
-	vec3 normal = normalize(vec3(2*(altitudeRight-altitudeLeft), 2*(altitudeBottom-altitudeTop), 4));
+	float altitudeTop = imageLoad(bumpMap[0], top).a / 2.0 + 0.5;
+	float altitudeBottom = imageLoad(bumpMap[0], bottom).a / 2.0 + 0.5;
+	float altitudeRight = imageLoad(bumpMap[0], right).a / 2.0 + 0.5;
+	float altitudeLeft = imageLoad(bumpMap[0], left).a / 2.0 + 0.5;
+	vec3 normal = normalize(vec3(4*(altitudeRight-altitudeLeft), 4*(altitudeBottom-altitudeTop), 1));
 	imageStore(bumpMap[0], ivec2(gl_GlobalInvocationID.xy), vec4(normal, altitude));
 }
 
@@ -307,16 +303,31 @@ void main() {
 	dvec3 vertexPos = dvec3(GetVertexPos(currentIndex)) + dvec3(chunkPosition);
 	dvec3 normalizedPos = normalize(vertexPos);
 	
-	// double mainHeightMap = double(texture(heightMap[planetIndex], vec3(normalizedPos)).r);
-	double secondaryHeightMap = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5)*20000.0;
-	secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/10000.0, 5)*1000.0;
-	// if (triangleSize < 200)
-		secondaryHeightMap += FastSimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
-	// if (triangleSize < 4)
-		secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/5.0, 2);
+	double mainHeightMap = double(texture(heightMap[planetIndex], vec3(vertexPos)).r);
+	vertexPos += normalizedPos * (mainHeightMap);
+	
+	// double secondaryHeightMap = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5)*20000.0;
+	// secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/10000.0, 5)*1000.0;
+	double secondaryHeightMap = FastSimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
+	secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/5.0, 2);
 	vertexPos += normalizedPos * (secondaryHeightMap);
 	
 	SetVertexPos(currentIndex, vec3(vertexPos - dvec3(chunkPosition)));
+	
+	// // Skirts
+	// if (genCol == 0) {
+	// 	// Left Skirt
+		
+	// } else if (genCol == vertexSubdivisionsPerChunk+1) {
+	// 	// Right Skirt
+		
+	// } else if (genRow == 0) {
+	// 	// Top Skirt
+		
+	// } else if (genRow == vertexSubdivisionsPerChunk+1) {
+	// 	// Bottom Skirt
+		
+	// }
 }
 
 
@@ -476,26 +487,32 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 // #include "incubator_rendering/assets/shaders/_noise.glsl"
 // #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
+vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
+	return vec4(0,0,1,0)
+	 + texture(bumpMap[0], uv)
+	 + texture(bumpMap[0], uv*4)
+	 + texture(bumpMap[0], uv*16)
+	 + texture(bumpMap[0], uv*64)
+	 + texture(bumpMap[0], uv*256)
+	 + texture(bumpMap[0], uv*1024)
+	 + texture(bumpMap[0], uv*4096)
+	 + texture(bumpMap[0], uvChunk)
+	;
+}
+
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	// uint planetIndex = fragment.material;
-	// vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0), fragment.viewSpaceNormal));
-	// vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	// mat3 TBN = mat3(tangentX, tangentY, normalize(cross(tangentX, tangentY))); // viewSpace TBN
-	// vec2 uvMult = fragment.objectInstance.custom4.xy;
-	// vec2 uvOffset = fragment.objectInstance.custom4.zw;
-	// vec2 uv = (fragment.uv*uvMult+uvOffset);
-	// vec4 bump = GetBumpMap(uv);
-	// vec3 normal = normalize(TBN * bump.xyz);
+	vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
+	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
+	vec2 uvMult = fragment.objectInstance.custom4.xy;
+	vec2 uvOffset = fragment.objectInstance.custom4.zw;
+	vec2 uv = (fragment.uv*uvMult+uvOffset);
+	vec4 bump = GetBumpMap(uv, fragment.uv);
+	vec3 normal = normalize(TBN * bump.xyz);
 	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, /*height*/0, /*roughness*/0.5, /*metallic*/0.0);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.01, /*roughness*/0.5, /*metallic*/0.0);
 	ray.color = color;
 	ray.distance = gl_HitTEXT;
-	
-	// ray.color = vec3(uv.xy, 0);
-	
-	// // ray.color = vec3(texture(bumpMap[0], fragment.uv).rgb);
-	// ray.color = vec3(texture(bumpMap[0], uv).rgb);
-	// ray.color = tangentX;
-	// ray.distance = gl_HitTEXT;
 }

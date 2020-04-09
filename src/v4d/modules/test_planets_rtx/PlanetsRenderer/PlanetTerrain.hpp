@@ -22,7 +22,7 @@ struct PlanetTerrain {
 	
 	#pragma region Graphics configuration
 	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 150; // low=32, medium=64, high=128, extreme=256
+	static const int vertexSubdivisionsPerChunk = 100; // low=40, medium=100, high=180,   extreme=250
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 0.1f; // approximative vertex separation in meters for the most precise level of detail
 	static const int chunkGeneratorNbThreads = 2;
@@ -124,13 +124,12 @@ struct PlanetTerrain {
 		}
 		
 		bool ShouldAddSubChunks() {
-			// return false;
 			if (IsLastLevel()) return false;
 			return distanceFromCamera < chunkSubdivisionDistanceFactor*chunkSize;
 		}
 		
 		bool ShouldRemoveSubChunks() {
-			return distanceFromCamera > chunkSubdivisionDistanceFactor*chunkSize * 1.5;
+			return distanceFromCamera > chunkSubdivisionDistanceFactor*chunkSize * 1.1;
 		}
 		
 		void RefreshDistanceFromCamera() {
@@ -386,7 +385,7 @@ struct PlanetTerrain {
 					
 					auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
 					*skirtVertex = *geometry->GetVertexPtr(pointIndex);
-					skirtVertex->pos -= glm::normalize(centerPos)*(chunkSize/double(vertexSubdivisionsPerChunk));
+					skirtVertex->pos -= glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0);
 					
 					if (topSign == rightSign) {
 						geometry->SetIndex(genIndexIndex++, pointIndex);
@@ -536,7 +535,7 @@ struct PlanetTerrain {
 					lock.lock();
 				}
 				if (meshEnqueuedForGeneration) {
-					ChunkGeneratorCancel(this);
+					ChunkGeneratorCancel(this, recursive);
 				}
 				render = false;
 				computedLevel = 0;
@@ -597,7 +596,13 @@ struct PlanetTerrain {
 							subChunk->Remove(true);
 						}
 					} else {
-						if ((!obj || !obj->IsGenerated())) {
+						if (ShouldRemoveSubChunks()) {
+							std::scoped_lock lock(subChunksMutex);
+							for (auto* subChunk : subChunks) if (subChunk->meshEnqueuedForGeneration) {
+								ChunkGeneratorCancel(subChunk, true);
+							}
+						}
+						if (!obj || !obj->IsGenerated()) {
 							// std::scoped_lock lock(stateMutex);
 							if (!meshGenerated && !meshGenerating) {
 								ChunkGeneratorEnqueue(this);
@@ -708,7 +713,15 @@ struct PlanetTerrain {
 		chunk->meshEnqueuedForGeneration = true;
 		chunkGeneratorEventVar.notify_all();
 	}
-	static void ChunkGeneratorCancel(Chunk* chunk) {
+	static void ChunkGeneratorCancel(Chunk* chunk, bool recursive = false) {
+		if (recursive) {
+			std::lock_guard lock(chunk->subChunksMutex);
+			for (auto* subChunk : chunk->subChunks) {
+				if (subChunk->meshEnqueuedForGeneration) {
+					ChunkGeneratorCancel(subChunk, true);
+				}
+			}
+		}
 		std::lock_guard lock(chunkGeneratorQueueMutex);
 		int lastIndex = chunkGeneratorQueue.size()-1;
 		for (int index = 0; index < chunkGeneratorQueue.size(); ++index) {
@@ -729,11 +742,14 @@ struct PlanetTerrain {
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = solidRadius;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/10000.0), 5)*1000.0;
-		if (triangleSize < 200)
-			height += v4d::noise::SimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
-		if (triangleSize < 4)
-			height += v4d::noise::SimplexFractal(normalizedPos*solidRadius/5.0, 2);
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*8000.0;
+		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*1000.0;
+		if (triangleSize < 1000)
+			height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100.0), 3)*6.0;
+		if (triangleSize < 100)
+			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/10.0, 2);
+		if (triangleSize < 30)
+			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius, 3)/5.0;
 		return height;
 	}
 	

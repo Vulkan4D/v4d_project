@@ -5,5 +5,5 @@ set -e
 scp -rq build/$1/* WINDOWS_PC:/v4d_build/$1/
 
 echo "
-$(basename `dirname $0`) $1 crosscompile files copied to remote machine
+$1 crosscompile files copied to remote $(basename `dirname $0`) machine
 "

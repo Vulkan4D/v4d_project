@@ -167,14 +167,14 @@ PipelineLayout terrainVertexComputeLayout;
 ComputeShaderPipeline terrainVertexPosCompute {terrainVertexComputeLayout, "modules/test_planets_rtx/assets/shaders/planets.terrain.vertexpos.comp"};
 ComputeShaderPipeline terrainVertexNormalCompute {terrainVertexComputeLayout, "modules/test_planets_rtx/assets/shaders/planets.terrain.vertexnormal.comp"};
 
-void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk) {
+void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk, int& chunksToGeneratePerFrame) {
 	if (chunk->active) {
 		
 		// subChunks
 		{
 			std::scoped_lock lock(chunk->subChunksMutex);
 			for (auto* subChunk : chunk->subChunks) {
-				ComputeChunkVertices(device, commandBuffer, subChunk);
+				ComputeChunkVertices(device, commandBuffer, subChunk, chunksToGeneratePerFrame);
 			}
 		}
 		
@@ -183,10 +183,12 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 		if (chunk->obj && chunk->meshGenerated) {
 			switch (chunk->computedLevel) {
 				case 0: {
-					// chunk->obj->Lock();
+				// 	if (chunksToGeneratePerFrame--<0) return;
+					
+				// 	// chunk->obj->Lock();
 						chunk->obj->SetGeometriesDirty();
 						chunk->obj->PushGeometries(device, commandBuffer);
-				// 	chunk->obj->Unlock();
+				// // 	chunk->obj->Unlock();
 					
 				// 	#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 				// 		VkBufferMemoryBarrier barrier1 {};
@@ -239,9 +241,9 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 				// }break;
 				// case 1: {
 				// 	chunk->obj->Lock();
-				// 		chunk->RefreshVertices();
 						chunk->computedLevel = 2;
 						chunk->obj->SetGenerated();
+						// chunk->RefreshVertices();
 						if (chunk->geometry->blas) {
 							chunk->geometry->blas->built = false;
 							LOG_WARN("BLAS already created but should not be...")
@@ -292,7 +294,7 @@ public:
 		
 		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets["0_base"]);
 		terrainVertexComputeLayout.AddDescriptorSet(descriptorSets["1_rayTracing"]);
-		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
+		terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
 		// terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
 		terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 	}
@@ -470,39 +472,39 @@ public:
 		
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
-		// if (!bumpMapsGenerated) {
-		// 	bumpMapsAltitudeGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
-		// 	bumpMapsAltitudeGen.Execute(renderingDevice, commandBuffer);
+		if (!bumpMapsGenerated) {
+			bumpMapsAltitudeGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
+			bumpMapsAltitudeGen.Execute(renderingDevice, commandBuffer);
 			
-		// 	VkImageMemoryBarrier barrier = {};
-		// 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		// 		barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 		barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// 		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		// 		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		// 		barrier.image = bumpMaps[0].image;
-		// 		barrier.subresourceRange.baseMipLevel = 0;
-		// 		barrier.subresourceRange.levelCount = 1;
-		// 		barrier.subresourceRange.baseArrayLayer = 0;
-		// 		barrier.subresourceRange.layerCount = 1;
-		// 		barrier.srcAccessMask = 0;
-		// 		barrier.dstAccessMask = 0;
-		// 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		// 		barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		// 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		// 	renderingDevice->CmdPipelineBarrier(
-		// 		commandBuffer,
-		// 		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		// 		0,
-		// 		0, nullptr,
-		// 		0, nullptr,
-		// 		1, &barrier
-		// 	);
+			VkImageMemoryBarrier barrier = {};
+				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+				barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.image = bumpMaps[0].image;
+				barrier.subresourceRange.baseMipLevel = 0;
+				barrier.subresourceRange.levelCount = 1;
+				barrier.subresourceRange.baseArrayLayer = 0;
+				barrier.subresourceRange.layerCount = 1;
+				barrier.srcAccessMask = 0;
+				barrier.dstAccessMask = 0;
+				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			renderingDevice->CmdPipelineBarrier(
+				commandBuffer,
+				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				0,
+				0, nullptr,
+				0, nullptr,
+				1, &barrier
+			);
 	
-		// 	bumpMapsNormalsGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
-		// 	bumpMapsNormalsGen.Execute(renderingDevice, commandBuffer);
-		// 	bumpMapsGenerated = true;
-		// }
+			bumpMapsNormalsGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
+			bumpMapsNormalsGen.Execute(renderingDevice, commandBuffer);
+			bumpMapsGenerated = true;
+		}
 		// for each planet
 			if (terrain) {
 				// planet.GenerateMaps(renderingDevice, commandBuffer);
@@ -510,8 +512,9 @@ public:
 				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);
 				terrainChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
 				std::lock_guard lock(terrain->chunksMutex);
+				int chunksToGeneratePerFrame = 8;
 				for (auto* chunk : terrain->chunks) {
-					ComputeChunkVertices(renderingDevice, commandBuffer, chunk);
+					ComputeChunkVertices(renderingDevice, commandBuffer, chunk, chunksToGeneratePerFrame);
 				}
 			}
 		//

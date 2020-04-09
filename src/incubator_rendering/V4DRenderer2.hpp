@@ -944,13 +944,7 @@ private: // Resources overrides
 		}
 		
 		Geometry::globalBuffers.DefragmentMemory();
-		LOG("AllocatedIndices : " << Geometry::globalBuffers.nbAllocatedIndices)
-		LOG("AllocatedVertices : " << Geometry::globalBuffers.nbAllocatedVertices)
 		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
-		
-		// LOG_VERBOSE("Allocated global index buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer))
-		// LOG_VERBOSE("Allocated global vertex buffer " << std::hex << renderingDevice->GetBufferDeviceAddress(Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer))
-		
 	}
 	void FreeBuffers() override {
 		FreeSceneBuffers();
