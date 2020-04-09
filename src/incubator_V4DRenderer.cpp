@@ -17,8 +17,8 @@ using namespace v4d::graphics;
 static std::vector<std::string> v4dModules {
 	"incubator_simplemovearound",
 	// "incubator_galaxy4d",
-	"test1",
-	// "test_planets_rtx",
+	// "test1",
+	"test_planets_rtx",
 };
 
 #if defined(_DEBUG)
