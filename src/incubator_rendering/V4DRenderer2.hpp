@@ -106,9 +106,11 @@ private: // UI
 
 
 private: // Main Rendering
-	Image litImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+
+	// Image litImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image litImage { VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
-	DescriptorSet rasterDescriptorSet_1;
+	DescriptorSet visibilityDescriptorSet_1;
 	
 	void CreateRenderingResources() {
 		uint rasterWidth = (uint)((float)swapChain->extent.width);
@@ -125,6 +127,199 @@ private: // Main Rendering
 		depthImage.Destroy(renderingDevice);
 	}
 	
+private: // Raster Visibility
+	RenderPass visibilityRasterPass;
+	PipelineLayout visibilityRasterLayout;
+	RasterShaderPipeline visibilityRasterShader {visibilityRasterLayout, {
+		"incubator_rendering/assets/shaders/raster.visibility.vert",
+		"incubator_rendering/assets/shaders/raster.visibility.frag",
+	}};
+
+	Image gBuffer_albedo_geomIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = geometry index
+	Image gBuffer_normal_uv { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = normal xyz,  a = uv
+	
+	// Image gBuffer_position_dist { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = position xyz,  a = trueDistanceFromCamera
+	Image gBuffer_position_dist { VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = position xyz,  a = trueDistanceFromCamera
+	
+	static const int NB_G_BUFFERS = 3;
+	std::array<Image*, NB_G_BUFFERS> gBuffers {
+		&gBuffer_albedo_geomIndex,// attachment 0
+		&gBuffer_normal_uv, 	// attachment 1
+		&gBuffer_position_dist, // attachment 2
+	};
+	DepthImage rasterDepthImage { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	
+	void CreateRasterVisibilityResources() {
+		uint rasterWidth = (uint)((float)swapChain->extent.width);
+		uint rasterHeight = (uint)((float)swapChain->extent.height);
+		
+		for (auto* img : gBuffers)
+			img->Create(renderingDevice, rasterWidth, rasterHeight);
+		for (auto* img : gBuffers)
+			TransitionImageLayout(*img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			
+		rasterDepthImage.viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		rasterDepthImage.Create(renderingDevice, rasterWidth, rasterHeight);
+	}
+	void DestroyRasterVisibilityResources() {
+		for (auto* img : gBuffers)
+			img->Destroy(renderingDevice);
+		rasterDepthImage.Destroy(renderingDevice);
+	}
+	
+	void CreateRasterVisibilityPipeline() {
+		
+		{// Opaque Raster Visibility pass
+			std::array<Image*, NB_G_BUFFERS+1> images {};
+			std::array<VkAttachmentDescription, NB_G_BUFFERS+1> attachments {};
+			std::array<VkAttachmentReference, NB_G_BUFFERS> colorAttachmentRefs {};
+			VkAttachmentReference depthAttachmentRef;
+			int i = 0;
+			// G-Buffers
+			for (auto* img : gBuffers) {
+				images[i] = img;
+				attachments[i].format = img->format;
+				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+				colorAttachmentRefs[i] = {
+					visibilityRasterPass.AddAttachment(attachments[i]),
+					VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				};
+				++i;
+			}
+			{ // Depth buffer
+				images[i] = &rasterDepthImage;
+				attachments[i].format = rasterDepthImage.format;
+				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+				attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+				depthAttachmentRef = {
+					visibilityRasterPass.AddAttachment(attachments[i]),
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+				};
+				++i;
+			}
+			
+			// SubPass
+			VkSubpassDescription subpass = {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.pDepthStencilAttachment = &depthAttachmentRef;
+			visibilityRasterPass.AddSubpass(subpass);
+			
+			// Create the render pass
+			visibilityRasterPass.Create(renderingDevice);
+			visibilityRasterPass.CreateFrameBuffers(renderingDevice, images.data(), images.size());
+			
+			// Shaders
+			for (auto* s : rasterShaders["visibility"]) {
+				s->SetRenderPass(*images.data(), visibilityRasterPass.handle, 0);
+				for (int i = 0; i < colorAttachmentRefs.size(); ++i)
+					s->AddColorBlendAttachmentState(VK_FALSE);
+				s->CreatePipeline(renderingDevice);
+			}
+		}
+		
+	}
+	
+	void DestroyRasterVisibilityPipeline() {
+		
+		for (auto* s : rasterShaders["visibility"]) {
+			s->DestroyPipeline(renderingDevice);
+		}
+		visibilityRasterPass.DestroyFrameBuffers(renderingDevice);
+		visibilityRasterPass.Destroy(renderingDevice);
+		
+	}
+	
+	void ConfigureRasterVisibilityShaders() {
+		visibilityRasterLayout.AddPushConstant<glm::u32>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		
+		visibilityRasterShader.AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+		
+		// visibilityRasterShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		// visibilityRasterShader.rasterizer.lineWidth = 1;
+
+		#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+			visibilityRasterShader.SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
+		#else
+			visibilityRasterShader.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
+		#endif
+	}
+	
+	void RunRasterVisibility(Device* device, VkCommandBuffer commandBuffer) {
+		
+		std::vector<VkClearValue> clearValues(NB_G_BUFFERS+1);
+		int i = 0;
+		for (; i < NB_G_BUFFERS; ++i)
+			clearValues[i] = {.0,.0,.0,.0};
+		clearValues[i] = {0.0f,0}; // depth
+		
+		// Visibility Raster pass
+		visibilityRasterPass.Begin(renderingDevice, commandBuffer, **gBuffers.data(), clearValues);
+			for (auto* s : rasterShaders["visibility"]) {
+				if (s == &visibilityRasterShader) {
+					scene.Lock();
+						for (auto* obj : scene.objectInstances) {
+							if (obj) {
+								// obj->Lock();
+								if (obj->IsActive()) {
+									// Geometries
+									for (auto& geom : obj->GetGeometries()) {
+										if (geom.geometry->active) {
+											//TODO frustum culling
+											if (geom.geometry->blas && geom.geometry->blas->built) {
+												if (geom.geometry->isProcedural) {
+													//TODO procedural objects
+												} else {
+													auto geometryPushConstant = obj->GetObjectOffset();
+													s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::VertexBuffer_T);
+													s->indexOffset = geom.geometry->indexOffset * sizeof(Geometry::IndexBuffer_T);
+													s->indexCount = geom.geometry->indexCount;
+													s->Execute(device, commandBuffer, 1, &geometryPushConstant);
+												}
+											}
+										}
+									}
+								}
+								// obj->Unlock();
+							}
+						}
+					scene.Unlock();
+				} else {
+					s->Execute(device, commandBuffer);
+				}
+			}
+		visibilityRasterPass.End(device, commandBuffer);
+		
+	}
+	
+	void RunRasterVisibilityCommands(VkCommandBuffer commandBuffer) {
+		
+		TransitionImageLayout(commandBuffer, gBuffer_position_dist, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		
+		VkImageCopy copyRegion {};
+			copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+			copyRegion.srcOffset = {0,0,0};
+			copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+			copyRegion.dstOffset = {0,0,0};
+			copyRegion.extent = {litImage.width, litImage.height, 1};
+		renderingDevice->CmdCopyImage(commandBuffer, gBuffer_position_dist.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, litImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		
+		TransitionImageLayout(commandBuffer, gBuffer_position_dist, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	
+	}
+
 private: // Ray Tracing
 	VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties{};
 	VkPhysicalDeviceRayTracingFeaturesKHR rayTracingFeatures {};
@@ -207,7 +402,7 @@ private: // Ray Tracing
 		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.light.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
 	}
 	
-	void RecordRayTracingCommands(VkCommandBuffer commandBuffer) {
+	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
 		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
 		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
 		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
@@ -373,8 +568,8 @@ private: // Ray Tracing
 	}
 	
 private: // Post Processing
-	PipelineLayout postProcessingPipelineLayout, thumbnailPipelineLayout, histogramComputeLayout;
 	RenderPass postProcessingRenderPass, thumbnailRenderPass;
+	PipelineLayout postProcessingPipelineLayout, thumbnailPipelineLayout, histogramComputeLayout;
 	RasterShaderPipeline thumbnailShader {postProcessingPipelineLayout, {
 		"incubator_rendering/assets/shaders/v4d_thumbnail.vert",
 		"incubator_rendering/assets/shaders/v4d_thumbnail.frag",
@@ -682,7 +877,7 @@ private: // Post Processing
 	
 private: // Global Containers
 	std::unordered_map<std::string, std::vector<PipelineLayout*>> pipelineLayouts {
-		{"raster", {}},
+		{"visibility", {&visibilityRasterLayout}},
 		{"rayTracing", {&rayTracingPipelineLayout}},
 		{"thumbnail", {&thumbnailPipelineLayout}},
 		{"ui", {&uiPipelineLayout}},
@@ -692,6 +887,7 @@ private: // Global Containers
 
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> rasterShaders {
 		/* RenderPass_SubPass => ShadersList */
+		{"visibility", {&visibilityRasterShader}},
 		{"thumbnail", {&thumbnailShader}},
 		{"postProcessing_0", {&postProcessingShader_txaa}},
 		{"postProcessing_1", {&postProcessingShader_history}},
@@ -796,13 +992,20 @@ private: // Init overrides
 		
 		descriptorSets["0_base"] = &baseDescriptorSet_0;
 			baseDescriptorSet_0.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
-			baseDescriptorSet_0.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
-			baseDescriptorSet_0.AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
+			baseDescriptorSet_0.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
+			baseDescriptorSet_0.AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
 			baseDescriptorSet_0.AddBinding_storageBuffer(3, &activeLightsUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
 		
-		descriptorSets["1_raster"] = &rasterDescriptorSet_1;
-			//...
-		
+		descriptorSets["1_visibility"] = &visibilityDescriptorSet_1;
+			// visibilityDescriptorSet_1.AddBinding_storageBuffer(0, &Geometry::globalBuffers.geometryBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+			// #ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+			// 	visibilityDescriptorSet_1.AddBinding_storageBuffer(1, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+			// 	visibilityDescriptorSet_1.AddBinding_storageBuffer(2, &Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+			// #else
+			// 	visibilityDescriptorSet_1.AddBinding_storageBuffer(1, &Geometry::globalBuffers.indexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+			// 	visibilityDescriptorSet_1.AddBinding_storageBuffer(2, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS);
+			// #endif
+			
 		descriptorSets["1_rayTracing"] = &rayTracingDescriptorSet_1;
 			rayTracingDescriptorSet_1.AddBinding_accelerationStructure(0, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			rayTracingDescriptorSet_1.AddBinding_imageView(1, &litImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
@@ -838,8 +1041,8 @@ private: // Init overrides
 			layout->AddDescriptorSet(&baseDescriptorSet_0);
 		}
 		// Add specific set 1 to specific layout lists
-		for (auto* layout : pipelineLayouts["raster"]) {
-			layout->AddDescriptorSet(&rasterDescriptorSet_1);
+		for (auto* layout : pipelineLayouts["visibility"]) {
+			layout->AddDescriptorSet(&visibilityDescriptorSet_1);
 		}
 		for (auto* layout : pipelineLayouts["rayTracing"]) {
 			layout->AddDescriptorSet(&rayTracingDescriptorSet_1);
@@ -864,6 +1067,7 @@ private: // Init overrides
 	}
 	
 	void ConfigureShaders() override {
+		ConfigureRasterVisibilityShaders();
 		ConfigureRayTracingShaders();
 		ConfigurePostProcessingShaders();
 		ConfigureUiShaders();
@@ -915,6 +1119,7 @@ private: // Resources overrides
 		CreateRenderingResources();
 		CreatePostProcessingResources();
 		CreateRayTracingResources();
+		CreateRasterVisibilityResources();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -927,6 +1132,7 @@ private: // Resources overrides
 		DestroyRenderingResources();
 		DestroyPostProcessingResources();
 		DestroyRayTracingResources();
+		DestroyRasterVisibilityResources();
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -998,6 +1204,9 @@ private: // Graphics configuration overrides
 			LoadImGui();
 		#endif
 		
+		// Visibility
+		CreateRasterVisibilityPipeline();
+		
 		// Ray Tracing
 		CreateRayTracingPipeline();
 		
@@ -1010,6 +1219,9 @@ private: // Graphics configuration overrides
 			UnloadImGui();
 		#endif
 		DestroyUiPipeline();
+		
+		// Visibility
+		DestroyRasterVisibilityPipeline();
 		
 		// Ray Tracing
 		DestroyRayTracingPipeline();
@@ -1161,12 +1373,18 @@ private: // Commands overrides
 		// 	submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
 		// }
 		
-		RecordRayTracingCommands(commandBuffer);
+		if (renderingMode == rasterization) {
+			// Visibility
+			RunRasterVisibility(renderingDevice, commandBuffer);
+			RunRasterVisibilityCommands(commandBuffer);
+		} else {
+			RunRayTracingCommands(commandBuffer);
+		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsBottom(commandBuffer, images);
-		// }
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsBottom(commandBuffer, images);
+		}
 	}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
@@ -1198,12 +1416,36 @@ private: // Commands overrides
 	
 public: // custom functions
 
+	enum RenderingMode : int {
+		rasterization,
+		// rasterization_shadows,
+		// rasterization_softShadows,
+		rayTracing,
+		rayTracing_shadows,
+		// rayTracing_softShadows,
+	};
+	int renderingMode = rayTracing;
+
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
 			// Submodules
-			ImGui::SetNextWindowSize({405, 285});
+			ImGui::SetNextWindowSize({405, 295});
 			ImGui::Begin("Settings and Modules");
 			// ImGui::Checkbox("Debug G-Buffers", &scene.camera.debug);
+			
+			// Rendering Mode
+			const char* items = 
+				"Rasterization (no shadows)\0"
+				// "Rasterization with ray-traced hard shadows\0"
+				// "Rasterization with ray-traced soft shadows\0"
+				"Ray Tracing (no shadows)\0"
+				"Ray Tracing with hard shadows\0"
+				// "Ray Tracing with soft shadows\0"
+			;
+			ImGui::Combo("Rendering Mode", &renderingMode, items);
+			scene.camera.shadows = renderingMode == rayTracing_shadows ;// || renderingMode == rasterization_shadows || renderingMode == rasterization_softShadows || renderingMode == rayTracing_softShadows;
+			scene.camera.softShadows = false;// renderingMode == rasterization_softShadows || renderingMode == rayTracing_softShadows;
+			
 			ImGui::Checkbox("TXAA", &scene.camera.txaa);
 			ImGui::Checkbox("Gamma correction", &scene.camera.gammaCorrection);
 			ImGui::Checkbox("HDR Tone Mapping", &scene.camera.hdr);

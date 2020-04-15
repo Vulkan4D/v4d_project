@@ -104,7 +104,7 @@ public:
 	void AllocateBuffers() override {
 		
 		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);
-		for (int i = 0; i < 2000; ++i)
+		for (int i = 0; i < 100; ++i)
 			objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {0,500,-30 + (i*90)}, 180.0);
 		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {200,250,-30}, 120.0);
 		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {-200,250,-30}, -120.0);

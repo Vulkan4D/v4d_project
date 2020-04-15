@@ -474,7 +474,7 @@ public:
 	}
 	
 	// Render frame
-	void RunDynamicGraphicsTop(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>&) {
+	void RunDynamicGraphicsBottom(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>&) {
 		
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {

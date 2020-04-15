@@ -8,8 +8,8 @@ using namespace v4d::graphics;
 
 #define APPLICATION_NAME "V4D Test"
 #define WINDOW_TITLE "TEST"
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 720
+#define WINDOW_WIDTH 1024
+#define WINDOW_HEIGHT 768
 #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
 
 #include "incubator_rendering/V4DRenderer2.hpp"
@@ -36,6 +36,7 @@ static std::vector<std::string> v4dModules {
 		{"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
 		{"incubator_rendering/assets/shaders/rtx.meta", 0},
 		{"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
+		{"incubator_rendering/assets/shaders/raster.meta", 0},
 	};
 #endif
 
@@ -149,7 +150,7 @@ int main() {
 				}
 			#endif
 			
-			SLEEP(200ms)
+			SLEEP(500ms)
 		}
 	});
 	
