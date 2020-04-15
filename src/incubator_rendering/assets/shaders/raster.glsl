@@ -114,5 +114,5 @@ layout(location = 1) out vec4 gBuffer_normal_uv; // rgb = normal xyz,  a = uv
 layout(location = 2) out vec4 gBuffer_position_dist; // rgb = position xyz,  a = trueDistanceFromCamera
 
 void main() {
-	gBuffer_position_dist = vec4(1,1,1,1);
+	gBuffer_position_dist = vec4(1);
 }

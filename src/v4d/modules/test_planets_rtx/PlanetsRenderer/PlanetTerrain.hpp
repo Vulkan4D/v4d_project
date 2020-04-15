@@ -93,7 +93,6 @@ struct PlanetTerrain {
 		double chunkSize = 0;
 		double triangleSize = 0;
 		double heightAtCenter = 0;
-		double boundingDistance = 0;
 		double lowestAltitude = 0;
 		double highestAltitude = 0;
 		std::atomic<double> distanceFromCamera = 0;
@@ -256,7 +255,7 @@ struct PlanetTerrain {
 					genVertexIndex++;
 					
 					// Bounding distance
-					boundingDistance = std::max(boundingDistance, glm::length(posOnChunk));
+					geometry->boundingDistance = std::max(geometry->boundingDistance, glm::length(vertex->pos));
 
 					// indices
 					if (genRow < vertexSubdivisionsPerChunk) {

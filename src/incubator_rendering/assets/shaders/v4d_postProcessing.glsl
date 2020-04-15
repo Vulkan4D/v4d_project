@@ -17,10 +17,7 @@ layout(set = 1, binding = 1) uniform sampler2D uiImage;
 layout(set = 1, input_attachment_index = 0, binding = 2) uniform highp subpassInput ppImage;
 layout(set = 1, binding = 3) uniform sampler2D historyImage; // previous frame
 layout(set = 1, binding = 4) uniform sampler2D depthImage;
-// layout(set = 1, binding = 5) uniform sampler2D gBuffer_albedo;
-// layout(set = 1, binding = 6) uniform sampler2D gBuffer_normal;
-// layout(set = 1, binding = 7) uniform sampler2D gBuffer_emission;
-// layout(set = 1, binding = 8) uniform sampler2D gBuffer_position;
+layout(set = 1, binding = 5) uniform sampler2D rasterDepthImage;
 
 ##################################################################
 #shader vert
@@ -42,7 +39,15 @@ void main() {
 	out_color = lit;
 	
 	if (camera.txaa) {
-		float depth = texture(depthImage, uvCurrent).r;
+		float depth;
+		switch (camera.renderMode) {
+			case 0: // raster
+				depth = texture(rasterDepthImage, uvCurrent).r;
+			break;
+			case 1: // ray tracing
+				depth = texture(depthImage, uvCurrent).r;
+			break;
+		}
 		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((uv * 2 - 1), depth, 1);
 		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
 		vec4 history = texture(historyImage, uvHistory);
@@ -119,28 +124,6 @@ void main() {
 		color = pow(color, vec3(1.0 / gamma));
 	}
 	
-	// // Debug G-Buffers
-	// if (camera.debug) {
-	// 	if (uv.t > 0.75) {
-	// 		// if (uv.s < 0.25) {
-	// 		// 	color = vec3(texture(gBuffer_position, uv).a) / 100.0;
-	// 		// 	if (color.r == 0) color = vec3(1,0,1);
-	// 		// }
-	// 		// if (uv.s > 0.25 && uv.s < 0.5) {
-	// 		// 	color = texture(gBuffer_normal, uv).rgb;
-	// 		// }
-	// 		// if (uv.s > 0.5 && uv.s < 0.75) {
-	// 		// 	color = vec3(texture(gBuffer_normal, uv).a);
-	// 		// }
-	// 		// if (uv.s > 0.75) {
-	// 		// 	color = vec3(texture(gBuffer_emission, uv).a);
-	// 		// 	if (color.r < 0) {
-	// 		// 		color *= vec3(0,0,-1);
-	// 		// 	}
-	// 		// }
-	// 	}
-	// }
-
 	// Final color
 	out_color = vec4(max(vec3(0),color.rgb), 1.0);
 }
