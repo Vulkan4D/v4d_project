@@ -151,7 +151,7 @@ hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
 void main() {
 	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
-	vec3 spherePosition = geom.objectInstance.position;
+	vec3 spherePosition = geom.geometryInstance.viewPosition;
 	float sphereRadius = geom.aabbMax.x;
 	
 	const vec3 origin = gl_WorldRayOriginEXT;
@@ -189,7 +189,7 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 #include "rtx_pbr.glsl"
 
 void main() {
-	vec3 spherePosition = sphereGeomAttr.objectInstance.position;
+	vec3 spherePosition = sphereGeomAttr.geometryInstance.viewPosition;
 	float sphereRadius = sphereGeomAttr.aabbMax.x;
 	
 	// Hit World Position

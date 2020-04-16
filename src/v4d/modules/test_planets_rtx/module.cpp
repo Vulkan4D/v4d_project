@@ -206,7 +206,7 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 				// 	terrainChunkPushConstant.chunkGeometryOffset = chunk->obj->GetFirstGeometryOffset();
 				// 	terrainChunkPushConstant.chunkPosition = chunk->centerPos;
 				// 	terrainChunkPushConstant.face = chunk->face;
-				// 	terrainChunkPushConstant.uvMult = {chunk->uvMultX, chunk->uvMultY};
+				// 	terrainChunkPushConstant.uvMult = {chunk->uvMult, chunk->uvMult};
 				// 	terrainChunkPushConstant.uvOffset = {chunk->uvOffsetX, chunk->uvOffsetY};
 					
 				// 	// Compute positions

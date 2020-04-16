@@ -168,17 +168,17 @@ private: // Raster Visibility
 	#endif
 	
 	struct GeometryPushConstant {
-		int objectIndex;
-		glm::mat4 geometryTransform;
+		uint objectIndex;
+		uint geometryIndex;
 	};
 
-	Image gBuffer_albedo_objIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = object index
+	Image gBuffer_albedo_geometryIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = geometry index
 	Image gBuffer_normal_uv { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = normal xyz,  a = uv
 	Image gBuffer_position_dist { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = position xyz,  a = trueDistanceFromCamera
 	
 	static const int NB_G_BUFFERS = 3;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
-		&gBuffer_albedo_objIndex,// attachment 0
+		&gBuffer_albedo_geometryIndex,// attachment 0
 		&gBuffer_normal_uv, 	// attachment 1
 		&gBuffer_position_dist, // attachment 2
 	};
@@ -339,7 +339,7 @@ private: // Raster Visibility
 													s->indexCount = geom.geometry->indexCount;
 													GeometryPushConstant geometryPushConstant {};
 														geometryPushConstant.objectIndex = obj->GetObjectOffset();
-														geometryPushConstant.geometryTransform = geom.transform;
+														geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
 													s->Execute(device, commandBuffer, 1, &geometryPushConstant);
 												}
 											}
@@ -571,10 +571,10 @@ private: // Ray Tracing
 		geometryInstance->geometry->blas->Allocate(renderingDevice);
 	}
 	
-	void SetRayTracingInstanceTransform(GeometryInstance* geometryInstance, const glm::mat4& transform) {
+	void SetRayTracingInstanceTransform(GeometryInstance* geometryInstance, const glm::dmat4& objectViewTransform) {
 		std::lock_guard lock(rayTracingInstanceMutex);
 		if (geometryInstance->rayTracingInstanceIndex == -1) return;
-		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(transform * geometryInstance->transform);
+		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(glm::mat4(objectViewTransform * glm::dmat4(geometryInstance->transform)));
 	}
 	
 	void AddRayTracingInstance(GeometryInstance* geometryInstance) {
@@ -1383,7 +1383,7 @@ public: // Update overrides
 										if (geom.rayTracingInstanceIndex == -1) {
 											AddRayTracingInstance(&geom);
 										}
-										SetRayTracingInstanceTransform(&geom, obj->GetModelViewMatrix());
+										SetRayTracingInstanceTransform(&geom, scene.camera.viewMatrix * obj->GetWorldTransform());
 									}
 								} else if (geom.rayTracingInstanceIndex != -1) {
 									RemoveRayTracingInstance(&geom);
@@ -1437,8 +1437,9 @@ private: // Commands overrides
 		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
 		Geometry::globalBuffers.PushObjects(renderingDevice, commandBuffer);
 		Geometry::globalBuffers.PushLights(renderingDevice, commandBuffer);
+		// Geometry::globalBuffers.PushGeometriesInfo(renderingDevice, commandBuffer);
 		for (auto[i,geometry] : activeGeometries) {
-			if (geometry) geometry->AutoPush(renderingDevice, commandBuffer);
+			if (geometry) geometry->AutoPush(renderingDevice, commandBuffer, true);
 		}
 		
 		//TODO memory barrier between transfer and vertex shaders ?

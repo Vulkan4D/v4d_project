@@ -500,11 +500,11 @@ vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	// uint planetIndex = fragment.material;
-	vec3 tangentX = normalize(cross(fragment.objectInstance.normalMatrix * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
+	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
 	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
 	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
-	vec2 uvMult = fragment.objectInstance.custom4.xy;
-	vec2 uvOffset = fragment.objectInstance.custom4.zw;
+	vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
+	vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
 	vec2 uv = (fragment.uv*uvMult+uvOffset);
 	vec4 bump = GetBumpMap(uv, fragment.uv);
 	vec3 normal = normalize(TBN * bump.xyz);

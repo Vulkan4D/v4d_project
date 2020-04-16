@@ -92,8 +92,7 @@ struct PlanetTerrain {
 		glm::dvec3 bottomLeftPosHighest {0};
 		glm::dvec3 bottomRightPosHighest {0};
 		
-		float uvMultX = 1;
-		float uvMultY = 1;
+		float uvMult = 1;
 		float uvOffsetX = 0;
 		float uvOffsetY = 0;
 		double chunkSize = 0;
@@ -240,7 +239,7 @@ struct PlanetTerrain {
 			}
 			planet->scene->Unlock();
 			
-			obj->SetObjectCustomData({0,0,0}, {uvMultX, uvMultY, uvOffsetX, uvOffsetY});
+			geometry->custom3f = {uvOffsetX, uvOffsetY, uvMult};
 			
 			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
 			double topSign = topDir.x + topDir.y + topDir.z;
@@ -497,8 +496,7 @@ struct PlanetTerrain {
 					left,
 					center
 				});
-				sub->uvMultX = uvMultX/2;
-				sub->uvMultY = uvMultY/2;
+				sub->uvMult = uvMult/2;
 				sub->uvOffsetX = uvOffsetX;
 				sub->uvOffsetY = uvOffsetY;
 			}
@@ -513,9 +511,8 @@ struct PlanetTerrain {
 					center,
 					right
 				});
-				sub->uvMultX = uvMultX/2;
-				sub->uvMultY = uvMultY/2;
-				sub->uvOffsetX = uvOffsetX+uvMultX/2;
+				sub->uvMult = uvMult/2;
+				sub->uvOffsetX = uvOffsetX+uvMult/2;
 				sub->uvOffsetY = uvOffsetY;
 			}
 			
@@ -529,10 +526,9 @@ struct PlanetTerrain {
 					bottomLeft,
 					bottom
 				});
-				sub->uvMultX = uvMultX/2;
-				sub->uvMultY = uvMultY/2;
+				sub->uvMult = uvMult/2;
 				sub->uvOffsetX = uvOffsetX;
-				sub->uvOffsetY = uvOffsetY+uvMultY/2;
+				sub->uvOffsetY = uvOffsetY+uvMult/2;
 			}
 			
 			{// Bottom Right
@@ -545,10 +541,9 @@ struct PlanetTerrain {
 					bottom,
 					bottomRight
 				});
-				sub->uvMultX = uvMultX/2;
-				sub->uvMultY = uvMultY/2;
-				sub->uvOffsetX = uvOffsetX+uvMultX/2;
-				sub->uvOffsetY = uvOffsetY+uvMultY/2;
+				sub->uvMult = uvMult/2;
+				sub->uvOffsetX = uvOffsetX+uvMult/2;
+				sub->uvOffsetY = uvOffsetY+uvMult/2;
 			}
 			
 			SortSubChunks();
@@ -840,8 +835,7 @@ struct PlanetTerrain {
 					});
 					chunk->uvOffsetX = col/chunkSubdivisionsPerFace;
 					chunk->uvOffsetY = row/chunkSubdivisionsPerFace;
-					chunk->uvMultX = 1.0f/chunkSubdivisionsPerFace;
-					chunk->uvMultY = 1.0f/chunkSubdivisionsPerFace;
+					chunk->uvMult = 1.0f/chunkSubdivisionsPerFace;
 				}
 			}
 		}
