@@ -109,14 +109,14 @@ private: // Main Rendering
 
 	enum RenderingMode : int {
 		rasterization,
-		hybridRayTracing,
 		fullRayTracing,
+		// hybridRayTracing,
 		// pathTracing,
 	};
 	const char* RENDER_MODES_STR = 
 		"Rasterization\0"
-		"Hybrid Ray Tracing\0"
 		"Full Ray Tracing\0"
+		// "Hybrid Ray Tracing\0"
 		// "Path Tracing\0"
 	;
 	enum ShadowType : int {
@@ -129,12 +129,20 @@ private: // Main Rendering
 		"Hard shadows\0"
 		// "Soft shadows\0"
 	;
-	static const int DEFAULT_RENDER_MODE = fullRayTracing;
-	static const int DEFAULT_SHADOW_TYPE = shadows_hard;
+	static const int DEFAULT_RENDER_MODE = rasterization;
+	static const int DEFAULT_SHADOW_TYPE = shadows_off;
 
-	Image litImage { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
-	DescriptorSet visibilityDescriptorSet_1;
+	DescriptorSet visibilityDescriptorSet_1, lightingDescriptorSet_1;
+	
+	RenderPass lightingRenderPass;
+	PipelineLayout lightingPipelineLayout;
+	RasterShaderPipeline lightingShader {lightingPipelineLayout, {
+		"incubator_rendering/assets/shaders/raster.lighting.vert",
+		"incubator_rendering/assets/shaders/raster.lighting.frag",
+	}};
+	// ComputeShaderPipeline lightingComputeShader {lightingPipelineLayout, "incubator_rendering/assets/shaders/raster.lighting.comp"};
 	
 	void CreateRenderingResources() {
 		uint rasterWidth = (uint)((float)swapChain->extent.width);
@@ -149,6 +157,115 @@ private: // Main Rendering
 	void DestroyRenderingResources() {
 		litImage.Destroy(renderingDevice);
 		depthImage.Destroy(renderingDevice);
+	}
+	
+	void CreateLightingPipeline() {
+		
+		{// Lighting pass
+			const int nbColorAttachments = 1;
+			const int nbInputAttachments = NB_G_BUFFERS;
+			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
+			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
+			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
+			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
+			
+			int i = 0;
+			
+			// Color attachment
+			images[i] = &litImage;
+			attachments[i].format = litImage.format;
+			attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			colorAttachmentRefs[0] = {
+				lightingRenderPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			++i;
+			
+			// Input attachments
+			for (auto* img : gBuffers) {
+				images[i] = img;
+				attachments[i].format = img->format;
+				attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+				attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+				attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+				attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+				attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+				inputAttachmentRefs[i-nbColorAttachments] = {
+					lightingRenderPass.AddAttachment(attachments[i]),
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				};
+				++i;
+			}
+		
+			// SubPass
+			VkSubpassDependency subpassDependency {
+				VK_SUBPASS_EXTERNAL,// srcSubpass;
+				0,// dstSubpass;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+				0// dependencyFlags;
+			};
+			VkSubpassDescription subpass {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
+				subpass.inputAttachmentCount = inputAttachmentRefs.size();
+				subpass.pInputAttachments = inputAttachmentRefs.data();
+			lightingRenderPass.AddSubpass(subpass);
+			lightingRenderPass.renderPassInfo.dependencyCount = 1;
+			lightingRenderPass.renderPassInfo.pDependencies = &subpassDependency;
+			
+			// Create the render pass
+			lightingRenderPass.Create(renderingDevice);
+			lightingRenderPass.CreateFrameBuffers(renderingDevice, images);
+			
+			// Shaders
+			for (auto* s : rasterShaders["lighting"]) {
+				s->SetRenderPass(&litImage, lightingRenderPass.handle, 0);
+				s->AddColorBlendAttachmentState();
+				s->CreatePipeline(renderingDevice);
+			}
+		}
+		
+		// lightingComputeShader.CreatePipeline(renderingDevice);
+	}
+	void DestroyLightingPipeline() {
+		for (auto* s : rasterShaders["lighting"]) {
+			s->DestroyPipeline(renderingDevice);
+		}
+		lightingRenderPass.DestroyFrameBuffers(renderingDevice);
+		lightingRenderPass.Destroy(renderingDevice);
+		
+		// lightingComputeShader.DestroyPipeline(renderingDevice);
+	}
+	
+	void ConfigureLightingShaders() {
+		
+		lightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		lightingShader.depthStencilState.depthTestEnable = VK_FALSE;
+		lightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
+		lightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		lightingShader.SetData(3);
+		
+	}
+	
+	void RunLighting(Device* device, VkCommandBuffer commandBuffer) {
+		
+		// Gen Thumbnail
+		lightingRenderPass.Begin(device, commandBuffer, litImage, {{.0,.0,.0,.0}});
+			for (auto* s : rasterShaders["lighting"]) {
+				s->Execute(device, commandBuffer);
+			}
+		lightingRenderPass.End(device, commandBuffer);
+		
 	}
 	
 private: // Raster Visibility
@@ -356,20 +473,6 @@ private: // Raster Visibility
 			}
 		visibilityRasterPass.End(device, commandBuffer);
 		
-		TransitionImageLayout(commandBuffer, gBuffer_position_dist, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		
-		VkImageCopy copyRegion {};
-			copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-			copyRegion.srcOffset = {0,0,0};
-			copyRegion.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-			copyRegion.dstOffset = {0,0,0};
-			copyRegion.extent = {litImage.width, litImage.height, 1};
-		renderingDevice->CmdCopyImage(commandBuffer, gBuffer_position_dist.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, litImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		
-		TransitionImageLayout(commandBuffer, gBuffer_position_dist, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-	
 	}
 	
 private: // Ray Tracing
@@ -388,7 +491,7 @@ private: // Ray Tracing
 	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
 	static const bool globalScratchDynamicSize = false;
 	static const int maxBlasBuildsPerFrame = 8;
-	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeGeometries {};
+	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeRayTracedGeometries {};
 	std::vector<std::shared_ptr<AccelerationStructure>> inactiveBlas {};
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};
 	
@@ -402,7 +505,7 @@ private: // Ray Tracing
 		topLevelAccelerationStructure.Free(renderingDevice);
 		topLevelAccelerationStructure.Destroy(renderingDevice);
 		
-		activeGeometries.clear();
+		activeRayTracedGeometries.clear();
 		inactiveBlas.clear();
 		blasBuildsForGlobalScratchBufferReallocation.clear();
 		ResetRayTracingBlasBuilds();
@@ -589,7 +692,7 @@ private: // Ray Tracing
 		rayTracingInstances[index].flags = geometryInstance->geometry->flags;
 		rayTracingInstances[index].transform = glm::mat3x4{0};
 		geometryInstance->rayTracingInstanceIndex = index;
-		activeGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
+		activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
 	}
 	
 	void RemoveRayTracingInstance(GeometryInstance* geometryInstance) {
@@ -601,9 +704,9 @@ private: // Ray Tracing
 		rayTracingInstances[index] = rayTracingInstances[lastIndex];
 		rayTracingInstances[lastIndex].accelerationStructureHandle = 0;
 	
-		// inactiveBlas.push_back(activeGeometries[index]->blas);
-		activeGeometries[index] = activeGeometries[lastIndex];
-		activeGeometries[lastIndex] = nullptr;
+		// inactiveBlas.push_back(activeRayTracedGeometries[index]->blas);
+		activeRayTracedGeometries[index] = activeRayTracedGeometries[lastIndex];
+		activeRayTracedGeometries[lastIndex] = nullptr;
 		
 		if (rayTracingInstances[index].accelerationStructureHandle != 0) {
 			for (auto* obj : scene.objectInstances) {
@@ -930,6 +1033,7 @@ private: // Global Containers
 	std::unordered_map<std::string, std::vector<PipelineLayout*>> pipelineLayouts {
 		{"visibility", {&visibilityRasterLayout}},
 		{"rayTracing", {&rayTracingPipelineLayout}},
+		{"lighting", {&lightingPipelineLayout}},
 		{"thumbnail", {&thumbnailPipelineLayout}},
 		{"ui", {&uiPipelineLayout}},
 		{"postProcessing", {&postProcessingPipelineLayout}},
@@ -944,6 +1048,7 @@ private: // Global Containers
 				&debugRasterShader,
 			#endif
 		}},
+		{"lighting", {&lightingShader}},
 		{"thumbnail", {&thumbnailShader}},
 		{"postProcessing_0", {&postProcessingShader_txaa}},
 		{"postProcessing_1", {&postProcessingShader_history}},
@@ -953,6 +1058,7 @@ private: // Global Containers
 	
 	std::vector<ComputeShaderPipeline*> computeShaders {
 		&histogramComputeShader,
+		// &lightingComputeShader,
 	};
 	
 public: // Scene
@@ -982,7 +1088,7 @@ public: // Scene
 	}
 	void FreeSceneBuffers() {
 		scene.ClenupObjectInstancesGeometries();
-		activeGeometries.clear();
+		activeRayTracedGeometries.clear();
 		scene.CollectGarbage();
 		
 		// Uniform Buffers
@@ -1090,6 +1196,12 @@ private: // Init overrides
 			rayTracingDescriptorSet_1.AddBinding_imageView(1, &litImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 			rayTracingDescriptorSet_1.AddBinding_imageView(2, &depthImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		
+		descriptorSets["1_lighting"] = &lightingDescriptorSet_1;
+		{
+			int i = 0;
+			for (auto* img : gBuffers) lightingDescriptorSet_1.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+		
 		descriptorSets["1_thumbnail"] = &thumbnailDescriptorSet_1;
 			thumbnailDescriptorSet_1.AddBinding_combinedImageSampler(0, &litImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			
@@ -1119,6 +1231,9 @@ private: // Init overrides
 		for (auto* layout : pipelineLayouts["rayTracing"]) {
 			layout->AddDescriptorSet(&rayTracingDescriptorSet_1);
 		}
+		for (auto* layout : pipelineLayouts["lighting"]) {
+			layout->AddDescriptorSet(&lightingDescriptorSet_1);
+		}
 		for (auto* layout : pipelineLayouts["thumbnail"]) {
 			layout->AddDescriptorSet(&thumbnailDescriptorSet_1);
 		}
@@ -1141,6 +1256,7 @@ private: // Init overrides
 	void ConfigureShaders() override {
 		ConfigureRasterVisibilityShaders();
 		ConfigureRayTracingShaders();
+		ConfigureLightingShaders();
 		ConfigurePostProcessingShaders();
 		ConfigureUiShaders();
 		
@@ -1287,6 +1403,9 @@ private: // Graphics configuration overrides
 		// Ray Tracing
 		if (rayTracingFeatures.rayTracing) CreateRayTracingPipeline();
 		
+		// Lighting
+		CreateLightingPipeline();
+		
 		// Post Processing
 		CreatePostProcessingPipeline();
 	}
@@ -1302,6 +1421,9 @@ private: // Graphics configuration overrides
 		
 		// Ray Tracing
 		if (rayTracingFeatures.rayTracing) DestroyRayTracingPipeline();
+		
+		// Lighting
+		DestroyLightingPipeline();
 		
 		// Post Processing
 		DestroyPostProcessingPipeline();
@@ -1332,7 +1454,7 @@ public: // Update overrides
 		
 		// Ray Tracing
 		size_t globalScratchBufferSize = 0;
-		if (rayTracingFeatures.rayTracing && scene.camera.renderMode > 0) {
+		if (rayTracingFeatures.rayTracing) {
 			topLevelAccelerationStructure.GetMemoryRequirementsForScratchBuffer(renderingDevice);
 		}
 		if (rayTracingFeatures.rayTracing) {
@@ -1357,7 +1479,7 @@ public: // Update overrides
 							activeLights[nbActiveLights++] = lightSource->lightOffset;
 						}
 						// Geometries
-						if (rayTracingFeatures.rayTracing && scene.camera.renderMode > 0) {
+						if (rayTracingFeatures.rayTracing) {
 							for (auto& geom : obj->GetGeometries()) {
 								if (geom.geometry->active) {
 									if (!geom.geometry->blas) {
@@ -1390,7 +1512,7 @@ public: // Update overrides
 								}
 							}
 						}
-					} else if (rayTracingFeatures.rayTracing && scene.camera.renderMode > 0) {
+					} else if (rayTracingFeatures.rayTracing) {
 						for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
 							RemoveRayTracingInstance(&geom);
 						}
@@ -1401,7 +1523,7 @@ public: // Update overrides
 		scene.Unlock();
 		
 		// Global Scratch Buffer
-		if (rayTracingFeatures.rayTracing && scene.camera.renderMode > 0 && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
+		if (rayTracingFeatures.rayTracing && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
 			// If current scratch buffer size is too small or more than 4x the necessary size, reallocate it
 			if (globalScratchBuffer.size < globalScratchBufferSize || globalScratchBuffer.size > globalScratchBufferSize*4) {
 				globalScratchBuffer.Free(renderingDevice);
@@ -1437,9 +1559,19 @@ private: // Commands overrides
 		activeLightsUniformBuffer.Update(renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
 		Geometry::globalBuffers.PushObjects(renderingDevice, commandBuffer);
 		Geometry::globalBuffers.PushLights(renderingDevice, commandBuffer);
-		// Geometry::globalBuffers.PushGeometriesInfo(renderingDevice, commandBuffer);
-		for (auto[i,geometry] : activeGeometries) {
-			if (geometry) geometry->AutoPush(renderingDevice, commandBuffer, true);
+		if (rayTracingFeatures.rayTracing) {
+			for (auto[i,geometry] : activeRayTracedGeometries) {
+				if (geometry) geometry->AutoPush(renderingDevice, commandBuffer, true);
+			}
+		} else {
+			// Geometry::globalBuffers.PushGeometriesInfo(renderingDevice, commandBuffer);
+			scene.Lock();
+				for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
+					for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
+						if (geom.geometry) geom.geometry->AutoPush(renderingDevice, commandBuffer, true);
+					}
+				}
+			scene.Unlock();
 		}
 		
 		//TODO memory barrier between transfer and vertex shaders ?
@@ -1463,6 +1595,7 @@ private: // Commands overrides
 		if (scene.camera.renderMode == rasterization || scene.camera.debug) {
 			// Visibility
 			RunRasterVisibility(renderingDevice, commandBuffer);
+			RunLighting(renderingDevice, commandBuffer);
 		} else if (rayTracingFeatures.rayTracing) {
 			RunRayTracingCommands(commandBuffer);
 		}
