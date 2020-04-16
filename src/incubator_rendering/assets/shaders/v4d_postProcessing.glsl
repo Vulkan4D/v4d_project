@@ -38,7 +38,7 @@ void main() {
 	vec4 lit = texture(litImage, uvCurrent);
 	out_color = lit;
 	
-	if (camera.txaa) {
+	if (TXAA) {
 		float depth;
 		switch (camera.renderMode) {
 			case 0: // raster
@@ -105,7 +105,7 @@ void main() {
 	vec2 uv = gl_FragCoord.st / textureSize(litImage,0).st;
 	
 	// HDR ToneMapping (Reinhard)
-	if (camera.hdr) {
+	if (HDR) {
 		float exposure;
 		if (humanEyeExposure) {
 			// Human Eye Exposure
@@ -119,7 +119,7 @@ void main() {
 	}
 	
 	// Gamma correction 
-	if (camera.gammaCorrection) {
+	if (GammaCorrection) {
 		const float gamma = 2.2;
 		color = pow(color, vec3(1.0 / gamma));
 	}

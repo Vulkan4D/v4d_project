@@ -76,22 +76,22 @@ void main() {
 }
 
 
-#############################################################
-#shader rahit
+// #############################################################
+// #shader rahit
 
-layout(location = 0) rayPayloadInEXT RayPayload ray;
-hitAttributeEXT vec3 hitAttribs;
+// layout(location = 0) rayPayloadInEXT RayPayload ray;
+// hitAttributeEXT vec3 hitAttribs;
 
-void main() {
-	// Fragment fragment = GetHitFragment(true);
-	// if (fragment.color.a < 0.99) {
-	// 	ray.color += fragment.color.rgb * fragment.color.a;
-	// }
+// void main() {
+// 	// Fragment fragment = GetHitFragment(true);
+// 	// if (fragment.color.a < 0.99) {
+// 	// 	ray.color += fragment.color.rgb * fragment.color.a;
+// 	// }
 	
-	// ignoreIntersectionEXT();
+// 	// ignoreIntersectionEXT();
 	
-	// ray.color += fragment.color.rgb * fragment.color.a;
-}
+// 	// ray.color += fragment.color.rgb * fragment.color.a;
+// }
 
 
 #############################################################

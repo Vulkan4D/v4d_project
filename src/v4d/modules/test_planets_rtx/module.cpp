@@ -71,7 +71,7 @@ StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuf
 struct Planet {
 	double solidRadius = 8000000;
 	double atmosphereRadius = 8400000;
-	double heightVariation = 40000;
+	double heightVariation = 10000;
 	
 	#pragma region cache
 	
