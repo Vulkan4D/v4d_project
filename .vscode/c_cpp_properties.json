@@ -5,6 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/src/v4d/core",
                 "${workspaceFolder}/src/v4d/xvk",
+                "${workspaceFolder}/src/v4d/xvk/glm",
+                "${workspaceFolder}/src/v4d/xvk/gli",
                 "${workspaceFolder}/src/v4d/xvk/glfw/include",
                 "${workspaceFolder}/src/openssl/include",
                 "${workspaceFolder}/src/imgui",

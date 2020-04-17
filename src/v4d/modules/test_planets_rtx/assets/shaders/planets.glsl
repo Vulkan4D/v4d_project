@@ -3,7 +3,7 @@
 #define MAX_PLANETS 1
 
 // layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
-layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
+// layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
 
 #############################################################
 
@@ -17,7 +17,7 @@ layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
 layout(set = 1, binding = 0, rgba32f) uniform image2D bumpMap[1];
 // layout(set = 1, binding = 1) uniform writeonly imageCube mantleMap[MAX_PLANETS];
 // layout(set = 1, binding = 2) uniform writeonly imageCube tectonicsMap[MAX_PLANETS];
-// layout(set = 1, binding = 3) uniform writeonly imageCube heightMap[MAX_PLANETS];
+layout(set = 1, binding = 3) uniform writeonly imageCube heightMap[MAX_PLANETS];
 // layout(set = 1, binding = 4) uniform writeonly imageCube volcanoesMap[MAX_PLANETS];
 // layout(set = 1, binding = 5) uniform writeonly imageCube liquidsMap[MAX_PLANETS];
 
@@ -65,22 +65,20 @@ layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 // layout(set = 2, binding = 4) uniform samplerCube volcanoesMap[MAX_PLANETS];
 // layout(set = 2, binding = 5) uniform samplerCube liquidsMap[MAX_PLANETS];
 
-#common terrain.*comp
+// #common terrain.*comp
 
-layout(set = 1, binding = 3) buffer GeometryBuffer {uvec4 geometries[];};
-layout(set = 1, binding = 4) buffer IndexBuffer {uint indices[];};
-layout(set = 1, binding = 5) buffer VertexBuffer {vec4 vertices[];};
+// #include "core_buffers.glsl"
 
-layout(std430, push_constant) uniform TerrainChunk{
-	int planetIndex;
-	int chunkGeometryOffset;
-	float solidRadius;
-	int vertexSubdivisionsPerChunk;
-	vec2 uvMult;
-	vec2 uvOffset;
-	ivec3 chunkPosition;
-	int face;
-};
+// layout(std430, push_constant) uniform TerrainChunk{
+// 	int planetIndex;
+// 	int chunkGeometryIndex;
+// 	float solidRadius;
+// 	int vertexSubdivisionsPerChunk;
+// 	vec2 uvMult;
+// 	vec2 uvOffset;
+// 	ivec3 chunkPosition;
+// 	int face;
+// };
 
 #############################################################
 
@@ -129,13 +127,13 @@ void main() {
 // 	imageStore(tectonicsMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(0));
 // }
 
-// #shader height.map.comp
-// void main() {
-// 	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
-// 	float height = FastSimplexFractal(dir*20, 6) / 2 + 0.5;
-// 	// height = 0;
-// 	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height*planetHeightVariation));
-// }
+#shader height.map.comp
+void main() {
+	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
+	float height = FastSimplexFractal(dir*20, 6);
+	// height = 0;
+	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height));
+}
 
 // #shader volcanoes.map.comp
 // void main() {
@@ -292,25 +290,21 @@ void main() {
 // }
 
 // void main() {
-// 	uint vertexOffset = geometries[chunkGeometryOffset].y;
-// 	// objectIndex = geometries[chunkGeometryOffset].z;
-// 	// material = geometries[chunkGeometryOffset].w;
-	
 // 	uint genRow = gl_GlobalInvocationID.x;
 // 	uint genCol = gl_GlobalInvocationID.y;
-// 	uint currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol + vertexOffset;
+// 	uint currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol + GetVertexOffset(chunkGeometryIndex);
 	
 // 	dvec3 vertexPos = dvec3(GetVertexPos(currentIndex)) + dvec3(chunkPosition);
 // 	dvec3 normalizedPos = normalize(vertexPos);
 	
-// 	double mainHeightMap = double(texture(heightMap[planetIndex], vec3(vertexPos)).r);
+// 	double mainHeightMap = double(texture(heightMap[planetIndex], vec3(vertexPos)).r*12000.0);
 // 	vertexPos += normalizedPos * (mainHeightMap);
 	
-// 	// double secondaryHeightMap = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5)*20000.0;
-// 	// secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/10000.0, 5)*1000.0;
-// 	double secondaryHeightMap = FastSimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
-// 	secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/5.0, 2);
-// 	vertexPos += normalizedPos * (secondaryHeightMap);
+// 	// // double secondaryHeightMap = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5)*20000.0;
+// 	// // secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/10000.0, 5)*1000.0;
+// 	// double secondaryHeightMap = FastSimplexFractal((normalizedPos*solidRadius/100.0), 5)*20.0;
+// 	// secondaryHeightMap += FastSimplexFractal(normalizedPos*solidRadius/5.0, 2);
+// 	// vertexPos += normalizedPos * (secondaryHeightMap);
 	
 // 	SetVertexPos(currentIndex, vec3(vertexPos - dvec3(chunkPosition)));
 	
@@ -378,7 +372,7 @@ void main() {
 // }
 
 // void main() {
-// 	uint vertexOffset = geometries[chunkGeometryOffset].y;
+// 	uint vertexOffset = GetVertexOffset(chunkGeometryIndex);
 	
 // 	uint genRow = gl_GlobalInvocationID.x;
 // 	uint genCol = gl_GlobalInvocationID.y;
