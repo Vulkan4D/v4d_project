@@ -17,6 +17,7 @@ struct V2F {
 
 #shader visibility.vert
 
+#define GEOMETRY_BUFFERS_ACCESS readonly
 #define VISIBILITY_VERTEX_SHADER
 #include "core_buffers.glsl"
 
@@ -65,16 +66,12 @@ void main() {
 
 #shader lighting.frag
 
+#define GEOMETRY_BUFFERS_ACCESS readonly
 #include "core_buffers.glsl"
 #include "core_pbr.glsl"
 
 vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float roughness, float metallic) {
 	vec3 color = vec3(0);
-	
-	// // Black backfaces
-	// if (dot(normal, gl_WorldRayDirectionEXT) > 0) {
-	// 	return vec3(1,0,1);
-	// }
 	
 	// PBR lighting
 	vec3 N = normal;
@@ -125,11 +122,7 @@ vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float r
 	return color;
 }
 
-layout(set = 1, input_attachment_index = 1, binding = 0) uniform highp subpassInput gBuffer_albedo_geometryIndex;
-layout(set = 1, input_attachment_index = 2, binding = 1) uniform highp subpassInput gBuffer_normal_uv;
-layout(set = 1, input_attachment_index = 3, binding = 2) uniform highp subpassInput gBuffer_position_dist;
-
-layout(location = 0) out vec4 out_color;
+#include "core_lightingPass.glsl"
 
 void main() {
 	vec2 albedo_geometryIndex = subpassLoad(gBuffer_albedo_geometryIndex).rg;
@@ -145,5 +138,5 @@ void main() {
 		return;
 	}
 	
-	out_color = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, normal, vec3(0), 0.5, 0.1), 1);
+	out_color = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, normal, vec3(0), 0.6, 0.1), 1);
 }

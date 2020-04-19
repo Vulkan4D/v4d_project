@@ -17,7 +17,7 @@
 layout(set = 1, binding = 0, rgba32f) uniform image2D bumpMap[1];
 // layout(set = 1, binding = 1) uniform writeonly imageCube mantleMap[MAX_PLANETS];
 // layout(set = 1, binding = 2) uniform writeonly imageCube tectonicsMap[MAX_PLANETS];
-layout(set = 1, binding = 3) uniform writeonly imageCube heightMap[MAX_PLANETS];
+// layout(set = 1, binding = 3) uniform writeonly imageCube heightMap[MAX_PLANETS];
 // layout(set = 1, binding = 4) uniform writeonly imageCube volcanoesMap[MAX_PLANETS];
 // layout(set = 1, binding = 5) uniform writeonly imageCube liquidsMap[MAX_PLANETS];
 
@@ -127,13 +127,13 @@ void main() {
 // 	imageStore(tectonicsMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(0));
 // }
 
-#shader height.map.comp
-void main() {
-	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
-	float height = FastSimplexFractal(dir*20, 6);
-	// height = 0;
-	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height));
-}
+// #shader height.map.comp
+// void main() {
+// 	vec3 dir = GetCubeDirection(heightMap[planetIndex]);
+// 	float height = FastSimplexFractal(dir*20, 6);
+// 	// height = 0;
+// 	imageStore(heightMap[planetIndex], ivec3(gl_GlobalInvocationID), vec4(height));
+// }
 
 // #shader volcanoes.map.comp
 // void main() {
@@ -484,38 +484,28 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 	return vec4(0,0,1,0)
 	 + texture(bumpMap[0], uv)
-	//  + texture(bumpMap[0], uv*16)
 	 + texture(bumpMap[0], uv*256)
-	//  + texture(bumpMap[0], uv*4096)
 	 + texture(bumpMap[0], uvChunk)*2
 	;
 }
 
 void main() {
 	Fragment fragment = GetHitFragment(true);
-	// uint planetIndex = fragment.material;
-	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
-	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
-	vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
-	vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
-	vec2 uv = (fragment.uv*uvMult+uvOffset);
-	vec4 bump = GetBumpMap(uv, fragment.uv);
-	vec3 normal = normalize(TBN * bump.xyz);
+
+	// vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
+	// vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	// mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
+	// vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
+	// vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
+	// vec2 uv = (fragment.uv*uvMult+uvOffset);
+	// vec4 bump = GetBumpMap(uv, fragment.uv);
+	// vec3 normal = normalize(TBN * bump.xyz);
+	// vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
+	// ray.color = color;
+	// ray.distance = gl_HitTEXT;
 	
 	
-	// // Chunk Normals perturbation
-	// float normalNoiseX = texture(bumpMap[0], fragment.uv*2.0).r;
-	// float normalNoiseY = texture(bumpMap[0], fragment.uv*2.0).a;
-	// vec3 normalNoise = ((
-	// 	+ tangentX * normalNoiseX
-	// 	+ tangentY * normalNoiseY
-	// ) - 0.5) / 2.0;
-	// float normalNoisePower = smoothstep(1000.0, 0.0, gl_HitTEXT)*0.7;
-	// normal = normalize(mix(normal, normal + normalNoise, normalNoisePower*normalNoisePower));
-	
-	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, vec3(0), /*roughness*/0.6, /*metallic*/0.1);
 	ray.color = color;
 	ray.distance = gl_HitTEXT;
 }

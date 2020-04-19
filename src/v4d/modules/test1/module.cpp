@@ -81,10 +81,6 @@ public:
 		}
 	#endif
 	
-	virtual void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
-		
-	}
-	
 	Scene* scene;
 	
 	std::vector<ObjectInstance*> objects {};

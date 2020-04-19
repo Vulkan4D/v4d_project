@@ -31,11 +31,11 @@ static std::vector<std::string> v4dModules {
 		{"incubator_rendering/assets/shaders/v4d_lighting.meta", 0},
 		{"incubator_rendering/assets/shaders/v4d_postProcessing.meta", 0},
 		{"incubator_rendering/assets/shaders/v4d_histogram.meta", 0},
-		{"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
-		{"modules/incubator_galaxy4d/assets/shaders/planetAtmosphere.meta", 0},
-		{"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
+		// {"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
+		// {"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
 		{"incubator_rendering/assets/shaders/rtx.meta", 0},
 		{"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
+		{"modules/test_planets_rtx/assets/shaders/planetAtmosphere.meta", 0},
 		{"incubator_rendering/assets/shaders/raster.meta", 0},
 	};
 #endif

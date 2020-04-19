@@ -73,6 +73,11 @@ void main() {
 	ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
 	imageStore(depthImage, coords, vec4(depth, 0,0,0));
 	imageStore(litImage, coords, vec4(ray.color, 1.0));
+	
+	//TODO also write to : 
+	// gBuffer_albedo_geometryIndex
+	// gBuffer_normal_uv
+	imageStore(gBuffer_position_dist, coords, vec4(ray.origin*ray.direction*ray.distance, ray.distance));
 }
 
 

@@ -13,6 +13,7 @@
 // #include <gli/gli.hpp>
 
 #include "PlanetsRenderer/PlanetTerrain.hpp"
+#include "PlanetsRenderer/PlanetAtmosphereShaderPipeline.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan::rtx;
@@ -26,10 +27,12 @@ ComputeShaderPipeline
 	bumpMapsNormalsGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.bump.normals.map.comp"}
 	// ,mantleMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.mantle.map.comp"}
 	// ,tectonicsMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.tectonics.map.comp"}
-	,heightMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.height.map.comp"}
+	// ,heightMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.height.map.comp"}
 	// ,volcanoesMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.volcanoes.map.comp"}
 	// ,liquidsMapGen{planetsMapGenLayout, "modules/test_planets_rtx/assets/shaders/planets.liquids.map.comp"}
 ;
+
+PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 
 struct MapGenPushConstant {
 	int planetIndex;
@@ -53,7 +56,7 @@ DescriptorSet mapsGenDescriptorSet, mapsSamplerDescriptorSet /*, planetsDescript
 
 // Image mantleMaps[MAX_PLANETS];
 // Image tectonicsMaps[MAX_PLANETS];
-Image heightMaps[MAX_PLANETS];
+// Image heightMaps[MAX_PLANETS];
 // Image volcanoesMaps[MAX_PLANETS];
 // Image liquidsMaps[MAX_PLANETS];
 
@@ -86,7 +89,7 @@ struct Planet {
 	
 	// CubeMapImage mantleMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}}; // platesDir, mantleHeightFactor, surfaceHeightFactor, hotSpots
 	// CubeMapImage tectonicsMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}}; // divergent, convergent, transform, density
-	CubeMapImage heightMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_SNORM}}; // variation mapped as [-1.0 to 1.0] ==> [-12.0 to 12.0] km
+	// CubeMapImage heightMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_SNORM}}; // variation mapped as [-1.0 to 1.0] ==> [-12.0 to 12.0] km
 	// CubeMapImage volcanoesMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_UNORM}}; // volcanoesMap
 	// CubeMapImage liquidsMap { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R8_UNORM}}; // liquidMap
 	
@@ -98,71 +101,71 @@ struct Planet {
 	// CubeMapImage weatherMapMaximum { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
 	// CubeMapImage weatherMapCurrent { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT , {VK_FORMAT_R32G32B32A32_SFLOAT}};
 	
-	void CreateMaps(Device* device, double scale = 1.0) {
-		int mapSize = std::max(64, int(scale * std::min(8000000.0, solidRadius) / 2000.0 * 3.141592654)); // 1 km / pixel (considering maximum radius of 8000km)
-	// 	// max image width : 12566
-	// 	mantleMap.Create(device, mapSize/16); // max 785 px = 57 MB
-	// 	tectonicsMap.Create(device, mapSize/8); // max 1570 px = 226 MB
-		heightMap.Create(device, mapSize); // max 12566 px = 904 MB
-	// 	volcanoesMap.Create(device, mapSize/4); // max 3141 px = 57 MB
-	// 	liquidsMap.Create(device, mapSize/4); // max 3141 px = 57 MB
-	// 	int weatherMapSize = std::max(8, int(mapSize / 100)); // max 125 px = 1.5 MB x4
-	// 	weatherMapAvg.Create(device, weatherMapSize);
-	// 	weatherMapMinimum.Create(device, weatherMapSize);
-	// 	weatherMapMaximum.Create(device, weatherMapSize);
-	// 	weatherMapCurrent.Create(device, weatherMapSize);
-	}
+	// void CreateMaps(Device* device, double scale = 1.0) {
+	// 	int mapSize = std::max(64, int(scale * std::min(8000000.0, solidRadius) / 2000.0 * 3.141592654)); // 1 km / pixel (considering maximum radius of 8000km)
+	// // 	// max image width : 12566
+	// // 	mantleMap.Create(device, mapSize/16); // max 785 px = 57 MB
+	// // 	tectonicsMap.Create(device, mapSize/8); // max 1570 px = 226 MB
+	// 	heightMap.Create(device, mapSize); // max 12566 px = 904 MB
+	// // 	volcanoesMap.Create(device, mapSize/4); // max 3141 px = 57 MB
+	// // 	liquidsMap.Create(device, mapSize/4); // max 3141 px = 57 MB
+	// // 	int weatherMapSize = std::max(8, int(mapSize / 100)); // max 125 px = 1.5 MB x4
+	// // 	weatherMapAvg.Create(device, weatherMapSize);
+	// // 	weatherMapMinimum.Create(device, weatherMapSize);
+	// // 	weatherMapMaximum.Create(device, weatherMapSize);
+	// // 	weatherMapCurrent.Create(device, weatherMapSize);
+	// }
 	
-	void DestroyMaps(Device* device) {
-	// 	mantleMap.Destroy(device);
-	// 	tectonicsMap.Destroy(device);
-		heightMap.Destroy(device);
-	// 	volcanoesMap.Destroy(device);
-	// 	liquidsMap.Destroy(device);
-	// 	weatherMapAvg.Destroy(device);
-	// 	weatherMapMinimum.Destroy(device);
-	// 	weatherMapMaximum.Destroy(device);
-	// 	weatherMapCurrent.Destroy(device);
+	// void DestroyMaps(Device* device) {
+	// // 	mantleMap.Destroy(device);
+	// // 	tectonicsMap.Destroy(device);
+	// 	heightMap.Destroy(device);
+	// // 	volcanoesMap.Destroy(device);
+	// // 	liquidsMap.Destroy(device);
+	// // 	weatherMapAvg.Destroy(device);
+	// // 	weatherMapMinimum.Destroy(device);
+	// // 	weatherMapMaximum.Destroy(device);
+	// // 	weatherMapCurrent.Destroy(device);
 		
-		mapsGenerated = false;
-	}
+	// 	mapsGenerated = false;
+	// }
 	
-	void GenerateMaps(Device* device, VkCommandBuffer commandBuffer) {
-		if (!mapsGenerated) {
-			mapGenPushConstant.planetIndex = 0;
-			mapGenPushConstant.planetHeightVariation = (float)heightVariation;
+	// void GenerateMaps(Device* device, VkCommandBuffer commandBuffer) {
+	// 	if (!mapsGenerated) {
+	// 		mapGenPushConstant.planetIndex = 0;
+	// 		mapGenPushConstant.planetHeightVariation = (float)heightVariation;
 			
-	// 		/*First Pass*/
+	// // 		/*First Pass*/
 		
-	// 		mantleMapGen.SetGroupCounts(mantleMap.width, mantleMap.height, mantleMap.arrayLayers);
-	// 		mantleMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
+	// // 		mantleMapGen.SetGroupCounts(mantleMap.width, mantleMap.height, mantleMap.arrayLayers);
+	// // 		mantleMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 			
-	// 		tectonicsMapGen.SetGroupCounts(tectonicsMap.width, tectonicsMap.height, tectonicsMap.arrayLayers);
-	// 		tectonicsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
+	// // 		tectonicsMapGen.SetGroupCounts(tectonicsMap.width, tectonicsMap.height, tectonicsMap.arrayLayers);
+	// // 		tectonicsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 			
-			heightMapGen.SetGroupCounts(heightMap.width, heightMap.height, heightMap.arrayLayers);
-			heightMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
+	// 		heightMapGen.SetGroupCounts(heightMap.width, heightMap.height, heightMap.arrayLayers);
+	// 		heightMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 			
-	// 		volcanoesMapGen.SetGroupCounts(volcanoesMap.width, volcanoesMap.height, volcanoesMap.arrayLayers);
-	// 		volcanoesMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
+	// // 		volcanoesMapGen.SetGroupCounts(volcanoesMap.width, volcanoesMap.height, volcanoesMap.arrayLayers);
+	// // 		volcanoesMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 			
-	// 		liquidsMapGen.SetGroupCounts(liquidsMap.width, liquidsMap.height, liquidsMap.arrayLayers);
-	// 		liquidsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
+	// // 		liquidsMapGen.SetGroupCounts(liquidsMap.width, liquidsMap.height, liquidsMap.arrayLayers);
+	// // 		liquidsMapGen.Execute(device, commandBuffer, 1, &mapGenPushConstant);
 			
-	// 		// Need pipeline barrier before other passes
+	// // 		// Need pipeline barrier before other passes
 			
 			
-			mapsGenerated = true;
+	// 		mapsGenerated = true;
 		
-	// 		VkMemoryBarrier barrier {};
-	// 			barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	// 			barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-	// 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	// 		device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
-		} else {
-			// heightMapTexture = gli::make_texture_cube()
-		}
-	}
+	// // 		VkMemoryBarrier barrier {};
+	// // 			barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	// // 			barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	// // 			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	// // 		device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	// 	} else {
+	// 		// heightMapTexture = gli::make_texture_cube()
+	// 	}
+	// }
 	
 	#pragma endregion
 	
@@ -275,7 +278,7 @@ public:
 	void InitDeviceFeatures() {
 		renderer->deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
 	}
-	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>&, PipelineLayout* rayTracingPipelineLayout) override {
+	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>&, std::unordered_map<std::string, PipelineLayout*>& pipelineLayouts) override {
 		
 		descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		// descriptorSets["planets"] = &planetsDescriptorSet;
@@ -283,13 +286,13 @@ public:
 		planetsMapGenLayout.AddDescriptorSet(descriptorSets["0_base"]);
 		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
-		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		// rayTracingPipelineLayout->AddDescriptorSet(&planetsDescriptorSet);
+		pipelineLayouts["rayTracing"]->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		// pipelineLayouts["rayTracing"]->AddDescriptorSet(&planetsDescriptorSet);
 		
 		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
 		// mapsGenDescriptorSet.AddBinding_imageView_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		// mapsGenDescriptorSet.AddBinding_imageView_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		mapsGenDescriptorSet.AddBinding_imageView_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
+		// mapsGenDescriptorSet.AddBinding_imageView_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		// mapsGenDescriptorSet.AddBinding_imageView_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		// mapsGenDescriptorSet.AddBinding_imageView_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
 		
@@ -307,10 +310,30 @@ public:
 		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
 		// // terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
 		// terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
+		
+		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*pipelineLayouts["lighting"], {
+			"modules/test_planets_rtx/assets/shaders/planetAtmosphere.vert",
+			"modules/test_planets_rtx/assets/shaders/planetAtmosphere.frag",
+		}};
+		planetAtmosphereShader->atmospherePushConstantIndex = pipelineLayouts["lighting"]->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 	}
-	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable) override {
+	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, ShaderBindingTable* shaderBindingTable, std::unordered_map<std::string, PipelineLayout*>& pipelineLayouts) override {
 		// Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.raymarching.rchit", "", "modules/test_planets_rtx/assets/shaders/planets.raymarching.rint");
 		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTable->AddHitShader("modules/test_planets_rtx/assets/shaders/planets.terrain.rchit");
+		
+		// Atmosphere
+		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
+		planetAtmosphereShader->depthStencilState.depthTestEnable = VK_FALSE;
+		planetAtmosphereShader->depthStencilState.depthWriteEnable = VK_FALSE;
+		planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
+			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
+		#else
+			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		#endif
+		shaders["lighting_1"].push_back(planetAtmosphereShader); //TODO this line should be called before ConfigureShaders() ?
+		
 	}
 	void ReadShaders() override {
 		bumpMapsAltitudeGen.ReadShaders();
@@ -318,7 +341,7 @@ public:
 		
 		// mantleMapGen.ReadShaders();
 		// tectonicsMapGen.ReadShaders();
-		heightMapGen.ReadShaders();
+		// heightMapGen.ReadShaders();
 		// volcanoesMapGen.ReadShaders();
 		// liquidsMapGen.ReadShaders();
 		
@@ -338,18 +361,18 @@ public:
 		// bumpMaps[1].Create(renderingDevice, 4096);
 		// renderer->TransitionImageLayout(bumpMaps[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
-		planet.CreateMaps(renderingDevice);
+		// planet.CreateMaps(renderingDevice);
 		
 		// renderer->TransitionImageLayout(planet.mantleMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		// renderer->TransitionImageLayout(planet.tectonicsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		renderer->TransitionImageLayout(planet.heightMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		// renderer->TransitionImageLayout(planet.heightMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		// renderer->TransitionImageLayout(planet.volcanoesMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		// renderer->TransitionImageLayout(planet.liquidsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		
 		// // Set Maps
 		// mantleMaps[0] = planet.mantleMap;
 		// tectonicsMaps[0] = planet.tectonicsMap;
-		heightMaps[0] = planet.heightMap;
+		// heightMaps[0] = planet.heightMap;
 		// volcanoesMaps[0] = planet.volcanoesMap;
 		// liquidsMaps[0] = planet.liquidsMap;
 		
@@ -360,14 +383,17 @@ public:
 		// Chunk Generator
 		PlanetTerrain::EndChunkGenerator();
 		
-		planet.DestroyMaps(renderingDevice);
+		// planet.DestroyMaps(renderingDevice);
 		bumpMaps[0].Destroy(renderingDevice);
 		// bumpMaps[1].Destroy(renderingDevice);
 		bumpMapsGenerated = false;
 		
 		if (terrain) {
+			terrain->atmosphere.Free(renderingDevice);
 			delete terrain;
 			terrain = nullptr;
+			planetAtmosphereShader->planets.clear();
+			planetAtmosphereShader->lightSources.clear();
 		}
 	}
 	void AllocateBuffers() override {
@@ -385,7 +411,7 @@ public:
 		
 		// mantleMapGen.CreatePipeline(renderingDevice);
 		// tectonicsMapGen.CreatePipeline(renderingDevice);
-		heightMapGen.CreatePipeline(renderingDevice);
+		// heightMapGen.CreatePipeline(renderingDevice);
 		// volcanoesMapGen.CreatePipeline(renderingDevice);
 		// liquidsMapGen.CreatePipeline(renderingDevice);
 		
@@ -398,7 +424,7 @@ public:
 		
 		// mantleMapGen.DestroyPipeline(renderingDevice);
 		// tectonicsMapGen.DestroyPipeline(renderingDevice);
-		heightMapGen.DestroyPipeline(renderingDevice);
+		// heightMapGen.DestroyPipeline(renderingDevice);
 		// volcanoesMapGen.DestroyPipeline(renderingDevice);
 		// liquidsMapGen.DestroyPipeline(renderingDevice);
 		
@@ -409,11 +435,14 @@ public:
 		planetsMapGenLayout.Destroy(renderingDevice);
 	}
 	
+	ObjectInstance* sun = nullptr;
+	
 	// Scene
 	void LoadScene(Scene& scene) override {
 		
 		// Light source
-		scene.AddObjectInstance()->Configure([](ObjectInstance* obj){
+		sun = scene.AddObjectInstance();
+		sun->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 700000000, 1e24f);
 		}, {10,-1.496e+11,300});
 				
@@ -422,7 +451,7 @@ public:
 						// 	obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
 						// }, {0,planet.solidRadius*2,0});
 				
-		
+		planetAtmosphereShader->viewMatrix = &scene.camera.viewMatrix;
 	}
 	
 	void UnloadScene(Scene&) override {
@@ -434,6 +463,9 @@ public:
 		if (!terrain) {
 			terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.solidRadius*2,0}};
 			terrain->scene = &scene;
+			planetAtmosphereShader->planets.push_back(terrain);
+			sun->GenerateGeometries();
+			planetAtmosphereShader->lightSources.push_back(sun->GetLightSources()[0]);
 		}
 		
 						// // // for each planet
@@ -483,8 +515,12 @@ public:
 	}
 	
 	// Render frame
-	void RunDynamicGraphicsBottom(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>&) {
-		
+	void RunDynamicGraphicsTop(VkCommandBuffer commandBuffer, std::unordered_map<std::string, Image*>&) {
+		// for each planet
+			if (terrain && terrain->atmosphere.radius > 0) {
+				terrain->atmosphere.Allocate(renderingDevice, commandBuffer);
+			}
+		//
 	}
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		if (!bumpMapsGenerated) {
@@ -522,7 +558,7 @@ public:
 		}
 		// for each planet
 			if (terrain) {
-				planet.GenerateMaps(renderingDevice, commandBuffer);
+				// planet.GenerateMaps(renderingDevice, commandBuffer);
 				terrainChunkPushConstant.planetIndex = 0;
 				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);
 				terrainChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
@@ -544,7 +580,6 @@ public:
 				ImGui::Separator();
 				ImGui::Text("Planet");
 				ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
-				// ImGui::Text("Chunks: %d (%d active, %d rendered)", terrain->totalChunks, terrain->activeChunks, terrain->renderedChunks);
 				
 				if (terrain) {
 					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
@@ -555,12 +590,12 @@ public:
 					} else {
 						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
 					}
-					// if (planet->atmosphere) {
-					// 	ImGui::Text("Atmosphere");
-					// 	ImGui::SliderFloat("density", &planet->atmosphere->densityFactor, 0.0f, 1.0f);
-					// 	ImGui::ColorEdit3("color", (float*)&planet->atmosphere->color);
-					// 	ImGui::Separator();
-					// }
+					if (terrain->atmosphere.radius > 0) {
+						ImGui::Text("Atmosphere");
+						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 1.0f);
+						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
+						ImGui::Separator();
+					}
 					// ImGui::Text("Sun");
 					// static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
 					// ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e26f);
@@ -578,4 +613,5 @@ V4DMODULE void V4D_ModuleCreate() {
 
 V4DMODULE void V4D_ModuleDestroy() {
 	V4D_UNLOAD_SUBMODULES(Rendering)
+	delete planetAtmosphereShader;
 }

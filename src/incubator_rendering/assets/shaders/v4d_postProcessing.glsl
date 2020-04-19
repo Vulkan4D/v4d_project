@@ -6,7 +6,7 @@ precision highp sampler2D;
 
 #include "Camera.glsl"
 
-const bool humanEyeExposure = false; // otherwise, use full range
+const bool humanEyeExposure = true; // otherwise, use full range
 
 #common .*frag
 
@@ -53,14 +53,14 @@ void main() {
 		vec4 history = texture(historyImage, uvHistory);
 		
 		if (length(history.rgb) > 0) {
-			vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 0)).rgb;
-			vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, 1)).rgb;
-			vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
-			vec3 nearColor3 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
-			vec3 nearColor4 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(1, 1)).rgb;
-			vec3 nearColor5 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 1)).rgb;
-			vec3 nearColor6 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, 0)).rgb;
-			vec3 nearColor7 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(0, -1)).rgb;
+			vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1,  0)).rgb;
+			vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 0,  1)).rgb;
+			vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1,  0)).rgb;
+			vec3 nearColor3 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 0, -1)).rgb;
+			vec3 nearColor4 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1,  1)).rgb;
+			vec3 nearColor5 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1,  1)).rgb;
+			vec3 nearColor6 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1, -1)).rgb;
+			vec3 nearColor7 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, -1)).rgb;
 			
 			vec3 m1 = nearColor0
 					+ nearColor1
@@ -84,19 +84,23 @@ void main() {
 			vec3 mu = m1 / 8.0;
 			vec3 sigma = sqrt(m2 / 8.0 - mu * mu);
 
-			float variance_clipping_gamma = 2.0;
+			float variance_clipping_gamma = 1.0;
 			vec3 boxMin = mu - variance_clipping_gamma * sigma;
 			vec3 boxMax = mu + variance_clipping_gamma * sigma;
 			history.rgb = clamp(history.rgb, boxMin, boxMax);
 			
-			out_color = vec4(mix(history.rgb, lit.rgb, 1.0/8.0), lit.a);
+			float factor = 1.0/8.0;
+			if (depth == 1.0) factor = 1.0;
+			
+			out_color = vec4(mix(history.rgb, lit.rgb, factor), lit.a);
 		}
 	}
 }
 
 #shader history.frag
 void main() {
-	out_color = subpassLoad(ppImage).rgba;
+	// out_color = subpassLoad(ppImage).rgba;
+	out_color = vec4(subpassLoad(ppImage).rgb * (TXAA?2:1), 1);
 }
 
 #shader hdr.frag
@@ -109,7 +113,7 @@ void main() {
 		float exposure;
 		if (humanEyeExposure) {
 			// Human Eye Exposure
-			exposure = 1.0 / sqrt(camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
+			exposure = 2.0 / (camera.luminance.r + camera.luminance.g + camera.luminance.b) * camera.luminance.a;
 			color = vec3(1.0) - exp(-color * clamp(exposure, 0.0001, 10));
 		} else {
 			// Full range Exposure

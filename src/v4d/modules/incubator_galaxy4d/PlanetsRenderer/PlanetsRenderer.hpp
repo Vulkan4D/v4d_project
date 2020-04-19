@@ -35,7 +35,7 @@ public:
 	// // Executed when calling InitRenderer() on the main Renderer
 	// void Init() override {}
 	
-	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, PipelineLayout*) override {
+	void InitLayouts(std::map<std::string, DescriptorSet*>& descriptorSets, std::unordered_map<std::string, Image*>& images, std::unordered_map<std::string, PipelineLayout*>& pipelineLayouts) override {
 		descriptorSets["atmosphere"] = &atmosphereDescriptorSet_1;
 		
 		planetTerrainPipelineLayout.AddDescriptorSet(descriptorSets["base"]);
@@ -54,7 +54,7 @@ public:
 		}
 	}
 	
-	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, v4d::graphics::vulkan::rtx::ShaderBindingTable*) override {
+	void ConfigureShaders(std::unordered_map<std::string, std::vector<RasterShaderPipeline*>>& shaders, v4d::graphics::vulkan::rtx::ShaderBindingTable*, std::unordered_map<std::string, PipelineLayout*>& pipelineLayouts) override {
 		
 		// Terrain
 		shaders["opaqueRasterization"].push_back(&planetTerrainShader);

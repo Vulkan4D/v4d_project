@@ -2,6 +2,7 @@
 #include <v4d.h>
 
 #include "CubeToSphere.hpp"
+#include "PlanetAtmosphere.hpp"
 #include "../../incubator_galaxy4d/Noise.hpp"
 
 using namespace v4d::graphics;
@@ -14,6 +15,7 @@ struct PlanetTerrain {
 	double solidRadius; // standard radius of solid surface (AKA sea level, surface height can go below or above)
 	double heightVariation; // half the total variation (surface height is +- heightVariation)
 	glm::dvec3 absolutePosition; // position of planet relative to world (star system center)
+	PlanetAtmosphere atmosphere;
 	#pragma endregion
 	
 	glm::dvec3 rotationAxis {0,0,1};
@@ -258,6 +260,8 @@ struct PlanetTerrain {
 					glm::dvec3 posOnChunk = pos * altitude - centerPos;
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					vertex->pos = posOnChunk;
+					// Color
+					vertex->SetColor({0.5, 0.4, 0.3, 1.0});
 					// UV
 					vertex->SetUV(glm::vec2(
 						rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
@@ -799,7 +803,8 @@ struct PlanetTerrain {
 	) : radius(radius),
 		solidRadius(solidRadius),
 		heightVariation(heightVariation),
-		absolutePosition(absolutePosition)
+		absolutePosition(absolutePosition),
+		atmosphere(radius)
 	{
 		AddBaseChunks();
 	}

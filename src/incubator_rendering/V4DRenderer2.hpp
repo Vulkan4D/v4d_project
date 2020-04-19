@@ -132,7 +132,7 @@ private: // Main Rendering
 	static const int DEFAULT_RENDER_MODE = rasterization;
 	static const int DEFAULT_SHADOW_TYPE = shadows_off;
 
-	Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
 	DescriptorSet visibilityDescriptorSet_1, lightingDescriptorSet_1;
 	
@@ -166,8 +166,8 @@ private: // Main Rendering
 			const int nbInputAttachments = NB_G_BUFFERS;
 			std::array<VkAttachmentDescription, nbColorAttachments + nbInputAttachments> attachments {};
 			std::vector<Image*> images(nbColorAttachments + nbInputAttachments);
-			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs {};
-			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs {};
+			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs0 {};
+			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs0 {};
 			
 			int i = 0;
 			
@@ -175,11 +175,11 @@ private: // Main Rendering
 			images[i] = &litImage;
 			attachments[i].format = litImage.format;
 			attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			colorAttachmentRefs[0] = {
+			colorAttachmentRefs0[0] = {
 				lightingRenderPass.AddAttachment(attachments[i]),
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 			};
@@ -196,40 +196,67 @@ private: // Main Rendering
 				attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 				attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 				attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-				inputAttachmentRefs[i-nbColorAttachments] = {
+				inputAttachmentRefs0[i-nbColorAttachments] = {
 					lightingRenderPass.AddAttachment(attachments[i]),
 					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 				};
 				++i;
 			}
+			
+			std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs1 = colorAttachmentRefs0;
+			std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs1 = inputAttachmentRefs0;
 		
-			// SubPass
-			VkSubpassDependency subpassDependency {
-				VK_SUBPASS_EXTERNAL,// srcSubpass;
-				0,// dstSubpass;
-				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
-				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
-				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
-				0// dependencyFlags;
+			// SubPasses
+			std::array<VkSubpassDependency, 2> subpassDependencies {
+				VkSubpassDependency{
+					VK_SUBPASS_EXTERNAL,// srcSubpass;
+					0,// dstSubpass;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+					0// dependencyFlags;
+				},
+				VkSubpassDependency{
+					0,// srcSubpass;
+					1,// dstSubpass;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+					0// dependencyFlags;
+				},
 			};
-			VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = colorAttachmentRefs.size();
-				subpass.pColorAttachments = colorAttachmentRefs.data();
-				subpass.inputAttachmentCount = inputAttachmentRefs.size();
-				subpass.pInputAttachments = inputAttachmentRefs.data();
-			lightingRenderPass.AddSubpass(subpass);
-			lightingRenderPass.renderPassInfo.dependencyCount = 1;
-			lightingRenderPass.renderPassInfo.pDependencies = &subpassDependency;
+			std::array<VkSubpassDescription, 2> subpasses {};
+				subpasses[0] = {};
+				subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpasses[0].colorAttachmentCount = colorAttachmentRefs0.size();
+				subpasses[0].pColorAttachments = colorAttachmentRefs0.data();
+				subpasses[0].inputAttachmentCount = inputAttachmentRefs0.size();
+				subpasses[0].pInputAttachments = inputAttachmentRefs0.data();
+				subpasses[1] = {};
+				subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpasses[1].colorAttachmentCount = colorAttachmentRefs1.size();
+				subpasses[1].pColorAttachments = colorAttachmentRefs1.data();
+				subpasses[1].inputAttachmentCount = inputAttachmentRefs1.size();
+				subpasses[1].pInputAttachments = inputAttachmentRefs1.data();
+			lightingRenderPass.AddSubpass(subpasses[0]);
+			lightingRenderPass.AddSubpass(subpasses[1]);
+			lightingRenderPass.renderPassInfo.dependencyCount = subpassDependencies.size();
+			lightingRenderPass.renderPassInfo.pDependencies = subpassDependencies.data();
 			
 			// Create the render pass
 			lightingRenderPass.Create(renderingDevice);
 			lightingRenderPass.CreateFrameBuffers(renderingDevice, images);
 			
 			// Shaders
-			for (auto* s : rasterShaders["lighting"]) {
+			for (auto* s : rasterShaders["lighting_0"]) {
 				s->SetRenderPass(&litImage, lightingRenderPass.handle, 0);
+				s->AddColorBlendAttachmentState();
+				s->CreatePipeline(renderingDevice);
+			}
+			for (auto* s : rasterShaders["lighting_1"]) {
+				s->SetRenderPass(&litImage, lightingRenderPass.handle, 1);
 				s->AddColorBlendAttachmentState();
 				s->CreatePipeline(renderingDevice);
 			}
@@ -238,8 +265,10 @@ private: // Main Rendering
 		// lightingComputeShader.CreatePipeline(renderingDevice);
 	}
 	void DestroyLightingPipeline() {
-		for (auto* s : rasterShaders["lighting"]) {
-			s->DestroyPipeline(renderingDevice);
+		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 8) == "lighting") {
+			for (auto* s : ss) {
+				s->DestroyPipeline(renderingDevice);
+			}
 		}
 		lightingRenderPass.DestroyFrameBuffers(renderingDevice);
 		lightingRenderPass.Destroy(renderingDevice);
@@ -248,24 +277,39 @@ private: // Main Rendering
 	}
 	
 	void ConfigureLightingShaders() {
-		
-		lightingShader.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		lightingShader.depthStencilState.depthTestEnable = VK_FALSE;
-		lightingShader.depthStencilState.depthWriteEnable = VK_FALSE;
-		lightingShader.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		lightingShader.SetData(3);
-		
+		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 8) == "lighting") {
+			for (auto* s : ss) {
+				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+				s->depthStencilState.depthTestEnable = VK_FALSE;
+				s->depthStencilState.depthWriteEnable = VK_FALSE;
+				s->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+				s->SetData(3);
+			}
+		}
 	}
 	
-	void RunLighting(Device* device, VkCommandBuffer commandBuffer) {
-		
-		// Gen Thumbnail
-		lightingRenderPass.Begin(device, commandBuffer, litImage, {{.0,.0,.0,.0}});
-			for (auto* s : rasterShaders["lighting"]) {
-				s->Execute(device, commandBuffer);
+	void ClearLitImage(VkCommandBuffer commandBuffer) {
+		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			const VkClearColorValue clearValues = {0,0,0,0};
+			VkImageSubresourceRange range {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1};
+			renderingDevice->CmdClearColorImage(commandBuffer, litImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValues, 1, &range);
+		TransitionImageLayout(commandBuffer, litImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	}
+	
+	void RunLighting(Device* device, VkCommandBuffer commandBuffer, bool runSubpass0, bool runSubpass1) {
+		lightingRenderPass.Begin(device, commandBuffer, litImage);
+			if (runSubpass0) {
+				for (auto* s : rasterShaders["lighting_0"]) {
+					s->Execute(device, commandBuffer);
+				}
+			}
+			if (runSubpass1) {
+				renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+				for (auto* s : rasterShaders["lighting_1"]) {
+					s->Execute(device, commandBuffer);
+				}
 			}
 		lightingRenderPass.End(device, commandBuffer);
-		
 	}
 	
 private: // Raster Visibility
@@ -289,9 +333,9 @@ private: // Raster Visibility
 		uint geometryIndex;
 	};
 
-	Image gBuffer_albedo_geometryIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = geometry index
-	Image gBuffer_normal_uv { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = normal xyz,  a = uv
-	Image gBuffer_position_dist { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = position xyz,  a = trueDistanceFromCamera
+	Image gBuffer_albedo_geometryIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = geometry index
+	Image gBuffer_normal_uv { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = normal xyz,  a = uv
+	Image gBuffer_position_dist { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }}; // rgb = position xyz,  a = trueDistanceFromCamera
 	
 	static const int NB_G_BUFFERS = 3;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
@@ -677,7 +721,7 @@ private: // Ray Tracing
 	void SetRayTracingInstanceTransform(GeometryInstance* geometryInstance, const glm::dmat4& objectViewTransform) {
 		std::lock_guard lock(rayTracingInstanceMutex);
 		if (geometryInstance->rayTracingInstanceIndex == -1) return;
-		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(glm::mat4(objectViewTransform * glm::dmat4(geometryInstance->transform)));
+		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(glm::mat4(objectViewTransform * geometryInstance->transform));
 	}
 	
 	void AddRayTracingInstance(GeometryInstance* geometryInstance) {
@@ -751,7 +795,7 @@ private: // Post Processing
 	Image historyImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image thumbnailImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 	float thumbnailScale = 1.0/16;
-	float exposureFactor = 1;
+	float exposureFactor = 1.0;
 	
 	DescriptorSet postProcessingDescriptorSet_1, thumbnailDescriptorSet_1, histogramDescriptorSet_1;
 	
@@ -846,8 +890,6 @@ private: // Post Processing
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.colorAttachmentCount = 1;
 				subpass.pColorAttachments = &colorAttRef_0;
-				// subpass.inputAttachmentCount = inputAttachmentRefs.size();
-				// subpass.pInputAttachments = inputAttachmentRefs.data();
 				postProcessingRenderPass.AddSubpass(subpass);
 			}
 			VkAttachmentReference colorAttRef_1 { historyAttachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -1030,14 +1072,14 @@ private: // Post Processing
 	}
 	
 private: // Global Containers
-	std::unordered_map<std::string, std::vector<PipelineLayout*>> pipelineLayouts {
-		{"visibility", {&visibilityRasterLayout}},
-		{"rayTracing", {&rayTracingPipelineLayout}},
-		{"lighting", {&lightingPipelineLayout}},
-		{"thumbnail", {&thumbnailPipelineLayout}},
-		{"ui", {&uiPipelineLayout}},
-		{"postProcessing", {&postProcessingPipelineLayout}},
-		{"histogram", {&histogramComputeLayout}},
+	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
+		{"visibility", &visibilityRasterLayout},
+		{"rayTracing", &rayTracingPipelineLayout},
+		{"lighting", &lightingPipelineLayout},
+		{"thumbnail", &thumbnailPipelineLayout},
+		{"ui", &uiPipelineLayout},
+		{"postProcessing", &postProcessingPipelineLayout},
+		{"histogram", &histogramComputeLayout},
 	};
 
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> rasterShaders {
@@ -1048,7 +1090,8 @@ private: // Global Containers
 				&debugRasterShader,
 			#endif
 		}},
-		{"lighting", {&lightingShader}},
+		{"lighting_0", {&lightingShader}},
+		{"lighting_1", {}},
 		{"thumbnail", {&thumbnailShader}},
 		{"postProcessing_0", {&postProcessingShader_txaa}},
 		{"postProcessing_1", {&postProcessingShader_history}},
@@ -1195,6 +1238,10 @@ private: // Init overrides
 			rayTracingDescriptorSet_1.AddBinding_accelerationStructure(0, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			rayTracingDescriptorSet_1.AddBinding_imageView(1, &litImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 			rayTracingDescriptorSet_1.AddBinding_imageView(2, &depthImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			{
+				int i = 3;
+				for (auto* img : gBuffers) rayTracingDescriptorSet_1.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			}
 		
 		descriptorSets["1_lighting"] = &lightingDescriptorSet_1;
 		{
@@ -1221,35 +1268,21 @@ private: // Init overrides
 			histogramDescriptorSet_1.AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
 		
 		// Add the same set 0 to all pipeline layouts
-		for (auto[name,layouts] : pipelineLayouts) for (auto* layout : layouts) {
+		for (auto[name,layout] : pipelineLayouts) {
 			layout->AddDescriptorSet(&baseDescriptorSet_0);
 		}
 		// Add specific set 1 to specific layout lists
-		for (auto* layout : pipelineLayouts["visibility"]) {
-			layout->AddDescriptorSet(&visibilityDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["rayTracing"]) {
-			layout->AddDescriptorSet(&rayTracingDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["lighting"]) {
-			layout->AddDescriptorSet(&lightingDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["thumbnail"]) {
-			layout->AddDescriptorSet(&thumbnailDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["ui"]) {
-			layout->AddDescriptorSet(&uiDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["postProcessing"]) {
-			layout->AddDescriptorSet(&postProcessingDescriptorSet_1);
-		}
-		for (auto* layout : pipelineLayouts["histogram"]) {
-			layout->AddDescriptorSet(&histogramDescriptorSet_1);
-		}
+		pipelineLayouts["visibility"]->AddDescriptorSet(&visibilityDescriptorSet_1);
+		pipelineLayouts["rayTracing"]->AddDescriptorSet(&rayTracingDescriptorSet_1);
+		pipelineLayouts["lighting"]->AddDescriptorSet(&lightingDescriptorSet_1);
+		pipelineLayouts["thumbnail"]->AddDescriptorSet(&thumbnailDescriptorSet_1);
+		pipelineLayouts["ui"]->AddDescriptorSet(&uiDescriptorSet_1);
+		pipelineLayouts["postProcessing"]->AddDescriptorSet(&postProcessingDescriptorSet_1);
+		pipelineLayouts["histogram"]->AddDescriptorSet(&histogramDescriptorSet_1);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->InitLayouts(descriptorSets, images, &rayTracingPipelineLayout);
+			submodule->InitLayouts(descriptorSets, images, pipelineLayouts);
 		}
 	}
 	
@@ -1262,7 +1295,7 @@ private: // Init overrides
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
-			submodule->ConfigureShaders(rasterShaders, &shaderBindingTable);
+			submodule->ConfigureShaders(rasterShaders, &shaderBindingTable, pipelineLayouts);
 		}
 	}
 
@@ -1382,7 +1415,7 @@ private: // Resources overrides
 private: // Graphics configuration overrides
 	void CreatePipelines() override {
 		// Pipeline layouts
-		for (auto[name,layouts] : pipelineLayouts) for (auto* layout : layouts) {
+		for (auto[name,layout] : pipelineLayouts) {
 			layout->Create(renderingDevice);
 		}
 		
@@ -1434,7 +1467,7 @@ private: // Graphics configuration overrides
 		}
 		
 		// Pipeline layouts
-		for (auto[name,layouts] : pipelineLayouts) for (auto* layout : layouts) {
+		for (auto[name,layout] : pipelineLayouts) {
 			layout->Destroy(renderingDevice);
 		}
 	}
@@ -1553,6 +1586,7 @@ public: // Update overrides
 	
 private: // Commands overrides
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) override {
+		ClearLitImage(commandBuffer);
 		
 		// Transfer data to rendering device
 		cameraUniformBuffer.Update(renderingDevice, commandBuffer);
@@ -1576,10 +1610,10 @@ private: // Commands overrides
 		
 		//TODO memory barrier between transfer and vertex shaders ?
 	
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsTop(commandBuffer, images);
-		// }
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsTop(commandBuffer, images);
+		}
 	
 		// Acceleration Structures
 		if (rayTracingFeatures.rayTracing) {
@@ -1587,17 +1621,19 @@ private: // Commands overrides
 			BuildTopLevelRayTracingAccelerationStructure(renderingDevice, commandBuffer);
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
-		// }
+		// Submodules
+		for (auto* submodule : renderingSubmodules) {
+			submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
+		}
 		
 		if (scene.camera.renderMode == rasterization || scene.camera.debug) {
-			// Visibility
+			// Raster Visibility and lighting
 			RunRasterVisibility(renderingDevice, commandBuffer);
-			RunLighting(renderingDevice, commandBuffer);
+			RunLighting(renderingDevice, commandBuffer, true, true);
 		} else if (rayTracingFeatures.rayTracing) {
+			// Ray Tracing lighting
 			RunRayTracingCommands(commandBuffer);
+			RunLighting(renderingDevice, commandBuffer, false, true);
 		}
 		
 		// Submodules
@@ -1659,7 +1695,7 @@ public: // custom functions
 				ImGui::Checkbox("TXAA", &scene.camera.txaa);
 				ImGui::Checkbox("Gamma correction", &scene.camera.gammaCorrection);
 				ImGui::Checkbox("HDR Tone Mapping", &scene.camera.hdr);
-				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 5);
+				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
 			}
 			for (auto* submodule : renderingSubmodules) {
 				ImGui::Separator();
