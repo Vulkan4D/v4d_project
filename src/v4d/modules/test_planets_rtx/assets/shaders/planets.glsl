@@ -492,20 +492,22 @@ vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 void main() {
 	Fragment fragment = GetHitFragment(true);
 
-	// vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
-	// vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	// mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
-	// vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
-	// vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
-	// vec2 uv = (fragment.uv*uvMult+uvOffset);
-	// vec4 bump = GetBumpMap(uv, fragment.uv);
-	// vec3 normal = normalize(TBN * bump.xyz);
-	// vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
+
+	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
+	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
+	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
+	vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
+	vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
+	vec2 uv = (fragment.uv*uvMult+uvOffset);
+	vec4 bump = GetBumpMap(uv, fragment.uv);
+	vec3 normal = normalize(TBN * bump.xyz);
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
+	ray.color = color;
+	ray.distance = gl_HitTEXT;
+	
+	
+	// vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, vec3(0), /*roughness*/0.6, /*metallic*/0.1);
 	// ray.color = color;
 	// ray.distance = gl_HitTEXT;
 	
-	
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, vec3(0), /*roughness*/0.6, /*metallic*/0.1);
-	ray.color = color;
-	ray.distance = gl_HitTEXT;
 }

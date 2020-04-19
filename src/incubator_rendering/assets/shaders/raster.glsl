@@ -130,13 +130,13 @@ void main() {
 	vec4 position_dist = subpassLoad(gBuffer_position_dist);
 	vec4 albedo = UnpackColorFromFloat(albedo_geometryIndex.r);
 	uint geometryIndex = floatBitsToUint(albedo_geometryIndex.g);
-	vec3 normal = normal_uv.xyz;
-	vec2 uv = UnpackUVfromFloat(normal_uv.w);
+	vec3 viewSpaceNormal = normal_uv.xyz;
+	vec2 viewSpaceUV = UnpackUVfromFloat(normal_uv.w);
 	
 	if (camera.debug) {
-		out_color = vec4(normal, 1);
+		out_color = vec4(viewSpaceNormal, 1);
 		return;
 	}
 	
-	out_color = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, normal, vec3(0), 0.6, 0.1), 1);
+	out_color = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, viewSpaceNormal, vec3(0), 0.6, 0.1), 1);
 }

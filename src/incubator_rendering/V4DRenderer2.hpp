@@ -129,8 +129,8 @@ private: // Main Rendering
 		"Hard shadows\0"
 		// "Soft shadows\0"
 	;
-	static const int DEFAULT_RENDER_MODE = rasterization;
-	static const int DEFAULT_SHADOW_TYPE = shadows_off;
+	static const int DEFAULT_RENDER_MODE = fullRayTracing;
+	static const int DEFAULT_SHADOW_TYPE = shadows_hard;
 
 	Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
