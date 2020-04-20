@@ -776,6 +776,7 @@ struct PlanetTerrain {
 	}
 
 	std::recursive_mutex chunksMutex;
+	std::mutex planetMutex;
 	std::vector<Chunk*> chunks {};
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
@@ -810,6 +811,7 @@ struct PlanetTerrain {
 	}
 	
 	~PlanetTerrain() {
+		std::lock_guard lock(planetMutex);
 		RemoveBaseChunks();
 	}
 	
@@ -849,6 +851,7 @@ struct PlanetTerrain {
 	}
 	
 	void RemoveBaseChunks() {
+		std::lock_guard lock(chunksMutex);
 		for (auto* chunk : chunks) {
 			delete chunk;
 		}

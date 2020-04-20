@@ -54,13 +54,13 @@ void main() {
 #include "core_lightingPass.glsl"
 layout(location = 0) in V2F v2f;
 
-const int RAYMARCH_STEPS = 64; // minimum of 3
-const int RAYMARCH_LIGHT_STEPS = 2; // minimum of 2
+const int RAYMARCH_STEPS = 40; // min = 24
+const int RAYMARCH_LIGHT_STEPS = RAYMARCH_STEPS/8;
 const float minStepSize = 100.0; // meters
 
-#define RAYLEIGH_BETA vec3(9.0e-6, 11.0e-6, 17.0e-6)
+#define RAYLEIGH_BETA vec3(7.0e-6, 8.0e-6, 9.0e-6)
 #define MIE_BETA vec3(1e-7)
-#define G 0.7 /* blob around the sun */
+#define G 0.9 // sun glow
 
 void main() {
 	vec4 unpackedAtmosphereColor = UnpackVec4FromUint(planetAtmosphere.color);
@@ -97,16 +97,16 @@ void main() {
 		suns[i] = UnpackSunFromVec4(planetAtmosphere.suns[i]);
 	}
 	
-	float rayleighHeight = atmosphereHeight * 0.06 * planetAtmosphere.densityFactor;
-	float mieHeight = atmosphereHeight / 10.0;
+	float rayleighHeight = atmosphereHeight/8;
+	float mieHeight = atmosphereHeight/1;
 	vec2 scaleHeight = vec2(rayleighHeight, mieHeight);
-	bool allowMie = distEnd > depthDistance;
+	bool allowMie = true;//distEnd > depthDistance;
 	float gg = G * G;
 	
 	vec3 totalRayleigh = vec3(0);
 	vec3 totalMie = vec3(0);
 	vec3 atmColor = vec3(0);
-	float atmosphereDensity = 0;
+	float maxDepth = 0;
 
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
 		// Calculate Rayleigh and Mie phases
@@ -121,8 +121,11 @@ void main() {
 		vec2 opticalDepth = vec2(0);
 		float rayDist = 0;
 		for (int i = 0; i < rayMarchingSteps; ++i) {
-			vec3 posOnSphere = rayStart + viewDir * (rayDist + stepSize / 2.0);
-			float altitude = length(posOnSphere) - planetAtmosphere.innerRadius;
+			vec3 posOnSphere = rayStart + viewDir * (rayDist + stepSize/2.0);
+			maxDepth = max(maxDepth, r-length(posOnSphere));
+			
+			float altitude = max(0.001, length(posOnSphere) - planetAtmosphere.innerRadius);
+			// if (altitude < 0) posOnSphere = normalize(posOnSphere) * planetAtmosphere.innerRadius;
 			vec2 density = exp(-altitude / scaleHeight) * stepSize;
 			opticalDepth += density;
 			
@@ -137,29 +140,29 @@ void main() {
 			vec2 lightRayOpticalDepth = vec2(0);
 			float lightRayDist = 0;
 			for (int l = 0; l < RAYMARCH_LIGHT_STEPS; ++l) {
-				vec3 posLightRay = posOnSphere + lightDir * (lightRayDist + lightRayStepSize / 2.0);
-				float lightRayAltitude = length(posLightRay) - planetAtmosphere.innerRadius;
+				vec3 posLightRay = posOnSphere + lightDir * (lightRayDist + lightRayStepSize/2.0);
+				float lightRayAltitude = max(0.001, length(posLightRay) - planetAtmosphere.innerRadius);
 				lightRayOpticalDepth += exp(-lightRayAltitude / scaleHeight) * lightRayStepSize;
 				lightRayDist += lightRayStepSize;
 			}
 			
-			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * planetAtmosphere.densityFactor * 2;
+			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * planetAtmosphere.densityFactor;
 			totalRayleigh += density.x * attenuation;
 			totalMie += density.y * attenuation;
 			
 			rayDist += stepSize;
 		}
 
-		vec3 opacity = exp(-((MIE_BETA * opticalDepth.y) + (RAYLEIGH_BETA * opticalDepth.x)));
 		atmColor += vec3(
 			(
 				rayleighPhase * RAYLEIGH_BETA * (planetAtmosphere.densityFactor*2) * totalRayleigh // rayleigh color
 				+ miePhase * MIE_BETA * (planetAtmosphere.densityFactor*2) * totalMie // mie
-				+ opticalDepth.x * (atmosphereColor/10000000.0*planetAtmosphere.densityFactor*atmosphereAmbient) // ambient
+				// + opticalDepth.x * (atmosphereColor/10000000.0*planetAtmosphere.densityFactor*atmosphereAmbient) // ambient
 			) * lightIntensity * atmosphereColor
 		);
-		atmosphereDensity += clamp(pow(length(opticalDepth), 0.01), 0, 1);
 	}
 	
-	out_color = vec4(atmColor, max(0.0, min(1.0, atmosphereDensity / 2.0)));
+	float alpha = clamp(maxDepth/atmosphereHeight, 0, 0.5);
+	out_color = vec4(atmColor, alpha);
+	// out_color = vec4(atmColor, 1);
 }

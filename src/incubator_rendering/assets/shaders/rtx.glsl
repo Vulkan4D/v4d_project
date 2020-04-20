@@ -135,6 +135,7 @@ layout(location = 0) rayPayloadInEXT RayPayload ray;
 
 void main() {
 	//... may return a background color if other than black
+	ray.distance = 0;
 }
 
 

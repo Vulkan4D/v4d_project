@@ -76,7 +76,7 @@ bool bumpMapsGenerated = false;
 
 struct Planet {
 	double solidRadius = 8000000;
-	double atmosphereRadius = 8400000;
+	double atmosphereRadius = 8200000;
 	double heightVariation = 10000;
 	
 	#pragma region cache
@@ -461,7 +461,8 @@ public:
 	// Frame Update
 	void FrameUpdate(Scene& scene) override {
 		if (!terrain) {
-			terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.solidRadius*2,0}};
+			terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*2,0}};
+			std::lock_guard lock(terrain->planetMutex);
 			terrain->scene = &scene;
 			planetAtmosphereShader->planets.push_back(terrain);
 			sun->GenerateGeometries();
@@ -580,8 +581,8 @@ public:
 				ImGui::Separator();
 				ImGui::Text("Planet");
 				ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
-				
 				if (terrain) {
+					std::lock_guard lock(terrain->planetMutex);
 					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
 					if (std::abs(altitude) < 1.0) {
 						ImGui::Text("Altitude above terrain: %d mm", (int)std::ceil(altitude*1000.0));
@@ -591,16 +592,22 @@ public:
 						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
 					}
 					if (terrain->atmosphere.radius > 0) {
+						ImGui::Separator();
 						ImGui::Text("Atmosphere");
 						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 1.0f);
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
 					}
-					// ImGui::Text("Sun");
-					// static glm::vec3 sunPosition = glm::normalize(sun.worldPosition);
-					// ImGui::SliderFloat("Intensity", (float*)&sun.intensity, 1e20f, 1e26f);
-					// ImGui::ColorEdit3("Position", (float*)&sunPosition);
-					// sun.worldPosition = planet->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * 1.496e+11;
+					ImGui::Separator();
+					ImGui::Text("Sun");
+					static glm::vec3 sunPosition = glm::normalize(glm::dvec3(sun->GetWorldTransform()[3]));
+					static double sunDistance = glm::distance(glm::dvec3(sun->GetWorldTransform()[3]), terrain->absolutePosition);
+					static float intensity = std::log10(sun->GetLightSources()[0]->intensity);
+					ImGui::SliderFloat("Intensity", &intensity, 20, 27);
+					sun->GetLightSources()[0]->intensity = std::pow(10.0f, intensity);
+					float* pos = (float*)&sunPosition;
+					ImGui::SliderFloat3("Position", pos, -1, 1);
+					sun->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance));
 				}
 			//
 		}

@@ -122,9 +122,14 @@ void main() {
 		}
 	}
 	
+	// Contrast / Brightness
+	if (camera.contrast != 1.0 || camera.brightness != 1.0) {
+		color = mix(color * camera.brightness, mix(vec3(0.5), color, camera.contrast), 0.5);
+	}
+	
 	// Gamma correction 
 	if (GammaCorrection) {
-		const float gamma = 2.2;
+		const float gamma = camera.gamma;
 		color = pow(color, vec3(1.0 / gamma));
 	}
 	
