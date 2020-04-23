@@ -133,6 +133,8 @@ void main() {
 	vec3 viewSpaceNormal = normal_uv.xyz;
 	vec2 viewSpaceUV = UnpackUVfromFloat(normal_uv.w);
 	
+	// out_color = vec4(albedo);return;
+	
 	if (camera.debug) {
 		out_color = vec4(viewSpaceNormal, 1);
 		return;

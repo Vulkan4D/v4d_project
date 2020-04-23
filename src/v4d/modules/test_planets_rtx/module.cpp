@@ -266,6 +266,81 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 	}
 }
 
+namespace TerrainGeneratorLib {
+	bool running = false;
+	std::string libPath {"/home/olivier/projects/v4d_project/dynamicLibs/terrainGenerator/build/terrainGenerator"};
+	v4d::io::SharedLibraryLoader libLoader;
+	v4d::io::SharedLibraryInstance* generatorLib = nullptr;
+	std::thread* autoReloaderThread = nullptr;
+	
+	double lastModifiedTime = 0;
+	void Load() {
+		generatorLib = libLoader.Load("terrainGenerator", libPath);
+		if (!generatorLib) {
+			LOG_ERROR("Error loading dynamic library 'terrainGenerator' from " << libPath)
+			return;
+		}
+		LOAD_DLL_FUNC(generatorLib, void, init)
+		if (init) {
+			init();
+		} else {
+			LOG_ERROR("Error loading function pointer 'init' from dynamic library 'terrainGenerator'")
+			return;
+		}
+		LOAD_DLL_FUNC(generatorLib, double, generateHeightMap, glm::dvec3* const)
+		if (!generatorLib) {
+			LOG_ERROR("Error loading function pointer 'generateHeightMap' from dynamic library 'terrainGenerator'")
+			return;
+		}
+		PlanetTerrain::generatorFunction = generateHeightMap;
+		// for each planet
+			if (terrain) {
+				std::scoped_lock lock(terrain->planetMutex);
+				terrain->RemoveBaseChunks();
+				terrain->AddBaseChunks();
+			}
+		//
+		LOG_SUCCESS("Dynamic library 'terrainGenerator' Loaded")
+		// PlanetTerrain::StartChunkGenerator();
+	}
+	void Unload() {
+		// PlanetTerrain::EndChunkGenerator();
+		PlanetTerrain::generatorFunction = nullptr;
+		libLoader.Unload("terrainGenerator");
+	}
+	void Start() {
+		if (running) return;
+		Load();
+		running = true;
+		autoReloaderThread = new std::thread{[&]{
+			LOG("Started autoReload dynamic library thread...")
+			while (running) {
+				auto t = v4d::io::FilePath(generatorLib->path).GetLastWriteTime();
+				if (lastModifiedTime == 0) {
+					lastModifiedTime = t;
+				} else if (t > lastModifiedTime) {
+					LOG_WARN("Dynamic library 'terrainGenerator' has been modified. Reloading it...")
+					lastModifiedTime = 0;
+					Unload();
+					SLEEP(100ms)
+					Load();
+				}
+				SLEEP(500ms)
+			}
+		}};
+	}
+	void Stop() {
+		if (!running) return;
+		running = false;
+		if (autoReloaderThread && autoReloaderThread->joinable()) {
+			autoReloaderThread->join();
+		}
+		delete autoReloaderThread;
+		autoReloaderThread = nullptr;
+		Unload();
+	}
+};
+
 class Rendering : public v4d::modules::Rendering {
 public:
 	Rendering() {}
@@ -439,6 +514,7 @@ public:
 	
 	// Scene
 	void LoadScene(Scene& scene) override {
+		TerrainGeneratorLib::Start();
 		
 		// Light source
 		sun = scene.AddObjectInstance();
@@ -455,18 +531,20 @@ public:
 	}
 	
 	void UnloadScene(Scene&) override {
-		
+		TerrainGeneratorLib::Stop();
 	}
-
+	
 	// Frame Update
 	void FrameUpdate(Scene& scene) override {
 		if (!terrain) {
 			terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*2,0}};
-			std::lock_guard lock(terrain->planetMutex);
-			terrain->scene = &scene;
-			planetAtmosphereShader->planets.push_back(terrain);
-			sun->GenerateGeometries();
-			planetAtmosphereShader->lightSources.push_back(sun->GetLightSources()[0]);
+			{
+				std::lock_guard lock(terrain->planetMutex);
+				terrain->scene = &scene;
+				planetAtmosphereShader->planets.push_back(terrain);
+				sun->GenerateGeometries();
+				planetAtmosphereShader->lightSources.push_back(sun->GetLightSources()[0]);
+			}
 		}
 		
 						// // // for each planet
@@ -494,7 +572,9 @@ public:
 			
 			// Camera position relative to planet
 			terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
-			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
+			if (PlanetTerrain::generatorFunction) {
+				terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
+			}
 			
 			for (auto* chunk : terrain->chunks) {
 				chunk->BeforeRender();

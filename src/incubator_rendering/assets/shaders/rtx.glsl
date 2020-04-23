@@ -71,7 +71,7 @@ void main() {
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
 	
 	ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
-	imageStore(depthImage, coords, vec4(depth, 0,0,0));
+	imageStore(depthImage, coords, vec4(ray.distance>0? depth:0, 0,0,0));
 	imageStore(litImage, coords, vec4(ray.color, 1.0));
 	
 	//TODO also write to : 

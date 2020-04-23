@@ -221,6 +221,9 @@ struct PlanetTerrain {
 		// }
 		
 		void Generate() {
+			#ifdef _DEBUG
+				auto timer = v4d::Timer(true);
+			#endif
 			int genRow = 0;
 			int genCol = 0;
 			int genVertexIndex = 0;
@@ -261,7 +264,7 @@ struct PlanetTerrain {
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					vertex->pos = posOnChunk;
 					// Color
-					vertex->SetColor({0.5, 0.4, 0.3, 1.0});
+					vertex->SetColor(planet->GetColorMap(pos, triangleSize));
 					// UV
 					vertex->SetUV(glm::vec2(
 						rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
@@ -485,6 +488,10 @@ struct PlanetTerrain {
 				computedLevel = 0;
 				meshGenerated = true;
 			}
+			
+			#ifdef _DEBUG
+				LOG("Chunk generated in " << timer.GetElapsedMilliseconds() << "ms")
+			#endif
 		}
 		
 		void AddSubChunks() {
@@ -779,17 +786,53 @@ struct PlanetTerrain {
 	std::mutex planetMutex;
 	std::vector<Chunk*> chunks {};
 	
+	static double (*generatorFunction)(glm::dvec3* const);
+	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = solidRadius;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*heightVariation;
-		height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*heightVariation/10.0;
-		if (triangleSize < 1000)
-			height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100.0), 3)*6.0;
-		if (triangleSize < 100)
-			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/10.0, 2);
-		if (triangleSize < 30)
-			height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius, 3)/5.0;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*heightVariation;
+		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*heightVariation/10.0;
+		// if (triangleSize < 1000)
+		// 	height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100.0), 3)*6.0;
+		// if (triangleSize < 100)
+		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius/10.0, 2);
+		// if (triangleSize < 30)
+		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius, 3)/5.0;
+		
+		if (generatorFunction) height += generatorFunction(&normalizedPos);
+		else {
+			LOG_ERROR("Tried to generate heightmap but terrainGenerator dynamic library is not loaded")
+		}
+		
 		return height;
+	}
+	
+	glm::vec4 GetColorMap(glm::dvec3 normalizedPos, double triangleSize) {
+
+		// const int nbPlates = 50;
+		// static std::vector<glm::dvec3> plates {};
+		// if (plates.size() == 0) {
+		// 	plates.reserve(nbPlates);
+		// 	for (int i = 0; i < nbPlates; ++i) {
+		// 		plates.push_back(glm::normalize(glm::dvec3{
+		// 			v4d::noise::QuickNoise(128.54+i*2.45),
+		// 			v4d::noise::QuickNoise(982.1+i*1.87),
+		// 			v4d::noise::QuickNoise(34.9+i*7.22),
+		// 		}*2.0-1.0));
+		// 	}
+		// }
+		
+		// double minDist = 1e100;
+		// for (int i = 0; i < nbPlates; ++i) {
+		// 	minDist = std::min(minDist, glm::distance(normalizedPos, plates[i]));
+		// }
+		
+		// return {minDist, minDist, minDist, 1.0f};
+		
+		// auto h = ((GetHeightMap(normalizedPos, triangleSize) - solidRadius) / heightVariation)/2.0+0.5;
+		// return glm::vec4(h,h,h, 1.0);
+		
+		return {0.5f, 0.4f, 0.3f, 1.0f};
 	}
 	
 	double GetSolidCirconference() {
@@ -806,6 +849,7 @@ struct PlanetTerrain {
 		heightVariation(heightVariation),
 		absolutePosition(absolutePosition),
 		atmosphere(radius)
+		// atmosphere(0)
 	{
 		AddBaseChunks();
 	}
@@ -906,3 +950,5 @@ std::vector<std::thread> PlanetTerrain::chunkGeneratorThreads {};
 std::mutex PlanetTerrain::chunkGeneratorQueueMutex {};
 std::condition_variable PlanetTerrain::chunkGeneratorEventVar {};
 std::atomic<bool> PlanetTerrain::chunkGeneratorActive = false;
+
+double (*PlanetTerrain::generatorFunction)(glm::dvec3* const) = nullptr;
