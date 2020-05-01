@@ -34,6 +34,10 @@ vec3 ViewSpaceNormal(vec3 normal) {
 	return normalize(transpose(inverse(mat3(planetAtmosphere.modelViewMatrix))) * normal);
 }
 
+vec3 PlanetSpaceDir(vec3 dir) {
+	return normalize(transpose(mat3(planetAtmosphere.modelViewMatrix)) * dir);
+}
+
 ##################################################################
 #shader vert
 
@@ -52,10 +56,11 @@ void main() {
 // layout(location = 0) out vec4 color;void main() {color = vec4(1);}
 
 #include "core_lightingPass.glsl"
+#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 layout(location = 0) in V2F v2f;
 
-const int RAYMARCH_STEPS = 40; // min = 24
-const int RAYMARCH_LIGHT_STEPS = RAYMARCH_STEPS/8;
+const int RAYMARCH_STEPS = 40; // min=24, low=40, high=64, max=100
+const int RAYMARCH_LIGHT_STEPS = 2; // min=1, low=2, high=3, max=5
 const float minStepSize = 100.0; // meters
 
 #define RAYLEIGH_BETA vec3(7.0e-6, 8.0e-6, 9.0e-6)
@@ -107,7 +112,23 @@ void main() {
 	vec3 totalMie = vec3(0);
 	vec3 atmColor = vec3(0);
 	float maxDepth = 0;
-
+	
+	// vec4 aurora = vec4(0);
+	// float auroraHeight = 100000;
+	// float t = camera.time / 32.0;
+	// vec3 polarPos = mix(rayStart, rayEnd, smoothstep(atmosphereHeight, atmosphereHeight-auroraHeight, (length(rayStart)-planetAtmosphere.innerRadius)));
+	// // vec3 polarPos = mix(rayStart, rayEnd, 0.5);
+	// vec3 polarDir = PlanetSpaceDir(normalize(polarPos));
+	// float polar = abs(dot(polarDir, vec3(0,1,0)));
+	// float auroraWidth = max(0.1, (FastSimplex(polarDir*2.0+vec3(48.5,0.8*t,t)))/2.0+0.5) * 0.1;
+	// float auroraPosition = 0.9;
+	// auroraPosition += FastSimplexFractal(polarDir*2.0+vec3(12.5,64.0,t/16.0), 2)/8.0;
+	// auroraPosition += FastSimplexFractal(polarDir*vec3(5.0, 40.0, 5.0)+vec3(8.5,16.5,t/8.0), 2)/16.0;
+	// auroraPosition += FastSimplexFractal(polarDir*vec3(15.0, 100.0, 15.0)+vec3(48.5,12.0,t), 4)/40.0;
+	// vec3 auroraMainColor = vec3(0.0, 1.0, 0.0);
+	// vec3 auroraSecondaryColor = mix(vec3(1.0, 0.1, 0.3), vec3(0.0, 0.2, 1.0), FastSimplexFractal(polarDir*3.0+vec3(9.5,24.0,t*3.0), 2)/2.0+0.5);
+	// vec3 auroraFinalColor = normalize(mix(auroraMainColor, auroraSecondaryColor, pow(FastSimplexFractal(polarDir*2.0+vec3(28.5,2.0,t*2.0), 2)/2.0+0.5, 1.5)));
+	
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
 		// Calculate Rayleigh and Mie phases
 		vec3 lightDir = suns[sunIndex].dir;
@@ -122,12 +143,17 @@ void main() {
 		float rayDist = 0;
 		for (int i = 0; i < rayMarchingSteps; ++i) {
 			vec3 posOnSphere = rayStart + viewDir * (rayDist + stepSize/2.0);
-			maxDepth = max(maxDepth, r-length(posOnSphere));
+			float depth = r-length(posOnSphere);
+			maxDepth = max(maxDepth, depth);
 			
 			float altitude = max(0.001, length(posOnSphere) - planetAtmosphere.innerRadius);
-			// if (altitude < 0) posOnSphere = normalize(posOnSphere) * planetAtmosphere.innerRadius;
 			vec2 density = exp(-altitude / scaleHeight) * stepSize;
 			opticalDepth += density;
+			
+			// polarDir = PlanetSpaceDir(normalize(posOnSphere));
+			// polar = abs(dot(polarDir, vec3(0,1,0)));
+			// float aur = smoothstep(auroraPosition-auroraWidth/2.0, auroraPosition, polar) * smoothstep(auroraPosition+auroraWidth/2.0, auroraPosition, polar) * smoothstep(auroraHeight, auroraHeight/2.0, depth);
+			// aurora += vec4(auroraFinalColor*aur, aur*maxDepth/atmosphereHeight)/float(rayMarchingSteps)/4.0;
 			
 			// step size for light ray
 			float a = dot(lightDir, lightDir);
@@ -139,16 +165,40 @@ void main() {
 			// RayMarch towards light source
 			vec2 lightRayOpticalDepth = vec2(0);
 			float lightRayDist = 0;
+			float decay = 0;
 			for (int l = 0; l < RAYMARCH_LIGHT_STEPS; ++l) {
 				vec3 posLightRay = posOnSphere + lightDir * (lightRayDist + lightRayStepSize/2.0);
 				float lightRayAltitude = max(0.001, length(posLightRay) - planetAtmosphere.innerRadius);
-				lightRayOpticalDepth += exp(-lightRayAltitude / scaleHeight) * lightRayStepSize;
+				vec2 lightRayDensity = exp(-lightRayAltitude / scaleHeight) * lightRayStepSize;
+				
+				vec3 posLightViewSpace = posLightRay-p;
+				vec4 posLightClipSpace = mat4(camera.projectionMatrix) * vec4(posLightViewSpace, 1);
+				vec3 posLightNDC = posLightClipSpace.xyz/posLightClipSpace.w;
+				vec3 posLightScreenSpace = posLightNDC * vec3(0.5, 0.5, 0) + vec3(0.5, 0.5, -posLightViewSpace.z);
+				
+				if (RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
+					float depth;
+					switch (camera.renderMode) {
+						case 0: // raster
+							depth = texture(rasterDepthImage, posLightScreenSpace.xy).r;
+						break;
+						case 1: // ray tracing
+							depth = texture(depthImage, posLightScreenSpace.xy).r;
+						break;
+					}
+					float depthDistance = float(GetTrueDistanceFromDepthBuffer(depth));
+					if (depth > 0) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
+				}
+				
+				lightRayOpticalDepth += lightRayDensity;
 				lightRayDist += lightRayStepSize;
 			}
 			
+			// out_color = vec4(vec3(decay), 1);return;
+			
 			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * planetAtmosphere.densityFactor;
-			totalRayleigh += density.x * attenuation;
-			totalMie += density.y * attenuation;
+			totalRayleigh += density.x * attenuation * (1.0-decay/3.0);
+			totalMie += density.y * attenuation * (1.0-decay);
 			
 			rayDist += stepSize;
 		}
@@ -157,12 +207,13 @@ void main() {
 			(
 				rayleighPhase * RAYLEIGH_BETA * (planetAtmosphere.densityFactor*2) * totalRayleigh // rayleigh color
 				+ miePhase * MIE_BETA * (planetAtmosphere.densityFactor*2) * totalMie // mie
-				// + opticalDepth.x * (atmosphereColor/10000000.0*planetAtmosphere.densityFactor*atmosphereAmbient) // ambient
+				+ opticalDepth.x * (atmosphereColor/10000000.0*planetAtmosphere.densityFactor*atmosphereAmbient) // ambient
 			) * lightIntensity * atmosphereColor
 		);
 	}
 	
 	float alpha = clamp(maxDepth/atmosphereHeight, 0, 0.5);
 	out_color = vec4(atmColor, alpha);
-	// out_color = vec4(atmColor, 1);
+	// float alpha = clamp(maxDepth/atmosphereHeight + aurora.a, 0, 0.5);
+	// out_color = vec4(mix(aurora.rgb, atmColor, clamp(length(atmColor)+0.5, 0, 1)), alpha);
 }

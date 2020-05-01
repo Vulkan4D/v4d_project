@@ -224,6 +224,6 @@ void main() {
 	} else {
 		ray.color = light.color * light.intensity/gl_HitTEXT;
 	}
-	ray.distance = gl_HitTEXT;
+	ray.distance = 0;
 }
 

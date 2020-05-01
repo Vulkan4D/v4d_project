@@ -322,12 +322,12 @@ private: // Raster Visibility
 		"incubator_rendering/assets/shaders/raster.visibility.frag",
 	}};
 	
-	#ifdef _DEBUG
+	// #ifdef _DEBUG
 		RasterShaderPipeline debugRasterShader {visibilityRasterLayout, {
 			"incubator_rendering/assets/shaders/raster.visibility.vert",
 			"incubator_rendering/assets/shaders/raster.visibility.frag",
 		}};
-	#endif
+	// #endif
 	
 	struct GeometryPushConstant {
 		uint objectIndex;
@@ -448,7 +448,7 @@ private: // Raster Visibility
 			visibilityRasterShader.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
 		#endif
 		
-		#ifdef _DEBUG
+		// #ifdef _DEBUG
 			debugRasterShader.AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
 			debugRasterShader.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
 			debugRasterShader.rasterizer.lineWidth = 1;
@@ -458,7 +458,7 @@ private: // Raster Visibility
 			#else
 				debugRasterShader.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
 			#endif
-		#endif
+		// #endif
 	}
 	
 	void RunRasterVisibility(Device* device, VkCommandBuffer commandBuffer) {
@@ -474,15 +474,15 @@ private: // Raster Visibility
 			for (auto* s : rasterShaders["visibility"]) {
 				if (
 					s == &visibilityRasterShader
-					#ifdef _DEBUG
+					// #ifdef _DEBUG
 						|| s == &debugRasterShader
-					#endif
+					// #endif
 				) {
-					#ifdef _DEBUG
+					// #ifdef _DEBUG
 						if (scene.camera.debug != (s == &debugRasterShader)) {
 							continue;
 						}
-					#endif
+					// #endif
 					scene.Lock();
 						for (auto* obj : scene.objectInstances) {
 							if (obj) {
@@ -1087,9 +1087,9 @@ private: // Global Containers
 		/* RenderPass_SubPass => ShadersList */
 		{"visibility", {
 			&visibilityRasterShader,
-			#ifdef _DEBUG
+			// #ifdef _DEBUG
 				&debugRasterShader,
-			#endif
+			// #endif
 		}},
 		{"lighting_0", {&lightingShader}},
 		{"lighting_1", {}},
@@ -1248,7 +1248,10 @@ private: // Init overrides
 		{
 			int i = 0;
 			for (auto* img : gBuffers) lightingDescriptorSet_1.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
+			lightingDescriptorSet_1.AddBinding_combinedImageSampler(i++, &depthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+			lightingDescriptorSet_1.AddBinding_combinedImageSampler(i++, &rasterDepthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
+		
 		
 		descriptorSets["1_thumbnail"] = &thumbnailDescriptorSet_1;
 			thumbnailDescriptorSet_1.AddBinding_combinedImageSampler(0, &litImage, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1480,6 +1483,7 @@ public: // Update overrides
 		scene.camera.width = swapChain->extent.width;
 		scene.camera.height = swapChain->extent.height;
 		scene.camera.RefreshProjectionMatrix();
+		scene.camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 		
 		// Submodules
 		for (auto* submodule : renderingSubmodules) {
@@ -1677,9 +1681,9 @@ public: // custom functions
 			// Submodules
 			ImGui::SetNextWindowSize({405, 344});
 			ImGui::Begin("Settings and Modules");
-			#ifdef _DEBUG
+			// #ifdef _DEBUG
 				ImGui::Checkbox("Debug", &scene.camera.debug);
-			#endif
+			// #endif
 			if (scene.camera.debug) {
 				// ...
 			} else {
@@ -1706,6 +1710,16 @@ public: // custom functions
 				submodule->RunImGui();
 			}
 			ImGui::End();
+			#ifdef _DEBUG
+				ImGui::SetNextWindowPos({425+405,0});
+				ImGui::SetNextWindowSize({200, 80});
+				ImGui::Begin("Debug");
+				for (auto* submodule : renderingSubmodules) {
+					ImGui::Separator();
+					submodule->RunImGuiDebug();
+				}
+				ImGui::End();
+			#endif
 		}
 	#endif
 };
