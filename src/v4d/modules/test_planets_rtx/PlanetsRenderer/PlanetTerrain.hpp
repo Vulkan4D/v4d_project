@@ -50,7 +50,11 @@ struct PlanetTerrain {
 	glm::dvec3 lastOptimizePosition {0};
 	v4d::Timer lastOptimizeTime {true};
 	static v4d::Timer lastGarbageCollectionTime;
-	
+	#ifdef _DEBUG
+		int totalChunkTimeNb = 0;
+		float totalChunkTime = 0;
+	#endif
+		
 	// Info
 	int totalChunks = 0;
 	int activeChunks = 0;
@@ -264,7 +268,10 @@ struct PlanetTerrain {
 					auto* vertex = geometry->GetVertexPtr(currentIndex);
 					vertex->pos = posOnChunk;
 					// Color
-					vertex->SetColor(planet->GetColorMap(pos, triangleSize));
+					// vertex->SetColor(planet->GetColorMap(pos, triangleSize));
+					if (PlanetTerrain::generateColor) {
+						vertex->SetColor(glm::vec4(PlanetTerrain::generateColor(altitude - planet->solidRadius), 1.0f));
+					}
 					// UV
 					vertex->SetUV(glm::vec2(
 						rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
@@ -490,7 +497,8 @@ struct PlanetTerrain {
 			}
 			
 			#ifdef _DEBUG
-				LOG("Chunk generated in " << timer.GetElapsedMilliseconds() << "ms")
+				planet->totalChunkTimeNb++;
+				planet->totalChunkTime += timer.GetElapsedMilliseconds();
 			#endif
 		}
 		
@@ -699,6 +707,7 @@ struct PlanetTerrain {
 	static std::condition_variable chunkGeneratorEventVar;
 	static std::atomic<bool> chunkGeneratorActive;
 	static void StartChunkGenerator() {
+		if (chunkGeneratorActive) return;
 		chunkGeneratorActive = true;
 		chunkGeneratorThreads.reserve(chunkGeneratorNbThreads);
 		for (int i = 0; i < chunkGeneratorNbThreads; ++i) {
@@ -742,6 +751,7 @@ struct PlanetTerrain {
 		}
 	}
 	static void EndChunkGenerator() {
+		if (!chunkGeneratorActive) return;
 		chunkGeneratorActive = false;
 		chunkGeneratorEventVar.notify_all();
 		for (auto& thread : chunkGeneratorThreads) {
@@ -787,6 +797,7 @@ struct PlanetTerrain {
 	std::vector<Chunk*> chunks {};
 	
 	static double (*generatorFunction)(glm::dvec3* const);
+	static glm::vec3 (*generateColor)(double heightMap);
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
 		double height = solidRadius;
@@ -952,3 +963,4 @@ std::condition_variable PlanetTerrain::chunkGeneratorEventVar {};
 std::atomic<bool> PlanetTerrain::chunkGeneratorActive = false;
 
 double (*PlanetTerrain::generatorFunction)(glm::dvec3* const) = nullptr;
+glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;

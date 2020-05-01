@@ -268,14 +268,19 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 
 namespace TerrainGeneratorLib {
 	bool running = false;
-	std::string libPath {"/home/olivier/projects/v4d_project/dynamicLibs/terrainGenerator/build/terrainGenerator"};
+	std::string libPath {"dynamicLibraries/terrainGenerator"};
 	v4d::io::SharedLibraryLoader libLoader;
 	v4d::io::SharedLibraryInstance* generatorLib = nullptr;
 	std::thread* autoReloaderThread = nullptr;
+	std::mutex mu;
 	
-	double lastModifiedTime = 0;
 	void Load() {
-		generatorLib = libLoader.Load("terrainGenerator", libPath);
+		std::lock_guard generatorLock(mu);
+		if (generatorLib) {
+			generatorLib = libLoader.Reload("terrainGenerator");
+		} else {
+			generatorLib = libLoader.Load("terrainGenerator", libPath);
+		}
 		if (!generatorLib) {
 			LOG_ERROR("Error loading dynamic library 'terrainGenerator' from " << libPath)
 			return;
@@ -293,9 +298,15 @@ namespace TerrainGeneratorLib {
 			return;
 		}
 		PlanetTerrain::generatorFunction = generateHeightMap;
+		LOAD_DLL_FUNC(generatorLib, glm::vec3, generateColor, double)
+		PlanetTerrain::generateColor = generateColor;
 		// for each planet
 			if (terrain) {
 				std::scoped_lock lock(terrain->planetMutex);
+				#ifdef _DEBUG
+					terrain->totalChunkTimeNb = 0;
+					terrain->totalChunkTime = 0;
+				#endif
 				terrain->RemoveBaseChunks();
 				terrain->AddBaseChunks();
 			}
@@ -306,6 +317,7 @@ namespace TerrainGeneratorLib {
 	void Unload() {
 		// PlanetTerrain::EndChunkGenerator();
 		PlanetTerrain::generatorFunction = nullptr;
+		PlanetTerrain::generateColor = nullptr;
 		libLoader.Unload("terrainGenerator");
 	}
 	void Start() {
@@ -315,17 +327,11 @@ namespace TerrainGeneratorLib {
 		autoReloaderThread = new std::thread{[&]{
 			LOG("Started autoReload dynamic library thread...")
 			while (running) {
-				auto t = v4d::io::FilePath(generatorLib->path).GetLastWriteTime();
-				if (lastModifiedTime == 0) {
-					lastModifiedTime = t;
-				} else if (t > lastModifiedTime) {
+				if (v4d::io::FilePath::FileExists(generatorLib->filePath+".new")) {
 					LOG_WARN("Dynamic library 'terrainGenerator' has been modified. Reloading it...")
-					lastModifiedTime = 0;
-					Unload();
-					SLEEP(100ms)
 					Load();
 				}
-				SLEEP(500ms)
+				SLEEP(100ms)
 			}
 		}};
 	}
@@ -536,6 +542,7 @@ public:
 	
 	// Frame Update
 	void FrameUpdate(Scene& scene) override {
+		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		if (!terrain) {
 			terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*2,0}};
 			{
@@ -572,9 +579,7 @@ public:
 			
 			// Camera position relative to planet
 			terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
-			if (PlanetTerrain::generatorFunction) {
-				terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
-			}
+			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
 			
 			for (auto* chunk : terrain->chunks) {
 				chunk->BeforeRender();
@@ -691,6 +696,11 @@ public:
 				}
 			//
 		}
+		#ifdef _DEBUG
+			void RunImGuiDebug() override {
+				ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
+			}
+		#endif
 	#endif
 };
 
