@@ -76,7 +76,7 @@ public:
 			#endif
 		) {
 			std::lock_guard lock(player->mu);
-			player->camSpeed *= (1+y/10);
+			player->camSpeed *= (1.0+y/10);
 		}
 	}
 	

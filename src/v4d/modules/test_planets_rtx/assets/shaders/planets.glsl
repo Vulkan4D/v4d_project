@@ -483,9 +483,9 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 
 vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 	return vec4(0,0,1,0)
-	 + texture(bumpMap[0], uv)
-	 + texture(bumpMap[0], uv*256)
-	 + texture(bumpMap[0], uvChunk)*2
+	//  + texture(bumpMap[0], uv)
+	//  + texture(bumpMap[0], uv*256)
+	 + texture(bumpMap[0], uvChunk)/2.0
 	;
 }
 
@@ -501,8 +501,10 @@ void main() {
 	vec2 uv = (fragment.uv*uvMult+uvOffset);
 	vec4 bump = GetBumpMap(uv, fragment.uv);
 	vec3 normal = normalize(TBN * bump.xyz);
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
-	ray.color = color;
+	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, /*bump*/fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
+	vec3 ambient = fragment.color.rgb * 0.001;
+	
+	ray.color = color + ambient;
 	ray.distance = gl_HitTEXT;
 	
 	
