@@ -1,4 +1,4 @@
-set(ModuleName "incubator_galaxy4d")
+set(ModuleName "test")
 
 file(GLOB_RECURSE ModuleSourceFiles "${CMAKE_CURRENT_SOURCE_DIR}/${ModuleName}/**.cpp")
 
@@ -11,5 +11,5 @@ target_link_libraries(${ModuleName}
 )
 
 target_include_directories(${ModuleName}
-	PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
+	PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 )

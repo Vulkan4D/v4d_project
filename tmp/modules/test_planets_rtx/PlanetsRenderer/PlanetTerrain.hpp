@@ -498,7 +498,7 @@ struct PlanetTerrain {
 			
 			#ifdef _DEBUG
 				planet->totalChunkTimeNb++;
-				planet->totalChunkTime += timer.GetElapsedMilliseconds();
+				planet->totalChunkTime += (float)timer.GetElapsedMilliseconds();
 			#endif
 		}
 		

@@ -12,14 +12,14 @@ using namespace v4d::graphics;
 #define WINDOW_HEIGHT 768
 #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
 
-#include "incubator_rendering/V4DRenderer2.hpp"
+#include "incubator_rendering/V4DRenderer.hpp"
 
-static std::vector<std::string> v4dModules {
-	"incubator_simplemovearound",
-	// "incubator_galaxy4d",
-	// "test1",
-	"test_planets_rtx",
-};
+// static std::vector<std::string> v4dModules {
+// 	"incubator_simplemovearound",
+// 	// "incubator_galaxy4d",
+// 	// "test1",
+// 	"test_planets_rtx",
+// };
 
 #if defined(_DEBUG)
 	// Shaders to watch for modifications to automatically reload the renderer
@@ -70,17 +70,17 @@ double inputAvgFrameRate = 0;
 }
 
 int main() {
+	if (!v4d::Init()) return -1;
+	
 	// Load settings
 	settings->Load();
 
 	SET_CPU_AFFINITY(0)
 	
-	// Core & Modules
-	V4D_PROJECT_INSTANTIATE_CORE_IN_MAIN ( v4dCore )
-	for (auto module : v4dModules) v4dCore->LoadModule(module);
+	// for (auto module : v4dModules) v4dCore->LoadModule(module);
 
-	// Input Submodules
-	auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
+	// // Input Submodules
+	// auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
 	
 	// Validation layers
 	#if defined(_DEBUG) && defined(_LINUX)
@@ -109,7 +109,7 @@ int main() {
 	#endif
 	
 	// Create Renderer (and Vulkan Instance)
-	auto* renderer = new V4DRenderer2(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
+	auto* renderer = new V4DRenderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
 	// Load renderer
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
@@ -121,13 +121,13 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	// Submodules
-	for (auto* submodule : inputSubmodules) {
-		submodule->SetWindow(window);
-		submodule->SetRenderer(renderer);
-		submodule->Init();
-		submodule->AddCallbacks();
-	}
+	// // Submodules
+	// for (auto* submodule : inputSubmodules) {
+	// 	submodule->SetWindow(window);
+	// 	submodule->SetRenderer(renderer);
+	// 	submodule->Init();
+	// 	submodule->AddCallbacks();
+	// }
 	
 	// Slow Loop (stuff unrelated to rendering that does not require any performance)
 	std::thread slowLoopThread([&]{
@@ -190,7 +190,7 @@ int main() {
 				// Main info UI
 				ImGui::SetNextWindowPos({20,0});
 				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
-				ImGui::Begin("Vulkan4D: V4DRenderer2 (Incubator)");
+				ImGui::Begin("Vulkan4D: V4DRenderer (Incubator)");
 				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
 				ImGui::Text("Secondary rendering thread & UI : %.1f FPS", secondaryAvgFrameRate);
 				ImGui::Text("Input thread : %.1f FPS", inputAvgFrameRate);
@@ -230,9 +230,9 @@ int main() {
 	
 		glfwPollEvents();
 	
-		for (auto* submodule : inputSubmodules) {
-			submodule->Update(deltaTime);
-		}
+		// for (auto* submodule : inputSubmodules) {
+		// 	submodule->Update(deltaTime);
+		// }
 		
 		SLEEP(10ms)
 	}
@@ -244,9 +244,9 @@ int main() {
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
-	for (auto* submodule : inputSubmodules) {
-		submodule->RemoveCallbacks();
-	}
+	// for (auto* submodule : inputSubmodules) {
+	// 	submodule->RemoveCallbacks();
+	// }
 	
 	renderer->UnloadRenderer();
 	renderer->UnloadScene();
@@ -261,8 +261,8 @@ int main() {
 	delete renderer;
 	delete window;
 
-	// Unload modules
-	for (auto module : v4dModules) v4dCore->UnloadModule(module);
+	// // Unload modules
+	// for (auto module : v4dModules) v4dCore->UnloadModule(module);
 	
 	LOG("\n\nApplication terminated\n\n");
 }
