@@ -14,29 +14,22 @@ using namespace v4d::graphics;
 
 #include "incubator_rendering/V4DRenderer.hpp"
 
-// static std::vector<std::string> v4dModules {
-// 	"incubator_simplemovearound",
-// 	// "incubator_galaxy4d",
-// 	// "test1",
-// 	"test_planets_rtx",
-// };
-
 #if defined(_DEBUG)
 	// Shaders to watch for modifications to automatically reload the renderer
 	static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
-		// {"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
-		// {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
-		// {"incubator_galaxy4d/assets/shaders/planetRayMarching.meta", 0},
-		// {"incubator_galaxy4d/assets/shaders/planetRaster.meta", 0},
-		{"incubator_rendering/assets/shaders/v4d_lighting.meta", 0},
-		{"incubator_rendering/assets/shaders/v4d_postProcessing.meta", 0},
-		{"incubator_rendering/assets/shaders/v4d_histogram.meta", 0},
-		// {"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
-		// {"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
-		{"incubator_rendering/assets/shaders/rtx.meta", 0},
-		{"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
-		{"modules/test_planets_rtx/assets/shaders/planetAtmosphere.meta", 0},
-		{"incubator_rendering/assets/shaders/raster.meta", 0},
+		// // {"incubator_rendering/assets/shaders/v4d_galaxy.meta", 0},
+		// // {"incubator_rendering/assets/shaders/rtx_galaxies.meta", 0},
+		// // {"incubator_galaxy4d/assets/shaders/planetRayMarching.meta", 0},
+		// // {"incubator_galaxy4d/assets/shaders/planetRaster.meta", 0},
+		// {"incubator_rendering/assets/shaders/v4d_lighting.meta", 0},
+		// {"incubator_rendering/assets/shaders/v4d_postProcessing.meta", 0},
+		// {"incubator_rendering/assets/shaders/v4d_histogram.meta", 0},
+		// // {"modules/incubator_galaxy4d/assets/shaders/planetTerrain.meta", 0},
+		// // {"modules/incubator_pbr_test/assets/shaders/test.meta", 0},
+		// {"incubator_rendering/assets/shaders/rtx.meta", 0},
+		// {"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
+		// {"modules/test_planets_rtx/assets/shaders/planetAtmosphere.meta", 0},
+		// {"incubator_rendering/assets/shaders/raster.meta", 0},
 	};
 #endif
 
@@ -77,11 +70,15 @@ int main() {
 
 	SET_CPU_AFFINITY(0)
 	
-	// for (auto module : v4dModules) v4dCore->LoadModule(module);
+	const std::vector<std::string> modules {
+		"V4D_sample",
+		"V4D_basicscene",
+	};
+	for (auto module : modules) {
+		V4D_Input0::Modules().Load(module);
+		V4D_Rendering0::Modules().Load(module);
+	}
 
-	// // Input Submodules
-	// auto inputSubmodules = v4d::modules::GetSubmodules<v4d::modules::Input>();
-	
 	// Validation layers
 	#if defined(_DEBUG) && defined(_LINUX)
 		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
@@ -121,13 +118,10 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	// // Submodules
-	// for (auto* submodule : inputSubmodules) {
-	// 	submodule->SetWindow(window);
-	// 	submodule->SetRenderer(renderer);
-	// 	submodule->Init();
-	// 	submodule->AddCallbacks();
-	// }
+	V4D_Input0::Modules().ForEach([window, renderer](auto* mod){
+		if (mod->Init) mod->Init(window, renderer);
+		mod->AddCallbacks(window);
+	});
 	
 	// Slow Loop (stuff unrelated to rendering that does not require any performance)
 	std::thread slowLoopThread([&]{
@@ -229,10 +223,10 @@ int main() {
 		CALCULATE_DELTATIME(deltaTime)
 	
 		glfwPollEvents();
-	
-		// for (auto* submodule : inputSubmodules) {
-		// 	submodule->Update(deltaTime);
-		// }
+		
+		V4D_Input0::Modules().ForEach([](auto* mod){
+			if (mod->Update) mod->Update(deltaTime);
+		});
 		
 		SLEEP(10ms)
 	}
@@ -244,9 +238,9 @@ int main() {
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
-	// for (auto* submodule : inputSubmodules) {
-	// 	submodule->RemoveCallbacks();
-	// }
+	V4D_Input0::Modules().ForEach([window, renderer](auto* mod){
+		mod->RemoveCallbacks(window);
+	});
 	
 	renderer->UnloadRenderer();
 	renderer->UnloadScene();
@@ -261,8 +255,5 @@ int main() {
 	delete renderer;
 	delete window;
 
-	// // Unload modules
-	// for (auto module : v4dModules) v4dCore->UnloadModule(module);
-	
 	LOG("\n\nApplication terminated\n\n");
 }

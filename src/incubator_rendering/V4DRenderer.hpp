@@ -9,8 +9,6 @@ const uint32_t MAX_ACTIVE_LIGHTS = 256;
 class V4DRenderer : public v4d::graphics::Renderer {
 	using v4d::graphics::Renderer::Renderer;
 	
-	// std::vector<v4d::modules::Rendering*> renderingSubmodules {};
-	
 	DescriptorSet baseDescriptorSet_0;
 	
 private: // UI
@@ -1142,10 +1140,10 @@ public: // Scene
 	
 private: // Init overrides
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) override {
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->ScorePhysicalDeviceSelection(score, physicalDevice);
-		// }
+		// Modules
+		V4D_Rendering0::Modules().ForEach([&score, physicalDevice](auto* mod){
+			if (mod->ScorePhysicalDeviceSelection) mod->ScorePhysicalDeviceSelection(score, physicalDevice);
+		});
 		
 		// Higher score for Ray Tracing support
 		if (physicalDevice->GetRayTracingFeatures().rayTracing) {
@@ -1167,13 +1165,13 @@ private: // Init overrides
 		activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
 		activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*MAX_ACTIVE_LIGHTS);
 		
-		// // Submodules
-		// renderingSubmodules = v4d::modules::GetSubmodules<v4d::modules::Rendering>();
-		// std::sort(renderingSubmodules.begin(), renderingSubmodules.end(), [](auto* a, auto* b){return a->OrderIndex() < b->OrderIndex();});
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->SetRenderer(this);
-		// 	submodule->Init();
-		// }
+		// Modules
+		V4D_Rendering0::Modules().Sort([](auto* a, auto* b){
+			return a->OrderIndex && b->OrderIndex && a->OrderIndex() < b->OrderIndex();
+		});
+		V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+			if (mod->Init) mod->Init(this);
+		});
 		
 		AccelerationStructure::useGlobalScratchBuffer = true;
 	}
@@ -1185,9 +1183,10 @@ private: // Init overrides
 		EnableRayTracingFeatures()->rayTracing = VK_TRUE;
 		EnableRayTracingFeatures()->rayQuery = VK_TRUE;
 		
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->InitDeviceFeatures();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([](auto* mod){
+		// 	if (mod->InitDeviceFeatures) mod->InitDeviceFeatures();
+		// });
 	}
 	void Info() override {
 		if (rayTracingFeatures.rayTracing) {
@@ -1205,15 +1204,15 @@ private: // Init overrides
 			scene.camera.shadows = shadows_off;
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->SetRenderingDevice(renderingDevice);
-		// 	submodule->SetGraphicsQueue(&graphicsQueue);
-		// 	submodule->SetLowPriorityGraphicsQueue(&lowPriorityGraphicsQueue);
-		// 	submodule->SetLowPriorityComputeQueue(&lowPriorityComputeQueue);
-		// 	submodule->SetTransferQueue(&transferQueue);
-		// 	submodule->Info();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->SetRenderingDevice) mod->SetRenderingDevice(renderingDevice);
+		// 	if (mod->SetGraphicsQueue) mod->SetGraphicsQueue(&graphicsQueue);
+		// 	if (mod->SetLowPriorityGraphicsQueue) mod->SetLowPriorityGraphicsQueue(&lowPriorityGraphicsQueue);
+		// 	if (mod->SetLowPriorityComputeQueue) mod->SetLowPriorityComputeQueue(&lowPriorityComputeQueue);
+		// 	if (mod->SetTransferQueue) mod->SetTransferQueue(&transferQueue);
+		// 	if (mod->Info) mod->Info();
+		// });
 	}
 	
 	void InitLayouts() override {
@@ -1284,10 +1283,10 @@ private: // Init overrides
 		pipelineLayouts["postProcessing"]->AddDescriptorSet(&postProcessingDescriptorSet_1);
 		pipelineLayouts["histogram"]->AddDescriptorSet(&histogramDescriptorSet_1);
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->InitLayouts(descriptorSets, images, pipelineLayouts);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->InitLayouts) mod->InitLayouts(descriptorSets, images, pipelineLayouts);
+		// });
 	}
 	
 	void ConfigureShaders() override {
@@ -1297,10 +1296,10 @@ private: // Init overrides
 		ConfigurePostProcessingShaders();
 		ConfigureUiShaders();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->ConfigureShaders(rasterShaders, &shaderBindingTable, pipelineLayouts);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->ConfigureShaders) mod->ConfigureShaders(rasterShaders, &shaderBindingTable, pipelineLayouts);
+		// });
 	}
 
 public: // Scene configuration overrides
@@ -1320,25 +1319,25 @@ public: // Scene configuration overrides
 			shader->ReadShaders();
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->ReadShaders();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->ReadShaders) mod->ReadShaders();
+		// });
 	}
 	void LoadScene() override {
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->LoadScene(scene);
-		// }
+		// Modules
+		V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+			if (mod->LoadScene) mod->LoadScene(scene);
+		});
 		
 		scene.camera.renderMode = DEFAULT_RENDER_MODE;
 		scene.camera.shadows = DEFAULT_SHADOW_TYPE;
 	}
 	void UnloadScene() override {
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->UnloadScene(scene);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->UnloadScene) mod->UnloadScene(scene);
+		// });
 	}
 	
 private: // Resources overrides
@@ -1349,11 +1348,11 @@ private: // Resources overrides
 		if (rayTracingFeatures.rayTracing) CreateRayTracingResources();
 		CreateRasterVisibilityResources();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->SetSwapChain(swapChain);
-		// 	submodule->CreateResources();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->SetSwapChain) mod->SetSwapChain(swapChain);
+		// 	if (mod->CreateResources) mod->CreateResources();
+		// });
 	}
 	void DestroyResources() override {
 		DestroyUiResources();
@@ -1362,10 +1361,10 @@ private: // Resources overrides
 		if (rayTracingFeatures.rayTracing) DestroyRayTracingResources();
 		DestroyRasterVisibilityResources();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->DestroyResources();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->DestroyResources) mod->DestroyResources();
+		// });
 	}
 	
 	/*
@@ -1385,10 +1384,10 @@ private: // Resources overrides
 		AllocatePostProcessingBuffers();
 		if (rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->AllocateBuffers();
-		// }
+		// Modules
+		V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+			if (mod->AllocateBuffers) mod->AllocateBuffers();
+		});
 		
 		Geometry::globalBuffers.DefragmentMemory();
 		Geometry::globalBuffers.Allocate(renderingDevice, {lowPriorityComputeQueue.familyIndex, graphicsQueue.familyIndex});
@@ -1408,10 +1407,10 @@ private: // Resources overrides
 		FreePostProcessingBuffers();
 		if (rayTracingFeatures.rayTracing) FreeRayTracingBuffers();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->FreeBuffers();
-		// }
+		// Modules
+		V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+			if (mod->FreeBuffers) mod->FreeBuffers();
+		});
 		
 		Geometry::globalBuffers.Free(renderingDevice);
 	}
@@ -1423,10 +1422,10 @@ private: // Graphics configuration overrides
 			layout->Create(renderingDevice);
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->CreatePipelines(images);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->CreatePipelines) mod->CreatePipelines(images);
+		// });
 		
 		// UI
 		CreateUiPipeline();
@@ -1465,10 +1464,10 @@ private: // Graphics configuration overrides
 		// Post Processing
 		DestroyPostProcessingPipeline();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->DestroyPipelines();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->DestroyPipelines) mod->DestroyPipelines();
+		// });
 		
 		// Pipeline layouts
 		for (auto[name,layout] : pipelineLayouts) {
@@ -1485,10 +1484,10 @@ public: // Update overrides
 		scene.camera.RefreshProjectionMatrix();
 		scene.camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->FrameUpdate(scene);
-		// }
+		// Modules
+		V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+			if (mod->FrameUpdate) mod->FrameUpdate(scene);
+		});
 		
 		// Ray Tracing
 		size_t globalScratchBufferSize = 0;
@@ -1582,10 +1581,10 @@ public: // Update overrides
 	void LowPriorityFrameUpdate() override {
 		PostProcessingLowPriorityUpdate();
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->LowPriorityFrameUpdate();
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->LowPriorityFrameUpdate) mod->LowPriorityFrameUpdate();
+		// });
 	}
 	void BeforeGraphics() override {}
 	
@@ -1615,10 +1614,10 @@ private: // Commands overrides
 		
 		//TODO memory barrier between transfer and vertex shaders ?
 	
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsTop(commandBuffer, images);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->RunDynamicGraphicsTop) mod->RunDynamicGraphicsTop(commandBuffer, images);
+		// });
 	
 		// Acceleration Structures
 		if (rayTracingFeatures.rayTracing) {
@@ -1626,10 +1625,10 @@ private: // Commands overrides
 			BuildTopLevelRayTracingAccelerationStructure(renderingDevice, commandBuffer);
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsMiddle(commandBuffer, images);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->RunDynamicGraphicsMiddle) mod->RunDynamicGraphicsMiddle(commandBuffer, images);
+		// });
 		
 		if (scene.camera.renderMode == rasterization || scene.camera.debug) {
 			// Raster Visibility and lighting
@@ -1641,10 +1640,10 @@ private: // Commands overrides
 			RunLighting(renderingDevice, commandBuffer, false, !scene.camera.debug);
 		}
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicGraphicsBottom(commandBuffer, images);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->RunDynamicGraphicsBottom) mod->RunDynamicGraphicsBottom(commandBuffer, images);
+		// });
 	}
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) override {
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
@@ -1652,10 +1651,10 @@ private: // Commands overrides
 	void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) override {
 		RunDynamicPostProcessingLowPriorityCompute(commandBuffer);
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicLowPriorityCompute(commandBuffer);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->RunDynamicLowPriorityCompute) mod->RunDynamicLowPriorityCompute(commandBuffer);
+		// });
 	}
 	void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) override {
 		// UI
@@ -1668,17 +1667,16 @@ private: // Commands overrides
 			#endif
 		uiRenderPass.End(renderingDevice, commandBuffer);
 		
-		// // Submodules
-		// for (auto* submodule : renderingSubmodules) {
-		// 	submodule->RunDynamicLowPriorityGraphics(commandBuffer);
-		// }
+		// // Modules
+		// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+		// 	if (mod->RunDynamicLowPriorityGraphics) mod->RunDynamicLowPriorityGraphics(commandBuffer);
+		// });
 	}
 	
 public: // custom functions
 
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
-			// Submodules
 			ImGui::SetNextWindowSize({405, 344});
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
@@ -1705,19 +1703,21 @@ public: // custom functions
 				ImGui::SliderFloat("contrast", &scene.camera.contrast, 0, 2);
 				ImGui::SliderFloat("gamma", &scene.camera.gamma, 0, 5);
 			}
-			// for (auto* submodule : renderingSubmodules) {
-			// 	ImGui::Separator();
-			// 	submodule->RunImGui();
-			// }
+			// Modules
+			V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
+				ImGui::Separator();
+				if (mod->RunImGui) mod->RunImGui();
+			});
 			ImGui::End();
 			#ifdef _DEBUG
 				ImGui::SetNextWindowPos({425+405,0});
 				ImGui::SetNextWindowSize({200, 80});
 				ImGui::Begin("Debug");
-				// for (auto* submodule : renderingSubmodules) {
+				// // Modules
+				// V4D_Rendering0::Modules().ForEachSorted([this](auto* mod){
 				// 	ImGui::Separator();
-				// 	submodule->RunImGuiDebug();
-				// }
+				// 	if (mod->RunImGuiDebug) mod->RunImGuiDebug();
+				// });
 				ImGui::End();
 			#endif
 		}

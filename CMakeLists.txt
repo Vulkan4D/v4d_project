@@ -8,8 +8,8 @@ option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
 option(USE_CCACHE "Use ccache" ON)
-option(ENABLE_IMGUI "Enable ImGUI" OFF)
-option(ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
+option(ENABLE_IMGUI "Enable ImGUI" ON)
+option(ADDRESS_SANITIZER "Enable Address Sanitizer" ON)
 
 ###########################################################################################
 

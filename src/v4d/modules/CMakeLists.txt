@@ -13,6 +13,9 @@ function(SubModule _ModuleSourceFile _ModuleClass)
 	add_library(${_SubModuleName} MODULE "${_ModuleDir}/${_ModuleSourceFile}")
 	target_link_libraries(${_SubModuleName} v4d)
 	target_include_directories(${_SubModuleName} PRIVATE "${_ModuleDir}")
+	target_compile_definitions(${_SubModuleName}
+		PRIVATE -DTHIS_MODULE="${_ModuleVendor}_${_ModuleName}"
+	)
 	set_target_properties(${_SubModuleName}
 		PROPERTIES
 			LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/debug/modules/${_ModuleVendor}_${_ModuleName}"
