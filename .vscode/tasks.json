@@ -62,14 +62,14 @@
         {
             "label": "send package",
             "type": "shell",
-            "command": "clear; ./sendPackage.sh debug",
+            "command": "clear; workspace/sendPackage.sh debug",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "send package (release)",
             "type": "shell",
-            "command": "clear; ./sendPackage.sh release",
+            "command": "clear; workspace/sendPackage.sh release",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
