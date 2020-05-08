@@ -1,18 +1,16 @@
 #include <v4d.h>
 
+using namespace v4d::graphics;
+
 // Settings file
 #include "settings.hh"
 auto settings = ProjectSettings::Instance("settings.ini", 1000);
-
-using namespace v4d::graphics;
 
 #define APPLICATION_NAME "V4D Test"
 #define WINDOW_TITLE "TEST"
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 768
 #define APPLICATION_VERSION VK_MAKE_VERSION(1, 0, 0)
-
-#include "incubator_rendering/V4DRenderer.hpp"
 
 #if defined(_DEBUG)
 	// Shaders to watch for modifications to automatically reload the renderer
@@ -44,22 +42,30 @@ double slowLoopAvgFrameRate = 0;
 double inputAvgFrameRate = 0;
 
 #define CALCULATE_FRAMERATE(varRef) {\
-	static v4d::Timer frameTimer(true);\
+	static v4d::Timer t(true);\
 	static double elapsedTime = 0.01;\
 	static int nbFrames = 0;\
 	++nbFrames;\
-	elapsedTime = frameTimer.GetElapsedSeconds();\
+	elapsedTime = t.GetElapsedSeconds();\
 	if (elapsedTime > 1.0) {\
 		varRef = nbFrames / elapsedTime;\
 		nbFrames = 0;\
-		frameTimer.Reset();\
+		t.Reset();\
 	}\
 }
 
 #define CALCULATE_DELTATIME(varRef) {\
-	static v4d::Timer deltaTimer(true);\
-	varRef = deltaTimer.GetElapsedSeconds();\
-	deltaTimer.Reset();\
+	static v4d::Timer t(true);\
+	varRef = t.GetElapsedSeconds();\
+	t.Reset();\
+}
+
+#define LIMIT_FRAMERATE(targetFps) {\
+	static v4d::Timer t(true);\
+	double elapsedTime = t.GetElapsedSeconds();\
+	double timeToSleep = 1.0/targetFps - 1.0*elapsedTime;\
+	if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
+	t.Reset();\
 }
 
 int main() {
@@ -71,13 +77,21 @@ int main() {
 	SET_CPU_AFFINITY(0)
 	
 	const std::vector<std::string> modules {
+		"V4D_hybrid",
 		"V4D_sample",
 		"V4D_basicscene",
 	};
 	for (auto module : modules) {
-		V4D_Input0::Modules().Load(module);
-		V4D_Rendering0::Modules().Load(module);
+		V4D_Input::LoadModule(module);
+		V4D_Renderer::LoadModule(module);
+		V4D_Game::LoadModule(module);
 	}
+	V4D_Renderer::SortModules([](auto* a, auto* b){
+		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+	});
+	V4D_Game::SortModules([](auto* a, auto* b){
+		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+	});
 
 	// Validation layers
 	#if defined(_DEBUG) && defined(_LINUX)
@@ -106,7 +120,9 @@ int main() {
 	#endif
 	
 	// Create Renderer (and Vulkan Instance)
-	auto* renderer = new V4DRenderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION, window);
+	auto* renderer = new Renderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION);
+	renderer->surface = window->CreateVulkanSurface(renderer->handle);
+	
 	// Load renderer
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
@@ -118,7 +134,7 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	V4D_Input0::Modules().ForEach([window, renderer](auto* mod){
+	V4D_Input::ForEachModule([window, renderer](auto* mod){
 		if (mod->Init) mod->Init(window, renderer);
 		mod->AddCallbacks(window);
 	});
@@ -144,7 +160,7 @@ int main() {
 				}
 			#endif
 			
-			SLEEP(500ms)
+			LIMIT_FRAMERATE(2)
 		}
 	});
 	
@@ -157,7 +173,7 @@ int main() {
 			
 			//...
 			
-			SLEEP(20ms)
+			LIMIT_FRAMERATE(50)
 		}
 	});
 	
@@ -184,7 +200,7 @@ int main() {
 				// Main info UI
 				ImGui::SetNextWindowPos({20,0});
 				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
-				ImGui::Begin("Vulkan4D: V4DRenderer (Incubator)");
+				ImGui::Begin("Vulkan4D: Renderer (Incubator)");
 				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
 				ImGui::Text("Secondary rendering thread & UI : %.1f FPS", secondaryAvgFrameRate);
 				ImGui::Text("Input thread : %.1f FPS", inputAvgFrameRate);
@@ -195,15 +211,27 @@ int main() {
 				ImGui::SetNextWindowPos({425,0});
 				
 				if (showOtherUI) {
-					renderer->RunImGui();
+					// Modules
+					V4D_Renderer::ForEachSortedModule([](auto* mod){
+						if (mod->RunImGui) {
+							mod->RunImGui();
+						}
+					});
 				}
 				
 				ImGui::Render();
 			#endif
 			
-			renderer->RenderLowPriority();
+			{
+				std::scoped_lock lock(renderer->renderMutex2);
+				if (!renderer->graphicsLoadedToDevice) continue;
+
+				V4D_Renderer::ForEachSortedModule([](auto* mod){
+					if (mod->Render2) mod->Render2();
+				});
+			}
 			
-			SLEEP(10ms)
+			LIMIT_FRAMERATE(30)
 		}
 	});
 	
@@ -212,7 +240,10 @@ int main() {
 		SET_CPU_AFFINITY(3)
 		while (appRunning) {
 			CALCULATE_FRAMERATE(primaryAvgFrameRate)
+			
 			renderer->Render();
+			
+			LIMIT_FRAMERATE(60)
 		}
 	});
 	
@@ -224,11 +255,11 @@ int main() {
 	
 		glfwPollEvents();
 		
-		V4D_Input0::Modules().ForEach([](auto* mod){
+		V4D_Input::ForEachModule([](auto* mod){
 			if (mod->Update) mod->Update(deltaTime);
 		});
 		
-		SLEEP(10ms)
+		LIMIT_FRAMERATE(60)
 	}
 	
 	appRunning = false;
@@ -238,7 +269,7 @@ int main() {
 	renderingThread.join();
 	lowPriorityRenderingThread.join();
 	
-	V4D_Input0::Modules().ForEach([window, renderer](auto* mod){
+	V4D_Input::ForEachModule([window, renderer](auto* mod){
 		mod->RemoveCallbacks(window);
 	});
 	
@@ -252,6 +283,7 @@ int main() {
 	#endif
 	
 	// Close Window and delete Vulkan
+	renderer->DestroySurfaceKHR(renderer->surface, nullptr);
 	delete renderer;
 	delete window;
 

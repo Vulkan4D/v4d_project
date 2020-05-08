@@ -60,53 +60,46 @@ void CreateTestBox(ObjectInstance* obj) {
 	
 }
 
-Scene* scene;
+std::vector<ObjectInstance*> objects {};
 
 extern "C" {
-	int OrderIndex() {return 0;}
 	
-	std::vector<ObjectInstance*> objects {};
-	
-	void LoadScene(Scene& s) {
-		scene = &s;
-	}
-	
-	void FreeBuffers() {
-		for (auto* obj : objects) {
-			scene->RemoveObjectInstance(obj);
-		}
-		objects.clear();
-		scene->ClenupObjectInstancesGeometries();
-	}
-	
-	void AllocateBuffers() {
+	void LoadScene(Scene& scene) {
 		
-		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);
 		for (int i = 0; i < 100; ++i)
-			objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {0,500,-30 + (i*90)}, 180.0);
-		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {200,250,-30}, 120.0);
-		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateTestBox, {-200,250,-30}, -120.0);
+			objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {0,500,-30 + (i*90)}, 180.0);
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {200,250,-30}, 120.0);
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {-200,250,-30}, -120.0);
 		
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 200, 100000000);
 		}, {10,-500,1000});
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 2, 10000);
 		}, {10,270,10});
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {210,270,-20});
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
-		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
 		
+	}
+	
+	void UnloadScene(Scene& scene) {
+		for (auto* obj : objects) {
+			scene.RemoveObjectInstance(obj);
+		}
+		objects.clear();
+		scene.ClenupObjectInstancesGeometries();
 	}
 	
 }
