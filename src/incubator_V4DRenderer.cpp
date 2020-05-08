@@ -41,7 +41,13 @@ double gameLoopAvgFrameRate = 0;
 double slowLoopAvgFrameRate = 0;
 double inputAvgFrameRate = 0;
 
-#define CALCULATE_FRAMERATE(varRef) {\
+double primaryFrameTime = 0;
+double secondaryFrameTime = 0;
+double gameLoopFrameTime = 0;
+double slowLoopFrameTime = 0;
+double inputFrameTime = 0;
+
+#define CALCULATE_AVG_FRAMERATE(varRef) {\
 	static v4d::Timer t(true);\
 	static double elapsedTime = 0.01;\
 	static int nbFrames = 0;\
@@ -60,13 +66,15 @@ double inputAvgFrameRate = 0;
 	t.Reset();\
 }
 
-#define LIMIT_FRAMERATE(targetFps) {\
+#define LIMIT_FRAMERATE(targetFps, frameTimeRef) {\
 	static v4d::Timer t(true);\
 	double elapsedTime = t.GetElapsedSeconds();\
+	frameTimeRef = elapsedTime * 1000.0;\
 	double timeToSleep = 1.0/targetFps - 1.0*elapsedTime;\
 	if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
 	t.Reset();\
 }
+
 
 int main() {
 	if (!v4d::Init()) return -1;
@@ -143,7 +151,7 @@ int main() {
 	std::thread slowLoopThread([&]{
 		SET_CPU_AFFINITY(0)
 		while (appRunning) {
-			CALCULATE_FRAMERATE(slowLoopAvgFrameRate)
+			CALCULATE_AVG_FRAMERATE(slowLoopAvgFrameRate)
 			if (!appRunning) break;
 			
 			// Auto-reload modified shaders
@@ -160,7 +168,7 @@ int main() {
 				}
 			#endif
 			
-			LIMIT_FRAMERATE(2)
+			LIMIT_FRAMERATE(2, slowLoopFrameTime)
 		}
 	});
 	
@@ -168,12 +176,12 @@ int main() {
 	std::thread gameLoopThread([&]{
 		SET_CPU_AFFINITY(1)
 		while (appRunning) {
-			CALCULATE_FRAMERATE(gameLoopAvgFrameRate)
+			CALCULATE_AVG_FRAMERATE(gameLoopAvgFrameRate)
 			if (!appRunning) break;
 			
 			//...
 			
-			LIMIT_FRAMERATE(50)
+			LIMIT_FRAMERATE(50, gameLoopFrameTime)
 		}
 	});
 	
@@ -181,7 +189,7 @@ int main() {
 	std::thread lowPriorityRenderingThread([&]{
 		SET_CPU_AFFINITY(2)
 		while (appRunning) {
-			CALCULATE_FRAMERATE(secondaryAvgFrameRate)
+			CALCULATE_AVG_FRAMERATE(secondaryAvgFrameRate)
 			if (!appRunning) break;
 			
 			// ImGui
@@ -201,11 +209,11 @@ int main() {
 				ImGui::SetNextWindowPos({20,0});
 				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
 				ImGui::Begin("Vulkan4D: Renderer (Incubator)");
-				ImGui::Text("Primary rendering thread : %.1f FPS", primaryAvgFrameRate);
-				ImGui::Text("Secondary rendering thread & UI : %.1f FPS", secondaryAvgFrameRate);
-				ImGui::Text("Input thread : %.1f FPS", inputAvgFrameRate);
-				ImGui::Text("Game Loop thread : %.1f FPS", gameLoopAvgFrameRate);
-				ImGui::Text("Slow Loop thread : %.1f FPS", slowLoopAvgFrameRate);
+				ImGui::Text("Primary rendering : %.1f / %d FPS (%d ms)", primaryAvgFrameRate, (int)std::round(1000.0/primaryFrameTime), (int)std::round(primaryFrameTime));
+				ImGui::Text("Secondary rendering & UI : %.1f / %d FPS (%d ms)", secondaryAvgFrameRate, (int)std::round(1000.0/secondaryFrameTime), (int)std::round(secondaryFrameTime));
+				ImGui::Text("Input thread : %.1f / %d FPS (%d ms)", inputAvgFrameRate, (int)std::round(1000.0/inputFrameTime), (int)std::round(inputFrameTime));
+				ImGui::Text("Game Loop thread : %.1f / %d FPS (%d ms)", gameLoopAvgFrameRate, (int)std::round(1000.0/gameLoopFrameTime), (int)std::round(gameLoopFrameTime));
+				ImGui::Text("Slow Loop thread : %.1f / %d FPS (%d ms)", slowLoopAvgFrameRate, (int)std::round(1000.0/slowLoopFrameTime), (int)std::round(slowLoopFrameTime));
 				ImGui::Checkbox("Show other UI windows", &showOtherUI);
 				ImGui::End();
 				ImGui::SetNextWindowPos({425,0});
@@ -231,7 +239,7 @@ int main() {
 				});
 			}
 			
-			LIMIT_FRAMERATE(30)
+			LIMIT_FRAMERATE(30, secondaryFrameTime)
 		}
 	});
 	
@@ -239,18 +247,18 @@ int main() {
 	std::thread renderingThread([&]{
 		SET_CPU_AFFINITY(3)
 		while (appRunning) {
-			CALCULATE_FRAMERATE(primaryAvgFrameRate)
+			CALCULATE_AVG_FRAMERATE(primaryAvgFrameRate)
 			
 			renderer->Render();
 			
-			LIMIT_FRAMERATE(60)
+			LIMIT_FRAMERATE(60, primaryFrameTime)
 		}
 	});
 	
 	// Input loop
 	while (window->IsActive()) {
 		static double deltaTime = 0.01;
-		CALCULATE_FRAMERATE(inputAvgFrameRate)
+		CALCULATE_AVG_FRAMERATE(inputAvgFrameRate)
 		CALCULATE_DELTATIME(deltaTime)
 	
 		glfwPollEvents();
@@ -259,7 +267,7 @@ int main() {
 			if (mod->Update) mod->Update(deltaTime);
 		});
 		
-		LIMIT_FRAMERATE(60)
+		LIMIT_FRAMERATE(100, inputFrameTime)
 	}
 	
 	appRunning = false;

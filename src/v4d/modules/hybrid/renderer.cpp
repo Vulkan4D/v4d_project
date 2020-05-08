@@ -1377,6 +1377,8 @@ extern "C" {
 	void Init(Renderer* _r) {
 		r = _r;
 		
+		r->queuesInfo.emplace_back("secondary", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+		
 		// Device Extensions
 		r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME); // RayTracing extension
 		r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
@@ -1886,8 +1888,8 @@ extern "C" {
 		// Increment r->currentFrameInFlight
 		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
 		
-		//TODO find a better fix...
-		r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
+		// //TODO find a better fix...
+		// r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	void Render2() {
@@ -1895,15 +1897,10 @@ extern "C" {
 		LowPriorityFrameUpdate();
 	
 		// Dynamic compute
-		auto computeCmd = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("compute"));
-			RunDynamicLowPriorityCompute(computeCmd);
-		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("compute"), computeCmd);
-		
-		// Dynamic graphics
-		auto graphicsCmd = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics", 1));
-			RunDynamicLowPriorityGraphics(graphicsCmd);
-		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics", 1), graphicsCmd);
-	
+		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
+			RunDynamicLowPriorityCompute(cmdBuffer);
+			RunDynamicLowPriorityGraphics(cmdBuffer);
+		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
 	#ifdef _ENABLE_IMGUI
