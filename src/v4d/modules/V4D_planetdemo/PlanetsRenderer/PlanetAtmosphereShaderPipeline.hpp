@@ -8,7 +8,7 @@ class PlanetAtmosphereShaderPipeline : public RasterShaderPipeline {
 public:
 	using RasterShaderPipeline::RasterShaderPipeline;
 	
-	glm::dmat4* viewMatrix = nullptr;
+	Camera* camera = nullptr;
 	std::vector<LightSource*> lightSources {};
 	std::vector<PlanetTerrain*> planets {};
 	int atmospherePushConstantIndex = 0;
@@ -30,11 +30,13 @@ public:
 	
 	using RasterShaderPipeline::Execute;
 	void Execute(Device* device, VkCommandBuffer cmdBuffer) override {
-		if (!viewMatrix || planets.size() == 0) return;
+		if (!camera || planets.size() == 0) return;
+		
 		Bind(device, cmdBuffer);
+		
 		for (auto* planet : planets) if (planet->atmosphere.radius > 0) {
-
-			planetAtmospherePushConstant.modelViewMatrix = *viewMatrix * planet->matrix;
+			
+			planetAtmospherePushConstant.modelViewMatrix = camera->viewMatrix * planet->matrix;
 			planetAtmospherePushConstant.innerRadius = (float)(planet->solidRadius - planet->heightVariation);
 			planetAtmospherePushConstant.outerRadius = (float)planet->radius;
 			planetAtmospherePushConstant.densityFactor = planet->atmosphere.densityFactor;
@@ -63,11 +65,13 @@ public:
 			}
 			
 			PushConstant(device, cmdBuffer, &planetAtmospherePushConstant, atmospherePushConstantIndex);
+			
 			SetData(
 				&planet->atmosphere.vertexBuffer.deviceLocalBuffer,
 				&planet->atmosphere.indexBuffer.deviceLocalBuffer,
 				PlanetAtmosphere::nbIndices
 			);
+			
 			Render(device, cmdBuffer);
 		}
 	}

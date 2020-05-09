@@ -3,7 +3,7 @@
 
 #include "CubeToSphere.hpp"
 #include "PlanetAtmosphere.hpp"
-#include "../../incubator_galaxy4d/Noise.hpp"
+#include "Noise.hpp"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;

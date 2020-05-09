@@ -1265,13 +1265,13 @@ void FrameUpdate(uint imageIndex) {
 	
 }
 
-void LowPriorityFrameUpdate() {
+void FrameUpdate2() {
 	PostProcessingLowPriorityUpdate();
 	
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->LowPriorityFrameUpdate) mod->LowPriorityFrameUpdate();
-	// });
+	// Modules
+	V4D_Game::ForEachSortedModule([](auto* mod){
+		if (mod->Update2) mod->Update2(scene);
+	});
 }
 
 void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
@@ -1333,13 +1333,13 @@ void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 	RecordPostProcessingCommands(commandBuffer, imageIndex);
 }
-void RunDynamicLowPriorityCompute(VkCommandBuffer commandBuffer) {
+void RunCompute(VkCommandBuffer commandBuffer) {
 	RunDynamicPostProcessingLowPriorityCompute(commandBuffer);
 	
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->RunDynamicLowPriorityCompute) mod->RunDynamicLowPriorityCompute(commandBuffer);
-	// });
+	// Modules
+	V4D_Game::ForEachSortedModule([commandBuffer](auto* mod){
+		if (mod->Compute) mod->Compute(commandBuffer);
+	});
 }
 void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) {
 	// UI
@@ -1351,18 +1351,13 @@ void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) {
 			DrawImGui(commandBuffer);
 		#endif
 	uiRenderPass.End(r->renderingDevice, commandBuffer);
-	
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->RunDynamicLowPriorityGraphics) mod->RunDynamicLowPriorityGraphics(commandBuffer);
-	// });
 }
 
 
 
 extern "C" {
 	
-	int OrderIndex() {return 0;}
+	int OrderIndex() {return -1;}
 	
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
 		// Higher score for Ray Tracing support
@@ -1581,6 +1576,11 @@ extern "C" {
 		CreatePostProcessingResources();
 		if (r->rayTracingFeatures.rayTracing) CreateRayTracingResources();
 		CreateRasterVisibilityResources();
+		
+		// Modules
+		V4D_Game::ForEachSortedModule([](auto* mod){
+			if (mod->CreateResources) mod->CreateResources(r->renderingDevice);
+		});
 	}
 	
 	void DestroyResources() {
@@ -1589,6 +1589,11 @@ extern "C" {
 		DestroyPostProcessingResources();
 		if (r->rayTracingFeatures.rayTracing) DestroyRayTracingResources();
 		DestroyRasterVisibilityResources();
+		
+		// Modules
+		V4D_Game::ForEachSortedModule([](auto* mod){
+			if (mod->DestroyResources) mod->DestroyResources(r->renderingDevice);
+		});
 	}
 	
 	void AllocateBuffers() {
@@ -1813,6 +1818,10 @@ extern "C" {
 			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 			
 			r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
+			
+			//TODO find a better fix...
+			r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
+		
 			r->renderingDevice->ResetFences(1, &fences["graphics"][r->currentFrameInFlight]);
 			
 			r->renderingDevice->ResetCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex], 0);
@@ -1887,18 +1896,15 @@ extern "C" {
 
 		// Increment r->currentFrameInFlight
 		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
-		
-		// //TODO find a better fix...
-		// r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	void Render2() {
 		
-		LowPriorityFrameUpdate();
+		FrameUpdate2();
 	
 		// Dynamic compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
-			RunDynamicLowPriorityCompute(cmdBuffer);
+			RunCompute(cmdBuffer);
 			RunDynamicLowPriorityGraphics(cmdBuffer);
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
@@ -1943,14 +1949,33 @@ extern "C" {
 				ImGui::SetNextWindowPos({425+405,0});
 				ImGui::SetNextWindowSize({200, 80});
 				ImGui::Begin("Debug");
-				// // Modules
-				// V4D_Game::ForEachSortedModule([](auto* mod){
-				// 	ImGui::Separator();
-				// 	if (mod->RunImGuiDebug) mod->RunImGuiDebug();
-				// });
+				// Modules
+				V4D_Game::ForEachSortedModule([](auto* mod){
+					ImGui::Separator();
+					if (mod->RunImGuiDebug) mod->RunImGuiDebug();
+				});
 				ImGui::End();
 			#endif
 		}
 	#endif
+	
+	// Getters
+	
+	
+	PipelineLayout* GetPipelineLayout (std::string name) {
+		return pipelineLayouts[name];
+	}
+	
+	std::vector<RasterShaderPipeline*>& GetShaderGroup (std::string groupName) {
+		return rasterShaders[groupName];
+	}
+	
+	ShaderBindingTable* GetShaderBindingTable () {
+		return &shaderBindingTable;
+	}
+	
+	Scene* GetScene() {
+		return &scene;
+	}
 
 }

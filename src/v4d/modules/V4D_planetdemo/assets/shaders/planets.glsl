@@ -9,7 +9,6 @@
 
 #common .*comp
 
-#include "incubator_rendering/assets/shaders/_noise.glsl"
 #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
 
 #common .*map.comp

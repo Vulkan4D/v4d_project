@@ -28,6 +28,8 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 		// {"modules/test_planets_rtx/assets/shaders/planets.meta", 0},
 		// {"modules/test_planets_rtx/assets/shaders/planetAtmosphere.meta", 0},
 		// {"incubator_rendering/assets/shaders/raster.meta", 0},
+		
+		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
 	};
 #endif
 
@@ -69,7 +71,7 @@ double inputFrameTime = 0;
 #define LIMIT_FRAMERATE(targetFps, frameTimeRef) {\
 	static v4d::Timer t(true);\
 	double elapsedTime = t.GetElapsedSeconds();\
-	frameTimeRef = elapsedTime * 1000.0;\
+	frameTimeRef = std::max(0.10001, elapsedTime * 1000.0);\
 	double timeToSleep = 1.0/targetFps - 1.0*elapsedTime;\
 	if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
 	t.Reset();\
@@ -87,7 +89,8 @@ int main() {
 	const std::vector<std::string> modules {
 		"V4D_hybrid",
 		"V4D_sample",
-		"V4D_basicscene",
+		// "V4D_basicscene",
+		"V4D_planetdemo",
 	};
 	for (auto module : modules) {
 		V4D_Input::LoadModule(module);

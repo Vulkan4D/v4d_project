@@ -15,7 +15,7 @@ Vulkan4D **DEV STATUS** : `in active development`
 - [x] Mudular structure
 - [x] Sample Module and documentation
 - [x] Core Graphics utilities (Vulkan API)
-- [~] Hybrid Ray-Tracing Renderer module
+- [x] Hybrid Ray-Tracing Renderer module
 - [ ] Physics utilities
 - [ ] In-game coding framework (XenonCode)
 - [ ] Audio utilities
