@@ -8,7 +8,7 @@
 
 // Other tests
 #include "v4d/core/tests.cxx"
-#include "v4d/modules/test/tests.cxx"
+#include "v4d/modules/V4D_test/tests.cxx"
 
 namespace MyProject {
 	int MyUnitTest1() {
