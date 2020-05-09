@@ -9,7 +9,7 @@
 
 #common .*comp
 
-#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+#include "noise.glsl"
 
 #common .*map.comp
 
@@ -215,8 +215,7 @@ void main() {
 // // layout(location = 2) rayPayloadEXT bool shadowed;
 // // #include "rtx_pbr.glsl"
 
-// // #include "incubator_rendering/assets/shaders/_noise.glsl"
-// // #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+// // #include "noise.glsl"
 
 // // layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 // // layout(set = 2, binding = 1) uniform samplerCube mantleMap[MAX_PLANETS];
@@ -477,8 +476,7 @@ layout(location = 2) rayPayloadEXT bool shadowed;
 #include "rtx_pbr.glsl"
 #include "rtx_fragment.glsl"
 
-// #include "incubator_rendering/assets/shaders/_noise.glsl"
-// #include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+// #include "noise.glsl"
 
 vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 	return vec4(0,0,1,0)

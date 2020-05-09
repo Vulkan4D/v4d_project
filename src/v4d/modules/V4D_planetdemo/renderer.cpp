@@ -52,7 +52,14 @@ bool bumpMapsGenerated = false;
 Renderer* r = nullptr;
 Scene* scene = nullptr;
 
+V4D_Renderer* mainRenderModule;
+
 extern "C" {
+	
+	void ModuleLoad() {
+		// Load Dependencies
+		mainRenderModule = V4D_Renderer::LoadModule("V4D_hybrid");
+	}
 	
 	void Init(Renderer* _r) {
 		r = _r;
@@ -63,7 +70,7 @@ extern "C" {
 	}
 	
 	void LoadScene() {
-		scene = V4D_Renderer::LoadModule("V4D_hybrid")->GetScene();
+		scene = mainRenderModule->GetScene();
 		if (planetAtmosphereShader) {
 			planetAtmosphereShader->camera = &scene->camera;
 		} else {
@@ -72,7 +79,6 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
-		auto* mainRenderModule = V4D_Renderer::LoadModule("V4D_hybrid");
 		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("rayTracing");
 		auto* lightingPipelineLayout = mainRenderModule->GetPipelineLayout("lighting");
 		
@@ -117,7 +123,6 @@ extern "C" {
 	}
 	
 	void ConfigureShaders() {
-		auto* mainRenderModule = V4D_Renderer::LoadModule("V4D_hybrid");
 		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable();
 		
 		// Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.raymarching.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.raymarching.rint");

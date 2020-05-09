@@ -11,16 +11,16 @@
             "group": "build"
         },
         {
-            "label": "quick build windows & run incubator remotely",
+            "label": "quick build windows & run remotely",
             "type": "shell",
-            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/run.sh debug incubator",
+            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/run.sh debug demo",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "cmake reset",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt debug/incubator debug/tests debug/demo;",
+            "command": "clear; cd build && rm -f CMakeCache.txt debug/tests debug/demo;",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
@@ -74,9 +74,9 @@
             "group": "test"
         },
         {
-            "label": "Profile Incubator",
+            "label": "Profile demo",
             "type": "shell",
-            "command": "clear; cd build/debug; rm callgrind.out.*; valgrind --tool=callgrind ./incubator; kcachegrind `ls callgrind.out.*`",
+            "command": "clear; cd build/debug; rm callgrind.out.*; valgrind --tool=callgrind ./demo; kcachegrind `ls callgrind.out.*`",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
         },
     ]

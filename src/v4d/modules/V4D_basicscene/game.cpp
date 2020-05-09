@@ -64,6 +64,13 @@ std::vector<ObjectInstance*> objects {};
 
 extern "C" {
 	
+	void ModuleLoad() {
+		// Load Dependencies
+		V4D_Renderer::LoadModule("V4D_hybrid");
+		V4D_Input::LoadModule("V4D_sample");
+		V4D_Game::LoadModule("V4D_sample");
+	}
+	
 	void LoadScene(Scene& scene) {
 		
 		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);

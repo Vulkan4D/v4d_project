@@ -31,52 +31,52 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	// Raster Visibility
 	PipelineLayout visibilityRasterLayout;
 	RasterShaderPipeline visibilityRasterShader {visibilityRasterLayout, {
-		"incubator_rendering/assets/shaders/raster.visibility.vert",
-		"incubator_rendering/assets/shaders/raster.visibility.frag",
+		"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
+		"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
 	}};
 	// #ifdef _DEBUG
 		RasterShaderPipeline debugRasterShader {visibilityRasterLayout, {
-			"incubator_rendering/assets/shaders/raster.visibility.vert",
-			"incubator_rendering/assets/shaders/raster.visibility.frag",
+			"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
+			"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
 		}};
 	// #endif
 	
 	// Main Rendering
 	PipelineLayout lightingPipelineLayout;
 	RasterShaderPipeline lightingShader {lightingPipelineLayout, {
-		"incubator_rendering/assets/shaders/raster.lighting.vert",
-		"incubator_rendering/assets/shaders/raster.lighting.frag",
+		"modules/V4D_hybrid/assets/shaders/raster.lighting.vert",
+		"modules/V4D_hybrid/assets/shaders/raster.lighting.frag",
 	}};
-	// ComputeShaderPipeline lightingComputeShader {lightingPipelineLayout, "incubator_rendering/assets/shaders/raster.lighting.comp"};
+	// ComputeShaderPipeline lightingComputeShader {lightingPipelineLayout, "modules/V4D_hybrid/assets/shaders/raster.lighting.comp"};
 	
 	// Ray Tracing
 	PipelineLayout rayTracingPipelineLayout;
-	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "incubator_rendering/assets/shaders/rtx.rgen"};
+	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "modules/V4D_hybrid/assets/shaders/rtx.rgen"};
 	
 	// Post Processing
 	PipelineLayout postProcessingPipelineLayout, thumbnailPipelineLayout, histogramComputeLayout;
 	RasterShaderPipeline thumbnailShader {postProcessingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_thumbnail.vert",
-		"incubator_rendering/assets/shaders/v4d_thumbnail.frag",
+		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.vert",
+		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.frag",
 	}};
 	RasterShaderPipeline postProcessingShader_txaa {postProcessingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
-		"incubator_rendering/assets/shaders/v4d_postProcessing.txaa.frag",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.txaa.frag",
 	}};
 	RasterShaderPipeline postProcessingShader_history {postProcessingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
-		"incubator_rendering/assets/shaders/v4d_postProcessing.history.frag",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.history.frag",
 	}};
 	RasterShaderPipeline postProcessingShader_hdr {postProcessingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
-		"incubator_rendering/assets/shaders/v4d_postProcessing.hdr.frag",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.hdr.frag",
 	}};
 	RasterShaderPipeline postProcessingShader_ui {postProcessingPipelineLayout, {
-		"incubator_rendering/assets/shaders/v4d_postProcessing.vert",
-		"incubator_rendering/assets/shaders/v4d_postProcessing.ui.frag",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
+		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.ui.frag",
 	}};
 	ComputeShaderPipeline histogramComputeShader {histogramComputeLayout, 
-		"incubator_rendering/assets/shaders/v4d_histogram.comp"
+		"modules/V4D_hybrid/assets/shaders/v4d_histogram.comp"
 	};
 	
 	// UI
@@ -144,7 +144,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		"Hard shadows\0"
 		// "Soft shadows\0"
 	;
-	static const int DEFAULT_RENDER_MODE = rasterization;
+	static const int DEFAULT_RENDER_MODE = fullRayTracing;
 	static const int DEFAULT_SHADOW_TYPE = shadows_hard;
 
 	Image gBuffer_albedo_geometryIndex { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT }}; // r = albedo, g = geometry index
@@ -603,12 +603,12 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	}
 	
 	void ConfigureRayTracingShaders() {
-		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.rmiss");
-		shaderBindingTable.AddMissShader("incubator_rendering/assets/shaders/rtx.shadow.rmiss");
+		shaderBindingTable.AddMissShader("modules/V4D_hybrid/assets/shaders/rtx.rmiss");
+		shaderBindingTable.AddMissShader("modules/V4D_hybrid/assets/shaders/rtx.shadow.rmiss");
 		// Base ray tracing shaders
-		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.rchit" /*, "incubator_rendering/assets/shaders/rtx.rahit"*/ );
-		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.sphere.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
-		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTable.AddHitShader("incubator_rendering/assets/shaders/rtx.light.rchit", "", "incubator_rendering/assets/shaders/rtx.sphere.rint");
+		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTable.AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx.rahit"*/ );
+		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTable.AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx.sphere.rint");
+		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTable.AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx.sphere.rint");
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -1911,7 +1911,7 @@ extern "C" {
 	
 	#ifdef _ENABLE_IMGUI
 		void RunImGui() {
-			ImGui::SetNextWindowSize({405, 344});
+			ImGui::SetNextWindowSize({340, 160});
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
 				ImGui::Checkbox("Debug", &scene.camera.debug);
@@ -1946,8 +1946,8 @@ extern "C" {
 			});
 			ImGui::End();
 			#ifdef _DEBUG
-				ImGui::SetNextWindowPos({425+405,0});
-				ImGui::SetNextWindowSize({200, 80});
+				ImGui::SetNextWindowPos({425+345,0});
+				ImGui::SetNextWindowSize({250, 100});
 				ImGui::Begin("Debug");
 				// Modules
 				V4D_Game::ForEachSortedModule([](auto* mod){

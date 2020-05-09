@@ -56,7 +56,7 @@ void main() {
 // layout(location = 0) out vec4 color;void main() {color = vec4(1);}
 
 #include "core_lightingPass.glsl"
-#include "incubator_rendering/assets/shaders/_v4dnoise.glsl"
+#include "noise.glsl"
 layout(location = 0) in V2F v2f;
 
 const int RAYMARCH_STEPS = 40; // min=24, low=40, high=64, max=100

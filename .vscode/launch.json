@@ -46,33 +46,12 @@
             ],
             "preLaunchTask": "quick build"
         },
-        {
-            "name": "Incubator",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/debug/incubator",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/debug",
-            "environment": [
-            ],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ],
-            "preLaunchTask": "quick build"
-        },
         
         // {
-        //     "name": "Debug Incubator Windows",
+        //     "name": "Debug Demo Windows",
         //     "type": "gdb",
         //     "request": "launch",
-        //     "target": "/v4d_build/debug/incubator.exe",
+        //     "target": "/v4d_build/debug/demo.exe",
         //     "cwd": "${workspaceRoot}",
         //     "ssh": {
         //         "host": "WINDOWS_PC",
@@ -87,8 +66,8 @@
         // {
         //     "type": "gdb",
         //     "request": "attach",
-        //     "name": "Debug Incubator Windows",
-        //     "executable": "incubator.exe",
+        //     "name": "Debug Demo Windows",
+        //     "executable": "demo.exe",
         //     "target": "PCWIN10:2000",
         //     "remote": true,
         //     "cwd": "${workspaceFolder}/build/debug",
@@ -97,10 +76,10 @@
         // }
         
         // {
-        //     "name": "Incubator Windows",
+        //     "name": "Demo Windows",
         //     "type": "gdb",
         //     "request": "launch",
-        //     "target": "${workspaceFolder}/crosscompile/windows/run.sh debug incubator",
+        //     "target": "${workspaceFolder}/crosscompile/windows/run.sh debug demo",
         //     "cwd": "${workspaceFolder}/build/debug",
         //     "preLaunchTask": "quick build windows"
         // },

@@ -310,6 +310,13 @@ Device* renderingDevice = nullptr;
 
 extern "C" {
 	
+	void ModuleLoad() {
+		// Load Dependencies
+		V4D_Renderer::LoadModule(THIS_MODULE);
+		V4D_Input::LoadModule("V4D_sample");
+		V4D_Game::LoadModule("V4D_sample");
+	}
+	
 	void ModuleSetCustomPtr(int what, void* ptr) {
 		switch (what) {
 			case ATMOSPHERE_SHADER: 
@@ -325,7 +332,7 @@ extern "C" {
 		sun = scene.AddObjectInstance();
 		sun->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 700000000, 1e24f);
-		}, {10,-1.496e+11,300});
+		}, {-1.496e+11,0, 0});
 				
 						// // Planet
 						// scene.objectInstances.emplace_back(new ObjectInstance("planet_raymarching"))->Configure([](ObjectInstance* obj){
@@ -363,7 +370,7 @@ extern "C" {
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
 			if (!terrain) {
-				terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*2,0}};
+				terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*1.5,0}};
 				{
 					std::lock_guard lock(terrain->planetMutex);
 					terrain->scene = &scene;
@@ -450,17 +457,7 @@ extern "C" {
 			// for each planet
 				ImGui::Separator();
 				ImGui::Text("Planet");
-				ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
 				if (terrain) {
-					std::lock_guard lock(terrain->planetMutex);
-					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
-					if (std::abs(altitude) < 1.0) {
-						ImGui::Text("Altitude above terrain: %d mm", (int)std::ceil(altitude*1000.0));
-					} else if (std::abs(altitude) < 1000.0) {
-						ImGui::Text("Altitude above terrain: %d m", (int)std::ceil(altitude));
-					} else {
-						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
-					}
 					if (terrain->atmosphere.radius > 0) {
 						ImGui::Separator();
 						ImGui::Text("Atmosphere");
@@ -483,7 +480,19 @@ extern "C" {
 		}
 		#ifdef _DEBUG
 			void RunImGuiDebug() {
-				if (terrain) ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
+				if (terrain) {
+					std::lock_guard lock(terrain->planetMutex);
+					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
+					if (std::abs(altitude) < 1.0) {
+						ImGui::Text("Altitude above terrain: %d mm", (int)std::ceil(altitude*1000.0));
+					} else if (std::abs(altitude) < 1000.0) {
+						ImGui::Text("Altitude above terrain: %d m", (int)std::ceil(altitude));
+					} else {
+						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
+					}
+					ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
+					ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
+				}
 			}
 		#endif
 	#endif

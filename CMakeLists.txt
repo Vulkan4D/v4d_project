@@ -134,19 +134,3 @@ target_compile_definitions(tests
 	PRIVATE -D_V4D_PROJECT
 )
 
-
-# Incubator
-add_executable(incubator
-	"${PROJECT_SOURCE_DIR}/src/incubator_V4DRenderer.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/sample_renderers/MinimalRenderer.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/sample_renderers/HelloWorldRenderer.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/sample_renderers/RasterizationRenderer.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/sample_renderers/RayTracingRenderer.cpp"
-	# "${PROJECT_SOURCE_DIR}/src/incubator.cpp"
-)
-target_link_libraries(incubator
-	v4d
-)
-target_compile_definitions(incubator
-	PRIVATE -D_V4D_PROJECT
-)
