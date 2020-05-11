@@ -6,4 +6,4 @@
 // Logger
 #define LOGGER_INSTANCE v4d::io::Logger::ConsoleInstance()
 
-
+// #define RENDER_SECONDARY_IN_ANOTHER_THREAD

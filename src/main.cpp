@@ -24,16 +24,17 @@ Loader vulkanLoader;
 std::atomic<bool> appRunning = true;
 
 double primaryAvgFrameRate = 0;
-double secondaryAvgFrameRate = 0;
-double gameLoopAvgFrameRate = 0;
-double slowLoopAvgFrameRate = 0;
-double inputAvgFrameRate = 0;
-
 double primaryFrameTime = 0;
-double secondaryFrameTime = 0;
+#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+	double secondaryAvgFrameRate = 0;
+	double secondaryFrameTime = 0;
+#endif
+double gameLoopAvgFrameRate = 0;
 double gameLoopFrameTime = 0;
+double slowLoopAvgFrameRate = 0;
 double slowLoopFrameTime = 0;
 double inputFrameTime = 0;
+double inputAvgFrameRate = 0;
 
 #define CALCULATE_AVG_FRAMERATE(varRef) {\
 	static v4d::Timer t(true);\
@@ -62,7 +63,6 @@ double inputFrameTime = 0;
 	if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
 	t.Reset();\
 }
-
 
 int main() {
 	// Load V4D Core
@@ -185,89 +185,105 @@ int main() {
 		}
 	});
 	
-	// Low-Priority Rendering Loop
-	std::thread lowPriorityRenderingThread([&]{
-		SET_CPU_AFFINITY(2)
-		while (appRunning) {
-			CALCULATE_AVG_FRAMERATE(secondaryAvgFrameRate)
-			if (!appRunning) break;
-			if (!renderer->graphicsLoadedToDevice || renderer->mustReload) continue;
+	std::function<void()> RunSecondaryRendering = [&](){
+		// ImGui
+		#ifdef _ENABLE_IMGUI
+			static bool showOtherUI = true;
+			ImGui_ImplVulkan_NewFrame();
 			
-			// ImGui
-			#ifdef _ENABLE_IMGUI
-				static bool showOtherUI = true;
-				ImGui_ImplVulkan_NewFrame();
-				
-				ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
-				// The quick fix is simply to always fetch the mouse position right here...
-				double mouse_x, mouse_y;
-				glfwGetCursorPos(window->GetHandle(), &mouse_x, &mouse_y);
-				io.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
-				
-				ImGui::NewFrame();
-				
-				// Main info UI
-				ImGui::SetNextWindowPos({20,0});
-				ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
-				ImGui::Begin("Vulkan4D: Renderer (Incubator)");
-				#ifdef V4D_DEMO_DEBUG_FULL_FRAMERATE
-					ImGui::Text("Primary rendering : %.1f / %d FPS (%d ms)", primaryAvgFrameRate, (int)std::round(1000.0/primaryFrameTime), (int)std::round(primaryFrameTime));
+			ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
+			// The quick fix is simply to always fetch the mouse position right here...
+			double mouse_x, mouse_y;
+			glfwGetCursorPos(window->GetHandle(), &mouse_x, &mouse_y);
+			io.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
+			
+			ImGui::NewFrame();
+			
+			// Main info UI
+			ImGui::SetNextWindowPos({20,0});
+			ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
+			ImGui::Begin("Vulkan4D: Renderer (Incubator)");
+			#ifdef V4D_DEMO_DEBUG_FULL_FRAMERATE
+				ImGui::Text("Primary rendering : %.1f / %d FPS (%d ms)", primaryAvgFrameRate, (int)std::round(1000.0/primaryFrameTime), (int)std::round(primaryFrameTime));
+				#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
 					ImGui::Text("Secondary rendering & UI : %.1f / %d FPS (%d ms)", secondaryAvgFrameRate, (int)std::round(1000.0/secondaryFrameTime), (int)std::round(secondaryFrameTime));
-					ImGui::Text("Input thread : %.1f / %d FPS (%d ms)", inputAvgFrameRate, (int)std::round(1000.0/inputFrameTime), (int)std::round(inputFrameTime));
-					ImGui::Text("Game Loop thread : %.1f / %d FPS (%d ms)", gameLoopAvgFrameRate, (int)std::round(1000.0/gameLoopFrameTime), (int)std::round(gameLoopFrameTime));
-					ImGui::Text("Slow Loop thread : %.1f / %d FPS (%d ms)", slowLoopAvgFrameRate, (int)std::round(1000.0/slowLoopFrameTime), (int)std::round(slowLoopFrameTime));
-				#else
-					if (settings->framerate_limit_rendering)
-						ImGui::Text("Primary rendering : %.1f avg FPS (limited)", primaryAvgFrameRate);
-					else
-						ImGui::Text("Primary rendering : %.1f avg FPS (unlimited)", primaryAvgFrameRate);
+				#endif
+				ImGui::Text("Input thread : %.1f / %d FPS (%d ms)", inputAvgFrameRate, (int)std::round(1000.0/inputFrameTime), (int)std::round(inputFrameTime));
+				ImGui::Text("Game Loop thread : %.1f / %d FPS (%d ms)", gameLoopAvgFrameRate, (int)std::round(1000.0/gameLoopFrameTime), (int)std::round(gameLoopFrameTime));
+				ImGui::Text("Slow Loop thread : %.1f / %d FPS (%d ms)", slowLoopAvgFrameRate, (int)std::round(1000.0/slowLoopFrameTime), (int)std::round(slowLoopFrameTime));
+			#else
+				if (settings->framerate_limit_rendering)
+					ImGui::Text("Primary rendering : %.1f avg FPS (limited)", primaryAvgFrameRate);
+				else
+					ImGui::Text("Primary rendering : %.1f avg FPS (unlimited)", primaryAvgFrameRate);
+				#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
 					if (settings->framerate_limit_ui)
 						ImGui::Text("Secondary rendering & UI : %.1f avg FPS (limited)", secondaryAvgFrameRate);
 					else
 						ImGui::Text("Secondary rendering & UI : %.1f avg FPS (unlimited)", secondaryAvgFrameRate);
-					ImGui::Text("Input thread : %.1f avg FPS (limited)", inputAvgFrameRate);
-					ImGui::Text("Game Loop thread : %.1f avg FPS (limited)", gameLoopAvgFrameRate);
-					ImGui::Text("Slow Loop thread : %.1f avg FPS (limited)", slowLoopAvgFrameRate);
 				#endif
-				ImGui::Checkbox("Show other UI windows", &showOtherUI);
-				ImGui::End();
-				ImGui::SetNextWindowPos({425,0});
-				
-				if (showOtherUI) {
-					// Modules
-					V4D_Renderer::ForEachSortedModule([](auto* mod){
-						if (mod->RunImGui) {
-							mod->RunImGui();
-						}
-					});
-				}
-				
-				ImGui::Render();
+				ImGui::Text("Input thread : %.1f avg FPS (limited)", inputAvgFrameRate);
+				ImGui::Text("Game Loop thread : %.1f avg FPS (limited)", gameLoopAvgFrameRate);
+				ImGui::Text("Slow Loop thread : %.1f avg FPS (limited)", slowLoopAvgFrameRate);
 			#endif
+			ImGui::Checkbox("Show other UI windows", &showOtherUI);
+			ImGui::End();
+			ImGui::SetNextWindowPos({425,0});
 			
-			if (!renderer->graphicsLoadedToDevice || renderer->mustReload) continue;
-			{
-				std::scoped_lock lock(renderer->renderMutex2);
+			if (showOtherUI) {
+				// Modules
 				V4D_Renderer::ForEachSortedModule([](auto* mod){
-					if (mod->Render2) mod->Render2();
+					if (mod->RunImGui) {
+						mod->RunImGui();
+					}
 				});
 			}
 			
-			if (settings->framerate_limit_ui) LIMIT_FRAMERATE(settings->framerate_limit_ui, secondaryFrameTime)
+			ImGui::Render();
+		#endif
+		
+		if (!renderer->graphicsLoadedToDevice || renderer->mustReload) return;
+		
+		{
+			std::scoped_lock lock(renderer->renderMutex2);
+			V4D_Renderer::ForEachSortedModule([](auto* mod){
+				if (mod->Render2) mod->Render2();
+			});
 		}
-	});
-	
+		
+	};
+
 	// Rendering Loop
 	std::thread renderingThread([&]{
-		SET_CPU_AFFINITY(3)
+		SET_CPU_AFFINITY(2)
 		while (appRunning) {
 			CALCULATE_AVG_FRAMERATE(primaryAvgFrameRate)
+			
+			#ifndef RENDER_SECONDARY_IN_ANOTHER_THREAD
+				RunSecondaryRendering();
+			#endif
 			
 			renderer->Render();
 			
 			if (settings->framerate_limit_rendering) LIMIT_FRAMERATE(settings->framerate_limit_rendering, primaryFrameTime)
 		}
 	});
+	
+	#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+		// Low-Priority Rendering Loop
+		std::thread lowPriorityRenderingThread([&]{
+			SET_CPU_AFFINITY(3)
+			while (appRunning) {
+				CALCULATE_AVG_FRAMERATE(secondaryAvgFrameRate)
+				if (!appRunning) break;
+				if (!renderer->graphicsLoadedToDevice || renderer->mustReload) continue;
+				
+				RunSecondaryRendering();
+				
+				if (settings->framerate_limit_ui) LIMIT_FRAMERATE(settings->framerate_limit_ui, secondaryFrameTime)
+			}
+		});
+	#endif
 	
 	// Input loop
 	while (window->IsActive()) {
@@ -289,7 +305,9 @@ int main() {
 	gameLoopThread.join();
 	slowLoopThread.join();
 	renderingThread.join();
-	lowPriorityRenderingThread.join();
+	#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+		lowPriorityRenderingThread.join();
+	#endif
 	
 	V4D_Input::ForEachModule([window, renderer](auto* mod){
 		mod->RemoveCallbacks(window);

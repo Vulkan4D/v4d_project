@@ -5,6 +5,8 @@ using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
+#pragma region Local members
+
 const uint32_t MAX_ACTIVE_LIGHTS = 256;
 
 Renderer* r = nullptr;
@@ -20,11 +22,17 @@ DescriptorSet baseDescriptorSet_0;
 
 Scene scene {};
 
+#pragma endregion
+
+#pragma region Buffers
+
 StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
 StagedBuffer activeLightsUniformBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
 	uint32_t nbActiveLights = 0;
 	uint32_t activeLights[MAX_ACTIVE_LIGHTS];
 Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
+
+#pragma endregion
 
 #pragma region Shaders
 
@@ -1043,7 +1051,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 			}
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
 	}
-	void RunDynamicPostProcessingLowPriorityCompute(VkCommandBuffer commandBuffer) {
+	void RunDynamicPostProcessingCompute(VkCommandBuffer commandBuffer) {
 		// Compute
 		histogramComputeShader.SetGroupCounts(1, 1, 1);
 		histogramComputeShader.Execute(r->renderingDevice, commandBuffer);
@@ -1154,6 +1162,8 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 
 #pragma endregion
 
+#pragma region Images
+
 std::unordered_map<std::string, Image*> images {
 	{"depthImage", &depthImage},
 	{"litImage", &litImage},
@@ -1161,6 +1171,26 @@ std::unordered_map<std::string, Image*> images {
 	{"historyImage", &historyImage},
 	{"ui", &uiImage},
 };
+
+#pragma endregion
+
+#pragma Rendering Pipeline
+
+void RunDynamicRenderPipeline(VkCommandBuffer commandBuffer) {
+	if (scene.camera.renderMode == rasterization || scene.camera.debug) {
+		// Raster Visibility and lighting
+		RunRasterVisibility(r->renderingDevice, commandBuffer);
+		RunLighting(r->renderingDevice, commandBuffer, true, !scene.camera.debug);
+	} else if (r->rayTracingFeatures.rayTracing) {
+		// Ray Tracing lighting
+		RunRayTracingCommands(commandBuffer);
+		RunLighting(r->renderingDevice, commandBuffer, false, true);
+	}
+}
+
+#pragma endregion
+
+#pragma region Update
 
 void FrameUpdate(uint imageIndex) {
 	
@@ -1264,7 +1294,6 @@ void FrameUpdate(uint imageIndex) {
 	}
 	
 }
-
 void FrameUpdate2() {
 	PostProcessingLowPriorityUpdate();
 	
@@ -1273,6 +1302,10 @@ void FrameUpdate2() {
 		if (mod->Update2) mod->Update2(scene);
 	});
 }
+
+#pragma endregion
+
+#pragma region Graphics commands
 
 void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 	ClearLitImage(commandBuffer);
@@ -1297,51 +1330,27 @@ void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		scene.Unlock();
 	}
 	
-	//TODO memory barrier between transfer and vertex shaders ?
-
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->RunDynamicGraphicsTop) mod->RunDynamicGraphicsTop(commandBuffer, images);
-	// });
-
-	// Acceleration Structures
+	// Build Acceleration Structures
 	if (r->rayTracingFeatures.rayTracing) {
 		BuildBottomLevelRayTracingAccelerationStructures(r->renderingDevice, commandBuffer);
 		BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 	}
 	
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->RunDynamicGraphicsMiddle) mod->RunDynamicGraphicsMiddle(commandBuffer, images);
-	// });
-	
-	if (scene.camera.renderMode == rasterization || scene.camera.debug) {
-		// Raster Visibility and lighting
-		RunRasterVisibility(r->renderingDevice, commandBuffer);
-		RunLighting(r->renderingDevice, commandBuffer, true, !scene.camera.debug);
-	} else if (r->rayTracingFeatures.rayTracing) {
-		// Ray Tracing lighting
-		RunRayTracingCommands(commandBuffer);
-		RunLighting(r->renderingDevice, commandBuffer, false, !scene.camera.debug);
-	}
-	
-	// // Modules
-	// V4D_Game::ForEachSortedModule([](auto* mod){
-	// 	if (mod->RunDynamicGraphicsBottom) mod->RunDynamicGraphicsBottom(commandBuffer, images);
-	// });
+	// Graphics pipeline
+	RunDynamicRenderPipeline(commandBuffer);
 }
 void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 	RecordPostProcessingCommands(commandBuffer, imageIndex);
 }
 void RunCompute(VkCommandBuffer commandBuffer) {
-	RunDynamicPostProcessingLowPriorityCompute(commandBuffer);
+	RunDynamicPostProcessingCompute(commandBuffer);
 	
 	// Modules
 	V4D_Game::ForEachSortedModule([commandBuffer](auto* mod){
 		if (mod->Compute) mod->Compute(commandBuffer);
 	});
 }
-void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) {
+void RunGraphics2(VkCommandBuffer commandBuffer) {
 	// UI
 	uiRenderPass.Begin(r->renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
 		for (auto* shader : rasterShaders["ui"]) {
@@ -1353,8 +1362,9 @@ void RunDynamicLowPriorityGraphics(VkCommandBuffer commandBuffer) {
 	uiRenderPass.End(r->renderingDevice, commandBuffer);
 }
 
+#pragma endregion
 
-
+#pragma region Module functions
 extern "C" {
 	
 	int OrderIndex() {return -1;}
@@ -1905,7 +1915,7 @@ extern "C" {
 		// Dynamic compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
 			RunCompute(cmdBuffer);
-			RunDynamicLowPriorityGraphics(cmdBuffer);
+			RunGraphics2(cmdBuffer);
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
@@ -1979,3 +1989,4 @@ extern "C" {
 	}
 
 }
+#pragma endregion
