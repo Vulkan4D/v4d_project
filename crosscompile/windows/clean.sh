@@ -14,6 +14,6 @@ ssh WINDOWS_PC "del /q /s \v4d_build\release\* > NUL"
 
 
 # Copy global DLLs to Remote Windows PC
-scp -rq dll/*.dll WINDOWS_PC:/v4d_build/debug/
-scp -rq dll/*.dll WINDOWS_PC:/v4d_build/release/
+scp -rq crosscompile/windows/dll/*.dll WINDOWS_PC:/v4d_build/debug/
+scp -rq crosscompile/windows/dll/*.dll WINDOWS_PC:/v4d_build/release/
 

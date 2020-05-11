@@ -2,4 +2,4 @@
 **/*.gch
 build/**
 workspace/**
-dll/unused
+crosscompile/windows/dll/unused
