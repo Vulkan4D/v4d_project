@@ -1178,7 +1178,7 @@ void FrameUpdate(uint imageIndex) {
 	// Ray Tracing
 	size_t globalScratchBufferSize = 0;
 	if (r->rayTracingFeatures.rayTracing) {
-		topLevelAccelerationStructure.GetMemoryRequirementsForScratchBuffer(r->renderingDevice);
+		topLevelAccelerationStructure.GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
 	}
 	if (r->rayTracingFeatures.rayTracing) {
 		ResetRayTracingBlasBuilds();
@@ -1212,7 +1212,7 @@ void FrameUpdate(uint imageIndex) {
 									
 									// Global Scratch Buffer
 									if (AccelerationStructure::useGlobalScratchBuffer) {
-										VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementsForScratchBuffer(r->renderingDevice);
+										VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
 										if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
 											continue;
 										}
