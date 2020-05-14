@@ -3,7 +3,7 @@
 
 using namespace v4d::graphics;
 
-void CreateTestBox(ObjectInstance* obj) {
+void CreateCornellBox(ObjectInstance* obj) {
 
 	auto geom1 = obj->AddGeometry(28, 42);
 	
@@ -73,12 +73,26 @@ extern "C" {
 	
 	void LoadScene(Scene& scene) {
 		
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {0,250,-30}, 180.0);
+		// Cornell boxes
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {0,250,-30}, 180.0);
 		for (int i = 0; i < 100; ++i)
-			objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {0,500,-30 + (i*90)}, 180.0);
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {200,250,-30}, 120.0);
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateTestBox, {-200,250,-30}, -120.0);
+			objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {200,250,-30}, 120.0);
+		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
 		
+		// Ground
+		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+			auto plane = obj->AddGeometry(4, 6);
+			plane->SetVertex(0,  /*pos*/{-80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			plane->SetVertex(1,  /*pos*/{ 80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			plane->SetVertex(2, /*pos*/{ 80000.0, 80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			plane->SetVertex(3, /*pos*/{-80000.0, 80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
+			plane->SetIndices({
+				0, 1, 2, 2, 3, 0,
+			});
+		}, {0,0,-200});
+		
+		// Lights
 		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
@@ -95,6 +109,7 @@ extern "C" {
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
+		// Red Sphere
 		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
