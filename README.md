@@ -68,6 +68,12 @@ You should **NOT** use V4D if :
 
 ----
 
+### Requirements
+
+* Vulkan 1.2 capable dedicated GPU
+
+----
+
 ## The WHY
 
 Most (if not all) game engines are optimized for fixed-map games with very limited physics and scale where level designers place assets in a scene using an editor. 
@@ -105,6 +111,14 @@ As a developer for this project or for a resulting game, you will respect our 5 
 
 ## Building a new Vulkan4D project
 (Only supported on Linux at the moment)
+
+### Dependencies
+* `openssl` 1.1.0 (and `libssl-dev` package)
+* `glslang` >= 8.13
+* `gcc` >= 9.3
+* `cmake` >= 3.10
+
+### First Build
 
 ```bash
 # from project parent directory
