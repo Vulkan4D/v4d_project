@@ -50,10 +50,10 @@ struct PlanetTerrain {
 	glm::dvec3 lastOptimizePosition {0};
 	v4d::Timer lastOptimizeTime {true};
 	static v4d::Timer lastGarbageCollectionTime;
-	#ifdef _DEBUG
+	// #ifdef _DEBUG
 		int totalChunkTimeNb = 0;
 		float totalChunkTime = 0;
-	#endif
+	// #endif
 		
 	// Info
 	int totalChunks = 0;
@@ -225,9 +225,9 @@ struct PlanetTerrain {
 		// }
 		
 		void Generate() {
-			#ifdef _DEBUG
+			// #ifdef _DEBUG
 				auto timer = v4d::Timer(true);
-			#endif
+			// #endif
 			int genRow = 0;
 			int genCol = 0;
 			int genVertexIndex = 0;
@@ -496,10 +496,10 @@ struct PlanetTerrain {
 				meshGenerated = true;
 			}
 			
-			#ifdef _DEBUG
+			// #ifdef _DEBUG
 				planet->totalChunkTimeNb++;
 				planet->totalChunkTime += (float)timer.GetElapsedMilliseconds();
-			#endif
+			// #endif
 		}
 		
 		void AddSubChunks() {

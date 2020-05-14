@@ -478,7 +478,7 @@ extern "C" {
 				}
 			//
 		}
-		#ifdef _DEBUG
+		// #ifdef _DEBUG
 			void RunImGuiDebug() {
 				if (terrain) {
 					std::lock_guard lock(terrain->planetMutex);
@@ -494,7 +494,7 @@ extern "C" {
 					ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
 				}
 			}
-		#endif
+		// #endif
 	#endif
 	
 }

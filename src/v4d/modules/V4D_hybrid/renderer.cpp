@@ -1955,7 +1955,7 @@ extern "C" {
 				}
 			});
 			ImGui::End();
-			#ifdef _DEBUG
+			// #ifdef _DEBUG
 				ImGui::SetNextWindowPos({425+345,0});
 				ImGui::SetNextWindowSize({250, 100});
 				ImGui::Begin("Debug");
@@ -1965,7 +1965,7 @@ extern "C" {
 					if (mod->RunImGuiDebug) mod->RunImGuiDebug();
 				});
 				ImGui::End();
-			#endif
+			// #endif
 		}
 	#endif
 	
