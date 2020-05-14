@@ -15,7 +15,7 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 #if defined(_DEBUG)
 	// Shaders to watch for modifications to automatically reload the renderer
 	static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
-		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
+		// {"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
 	};
 #endif
 
