@@ -23,3 +23,6 @@
 [submodule "src/ImGuiColorTextEdit"]
 	path = src/ImGuiColorTextEdit
 	url = git@github.com:BalazsJako/ImGuiColorTextEdit.git
+[submodule "src/bullet3"]
+	path = src/bullet3
+	url = git@github.com:bulletphysics/bullet3.git
