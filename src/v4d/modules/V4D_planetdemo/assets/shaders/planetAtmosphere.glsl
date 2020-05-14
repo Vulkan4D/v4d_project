@@ -88,6 +88,8 @@ void main() {
 	vec3 rayStart = (viewDir * distStart) + p;
 	vec3 rayEnd = (viewDir * distEnd) + p;
 	float rayLength = distance(rayStart, rayEnd);
+	float rayStartAltitude = length(rayStart) - r; // this will range from negative atmosphereHeight to 0.0
+	float dist_epsilon = distStart * 0.0001;
 	
 	int rayMarchingSteps = RAYMARCH_STEPS;
 	float stepSize = rayLength / float(rayMarchingSteps);
@@ -176,7 +178,7 @@ void main() {
 				vec3 posLightNDC = posLightClipSpace.xyz/posLightClipSpace.w;
 				vec3 posLightScreenSpace = posLightNDC * vec3(0.5, 0.5, 0) + vec3(0.5, 0.5, -posLightViewSpace.z);
 				
-				if (RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
+				if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
 					float depth;
 					switch (camera.renderMode) {
 						case 0: // raster
@@ -193,8 +195,7 @@ void main() {
 				lightRayOpticalDepth += lightRayDensity;
 				lightRayDist += lightRayStepSize;
 			}
-			
-			// out_color = vec4(vec3(decay), 1);return;
+			decay *= clamp(-rayStartAltitude/atmosphereHeight*8.0, 0.0, 1.0);
 			
 			vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * planetAtmosphere.densityFactor;
 			totalRayleigh += density.x * attenuation * (1.0-decay/3.0);
