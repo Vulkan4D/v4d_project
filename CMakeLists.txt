@@ -51,10 +51,6 @@ else()
 	# set(BUILD_FLAGS "${BUILD_FLAGS} -Wconversion")
 	# set(BUILD_FLAGS "${BUILD_FLAGS} -Wsign-conversion")
 	# set(BUILD_FLAGS "${BUILD_FLAGS} -Wshadow")
-	
-	# RPATH
-	set(CMAKE_INSTALL_RPATH "\$ORIGIN")
-	set(CMAKE_INSTALL_RPATH_USE_LINK_PATH True)
 endif()
 
 if(ADDRESS_SANITIZER)
@@ -66,10 +62,10 @@ endif()
 
 # CCACHE
 if(USE_CCACHE)
-    find_program(CCACHE_FOUND ccache)
-    if(CCACHE_FOUND)
-        set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-    endif(CCACHE_FOUND)
+	find_program(CCACHE_FOUND ccache)
+	if(CCACHE_FOUND)
+		set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+	endif(CCACHE_FOUND)
 endif()
 
 # Output Directories
@@ -170,7 +166,11 @@ target_link_libraries(${APP_NAME}
 target_compile_definitions(${APP_NAME}
 	PRIVATE -D_V4D_PROJECT
 )
-set_target_properties(${APP_NAME} PROPERTIES COMPILE_FLAGS ${BUILD_FLAGS})
+set_target_properties(${APP_NAME}
+	PROPERTIES
+		COMPILE_FLAGS ${BUILD_FLAGS}
+		LINK_FLAGS "-Wl,-rpath,./"
+)
 
 
 # Unit Tests
@@ -192,5 +192,9 @@ if(COMPILE_TESTS)
 	# 		"${PROJECT_SOURCE_DIR}/src/bullet3/src/"
 	# )
 	# ADD_DEFINITIONS( -DBT_USE_DOUBLE_PRECISION)
-	set_target_properties(tests PROPERTIES COMPILE_FLAGS "-W -Wno-cast-function-type")
+	set_target_properties(tests 
+		PROPERTIES 
+			COMPILE_FLAGS "-W -Wno-cast-function-type"
+			LINK_FLAGS "-Wl,-rpath,./"
+		)
 endif()
