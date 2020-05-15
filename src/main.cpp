@@ -86,8 +86,8 @@ int main() {
 	std::vector<std::string> modules {};
 	if (settings->modules_list_file != "") {
 		modules = v4d::io::StringListFile::Instance(settings->modules_list_file)->Load();
-		// if (modules.size() == 0) modules.push_back("V4D_basicscene");
-		if (modules.size() == 0) modules.push_back("V4D_planetdemo");
+		if (modules.size() == 0) modules.push_back("V4D_basicscene");
+		// if (modules.size() == 0) modules.push_back("V4D_planetdemo");
 	}
 	for (auto module : modules) {
 		V4D_Game::LoadModule(module);

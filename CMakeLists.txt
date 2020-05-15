@@ -8,7 +8,7 @@ set(APP_NAME demo)
 
 option(COMPILE_TESTS "Build Unit Tests" ON)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
-option(COMPILE_BULLET "Compile Bullet3 from source instead of linking with installed library" OFF)
+option(COMPILE_BULLET "Compile Bullet3 from source instead of linking with installed library" ON)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
@@ -180,21 +180,22 @@ if(COMPILE_TESTS)
 	)
 	target_link_libraries(tests
 		v4d
-		# BulletDynamics
-		# LinearMath
-		# BulletCollision
+		BulletDynamics
+		LinearMath
+		BulletCollision
 	)
 	target_compile_definitions(tests
 		PRIVATE -D_V4D_PROJECT
 	)
-	# target_include_directories(v4d
-	# 	PUBLIC
-	# 		"${PROJECT_SOURCE_DIR}/src/bullet3/src/"
-	# )
-	# ADD_DEFINITIONS( -DBT_USE_DOUBLE_PRECISION)
 	set_target_properties(tests 
 		PROPERTIES 
 			COMPILE_FLAGS "-W -Wno-cast-function-type"
 			LINK_FLAGS "-Wl,-rpath,./"
-		)
+	)
+	target_include_directories(v4d
+		PUBLIC
+			"${PROJECT_SOURCE_DIR}/src/bullet3/src/"
+	)
+	ADD_DEFINITIONS( -DBT_USE_DOUBLE_PRECISION)
+	set_target_properties(tests PROPERTIES COMPILE_FLAGS "-W -Wno-cast-function-type")
 endif()
