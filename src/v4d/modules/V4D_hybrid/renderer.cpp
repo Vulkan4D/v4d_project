@@ -1174,7 +1174,7 @@ std::unordered_map<std::string, Image*> images {
 
 #pragma endregion
 
-#pragma Rendering Pipeline
+#pragma region Rendering Pipeline
 
 void RunDynamicRenderPipeline(VkCommandBuffer commandBuffer) {
 	if (scene.camera.renderMode == rasterization || scene.camera.debug) {
@@ -1385,10 +1385,12 @@ extern "C" {
 		r->queuesInfo.emplace_back("secondary", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		
 		// Device Extensions
-		r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME); // RayTracing extension
-		r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
-		r->OptionalDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME); // Needed for RayTracing extension
-		r->OptionalDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME); // Needed for RayTracing extension
+		if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
+			r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME); // RayTracing extension
+			r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
+			r->OptionalDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME); // Needed for RayTracing extension
+			r->OptionalDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME); // Needed for RayTracing extension
+		}
 		
 		// UBOs
 		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
@@ -1407,9 +1409,13 @@ extern "C" {
 		r->deviceFeatures.shaderFloat64 = VK_TRUE;
 		r->deviceFeatures.depthClamp = VK_TRUE;
 		r->deviceFeatures.fillModeNonSolid = VK_TRUE;
-		r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
-		r->EnableRayTracingFeatures()->rayTracing = VK_TRUE;
-		r->EnableRayTracingFeatures()->rayQuery = VK_TRUE;
+		
+		// Vulkan 1.2
+		if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
+			r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
+			r->EnableRayTracingFeatures()->rayTracing = VK_TRUE;
+			r->EnableRayTracingFeatures()->rayQuery = VK_TRUE;
+		}
 	}
 	
 	void ConfigureRenderer() {

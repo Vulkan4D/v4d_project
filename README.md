@@ -37,6 +37,7 @@ https://discord.gg/5aY3ZBW
 
 * Build games for 64-bit Windows and Linux platforms
 * Developed from the ground up for optimal use of the Vulkan API and ray tracing
+* Specialized for completely dynamic or procedural worlds with user-created content
 * Completely Modular and supports Modding at its core
 
 V4D games will have three modes of rendering : 
@@ -46,7 +47,7 @@ V4D games will have three modes of rendering :
 
 ----
 
-## Is Vulkan4D any good for your project ?
+## Is Vulkan4D a good choice for your project ?
 
 You should use V4D if : 
 
@@ -55,12 +56,13 @@ You should use V4D if :
 * You want high fidelity graphics with Ray Tracing
 * You need double precision physics
 * You want your game to support Modding
+* Your game world is very dynamic and cannot afford having baked lighting/assets
 
 You should **NOT** use V4D if : 
 
 * You are making a game for Mobile devices
-* You are a level designer who like to drag and drop assets
-* You are making an XBOX game
+* You are making an Console game
+* You are/have level designers who like to drag and drop assets
 * You want OSX support
 * You want 32-bit support
 * You are making a game that needs to run on integrated graphics
@@ -76,20 +78,22 @@ You should **NOT** use V4D if :
 
 ## The WHY
 
-Most (if not all) game engines are optimized for fixed-map games with very limited physics and scale where level designers place assets in a scene using an editor. 
-They are not meant for Large-scale Procedural Open-World games. 
+Most (if not all) current game engines are optimized for fixed-map games with limited scale where level designers place assets in a scene using an editor, and very often rely on pre-baked graphics. 
 
-When trying to build space games using popular game engines, we quickly fall into problems that the engine was not intended to solve, and have to do lots of workarounds, which takes most of our development time and affects performance, maintainability and stability of the resulting game. 
+This means that other game engines are not meant for Large-scale Procedural Dynamic Open-World games with lots of user-created contents. 
 
-Also, most game engines do not implement Vulkan nor RTX from the ground up, and these features do not work well with existing technologies, causing poor performance, not taking advantage of these new technologies. 
+But this is where Vulkan4D shines !
 
-Vulkan4D is not only the answer to all possible issues developing space games, but also future-proof, implementing new technologies and taking advantage of all the most recent hardware. 
+Vulkan4D is also designed especially for realistic large scale space games/simulators. 
 
-V4D is thought from the ground up and optimized for multi-threading, easily taking full advantage of a 16-cores CPU, also achieving fully multi-threaded Rendering !
+----
 
-The aim of this engine is at games that require very large scales, complex physics and native Ray Tracing implementation. 
+## Key Features
 
-In other words, the holy grail of an engine for realistic multiplayer space games. 
+* Vulkan Renderer with full Ray Tracing support
+* Double precision physics system
+* Modular system
+* Multiplayer integration tools
 
 ----
 
