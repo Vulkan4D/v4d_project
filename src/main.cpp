@@ -86,18 +86,28 @@ int main() {
 	std::vector<std::string> modules {};
 	if (settings->modules_list_file != "") {
 		modules = v4d::io::StringListFile::Instance(settings->modules_list_file)->Load();
-		if (modules.size() == 0) modules.push_back("V4D_basicscene");
+		if (modules.size() == 0) {
+			modules.push_back("V4D_basicscene");
+			modules.push_back("V4D_bullet");
+		}
 		// if (modules.size() == 0) modules.push_back("V4D_planetdemo");
 	}
 	for (auto module : modules) {
 		V4D_Game::LoadModule(module);
 		V4D_Input::LoadModule(module);
 		V4D_Renderer::LoadModule(module);
+		V4D_Physics::LoadModule(module);
 	}
+	V4D_Game::SortModules([](auto* a, auto* b){
+		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+	});
+	V4D_Input::SortModules([](auto* a, auto* b){
+		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+	});
 	V4D_Renderer::SortModules([](auto* a, auto* b){
 		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 	});
-	V4D_Game::SortModules([](auto* a, auto* b){
+	V4D_Physics::SortModules([](auto* a, auto* b){
 		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 	});
 
@@ -142,9 +152,13 @@ int main() {
 	renderer->LoadScene();
 	renderer->LoadRenderer();
 	
-	V4D_Input::ForEachModule([window, renderer](auto* mod){
+	V4D_Input::ForEachSortedModule([window, renderer](auto* mod){
 		if (mod->Init) mod->Init(window, renderer);
 		mod->AddCallbacks(window);
+	});
+	
+	V4D_Physics::ForEachSortedModule([](auto* mod){
+		if (mod->Init) mod->Init();
 	});
 	
 	// Slow Loop (stuff unrelated to rendering that does not require any performance)
@@ -293,7 +307,7 @@ int main() {
 	
 		glfwPollEvents();
 		
-		V4D_Input::ForEachModule([](auto* mod){
+		V4D_Input::ForEachSortedModule([](auto* mod){
 			if (mod->Update) mod->Update(deltaTime);
 		});
 		
@@ -309,7 +323,7 @@ int main() {
 		lowPriorityRenderingThread.join();
 	#endif
 	
-	V4D_Input::ForEachModule([window, renderer](auto* mod){
+	V4D_Input::ForEachSortedModule([window, renderer](auto* mod){
 		mod->RemoveCallbacks(window);
 	});
 	

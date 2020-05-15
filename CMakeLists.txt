@@ -1,14 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 
-# Vulkan4D Project Build Template 0.1
+# Vulkan4D Project Build Template 0.2
 ###########################################################################################
+# Project Setup
 
-project(v4d_demo_project)
-set(APP_NAME demo)
+	project(v4d_demo_project)
+	set(APP_NAME demo)
 
+###########################################################################################
+# Configuration
+
+# Options
+option(COMPILE_APP "Build Demo/Project" ON)
 option(COMPILE_TESTS "Build Unit Tests" ON)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
-option(COMPILE_BULLET "Compile Bullet3 from source instead of linking with installed library" ON)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
@@ -16,14 +21,14 @@ option(USE_CCACHE "Use ccache" ON)
 option(ENABLE_IMGUI "Enable ImGUI" ON)
 option(ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
 
-###########################################################################################
-
 # Global specs
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Platforms
+###########################################################################################
+
+# Platform settings
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
 if(WIN32)
 	add_definitions(-D_WINDOWS -D_WIN32_WINNT=0x06030000)
@@ -53,6 +58,7 @@ else()
 	# set(BUILD_FLAGS "${BUILD_FLAGS} -Wshadow")
 endif()
 
+# Address Sanitizer
 if(ADDRESS_SANITIZER)
 	if(WIN32)
 	else()
@@ -79,7 +85,7 @@ SET(CMAKE_DEBUG_POSTFIX "" CACHE STRING "" FORCE)
 SET(CMAKE_MINSIZEREL_POSTFIX "" CACHE STRING "" FORCE)
 SET(CMAKE_RELWITHDEBINFO_POSTFIX "" CACHE STRING "" FORCE)
 
-# Config-specific
+# Release / Debug
 if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 	set(DEBUG 1)
 	set(RUNTIME_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG})
@@ -91,50 +97,20 @@ else()
 endif()
 
 
+###########################################################################################
+# Builds
+
+
 # GLFW
 if(COMPILE_GLFW)
 	set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-
 	set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-	
 	set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-	
 	add_subdirectory("${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw")
 else()
 	find_package(glfw3 3.3 REQUIRED)
-endif()
-
-
-# Bullet3
-if(COMPILE_BULLET)
-	set(USE_DOUBLE_PRECISION ON CACHE BOOL "" FORCE)
-	set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-	
-	set(BUILD_BULLET3 OFF CACHE BOOL "" FORCE)
-	set(BUILD_EGL OFF CACHE BOOL "" FORCE)
-	set(BUILD_ENET OFF CACHE BOOL "" FORCE)
-	set(BUILD_PYBULLET OFF CACHE BOOL "" FORCE)
-	set(BUILD_OPENGL3_DEMOS OFF CACHE BOOL "" FORCE)
-	set(BUILD_BULLET2_DEMOS OFF CACHE BOOL "" FORCE)
-	set(BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
-	set(BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
-	
-	set(INSTALL_LIBS OFF CACHE BOOL "" FORCE)
-	set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
-	set(USE_GRAPHICAL_BENCHMARK OFF CACHE BOOL "" FORCE)
-	set(USE_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD OFF CACHE BOOL "" FORCE)
-	set(BUILD_CPU_DEMOS OFF CACHE BOOL "" FORCE)
-	set(USE_GLUT OFF CACHE BOOL "" FORCE)
-	SET(INTERNAL_CREATE_MSVC_RELATIVE_PATH_PROJECTFILES OFF CACHE BOOL "" FORCE)
-	SET(INTERNAL_ADD_POSTFIX_EXECUTABLE_NAMES OFF CACHE BOOL "" FORCE)
-
-	add_subdirectory("${PROJECT_SOURCE_DIR}/src/bullet3")
-else()
-	# find_package(BulletDynamics 2.89 REQUIRED)
-	# find_package(LinearMath 2.89 REQUIRED)
-	# find_package(BulletCollision 2.89 REQUIRED)
 endif()
 
 
@@ -157,20 +133,22 @@ endif()
 
 
 # Demo / Project
-add_executable(${APP_NAME}
-	"${PROJECT_SOURCE_DIR}/src/main.cpp"
-)
-target_link_libraries(${APP_NAME}
-	v4d
-)
-target_compile_definitions(${APP_NAME}
-	PRIVATE -D_V4D_PROJECT
-)
-set_target_properties(${APP_NAME}
-	PROPERTIES
-		COMPILE_FLAGS ${BUILD_FLAGS}
-		LINK_FLAGS "-Wl,-rpath,./"
-)
+if(COMPILE_APP)
+	add_executable(${APP_NAME}
+		"${PROJECT_SOURCE_DIR}/src/main.cpp"
+	)
+	target_link_libraries(${APP_NAME}
+		v4d
+	)
+	target_compile_definitions(${APP_NAME}
+		PRIVATE -D_V4D_PROJECT
+	)
+	set_target_properties(${APP_NAME}
+		PROPERTIES
+			COMPILE_FLAGS ${BUILD_FLAGS}
+			LINK_FLAGS "-Wl,-rpath,./"
+	)
+endif()
 
 
 # Unit Tests
@@ -180,22 +158,13 @@ if(COMPILE_TESTS)
 	)
 	target_link_libraries(tests
 		v4d
-		BulletDynamics
-		LinearMath
-		BulletCollision
 	)
 	target_compile_definitions(tests
 		PRIVATE -D_V4D_PROJECT
 	)
 	set_target_properties(tests 
 		PROPERTIES 
-			COMPILE_FLAGS "-W -Wno-cast-function-type"
+			COMPILE_FLAGS ${BUILD_FLAGS}
 			LINK_FLAGS "-Wl,-rpath,./"
 	)
-	target_include_directories(v4d
-		PUBLIC
-			"${PROJECT_SOURCE_DIR}/src/bullet3/src/"
-	)
-	ADD_DEFINITIONS( -DBT_USE_DOUBLE_PRECISION)
-	set_target_properties(tests PROPERTIES COMPILE_FLAGS "-W -Wno-cast-function-type")
 endif()
