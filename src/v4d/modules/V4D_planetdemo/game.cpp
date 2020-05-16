@@ -307,6 +307,7 @@ namespace TerrainGeneratorLib {
 ObjectInstance* sun = nullptr;
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
+Scene* scene = nullptr;
 
 extern "C" {
 	
@@ -325,34 +326,38 @@ extern "C" {
 		}
 	}
 	
-	void LoadScene(Scene& scene) {
+	void Init(Scene* _s) {
+		scene = _s;
+	}
+	
+	void LoadScene() {
 		TerrainGeneratorLib::Start();
 		
 		// Light source
-		sun = scene.AddObjectInstance();
+		sun = scene->AddObjectInstance();
 		sun->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 700000000, 1e24f);
 		}, {-1.496e+11,0, 0});
 				
 						// // Planet
-						// scene.objectInstances.emplace_back(new ObjectInstance("planet_raymarching"))->Configure([](ObjectInstance* obj){
+						// scene->objectInstances.emplace_back(new ObjectInstance("planet_raymarching"))->Configure([](ObjectInstance* obj){
 						// 	obj->SetSphereGeometry((float)planet.solidRadius, {1,0,0, 1}, 0/*planet index*/);
 						// }, {0,planet.solidRadius*2,0});
 				
 	}
 	
-	void UnloadScene(Scene& scene) {
+	void UnloadScene() {
 		TerrainGeneratorLib::Stop();
 	}
 	
 	// Images / Buffers / Pipelines
-	void CreateResources(Device* device) {
+	void RendererCreateResources(Device* device) {
 		renderingDevice = device;
 		// Chunk Generator
 		PlanetTerrain::StartChunkGenerator();
 	}
 	
-	void DestroyResources(Device* device) {
+	void RendererDestroyResources(Device* device) {
 		// Chunk Generator
 		PlanetTerrain::EndChunkGenerator();
 		if (terrain) {
@@ -366,14 +371,14 @@ extern "C" {
 		}
 	}
 	
-	void Update(Scene& scene) {
+	void RendererFrameUpdate() {
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
 			if (!terrain) {
 				terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*1.5,0}};
 				{
 					std::lock_guard lock(terrain->planetMutex);
-					terrain->scene = &scene;
+					terrain->scene = scene;
 					sun->GenerateGeometries();
 					if (planetAtmosphereShader) {
 						planetAtmosphereShader->planets.push_back(terrain);
@@ -392,7 +397,7 @@ extern "C" {
 						// // // for each planet
 						// 	int planetIndex = 0;
 						// 	auto* planetBuffer = &((PlanetBuffer*)(planetsBuffer.stagingBuffer.data))[planetIndex];
-						// // 	planetBuffer->viewToPlanetPosMatrix = glm::inverse(scene.camera.viewMatrix * scene.objectInstances[1]->GetWorldTransform());
+						// // 	planetBuffer->viewToPlanetPosMatrix = glm::inverse(scene->camera.viewMatrix * scene->objectInstances[1]->GetWorldTransform());
 						// 	planetBuffer->northDir = glm::normalize(glm::transpose(glm::inverse(glm::dmat3(terrain->matrix))) * glm::dvec3(0,1,0));
 						// // //
 						// auto cmdBuffer = r->BeginSingleTimeCommands(*graphicsQueue);
@@ -413,7 +418,7 @@ extern "C" {
 			terrain->RefreshMatrix();
 			
 			// Camera position relative to planet
-			terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(scene.camera.worldPosition, 1);
+			terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(scene->camera.worldPosition, 1);
 			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
 			
 			for (auto* chunk : terrain->chunks) {
@@ -423,7 +428,7 @@ extern "C" {
 		//
 	}
 	
-	void Update2(Scene& scene) {
+	void RendererFrameUpdate2() {
 		// for each planet
 			if (terrain) {
 				std::lock_guard lock(terrain->chunksMutex);
@@ -436,7 +441,7 @@ extern "C" {
 		// PlanetTerrain::CollectGarbage(renderingDevice);
 	}
 	
-	void Compute(VkCommandBuffer commandBuffer) {
+	void RendererFrameCompute(VkCommandBuffer commandBuffer) {
 		// for each planet
 			if (terrain) {
 				// planet.GenerateMaps(renderingDevice, commandBuffer);
@@ -452,8 +457,8 @@ extern "C" {
 		//
 	}
 	
-	#ifdef _ENABLE_IMGUI
-		void RunImGui() {
+	void RendererRunUi() {
+		#ifdef _ENABLE_IMGUI
 			// for each planet
 				ImGui::Separator();
 				ImGui::Text("Planet");
@@ -477,9 +482,11 @@ extern "C" {
 					sun->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance));
 				}
 			//
-		}
+		#endif
+	}
+	void RendererRunUiDebug() {
 		// #ifdef _DEBUG
-			void RunImGuiDebug() {
+			#ifdef _ENABLE_IMGUI
 				if (terrain) {
 					std::lock_guard lock(terrain->planetMutex);
 					float altitude = (float)terrain->cameraAltitudeAboveTerrain;
@@ -493,8 +500,8 @@ extern "C" {
 					ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
 					ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
 				}
-			}
+			#endif
 		// #endif
-	#endif
+	}
 	
 }

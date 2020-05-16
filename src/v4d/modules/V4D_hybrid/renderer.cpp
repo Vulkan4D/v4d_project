@@ -20,7 +20,7 @@ std::unordered_map<std::string, std::vector<VkCommandBuffer>> commandBuffers {};
 
 DescriptorSet baseDescriptorSet_0;
 
-Scene scene {};
+Scene* scene = nullptr;
 
 #pragma endregion
 
@@ -491,12 +491,12 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 					// #endif
 				) {
 					// #ifdef _DEBUG
-						if (scene.camera.debug != (s == &debugRasterShader)) {
+						if (scene->camera.debug != (s == &debugRasterShader)) {
 							continue;
 						}
 					// #endif
-					scene.Lock();
-						for (auto* obj : scene.objectInstances) {
+					scene->Lock();
+						for (auto* obj : scene->objectInstances) {
 							if (obj) {
 								// obj->Lock();
 								if (obj->IsActive()) {
@@ -504,7 +504,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 									for (auto& geom : obj->GetGeometries()) {
 										if (geom.geometry->active) {
 											// Frustum culling
-											if (scene.camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
+											if (scene->camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
 												if (geom.geometry->isProcedural) {
 													//TODO procedural objects
 												} else {
@@ -523,7 +523,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 								// obj->Unlock();
 							}
 						}
-					scene.Unlock();
+					scene->Unlock();
 				} else {
 					s->Execute(device, commandBuffer);
 				}
@@ -757,7 +757,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		activeRayTracedGeometries[lastIndex] = nullptr;
 		
 		if (rayTracingInstances[index].accelerationStructureHandle != 0) {
-			for (auto* obj : scene.objectInstances) {
+			for (auto* obj : scene->objectInstances) {
 				for (auto& geom : obj->GetGeometries()) {
 					if (geom.rayTracingInstanceIndex == lastIndex) {
 						geom.rayTracingInstanceIndex = index;
@@ -1052,7 +1052,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		glm::vec4 luminance;
 		totalLuminance.ReadFromMappedData(&luminance);
 		if (luminance.a > 0) {
-			scene.camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
+			scene->camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
 		}
 	}
 	
@@ -1168,10 +1168,10 @@ std::unordered_map<std::string, Image*> images {
 #pragma region Rendering Pipeline
 
 void RunDynamicRenderPipeline(VkCommandBuffer commandBuffer) {
-	if (scene.camera.renderMode == rasterization || scene.camera.debug) {
+	if (scene->camera.renderMode == rasterization || scene->camera.debug) {
 		// Raster Visibility and lighting
 		RunRasterVisibility(r->renderingDevice, commandBuffer);
-		RunLighting(r->renderingDevice, commandBuffer, true, !scene.camera.debug);
+		RunLighting(r->renderingDevice, commandBuffer, true, !scene->camera.debug);
 	} else if (r->rayTracingFeatures.rayTracing) {
 		// Ray Tracing lighting
 		RunRayTracingCommands(commandBuffer);
@@ -1186,14 +1186,17 @@ void RunDynamicRenderPipeline(VkCommandBuffer commandBuffer) {
 void FrameUpdate(uint imageIndex) {
 	
 	// Reset camera information
-	scene.camera.width = r->swapChain->extent.width;
-	scene.camera.height = r->swapChain->extent.height;
-	scene.camera.RefreshProjectionMatrix();
-	scene.camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
+	scene->camera.width = r->swapChain->extent.width;
+	scene->camera.height = r->swapChain->extent.height;
+	scene->camera.RefreshProjectionMatrix();
+	scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 	
 	// Modules
 	V4D_Game::ForEachSortedModule([](auto* mod){
-		if (mod->Update) mod->Update(scene);
+		if (mod->RendererFrameUpdate) mod->RendererFrameUpdate();
+	});
+	V4D_Physics::ForEachSortedModule([](auto* mod){
+		if (mod->RendererFrameDebug) mod->RendererFrameDebug();
 	});
 	
 	// Ray Tracing
@@ -1206,18 +1209,18 @@ void FrameUpdate(uint imageIndex) {
 		inactiveBlas.clear();
 	}
 	
-	scene.CollectGarbage();
+	scene->CollectGarbage();
 	
 	// Update object transforms and light sources (Use all lights for now)
-	scene.Lock();
+	scene->Lock();
 		nbActiveLights = 0;
-		for (auto* obj : scene.objectInstances) {
+		for (auto* obj : scene->objectInstances) {
 			if (obj) {
 				// obj->Lock();
 				if (obj->IsActive()) {
 					if (!obj->IsGenerated()) obj->GenerateGeometries();
 					// Matrices
-					obj->WriteMatrices(scene.camera.viewMatrix);
+					obj->WriteMatrices(scene->camera.viewMatrix);
 					// Light sources
 					for (auto* lightSource : obj->GetLightSources()) {
 						activeLights[nbActiveLights++] = lightSource->lightOffset;
@@ -1249,7 +1252,7 @@ void FrameUpdate(uint imageIndex) {
 									if (geom.rayTracingInstanceIndex == -1) {
 										AddRayTracingInstance(&geom);
 									}
-									SetRayTracingInstanceTransform(&geom, scene.camera.viewMatrix * obj->GetWorldTransform());
+									SetRayTracingInstanceTransform(&geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 								}
 							} else if (geom.rayTracingInstanceIndex != -1) {
 								RemoveRayTracingInstance(&geom);
@@ -1264,7 +1267,7 @@ void FrameUpdate(uint imageIndex) {
 				// obj->Unlock();
 			}
 		}
-	scene.Unlock();
+	scene->Unlock();
 	
 	// Global Scratch Buffer
 	if (r->rayTracingFeatures.rayTracing && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
@@ -1290,7 +1293,7 @@ void FrameUpdate2() {
 	
 	// Modules
 	V4D_Game::ForEachSortedModule([](auto* mod){
-		if (mod->Update2) mod->Update2(scene);
+		if (mod->RendererFrameUpdate2) mod->RendererFrameUpdate2();
 	});
 }
 
@@ -1312,13 +1315,13 @@ void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		}
 	} else {
 		// Geometry::globalBuffers.PushGeometriesInfo(r->renderingDevice, commandBuffer);
-		scene.Lock();
-			for (auto* obj : scene.objectInstances) if (obj && obj->IsActive()) {
+		scene->Lock();
+			for (auto* obj : scene->objectInstances) if (obj && obj->IsActive()) {
 				for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
 					if (geom.geometry) geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 				}
 			}
-		scene.Unlock();
+		scene->Unlock();
 	}
 	
 	// Build Acceleration Structures
@@ -1338,7 +1341,7 @@ void RunCompute(VkCommandBuffer commandBuffer) {
 	
 	// Modules
 	V4D_Game::ForEachSortedModule([commandBuffer](auto* mod){
-		if (mod->Compute) mod->Compute(commandBuffer);
+		if (mod->RendererFrameCompute) mod->RendererFrameCompute(commandBuffer);
 	});
 }
 void RunGraphics2(VkCommandBuffer commandBuffer) {
@@ -1358,7 +1361,7 @@ void RunGraphics2(VkCommandBuffer commandBuffer) {
 #pragma region Module functions
 extern "C" {
 	
-	int OrderIndex() {return -1;}
+	int OrderIndex() {return -1000;}
 	
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
 		// Higher score for Ray Tracing support
@@ -1370,8 +1373,12 @@ extern "C" {
 		}
 	}
 	
-	void Init(Renderer* _r) {
+	void Init(Renderer* _r, Scene* _s) {
 		r = _r;
+		scene = _s;
+		
+		scene->camera.renderMode = DEFAULT_RENDER_MODE;
+		scene->camera.shadows = DEFAULT_SHADOW_TYPE;
 		
 		r->queuesInfo.emplace_back("secondary", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 		
@@ -1384,16 +1391,11 @@ extern "C" {
 		}
 		
 		// UBOs
-		cameraUniformBuffer.AddSrcDataPtr(&scene.camera, sizeof(Camera));
+		cameraUniformBuffer.AddSrcDataPtr(&scene->camera, sizeof(Camera));
 		activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
 		activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*MAX_ACTIVE_LIGHTS);
 		
 		AccelerationStructure::useGlobalScratchBuffer = true;
-		
-		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->Init) mod->Init(scene);
-		});
 	}
 	
 	void InitDeviceFeatures() {
@@ -1421,8 +1423,8 @@ extern "C" {
 		} else {
 			// No Ray-Tracing support
 			LOG_WARN("Ray-Tracing unavailable, using rasterization")
-			scene.camera.renderMode = rasterization;
-			scene.camera.shadows = shadows_off;
+			scene->camera.renderMode = rasterization;
+			scene->camera.shadows = shadows_off;
 		}
 	}
 	
@@ -1521,23 +1523,6 @@ extern "C" {
 		}
 	}
 	
-	void LoadScene() {
-		scene.camera.renderMode = DEFAULT_RENDER_MODE;
-		scene.camera.shadows = DEFAULT_SHADOW_TYPE;
-		
-		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->LoadScene) mod->LoadScene(scene);
-		});
-	}
-	
-	void UnloadScene() {
-		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->UnloadScene) mod->UnloadScene(scene);
-		});
-	}
-	
 	void CreateSyncObjects() {
 		LOG_VERBOSE(" [Renderer] CreateSyncObjects()")
 		
@@ -1586,7 +1571,7 @@ extern "C" {
 		
 		// Modules
 		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->CreateResources) mod->CreateResources(r->renderingDevice);
+			if (mod->RendererCreateResources) mod->RendererCreateResources(r->renderingDevice);
 		});
 	}
 	
@@ -1599,7 +1584,7 @@ extern "C" {
 		
 		// Modules
 		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->DestroyResources) mod->DestroyResources(r->renderingDevice);
+			if (mod->RendererDestroyResources) mod->RendererDestroyResources(r->renderingDevice);
 		});
 	}
 	
@@ -1638,9 +1623,9 @@ extern "C" {
 	}
 	
 	void FreeBuffers() {
-		scene.ClenupObjectInstancesGeometries();
+		scene->ClenupObjectInstancesGeometries();
 		activeRayTracedGeometries.clear();
-		scene.CollectGarbage();
+		scene->CollectGarbage();
 		
 		// Uniform Buffers
 		cameraUniformBuffer.Free(r->renderingDevice);
@@ -1657,11 +1642,6 @@ extern "C" {
 		for (auto[name,layout] : pipelineLayouts) {
 			layout->Create(r->renderingDevice);
 		}
-		
-		// // Modules
-		// V4D_Game::ForEachSortedModule([](auto* mod){
-		// 	if (mod->CreatePipelines) mod->CreatePipelines(images);
-		// });
 		
 		// UI
 		CreateUiPipeline();
@@ -1700,11 +1680,6 @@ extern "C" {
 		
 		// Post Processing
 		DestroyPostProcessingPipeline();
-		
-		// // Modules
-		// V4D_Game::ForEachSortedModule([](auto* mod){
-		// 	if (mod->DestroyPipelines) mod->DestroyPipelines();
-		// });
 		
 		// Pipeline layouts
 		for (auto[name,layout] : pipelineLayouts) {
@@ -1801,7 +1776,6 @@ extern "C" {
 
 		// Update data every frame
 		FrameUpdate(imageIndex);
-		
 
 		std::array<VkSubmitInfo, 2> computeSubmitInfo {};
 			computeSubmitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1916,55 +1890,65 @@ extern "C" {
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
-	#ifdef _ENABLE_IMGUI
-		void RunImGui() {
+	void RunUi() {
+		#ifdef _ENABLE_IMGUI
 			ImGui::SetNextWindowSize({340, 160});
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
-				ImGui::Checkbox("Debug", &scene.camera.debug);
+				ImGui::Checkbox("Debug", &scene->camera.debug);
 			// #endif
-			if (scene.camera.debug) {
+			if (scene->camera.debug) {
 				// ...
 			} else {
 				if (r->rayTracingFeatures.rayTracing) {
-					ImGui::Combo("Rendering Mode", &scene.camera.renderMode, RENDER_MODES_STR);
+					ImGui::Combo("Rendering Mode", &scene->camera.renderMode, RENDER_MODES_STR);
 				} else {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
-				if (scene.camera.renderMode > 0) {
-					ImGui::Combo("Shadows", &scene.camera.shadows, SHADOW_TYPES_STR);
+				if (scene->camera.renderMode > 0) {
+					ImGui::Combo("Shadows", &scene->camera.shadows, SHADOW_TYPES_STR);
 				} else {
 					ImGui::Text("Shadows disabled");
 				}
-				ImGui::Checkbox("TXAA", &scene.camera.txaa);
-				ImGui::Checkbox("Gamma correction", &scene.camera.gammaCorrection);
-				ImGui::Checkbox("HDR Tone Mapping", &scene.camera.hdr);
+				ImGui::Checkbox("TXAA", &scene->camera.txaa);
+				ImGui::Checkbox("Gamma correction", &scene->camera.gammaCorrection);
+				ImGui::Checkbox("HDR Tone Mapping", &scene->camera.hdr);
 				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
-				ImGui::SliderFloat("brightness", &scene.camera.brightness, 0, 2);
-				ImGui::SliderFloat("contrast", &scene.camera.contrast, 0, 2);
-				ImGui::SliderFloat("gamma", &scene.camera.gamma, 0, 5);
+				ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
+				ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
+				ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 			}
+		#endif
 			// Modules
 			V4D_Game::ForEachSortedModule([](auto* mod){
-				if (mod->RunImGui) {
-					ImGui::Separator();
-					mod->RunImGui();
+				if (mod->RendererRunUi) {
+					#ifdef _ENABLE_IMGUI
+						ImGui::Separator();
+					#endif
+					mod->RendererRunUi();
 				}
 			});
+		#ifdef _ENABLE_IMGUI
 			ImGui::End();
-			// #ifdef _DEBUG
+		#endif
+		// #ifdef _DEBUG
+			#ifdef _ENABLE_IMGUI
 				ImGui::SetNextWindowPos({425+345,0});
 				ImGui::SetNextWindowSize({250, 100});
 				ImGui::Begin("Debug");
+			#endif
 				// Modules
 				V4D_Game::ForEachSortedModule([](auto* mod){
-					ImGui::Separator();
-					if (mod->RunImGuiDebug) mod->RunImGuiDebug();
+					#ifdef _ENABLE_IMGUI
+						ImGui::Separator();
+					#endif
+					if (mod->RendererRunUiDebug) mod->RendererRunUiDebug();
 				});
+			#ifdef _ENABLE_IMGUI
 				ImGui::End();
-			// #endif
-		}
-	#endif
+			#endif
+		// #endif
+	}
 	
 	// Getters
 	
@@ -1981,9 +1965,5 @@ extern "C" {
 		return &shaderBindingTable;
 	}
 	
-	Scene* GetScene() {
-		return &scene;
-	}
-
 }
 #pragma endregion

@@ -9,9 +9,17 @@ btDbvtBroadphase* overlappingPairCache = nullptr;
 btSequentialImpulseConstraintSolver* solver = nullptr;
 btDiscreteDynamicsWorld* dynamicsWorld = nullptr;
 
+v4d::graphics::Renderer* r = nullptr;
+v4d::graphics::Scene* scene = nullptr;
+
 extern "C" {
 	
-	void ModuleLoad() {
+	void Init(v4d::graphics::Renderer* _r, v4d::graphics::Scene* _s) {
+		r = _r;
+		scene = _s;
+	}
+	
+	void LoadScene() {
 		collisionConfiguration = new btDefaultCollisionConfiguration();
 		dispatcher = new btCollisionDispatcher(collisionConfiguration);
 		overlappingPairCache = new btDbvtBroadphase();
@@ -19,10 +27,9 @@ extern "C" {
 		dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
 		
 		dynamicsWorld->setGravity(btVector3(0, -10, 0));
-		
-		LOG("Physics module loaded !!!")
 	}
-	void ModuleUnload() {
+	
+	void UnloadScene() {
 		delete dynamicsWorld;
 		delete solver;
 		delete overlappingPairCache;
@@ -30,8 +37,16 @@ extern "C" {
 		delete collisionConfiguration;
 	}
 	
-	void Init() {
-		LOG("Physics module Init() !!!")
+	void RendererFrameDebug() {
+		
+	}
+	
+	void RunUi() {
+		
+	}
+	
+	void StepSimulation(double deltaTime) {
+		
 	}
 	
 }

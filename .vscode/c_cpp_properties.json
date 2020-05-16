@@ -8,7 +8,7 @@
                 "${workspaceFolder}/src/openssl/include",
                 "${workspaceFolder}/src/imgui",
                 "${workspaceFolder}/src",
-                "${workspaceFolder}/src/bullet3/src/"
+                "${workspaceFolder}/src/v4d/modules/V4D_bullet/bullet3/src/"
             ],
             "defines": [
                 "_LINUX",

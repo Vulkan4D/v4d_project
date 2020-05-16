@@ -61,21 +61,13 @@ extern "C" {
 		mainRenderModule = V4D_Renderer::LoadModule("V4D_hybrid");
 	}
 	
-	void Init(Renderer* _r) {
+	void Init(Renderer* _r, Scene* _s) {
 		r = _r;
+		scene = _s;
 	}
 	
 	void InitDeviceFeatures() {
 		r->deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
-	}
-	
-	void LoadScene() {
-		scene = mainRenderModule->GetScene();
-		if (planetAtmosphereShader) {
-			planetAtmosphereShader->camera = &scene->camera;
-		} else {
-			LOG_ERROR("Planet atmosphere shader is null")
-		}
 	}
 	
 	void InitLayouts() {
@@ -117,6 +109,7 @@ extern "C" {
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.vert",
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.frag",
 		}};
+		planetAtmosphereShader->camera = &scene->camera;
 		planetAtmosphereShader->atmospherePushConstantIndex = lightingPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		V4D_Game::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(ATMOSPHERE_SHADER, planetAtmosphereShader);
 		mainRenderModule->GetShaderGroup("lighting_1").push_back(planetAtmosphereShader);

@@ -81,6 +81,8 @@ int main() {
 	v4d::event::APP_ERROR << [](int signal){
 		LOG_ERROR("Process signaled error " << signal)
 	};
+	
+	#pragma region Modules
 
 	// Load Modules
 	std::vector<std::string> modules {};
@@ -89,8 +91,8 @@ int main() {
 		if (modules.size() == 0) {
 			modules.push_back("V4D_basicscene");
 			modules.push_back("V4D_bullet");
+			// modules.push_back("V4D_planetdemo");
 		}
-		// if (modules.size() == 0) modules.push_back("V4D_planetdemo");
 	}
 	for (auto module : modules) {
 		V4D_Game::LoadModule(module);
@@ -98,6 +100,8 @@ int main() {
 		V4D_Renderer::LoadModule(module);
 		V4D_Physics::LoadModule(module);
 	}
+	
+	// Sort Modules
 	V4D_Game::SortModules([](auto* a, auto* b){
 		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 	});
@@ -110,6 +114,8 @@ int main() {
 	V4D_Physics::SortModules([](auto* a, auto* b){
 		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 	});
+	
+	#pragma endregion
 
 	// Validation layers
 	#if defined(_DEBUG) && defined(_LINUX)
@@ -139,34 +145,62 @@ int main() {
 	
 	// Create Renderer (and Vulkan Instance)
 	auto* renderer = new Renderer(&vulkanLoader, APPLICATION_NAME, APPLICATION_VERSION);
-	renderer->surface = window->CreateVulkanSurface(renderer->handle);
-	
-	// Load renderer
 	renderer->preferredPresentModes = {
 		VK_PRESENT_MODE_MAILBOX_KHR,	// TripleBuffering (No Tearing, low latency)
 		VK_PRESENT_MODE_IMMEDIATE_KHR,	// VSync OFF (With Tearing, no latency)
 		VK_PRESENT_MODE_FIFO_KHR,		// VSync ON (No Tearing, more latency)
 	};
-	renderer->InitRenderer();
-	renderer->ReadShaders();
-	renderer->LoadScene();
-	renderer->LoadRenderer();
+	renderer->surface = window->CreateVulkanSurface(renderer->handle);
 	
-	V4D_Input::ForEachSortedModule([window, renderer](auto* mod){
-		if (mod->Init) mod->Init(window, renderer);
+	Scene scene {};
+
+	// Init Modules
+	V4D_Renderer::ForEachSortedModule([renderer, &scene](auto* mod){
+		if (mod->Init) mod->Init(renderer, &scene);
+	});
+	V4D_Game::ForEachSortedModule([&scene](auto* mod){
+		if (mod->Init) mod->Init(&scene);
+	});
+	V4D_Physics::ForEachSortedModule([renderer, &scene](auto* mod){
+		if (mod->Init) mod->Init(renderer, &scene);
+	});
+	V4D_Input::ForEachSortedModule([window, renderer, &scene](auto* mod){
+		if (mod->Init) mod->Init(window, renderer, &scene);
+	});
+	
+	// Input Callbacks
+	V4D_Input::ForEachSortedModule([window, renderer, &scene](auto* mod){
 		mod->AddCallbacks(window);
 	});
 	
+	// Load Scene
 	V4D_Physics::ForEachSortedModule([](auto* mod){
-		if (mod->Init) mod->Init();
+		if (mod->LoadScene) mod->LoadScene();
 	});
+	V4D_Game::ForEachSortedModule([](auto* mod){
+		if (mod->LoadScene) mod->LoadScene();
+	});
+	
+	// Load renderer
+	renderer->InitRenderer();
+	renderer->ReadShaders();
+	renderer->LoadRenderer();
 	
 	// Slow Loop (stuff unrelated to rendering that does not require any performance)
 	std::thread slowLoopThread([&]{
 		SET_CPU_AFFINITY(0)
 		while (appRunning) {
+			static double deltaTime = 0.01;
 			CALCULATE_AVG_FRAMERATE(slowLoopAvgFrameRate)
-			if (!appRunning) break;
+			CALCULATE_DELTATIME(deltaTime)
+			
+			V4D_Game::ForEachSortedModule([&scene](auto* mod){
+				if (mod->SlowUpdate) mod->SlowUpdate(deltaTime);
+			});
+			
+			V4D_Physics::ForEachSortedModule([&scene](auto* mod){
+				if (mod->SlowStepSimulation) mod->SlowStepSimulation(deltaTime);
+			});
 			
 			// Auto-reload modified shaders
 			#if defined(_DEBUG)
@@ -182,7 +216,7 @@ int main() {
 				}
 			#endif
 			
-			LIMIT_FRAMERATE(2, slowLoopFrameTime)
+			LIMIT_FRAMERATE(4, slowLoopFrameTime)
 		}
 	});
 	
@@ -190,19 +224,26 @@ int main() {
 	std::thread gameLoopThread([&]{
 		SET_CPU_AFFINITY(1)
 		while (appRunning) {
+			static double deltaTime = 0.01;
 			CALCULATE_AVG_FRAMERATE(gameLoopAvgFrameRate)
-			if (!appRunning) break;
+			CALCULATE_DELTATIME(deltaTime)
 			
-			//...
+			V4D_Game::ForEachSortedModule([&scene](auto* mod){
+				if (mod->Update) mod->Update(deltaTime);
+			});
 			
-			LIMIT_FRAMERATE(50, gameLoopFrameTime)
+			V4D_Physics::ForEachSortedModule([&scene](auto* mod){
+				if (mod->StepSimulation) mod->StepSimulation(deltaTime);
+			});
+			
+			LIMIT_FRAMERATE(60, gameLoopFrameTime)
 		}
 	});
 	
 	std::function<void()> RunSecondaryRendering = [&](){
 		// ImGui
+		static bool showOtherUI = true;
 		#ifdef _ENABLE_IMGUI
-			static bool showOtherUI = true;
 			ImGui_ImplVulkan_NewFrame();
 			
 			ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
@@ -243,16 +284,19 @@ int main() {
 			ImGui::Checkbox("Show other UI windows", &showOtherUI);
 			ImGui::End();
 			ImGui::SetNextWindowPos({425,0});
+		#endif
 			
 			if (showOtherUI) {
 				// Modules
 				V4D_Renderer::ForEachSortedModule([](auto* mod){
-					if (mod->RunImGui) {
-						mod->RunImGui();
-					}
+					if (mod->RunUi) mod->RunUi();
+				});
+				V4D_Physics::ForEachSortedModule([](auto* mod){
+					if (mod->RunUi) mod->RunUi();
 				});
 			}
 			
+		#ifdef _ENABLE_IMGUI
 			ImGui::Render();
 		#endif
 		
@@ -278,7 +322,7 @@ int main() {
 			#endif
 			
 			renderer->Render();
-			
+		
 			if (settings->framerate_limit_rendering) LIMIT_FRAMERATE(settings->framerate_limit_rendering, primaryFrameTime)
 		}
 	});
@@ -328,7 +372,14 @@ int main() {
 	});
 	
 	renderer->UnloadRenderer();
-	renderer->UnloadScene();
+	
+	// Unload Scene
+	V4D_Game::ForEachSortedModule([](auto* mod){
+		if (mod->UnloadScene) mod->UnloadScene();
+	});
+	V4D_Physics::ForEachSortedModule([](auto* mod){
+		if (mod->UnloadScene) mod->UnloadScene();
+	});
 	
 	// ImGui
 	#ifdef _ENABLE_IMGUI

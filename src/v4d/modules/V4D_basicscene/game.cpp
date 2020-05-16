@@ -61,6 +61,7 @@ void CreateCornellBox(ObjectInstance* obj) {
 }
 
 std::vector<ObjectInstance*> objects {};
+Scene* scene = nullptr;
 
 extern "C" {
 	
@@ -71,17 +72,21 @@ extern "C" {
 		V4D_Game::LoadModule("V4D_sample");
 	}
 	
-	void LoadScene(Scene& scene) {
+	void Init(Scene* _s) {
+		scene = _s;
+	}
+	
+	void LoadScene() {
 		
 		// Cornell boxes
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {0,250,-30}, 180.0);
+		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateCornellBox, {0,250,-30}, 180.0);
 		for (int i = 0; i < 100; ++i)
-			objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {200,250,-30}, 120.0);
-		objects.emplace_back(scene.AddObjectInstance())->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
+			objects.emplace_back(scene->AddObjectInstance())->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
+		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateCornellBox, {200,250,-30}, 120.0);
+		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
 		
 		// Ground
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			auto plane = obj->AddGeometry(4, 6);
 			plane->SetVertex(0, /*pos*/{-80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 			plane->SetVertex(1, /*pos*/{ 80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
@@ -93,35 +98,35 @@ extern "C" {
 		}, {0,0,-200});
 		
 		// Lights
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 200, 100000000);
 		}, {10,-500,1000});
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 2, 10000);
 		}, {10,270,10});
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {210,270,-20});
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
 		// Red Sphere
-		objects.emplace_back(scene.AddObjectInstance())->Configure([](ObjectInstance* obj){
+		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
 		
 	}
 	
-	void UnloadScene(Scene& scene) {
+	void UnloadScene() {
 		for (auto* obj : objects) {
-			scene.RemoveObjectInstance(obj);
+			scene->RemoveObjectInstance(obj);
 		}
 		objects.clear();
-		scene.ClenupObjectInstancesGeometries();
+		scene->ClenupObjectInstancesGeometries();
 	}
 	
 }
