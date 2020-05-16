@@ -2,7 +2,7 @@
 
 # v4d_project
 
-Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use)*
+Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use just yet)*
 
 - [x] CMAKE cross-platform build system from linux host
 - [x] Core helpers
@@ -74,9 +74,28 @@ You should **NOT** use V4D if :
 
 ----
 
-### Requirements
+### Requirements for development
 
-* Vulkan 1.2 capable dedicated GPU
+* Vulkan capable dedicated GPU and driver
+* Linux 64-bit system with `gcc` 9.3+ (Manjaro works great)
+
+*Support for Windows 10 & MSVC **coming soon***
+
+*Support for MAC/OSX or 32-bit OS is **not** planned*
+
+----
+
+### Requirements for playing / testing
+
+* 64-bit **Windows 10** or **Linux**
+* Vulkan capable dedicated GPU with at least 4 gb or VRAM
+* Recent GPU drivers with Vulkan 1.1+ support
+* CPU with at least 4 cores
+* At least 8 gb or system RAM
+
+*We are **NOT** planning to support MAC/OSX, Mobile, Consoles or 32-bit OS*
+
+*However, we plan to support streaming in the future for other platforms*
 
 ----
 
@@ -119,11 +138,11 @@ As a developer for this project or for a resulting game, you will respect our 5 
 
 ----
 
-## Building a new Vulkan4D project
-(Only supported on Linux at the moment)
+## Building Vulkan4D library or project
+(Only supported on **Linux 64-bit** at the moment)
 
 ### Dependencies
-* `openssl` 1.1.0 (and `libssl-dev` package)
+* `openssl` >= 1.1.0 (and `libssl-dev` package on debian systems)
 * `glslang` >= 8.13
 * `gcc` >= 9.3
 * `cmake` >= 3.10
@@ -162,7 +181,7 @@ A Vulkan4D Project consists of the following directory structure :
 * `tools/` optional submodule containing useful V4D tools - **DO NOT EDIT**
 * `workspace/` optional directory containing your workspace and tools
 * `.editorconfig` optional project settings for general IDEs / GitHub
-* `.git` , `.gitignore` git configuration files
+* `.git` , `.gitignore` , `.gitmodules` git configuration files
 * `CMakeLists.txt` Project/V4D Builder Template
 * `README.md` this documentation file
 
