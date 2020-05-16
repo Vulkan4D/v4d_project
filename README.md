@@ -175,11 +175,11 @@ A Vulkan4D Project consists of the following directory structure :
 * `.vscode` optioanl project settings for the Visual-Studio-Code IDE
 * `build/` created automatically to contain generated/build files
 * `crosscompile` your optional cross-compilation scripts
-* `res/` optional directory to contain project resources
+* **`res/`** optional directory to contain project resources
 * **`src/`** contains ALL source files
 * `tmp/` optional temporary directory
 * `tools/` optional submodule containing useful V4D tools - **DO NOT EDIT**
-* `workspace/` optional directory containing your workspace and tools
+* **`workspace/`** optional directory containing your workspace and tools
 * `.editorconfig` optional project settings for general IDEs / GitHub
 * `.git` , `.gitignore` , `.gitmodules` git configuration files
 * `CMakeLists.txt` Project/V4D Builder Template
