@@ -40,10 +40,14 @@ https://discord.gg/5aY3ZBW
 * Specialized for completely dynamic or procedural worlds with user-created content
 * Completely Modular and supports Modding at its core
 
-V4D games will have three modes of rendering : 
-- **Basic** : basic rasterization without shadows nor reflections (any vulkan 1.2 capable GPU)
-- **Hybrid** : rasterizaton with ray-traced shadows (GTX10+ series GPU)
-- **Let There Be Light** : 100% Ray-Traced, photorealistic graphics (requires RTX or RDNA2 GPU)
+----
+
+## Renderer
+
+V4D games will allow for up to three modes of rendering : 
+- **Basic** : basic rasterization without shadows nor reflections
+- **Hybrid** : rasterizaton with ray-traced shadows, reflections and GI
+- **Let There Be Light** : 100% Path-Traced, photorealistic graphics
 
 ----
 

@@ -601,9 +601,9 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	
 	void CreateRayTracingPipeline() {
 		shaderBindingTable.CreateRayTracingPipeline(r->renderingDevice);
-		rayTracingShaderBindingTableBuffer.size = rayTracingProperties.shaderGroupHandleSize * shaderBindingTable.GetGroups().size();
+		rayTracingShaderBindingTableBuffer.size = shaderBindingTable.GetSbtBufferSize(rayTracingProperties);
 		rayTracingShaderBindingTableBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-		shaderBindingTable.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer, rayTracingProperties.shaderGroupHandleSize);
+		shaderBindingTable.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer, 0, rayTracingProperties);
 	}
 	void DestroyRayTracingPipeline() {
 		rayTracingShaderBindingTableBuffer.Free(r->renderingDevice);
@@ -620,15 +620,6 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
-		VkDeviceSize bindingStride = rayTracingProperties.shaderGroupHandleSize;
-		VkDeviceSize bindingOffsetMissShader = bindingStride * shaderBindingTable.GetMissGroupOffset();
-		VkDeviceSize bindingOffsetHitShader = bindingStride * shaderBindingTable.GetHitGroupOffset();
-		
-		VkStridedBufferRegionKHR rayGen {rayTracingShaderBindingTableBuffer.buffer, 0, bindingStride, rayTracingShaderBindingTableBuffer.size};
-		VkStridedBufferRegionKHR rayMiss {rayTracingShaderBindingTableBuffer.buffer, bindingOffsetMissShader, bindingStride, rayTracingShaderBindingTableBuffer.size};
-		VkStridedBufferRegionKHR rayHit {rayTracingShaderBindingTableBuffer.buffer, bindingOffsetHitShader, bindingStride, rayTracingShaderBindingTableBuffer.size};
-		VkStridedBufferRegionKHR callable {VK_NULL_HANDLE, 0, bindingStride, rayTracingShaderBindingTableBuffer.size};
-		
 		int width = (int)((float)r->swapChain->extent.width);
 		int height = (int)((float)r->swapChain->extent.height);
 		
@@ -636,10 +627,10 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		shaderBindingTable.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
 			commandBuffer, 
-			&rayGen,
-			&rayMiss,
-			&rayHit,
-			&callable,
+			shaderBindingTable.GetRayGenBufferRegion(),
+			shaderBindingTable.GetRayMissBufferRegion(),
+			shaderBindingTable.GetRayHitBufferRegion(),
+			shaderBindingTable.GetRayCallableBufferRegion(),
 			width, height, 1
 		);
 	}
