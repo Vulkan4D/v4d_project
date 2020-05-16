@@ -54,24 +54,22 @@ V4D games will allow for up to three modes of rendering :
 
 ## Is Vulkan4D a good choice for your project ?
 
-You should use V4D if : 
+You **should** use V4D if one of these apply to your project : 
 
 * You are making a realistic space game with full size planets
 * You are making a large scale open-world MMO
-* You want high fidelity graphics with Ray Tracing
+* You want high fidelity graphics with Ray-Tracing
 * You need double precision physics
 * You want your game to support Modding
 * Your game world is very dynamic and cannot afford having baked lighting/assets
 
-You should **NOT** use V4D if : 
+You should **NOT** use V4D if one of these apply to your project : 
 
-* You are making a game for Mobile devices
-* You are making an Console game
-* You are/have level designers who like to drag and drop assets
-* You want OSX support
-* You want 32-bit support
-* You are making a game that needs to run on integrated graphics
-* You are making a top-down, 2D or 2.5D game
+* You are making a game for Consoles or Mobile devices
+* You want MAC/OSX or 32-bit support
+* You are making a game that can run on integrated graphics
+* You are/have level designers who need to drag and drop assets in a scene
+* You are making a 2D or 2.5D game
 
 ----
 
