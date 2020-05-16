@@ -104,7 +104,7 @@ Most (if not all) current game engines are optimized for fixed-map games with li
 
 This means that other game engines are not meant for Large-scale Procedural Dynamic Open-World games with lots of user-created contents. 
 
-But this is where Vulkan4D shines !
+But that is where Vulkan4D shines !
 
 Vulkan4D is also designed especially for realistic large scale space games/simulators. 
 
