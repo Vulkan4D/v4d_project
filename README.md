@@ -35,10 +35,11 @@ https://discord.gg/5aY3ZBW
 
 **Vulkan4D** is a game engine meant for large scale open worlds with high fidelity graphics. 
 
-* Build games for 64-bit Windows and Linux platforms
-* Developed from the ground up for optimal use of the Vulkan API and ray tracing
+* Pure C++17 game engine (C++20 coming soon)
+* Build games for 64-bit Windows and Linux platforms with dedicated GPU
+* Developed from the ground up for optimal use of the Vulkan API and Ray-Tracing
 * Specialized for completely dynamic or procedural worlds with user-created content
-* Completely Modular and supports Modding at its core
+* Fully Modular and supports Modding out of the box
 
 ----
 
@@ -47,7 +48,7 @@ https://discord.gg/5aY3ZBW
 V4D games will allow for up to three modes of rendering : 
 - **Basic** : basic rasterization without shadows nor reflections
 - **Hybrid** : rasterizaton with ray-traced shadows, reflections and GI
-- **Let There Be Light** : 100% Path-Traced, photorealistic graphics
+- **Let There Be Light** : 100% Path-Traced with photorealistic graphics
 
 ----
 
