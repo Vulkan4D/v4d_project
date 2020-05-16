@@ -3,16 +3,22 @@
 
 #include "btBulletDynamicsCommon.h"
 
-btDefaultCollisionConfiguration* collisionConfiguration = nullptr;
-btCollisionDispatcher* dispatcher = nullptr;
-btDbvtBroadphase* overlappingPairCache = nullptr;
-btSequentialImpulseConstraintSolver* solver = nullptr;
-btDiscreteDynamicsWorld* dynamicsWorld = nullptr;
+btCollisionConfiguration* collisionConfiguration = nullptr;
+btDispatcher* dispatcher = nullptr;
+btBroadphaseInterface* overlappingPairCache = nullptr;
+btConstraintSolver* solver = nullptr;
+btDynamicsWorld* dynamicsWorld = nullptr;
 
 v4d::graphics::Renderer* r = nullptr;
 v4d::graphics::Scene* scene = nullptr;
 
+V4D_Renderer* rendererModule = nullptr;
+
 extern "C" {
+	
+	void ModuleLoad() {
+		rendererModule = V4D_Renderer::LoadModule(THIS_MODULE);
+	}
 	
 	void Init(v4d::graphics::Renderer* _r, v4d::graphics::Scene* _s) {
 		r = _r;
@@ -27,6 +33,11 @@ extern "C" {
 		dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
 		
 		dynamicsWorld->setGravity(btVector3(0, -10, 0));
+		
+		// #ifdef _DEBUG
+			dynamicsWorld->setDebugDrawer((btIDebugDraw*)rendererModule->ModuleGetCustomPtr(0));
+			rendererModule->ModuleSetCustomPtr(0, dynamicsWorld);
+		// #endif
 	}
 	
 	void UnloadScene() {
@@ -35,10 +46,6 @@ extern "C" {
 		delete overlappingPairCache;
 		delete dispatcher;
 		delete collisionConfiguration;
-	}
-	
-	void RendererFrameDebug() {
-		
 	}
 	
 	void RunUi() {

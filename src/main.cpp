@@ -100,6 +100,9 @@ int main() {
 		V4D_Renderer::LoadModule(module);
 		V4D_Physics::LoadModule(module);
 	}
+	if (!V4D_Renderer::GetPrimaryModule()) {
+		V4D_Renderer::LoadModule("V4D_hybrid");
+	}
 	
 	// Sort Modules
 	V4D_Game::SortModules([](auto* a, auto* b){
@@ -305,7 +308,7 @@ int main() {
 		{
 			std::scoped_lock lock(renderer->renderMutex2);
 			V4D_Renderer::ForEachSortedModule([](auto* mod){
-				if (mod->Render2) mod->Render2();
+				if (mod->Update2) mod->Update2();
 			});
 		}
 		
@@ -321,7 +324,7 @@ int main() {
 				RunSecondaryRendering();
 			#endif
 			
-			renderer->Render();
+			renderer->Update();
 		
 			if (settings->framerate_limit_rendering) LIMIT_FRAMERATE(settings->framerate_limit_rendering, primaryFrameTime)
 		}

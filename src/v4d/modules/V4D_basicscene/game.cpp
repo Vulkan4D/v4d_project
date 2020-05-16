@@ -67,7 +67,6 @@ extern "C" {
 	
 	void ModuleLoad() {
 		// Load Dependencies
-		V4D_Renderer::LoadModule("V4D_hybrid");
 		V4D_Input::LoadModule("V4D_sample");
 		V4D_Game::LoadModule("V4D_sample");
 	}

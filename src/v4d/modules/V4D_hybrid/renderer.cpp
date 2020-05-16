@@ -1165,22 +1165,6 @@ std::unordered_map<std::string, Image*> images {
 
 #pragma endregion
 
-#pragma region Rendering Pipeline
-
-void RunDynamicRenderPipeline(VkCommandBuffer commandBuffer) {
-	if (scene->camera.renderMode == rasterization || scene->camera.debug) {
-		// Raster Visibility and lighting
-		RunRasterVisibility(r->renderingDevice, commandBuffer);
-		RunLighting(r->renderingDevice, commandBuffer, true, !scene->camera.debug);
-	} else if (r->rayTracingFeatures.rayTracing) {
-		// Ray Tracing lighting
-		RunRayTracingCommands(commandBuffer);
-		RunLighting(r->renderingDevice, commandBuffer, false, true);
-	}
-}
-
-#pragma endregion
-
 #pragma region Update
 
 void FrameUpdate(uint imageIndex) {
@@ -1194,9 +1178,6 @@ void FrameUpdate(uint imageIndex) {
 	// Modules
 	V4D_Game::ForEachSortedModule([](auto* mod){
 		if (mod->RendererFrameUpdate) mod->RendererFrameUpdate();
-	});
-	V4D_Physics::ForEachSortedModule([](auto* mod){
-		if (mod->RendererFrameDebug) mod->RendererFrameDebug();
 	});
 	
 	// Ray Tracing
@@ -1330,30 +1311,12 @@ void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 	}
 	
-	// Graphics pipeline
-	RunDynamicRenderPipeline(commandBuffer);
+	V4D_Renderer::ForEachSortedModule([&commandBuffer](auto* mod){
+		if (mod->Render) mod->Render(commandBuffer);
+	}, "render");
 }
 void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 	RecordPostProcessingCommands(commandBuffer, imageIndex);
-}
-void RunCompute(VkCommandBuffer commandBuffer) {
-	RunDynamicPostProcessingCompute(commandBuffer);
-	
-	// Modules
-	V4D_Game::ForEachSortedModule([commandBuffer](auto* mod){
-		if (mod->RendererFrameCompute) mod->RendererFrameCompute(commandBuffer);
-	});
-}
-void RunGraphics2(VkCommandBuffer commandBuffer) {
-	// UI
-	uiRenderPass.Begin(r->renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
-		for (auto* shader : rasterShaders["ui"]) {
-			shader->Execute(r->renderingDevice, commandBuffer);
-		}
-		#ifdef _ENABLE_IMGUI
-			DrawImGui(commandBuffer);
-		#endif
-	uiRenderPass.End(r->renderingDevice, commandBuffer);
 }
 
 #pragma endregion
@@ -1361,6 +1324,7 @@ void RunGraphics2(VkCommandBuffer commandBuffer) {
 #pragma region Module functions
 extern "C" {
 	
+	bool ModuleIsPrimary() {return true;}
 	int OrderIndex() {return -1000;}
 	
 	void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
@@ -1376,6 +1340,10 @@ extern "C" {
 	void Init(Renderer* _r, Scene* _s) {
 		r = _r;
 		scene = _s;
+		
+		V4D_Renderer::SortModules([](auto* a, auto* b){
+			return (a->RenderOrderIndex? a->RenderOrderIndex():0) < (b->RenderOrderIndex? b->RenderOrderIndex():0);
+		}, "render");
 		
 		scene->camera.renderMode = DEFAULT_RENDER_MODE;
 		scene->camera.shadows = DEFAULT_SHADOW_TYPE;
@@ -1746,7 +1714,7 @@ extern "C" {
 		r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphicsDynamic"].size()), commandBuffers["graphicsDynamic"].data());
 	}
 
-	void Render() {
+	void Update() {
 		
 		
 		uint64_t timeout = 1000UL * 1000 * 1000 * 10; // 10 seconds
@@ -1879,14 +1847,23 @@ extern "C" {
 		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
 	}
 	
-	void Render2() {
+	void Update2() {
 		
 		FrameUpdate2();
 	
 		// Dynamic compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
-			RunCompute(cmdBuffer);
-			RunGraphics2(cmdBuffer);
+		
+			RunDynamicPostProcessingCompute(cmdBuffer);
+			
+			// Modules
+			V4D_Game::ForEachSortedModule([cmdBuffer](auto* mod){
+				if (mod->RendererFrameCompute) mod->RendererFrameCompute(cmdBuffer);
+			});
+			V4D_Renderer::ForEachSortedModule([cmdBuffer](auto* mod){
+				if (mod->Render2) mod->Render2(cmdBuffer);
+			}, "render");
+			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
@@ -1895,7 +1872,7 @@ extern "C" {
 			ImGui::SetNextWindowSize({340, 160});
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
-				ImGui::Checkbox("Debug", &scene->camera.debug);
+				ImGui::Checkbox("Debug Geometry", &scene->camera.debug);
 			// #endif
 			if (scene->camera.debug) {
 				// ...
@@ -1950,8 +1927,8 @@ extern "C" {
 		// #endif
 	}
 	
-	// Getters
 	
+	// Getters
 	
 	PipelineLayout* GetPipelineLayout (std::string name) {
 		return pipelineLayouts[name];
@@ -1965,5 +1942,32 @@ extern "C" {
 		return &shaderBindingTable;
 	}
 	
+	
+	// Render pipelines
+	
+	void Render2(VkCommandBuffer commandBuffer) {
+		// UI
+		uiRenderPass.Begin(r->renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
+			for (auto* shader : rasterShaders["ui"]) {
+				shader->Execute(r->renderingDevice, commandBuffer);
+			}
+			#ifdef _ENABLE_IMGUI
+				DrawImGui(commandBuffer);
+			#endif
+		uiRenderPass.End(r->renderingDevice, commandBuffer);
+	}
+	
+	void Render(VkCommandBuffer commandBuffer) {
+		if (scene->camera.renderMode == rasterization || scene->camera.debug) {
+			// Raster Visibility and lighting
+			RunRasterVisibility(r->renderingDevice, commandBuffer);
+			RunLighting(r->renderingDevice, commandBuffer, true, !scene->camera.debug);
+		} else if (r->rayTracingFeatures.rayTracing) {
+			// Ray Tracing lighting
+			RunRayTracingCommands(commandBuffer);
+			RunLighting(r->renderingDevice, commandBuffer, false, true);
+		}
+	}
+
 }
 #pragma endregion

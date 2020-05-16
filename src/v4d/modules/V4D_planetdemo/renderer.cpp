@@ -51,19 +51,14 @@ bool bumpMapsGenerated = false;
 
 Renderer* r = nullptr;
 Scene* scene = nullptr;
-
-V4D_Renderer* mainRenderModule;
+V4D_Renderer* mainRenderModule = nullptr;
 
 extern "C" {
-	
-	void ModuleLoad() {
-		// Load Dependencies
-		mainRenderModule = V4D_Renderer::LoadModule("V4D_hybrid");
-	}
 	
 	void Init(Renderer* _r, Scene* _s) {
 		r = _r;
 		scene = _s;
+		mainRenderModule = V4D_Renderer::GetPrimaryModule();
 	}
 	
 	void InitDeviceFeatures() {
