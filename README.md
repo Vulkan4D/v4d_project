@@ -54,7 +54,7 @@ V4D games will allow for up to three modes of rendering :
 
 ## Is Vulkan4D a good choice for your project ?
 
-You **should** use V4D if one of these apply to your project : 
+You **may** use V4D if one of these apply to your project : 
 
 * You are making a realistic space game with full size planets
 * You are making a large scale open-world MMO
@@ -63,7 +63,7 @@ You **should** use V4D if one of these apply to your project :
 * You want your game to support Modding
 * Your game world is very dynamic and cannot afford having baked lighting/assets
 
-You should **NOT** use V4D if one of these apply to your project : 
+You **should NOT** use V4D if one of these apply to your project : 
 
 * You are making a game for Consoles or Mobile devices
 * You want MAC/OSX or 32-bit support
