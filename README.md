@@ -146,7 +146,7 @@ As a developer for this project or for a resulting game, you will respect our 5 
 * `gcc` >= 9.3
 * `cmake` >= 3.10
 
-### First Build
+### Download V4D and First Build
 
 ```bash
 # from project parent directory
@@ -171,7 +171,7 @@ git push -u -f origin master
 
 A Vulkan4D Project consists of the following directory structure : 
 
-* `.vscode` optioanl project settings for the Visual-Studio-Code IDE
+* `.vscode` optional project settings for the Visual-Studio-Code IDE
 * `build/` created automatically to contain generated/build files
 * `crosscompile` your optional cross-compilation scripts
 * **`res/`** optional directory to contain project resources
