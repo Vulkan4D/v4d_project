@@ -53,13 +53,6 @@
             "group": "test"
         },
         {
-            "label": "unit tests windows",
-            "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt && ../crosscompile/windows/build.sh Debug && ssh WINDOWS_PC \"START /wait taskkill /f /im tests.exe\" && scp -rq debug/* WINDOWS_PC:/v4d_build/debug/ && ssh WINDOWS_PC \"cd /v4d_build/debug/ && tests.exe\"",
-            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
-            "group": "test"
-        },
-        {
             "label": "send package",
             "type": "shell",
             "command": "clear; workspace/sendPackage.sh",

@@ -2,7 +2,7 @@
 
 # v4d_project
 
-Vulkan4D **DEV STATUS** : `in active development`
+Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use)*
 
 - [x] CMAKE cross-platform build system from linux host
 - [x] Core helpers
@@ -96,8 +96,10 @@ Vulkan4D is also designed especially for realistic large scale space games/simul
 
 * Vulkan Renderer with full Ray Tracing support
 * Double precision physics system
-* Modular system
-* Multiplayer integration tools
+* Flexible Modular system
+* Advanced data streaming utilities
+* Advanced Multiplayer integration utilities
+* In-game coding framework
 
 ----
 
@@ -144,6 +146,50 @@ tools/initNewGitRepository.sh
 git remote add origin <Your Repository Url>
 git push -u -f origin master
 ```
+
+----
+
+## Project Structure
+
+A Vulkan4D Project consists of the following directory structure : 
+
+* `.vscode` optioanl project settings for the Visual-Studio-Code IDE
+* `build/` created automatically to contain generated/build files
+* `crosscompile` your optional cross-compilation scripts
+* `res/` optional directory to contain project resources
+* **`src/`** contains ALL source files
+* `tmp/` optional temporary directory
+* `tools/` optional submodule containing useful V4D tools - **DO NOT EDIT**
+* `workspace/` optional directory containing your workspace and tools
+* `.editorconfig` optional project settings for general IDEs / GitHub
+* `.git` , `.gitignore` git configuration files
+* `CMakeLists.txt` Project/V4D Builder Template
+* `README.md` this documentation file
+
+The `src` directory will contain all source files, libraries, compiled resources and modules used for your project. It consists of the following structure in addition to your own libraries and source files : 
+
+* `openssl/` V4D depends on the OpenSSL library >= 1.1.0
+* `v4d/` contains everything related to the V4D Engine, including your own modules
+	* `./core/` submodule for the Core of V4D - **DO NOT EDIT ANYTHING IN CORE**
+	* **`./modules/`** You may remove unneeded modules or add your own mods here
+	* `./xvk/` Vulkan dynamic loader - V4D depends on it - **DO NOT EDIT XVK**
+	* **`./v4dconfig.hh`** You may edit macros here for compiling a custom v4d.dll
+* **`config.hh`** You may edit/add macros here for your own project configuration
+* **`main.cpp`, `*.cpp`** Source code for your app/game
+* **`settings.hh`** Defines the structure of a settings.ini configuration file
+* **`tests.cxx`** Your unit tests
+
+Files/Directories that you will typically write your code in are in **bold**. 
+
+----
+
+## V4D Modules (modding system)
+
+Vulkan4D is modular and built from the ground up to fully support Modding. 
+
+A module may contain resources and shared libraries that are loaded at runtime into the application.
+
+See modding documentation in [the sample module repository](https://github.com/Vulkan4D/v4d_module_sample)
 
 ----
 

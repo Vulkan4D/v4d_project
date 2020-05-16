@@ -3,3 +3,4 @@
 build/**
 workspace/**
 crosscompile/windows/dll/unused
+tmp/**
