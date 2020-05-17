@@ -37,29 +37,29 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 #pragma region Shaders
 
 	// Raster Visibility
-	PipelineLayout visibilityRasterLayout;
-	RasterShaderPipeline visibilityRasterShader {visibilityRasterLayout, {
+	PipelineLayout visibilityRasterPipelineLayout;
+	RasterShaderPipeline visibilityRasterShader {visibilityRasterPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
 		"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
 	}};
 	// #ifdef _DEBUG
-		RasterShaderPipeline debugRasterShader {visibilityRasterLayout, {
+		RasterShaderPipeline debugRasterShader {visibilityRasterPipelineLayout, {
 			"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
 			"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
 		}};
 	// #endif
 	
 	// Main Rendering
-	PipelineLayout lightingPipelineLayout, fogPipelineLayout;
-	RasterShaderPipeline lightingShader {lightingPipelineLayout, {
+	PipelineLayout lightingRasterPipelineLayout, fogRasterPipelineLayout;
+	RasterShaderPipeline lightingShader {lightingRasterPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/raster.lighting.vert",
 		"modules/V4D_hybrid/assets/shaders/raster.lighting.frag",
 	}};
-	// ComputeShaderPipeline lightingComputeShader {lightingPipelineLayout, "modules/V4D_hybrid/assets/shaders/raster.lighting.comp"};
+	// ComputeShaderPipeline lightingComputeShader {lightingRasterPipelineLayout, "modules/V4D_hybrid/assets/shaders/raster.lighting.comp"};
 	
 	// Ray Tracing
-	PipelineLayout rayTracingPipelineLayout;
-	ShaderBindingTable shaderBindingTable {rayTracingPipelineLayout, "modules/V4D_hybrid/assets/shaders/rtx.rgen"};
+	PipelineLayout visibilityRaysPipelineLayout;
+	ShaderBindingTable shaderBindingTable {visibilityRaysPipelineLayout, "modules/V4D_hybrid/assets/shaders/rtx.rgen"};
 	
 	// Post Processing
 	PipelineLayout postProcessingPipelineLayout, thumbnailPipelineLayout, histogramComputeLayout;
@@ -78,7 +78,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	RasterShaderPipeline postProcessingShader_hdr {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.hdr.frag",
-	}, -1000};
+	}, -100};
 	RasterShaderPipeline postProcessingShader_ui {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.ui.frag",
@@ -95,10 +95,10 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 #pragma region Global shader Containers
 
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
-		{"visibility", &visibilityRasterLayout},
-		{"ray_tracing", &rayTracingPipelineLayout},
-		{"lighting", &lightingPipelineLayout},
-		{"fog", &fogPipelineLayout},
+		{"visibility_raster", &visibilityRasterPipelineLayout},
+		{"visibility_rays", &visibilityRaysPipelineLayout},
+		{"lighting_raster", &lightingRasterPipelineLayout},
+		{"fog_raster", &fogRasterPipelineLayout},
 		{"thumbnail", &thumbnailPipelineLayout},
 		{"overlay", &overlayPipelineLayout},
 		{"post", &postProcessingPipelineLayout},
@@ -453,7 +453,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	}
 	
 	void ConfigureRasterVisibilityShaders() {
-		visibilityRasterLayout.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		visibilityRasterPipelineLayout.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		
 		visibilityRasterShader.AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
 		#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
@@ -1065,28 +1065,28 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 #pragma endregion
 
 #pragma region UI
-	float uiImageScale = 1.0;
-	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
+	float overlayImageScale = 1.0;
+	Image overlayImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	RenderPass uiRenderPass;
 	DescriptorSet overlayDescriptorSet_1;
 	
 	void CreateUiResources() {
-		uiImage.Create(r->renderingDevice, 
-			(uint)((float)r->swapChain->extent.width * uiImageScale), 
-			(uint)((float)r->swapChain->extent.height * uiImageScale)
+		overlayImage.Create(r->renderingDevice, 
+			(uint)((float)r->swapChain->extent.width * overlayImageScale), 
+			(uint)((float)r->swapChain->extent.height * overlayImageScale)
 		);
 		auto commandBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
-			r->TransitionImageLayout(commandBuffer, uiImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, overlayImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
 	void DestroyUiResources() {
-		uiImage.Destroy(r->renderingDevice);
+		overlayImage.Destroy(r->renderingDevice);
 	}
 	
 	void CreateUiPipeline() {
 		// Color Attachment (Fragment shader Standard Output)
 		VkAttachmentDescription colorAttachment = {};
-			colorAttachment.format = uiImage.format;
+			colorAttachment.format = overlayImage.format;
 			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 			// Color and depth data
 			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1109,11 +1109,11 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		
 		// Create the render pass
 		uiRenderPass.Create(r->renderingDevice);
-		uiRenderPass.CreateFrameBuffers(r->renderingDevice, uiImage);
+		uiRenderPass.CreateFrameBuffers(r->renderingDevice, overlayImage);
 		
 		// Shader pipeline
 		for (auto* shader : rasterShaders["overlay"]) {
-			shader->SetRenderPass(&uiImage, uiRenderPass.handle, 0);
+			shader->SetRenderPass(&overlayImage, uiRenderPass.handle, 0);
 			shader->AddColorBlendAttachmentState();
 			shader->CreatePipeline(r->renderingDevice);
 		}
@@ -1162,11 +1162,12 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 #pragma region Images
 
 std::unordered_map<std::string, Image*> images {
-	{"depthImage", &depthImage},
-	{"litImage", &litImage},
+	{"depth", &depthImage},
+	{"rasterDepth", &rasterDepthImage},
+	{"lit", &litImage},
+	{"history", &historyImage},
+	{"overlay", &overlayImage},
 	{"thumbnail", &thumbnailImage},
-	{"historyImage", &historyImage},
-	{"overlay", &uiImage},
 };
 
 #pragma endregion
@@ -1448,7 +1449,7 @@ extern "C" {
 		
 		r->descriptorSets["set1_postProcessing"] = &postProcessingDescriptorSet_1;
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(0, &litImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(1, &overlayImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_inputAttachment(2, &ppImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(3, &historyImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(4, &depthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1463,10 +1464,10 @@ extern "C" {
 			layout->AddDescriptorSet(&baseDescriptorSet_0);
 		}
 		// Add specific set 1 to specific layout lists
-		pipelineLayouts["visibility"]->AddDescriptorSet(&visibilityDescriptorSet_1);
-		pipelineLayouts["ray_tracing"]->AddDescriptorSet(&rayTracingDescriptorSet_1);
-		pipelineLayouts["lighting"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
-		pipelineLayouts["fog"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
+		pipelineLayouts["visibility_raster"]->AddDescriptorSet(&visibilityDescriptorSet_1);
+		pipelineLayouts["visibility_rays"]->AddDescriptorSet(&rayTracingDescriptorSet_1);
+		pipelineLayouts["lighting_raster"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
+		pipelineLayouts["fog_raster"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
 		pipelineLayouts["thumbnail"]->AddDescriptorSet(&thumbnailDescriptorSet_1);
 		pipelineLayouts["overlay"]->AddDescriptorSet(&overlayDescriptorSet_1);
 		pipelineLayouts["post"]->AddDescriptorSet(&postProcessingDescriptorSet_1);
@@ -1942,7 +1943,7 @@ extern "C" {
 	
 	void Render2(VkCommandBuffer commandBuffer) {
 		// UI
-		uiRenderPass.Begin(r->renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
+		uiRenderPass.Begin(r->renderingDevice, commandBuffer, overlayImage, {{.0,.0,.0,.0}});
 			for (auto* shader : rasterShaders["overlay"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}

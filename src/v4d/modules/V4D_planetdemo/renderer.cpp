@@ -66,8 +66,8 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
-		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("ray_tracing");
-		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("fog");
+		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("visibility_rays");
+		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		// r->descriptorSets["planets"] = &planetsDescriptorSet;
