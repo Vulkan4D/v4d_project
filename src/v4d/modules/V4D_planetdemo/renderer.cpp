@@ -107,7 +107,7 @@ extern "C" {
 		planetAtmosphereShader->camera = &scene->camera;
 		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		V4D_Game::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(ATMOSPHERE_SHADER, planetAtmosphereShader);
-		mainRenderModule->GetShaderGroup("fog").push_back(planetAtmosphereShader);
+		mainRenderModule->AddShader("fog", planetAtmosphereShader);
 	}
 	
 	void ConfigureShaders() {

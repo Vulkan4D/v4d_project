@@ -93,7 +93,7 @@ void main() {
 	}
 }
 
-#shader history.frag
+#shader history_write.frag
 void main() {
 	out_color = vec4(subpassLoad(ppImage).rgb * (TXAA?2:1), 1);
 }
@@ -132,12 +132,12 @@ void main() {
 	out_color = vec4(max(vec3(0),color.rgb), 1.0);
 }
 
-#shader ui.frag
+#shader overlay_apply.frag
 void main() {
-	vec4 ui = texture(overlayImage, in_uv);
-	if (length(ui.rgb) > 0) {
-		ui.a = length(ui.rgb) + 0.2;
+	vec4 overlay = texture(overlayImage, in_uv);
+	if (length(overlay.rgb) > 0) {
+		overlay.a = length(overlay.rgb) + 0.2;
 	}
-	out_color = ui;
+	out_color = overlay;
 }
 

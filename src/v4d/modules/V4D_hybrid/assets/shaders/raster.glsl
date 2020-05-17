@@ -55,7 +55,38 @@ void main() {
 	gBuffer_position_dist = vec4(v2f.pos.xyz, v2f.normal_dist.w);
 }
 
-// #shader lighting.comp
+
+#################################################################################
+
+#shader material.vert
+
+void main() {
+	//TODO
+}
+
+#shader material.frag
+
+void main() {
+	//TODO
+}
+
+
+#################################################################################
+
+#shader glass.vert
+
+void main() {
+	//TODO
+}
+
+#shader glass.frag
+
+void main() {
+	//TODO
+}
+
+
+#################################################################################
 
 #shader lighting.vert
 
