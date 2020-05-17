@@ -17,7 +17,9 @@ V4D_Renderer* rendererModule = nullptr;
 extern "C" {
 	
 	void ModuleLoad() {
-		rendererModule = V4D_Renderer::LoadModule(THIS_MODULE);
+		// #ifdef _DEBUG
+			rendererModule = V4D_Renderer::LoadModule(THIS_MODULE);
+		// #endif
 	}
 	
 	void Init(v4d::graphics::Renderer* _r, v4d::graphics::Scene* _s) {
@@ -35,8 +37,10 @@ extern "C" {
 		dynamicsWorld->setGravity(btVector3(0, -10, 0));
 		
 		// #ifdef _DEBUG
-			dynamicsWorld->setDebugDrawer((btIDebugDraw*)rendererModule->ModuleGetCustomPtr(0));
-			rendererModule->ModuleSetCustomPtr(0, dynamicsWorld);
+			if (rendererModule) {
+				dynamicsWorld->setDebugDrawer((btIDebugDraw*)rendererModule->ModuleGetCustomPtr(0));
+				rendererModule->ModuleSetCustomPtr(0, dynamicsWorld);
+			}
 		// #endif
 	}
 	

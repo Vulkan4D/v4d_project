@@ -8,7 +8,7 @@ const bool humanEyeExposure = true; // otherwise, use full range
 layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 1, binding = 0) uniform sampler2D litImage;
-layout(set = 1, binding = 1) uniform sampler2D uiImage;
+layout(set = 1, binding = 1) uniform sampler2D overlayImage;
 layout(set = 1, input_attachment_index = 0, binding = 2) uniform highp subpassInput ppImage;
 layout(set = 1, binding = 3) uniform sampler2D historyImage; // previous frame
 layout(set = 1, binding = 4) uniform sampler2D depthImage;
@@ -134,7 +134,7 @@ void main() {
 
 #shader ui.frag
 void main() {
-	vec4 ui = texture(uiImage, in_uv);
+	vec4 ui = texture(overlayImage, in_uv);
 	if (length(ui.rgb) > 0) {
 		ui.a = length(ui.rgb) + 0.2;
 	}

@@ -328,6 +328,12 @@ extern "C" {
 	
 	void Init(Scene* _s) {
 		scene = _s;
+		
+		// v4d::graphics::Geometry::globalBuffers.lightBuffer.Extend(16384);
+		// v4d::graphics::Geometry::globalBuffers.objectBuffer.Extend(16384);
+		// v4d::graphics::Geometry::globalBuffers.geometryBuffer.Extend(65536);
+		v4d::graphics::Geometry::globalBuffers.vertexBuffer.Extend(16777216); // 16 million @ 32 bytes each = 512 mb
+		v4d::graphics::Geometry::globalBuffers.indexBuffer.Extend(16777216*6); // 100 million @ 4 bytes each = 384 mb
 	}
 	
 	void LoadScene() {

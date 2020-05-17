@@ -66,13 +66,13 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
-		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("rayTracing");
-		auto* lightingPipelineLayout = mainRenderModule->GetPipelineLayout("lighting");
+		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("ray_tracing");
+		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("fog");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		// r->descriptorSets["planets"] = &planetsDescriptorSet;
 		r->descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;
-		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["0_base"]);
+		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
 		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
@@ -94,20 +94,20 @@ extern "C" {
 		
 		// planetsDescriptorSet.AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		
-		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["0_base"]);
-		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["1_rayTracing"]);
+		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
+		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["set1_ray_tracing"]);
 		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
 		// // terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
 		// terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 		
-		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*lightingPipelineLayout, {
+		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*fogPipelineLayout, {
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.vert",
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.frag",
 		}};
 		planetAtmosphereShader->camera = &scene->camera;
-		planetAtmosphereShader->atmospherePushConstantIndex = lightingPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		V4D_Game::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(ATMOSPHERE_SHADER, planetAtmosphereShader);
-		mainRenderModule->GetShaderGroup("lighting_1").push_back(planetAtmosphereShader);
+		mainRenderModule->GetShaderGroup("fog").push_back(planetAtmosphereShader);
 	}
 	
 	void ConfigureShaders() {

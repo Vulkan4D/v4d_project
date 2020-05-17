@@ -50,7 +50,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	// #endif
 	
 	// Main Rendering
-	PipelineLayout lightingPipelineLayout;
+	PipelineLayout lightingPipelineLayout, fogPipelineLayout;
 	RasterShaderPipeline lightingShader {lightingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/raster.lighting.vert",
 		"modules/V4D_hybrid/assets/shaders/raster.lighting.frag",
@@ -70,7 +70,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	RasterShaderPipeline postProcessingShader_txaa {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.txaa.frag",
-	}};
+	}, 100};
 	RasterShaderPipeline postProcessingShader_history {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.history.frag",
@@ -78,17 +78,17 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	RasterShaderPipeline postProcessingShader_hdr {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.hdr.frag",
-	}};
+	}, -1000};
 	RasterShaderPipeline postProcessingShader_ui {postProcessingPipelineLayout, {
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_postProcessing.ui.frag",
-	}};
+	}, 100};
 	ComputeShaderPipeline histogramComputeShader {histogramComputeLayout, 
 		"modules/V4D_hybrid/assets/shaders/v4d_histogram.comp"
 	};
 	
 	// UI
-	PipelineLayout uiPipelineLayout;
+	PipelineLayout overlayPipelineLayout;
 	
 #pragma endregion
 
@@ -96,11 +96,12 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
 		{"visibility", &visibilityRasterLayout},
-		{"rayTracing", &rayTracingPipelineLayout},
+		{"ray_tracing", &rayTracingPipelineLayout},
 		{"lighting", &lightingPipelineLayout},
+		{"fog", &fogPipelineLayout},
 		{"thumbnail", &thumbnailPipelineLayout},
-		{"ui", &uiPipelineLayout},
-		{"postProcessing", &postProcessingPipelineLayout},
+		{"overlay", &overlayPipelineLayout},
+		{"post", &postProcessingPipelineLayout},
 		{"histogram", &histogramComputeLayout},
 	};
 
@@ -112,13 +113,13 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 				&debugRasterShader,
 			// #endif
 		}},
-		{"lighting_0", {&lightingShader}},
-		{"lighting_1", {}},
+		{"lighting", {&lightingShader}},
+		{"fog", {}},
 		{"thumbnail", {&thumbnailShader}},
-		{"postProcessing_0", {&postProcessingShader_txaa}},
-		{"postProcessing_1", {&postProcessingShader_history}},
-		{"postProcessing_2", {&postProcessingShader_hdr, &postProcessingShader_ui}},
-		{"ui", {}},
+		{"postfx", {&postProcessingShader_txaa}},
+		{"history_write", {&postProcessingShader_history}},
+		{"present", {&postProcessingShader_hdr, &postProcessingShader_ui}},
+		{"overlay", {}},
 	};
 	
 	std::vector<ComputeShaderPipeline*> computeShaders {
@@ -169,7 +170,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	
 	Image litImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image depthImage { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
-	DescriptorSet visibilityDescriptorSet_1, lightingDescriptorSet_1;
+	DescriptorSet visibilityDescriptorSet_1, lightingAndFogDescriptorSet_1;
 	
 	RenderPass lightingRenderPass;
 	
@@ -281,12 +282,12 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 			lightingRenderPass.CreateFrameBuffers(r->renderingDevice, images);
 			
 			// Shaders
-			for (auto* s : rasterShaders["lighting_0"]) {
+			for (auto* s : rasterShaders["lighting"]) {
 				s->SetRenderPass(&litImage, lightingRenderPass.handle, 0);
 				s->AddColorBlendAttachmentState();
 				s->CreatePipeline(r->renderingDevice);
 			}
-			for (auto* s : rasterShaders["lighting_1"]) {
+			for (auto* s : rasterShaders["fog"]) {
 				s->SetRenderPass(&litImage, lightingRenderPass.handle, 1);
 				s->AddColorBlendAttachmentState();
 				s->CreatePipeline(r->renderingDevice);
@@ -296,10 +297,11 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		// lightingComputeShader.CreatePipeline(r->renderingDevice);
 	}
 	void DestroyLightingPipeline() {
-		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 8) == "lighting") {
-			for (auto* s : ss) {
-				s->DestroyPipeline(r->renderingDevice);
-			}
+		for (auto* s : rasterShaders["lighting"]) {
+			s->DestroyPipeline(r->renderingDevice);
+		}
+		for (auto* s : rasterShaders["fog"]) {
+			s->DestroyPipeline(r->renderingDevice);
 		}
 		lightingRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		lightingRenderPass.Destroy(r->renderingDevice);
@@ -308,7 +310,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	}
 	
 	void ConfigureLightingShaders() {
-		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 8) == "lighting") {
+		for (auto[rp, ss] : rasterShaders) if (rp == "lighting" || rp == "fog") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -331,13 +333,13 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		if (!runSubpass0 && !runSubpass1) return;
 		lightingRenderPass.Begin(device, commandBuffer, litImage);
 			if (runSubpass0) {
-				for (auto* s : rasterShaders["lighting_0"]) {
+				for (auto* s : rasterShaders["lighting"]) {
 					s->Execute(device, commandBuffer);
 				}
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 			if (runSubpass1) {
-				for (auto* s : rasterShaders["lighting_1"]) {
+				for (auto* s : rasterShaders["fog"]) {
 					s->Execute(device, commandBuffer);
 				}
 			}
@@ -944,17 +946,17 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 			});
 			
 			// Shaders
-			for (auto* shader : rasterShaders["postProcessing_0"]) {
+			for (auto* shader : rasterShaders["postfx"]) {
 				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 0);
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(r->renderingDevice);
 			}
-			for (auto* shader : rasterShaders["postProcessing_1"]) {
+			for (auto* shader : rasterShaders["history_write"]) {
 				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 1);
 				shader->AddColorBlendAttachmentState(VK_FALSE);
 				shader->CreatePipeline(r->renderingDevice);
 			}
-			for (auto* shader : rasterShaders["postProcessing_2"]) {
+			for (auto* shader : rasterShaders["present"]) {
 				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 2);
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(r->renderingDevice);
@@ -973,10 +975,14 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		thumbnailRenderPass.Destroy(r->renderingDevice);
 		
 		// Post-processing
-		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 14) == "postProcessing") {
-			for (auto* s : ss) {
-				s->DestroyPipeline(r->renderingDevice);
-			}
+		for (auto* s : rasterShaders["postfx"]) {
+			s->DestroyPipeline(r->renderingDevice);
+		}
+		for (auto* s : rasterShaders["history_write"]) {
+			s->DestroyPipeline(r->renderingDevice);
+		}
+		for (auto* s : rasterShaders["present"]) {
+			s->DestroyPipeline(r->renderingDevice);
 		}
 		postProcessingRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		postProcessingRenderPass.Destroy(r->renderingDevice);
@@ -994,7 +1000,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		thumbnailShader.SetData(3);
 		
 		// Post-Processing
-		for (auto[rp, ss] : rasterShaders) if (rp.substr(0, 14) == "postProcessing") {
+		for (auto[rp, ss] : rasterShaders) if (rp == "postfx" || rp == "history_write" || rp == "present") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -1029,15 +1035,15 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		
 		// Post Processing
 		postProcessingRenderPass.Begin(r->renderingDevice, commandBuffer, r->swapChain, {{.0,.0,.0,.0}, {.0,.0,.0,.0}, {.0,.0,.0,.0}}, imageIndex);
-			for (auto* shader : rasterShaders["postProcessing_0"]) {
+			for (auto* shader : rasterShaders["postfx"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			for (auto* shader : rasterShaders["postProcessing_1"]) {
+			for (auto* shader : rasterShaders["history_write"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			for (auto* shader : rasterShaders["postProcessing_2"]) {
+			for (auto* shader : rasterShaders["present"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
@@ -1062,7 +1068,7 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	float uiImageScale = 1.0;
 	Image uiImage { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
 	RenderPass uiRenderPass;
-	DescriptorSet uiDescriptorSet_1;
+	DescriptorSet overlayDescriptorSet_1;
 	
 	void CreateUiResources() {
 		uiImage.Create(r->renderingDevice, 
@@ -1106,14 +1112,14 @@ Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 		uiRenderPass.CreateFrameBuffers(r->renderingDevice, uiImage);
 		
 		// Shader pipeline
-		for (auto* shader : rasterShaders["ui"]) {
+		for (auto* shader : rasterShaders["overlay"]) {
 			shader->SetRenderPass(&uiImage, uiRenderPass.handle, 0);
 			shader->AddColorBlendAttachmentState();
 			shader->CreatePipeline(r->renderingDevice);
 		}
 	}
 	void DestroyUiPipeline() {
-		for (auto* shader : rasterShaders["ui"]) {
+		for (auto* shader : rasterShaders["overlay"]) {
 			shader->DestroyPipeline(r->renderingDevice);
 		}
 		uiRenderPass.DestroyFrameBuffers(r->renderingDevice);
@@ -1160,7 +1166,7 @@ std::unordered_map<std::string, Image*> images {
 	{"litImage", &litImage},
 	{"thumbnail", &thumbnailImage},
 	{"historyImage", &historyImage},
-	{"ui", &uiImage},
+	{"overlay", &uiImage},
 };
 
 #pragma endregion
@@ -1398,7 +1404,7 @@ extern "C" {
 	
 	void InitLayouts() {
 		
-		r->descriptorSets["0_base"] = &baseDescriptorSet_0;
+		r->descriptorSets["set0_base"] = &baseDescriptorSet_0;
 			baseDescriptorSet_0.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			baseDescriptorSet_0.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
 			baseDescriptorSet_0.AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
@@ -1412,34 +1418,35 @@ extern "C" {
 				baseDescriptorSet_0.AddBinding_storageBuffer(6, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 			#endif
 			
-		r->descriptorSets["1_visibility"] = &visibilityDescriptorSet_1;
+		r->descriptorSets["set1_visibility"] = &visibilityDescriptorSet_1;
 			//...
 			
-		r->descriptorSets["1_rayTracing"] = &rayTracingDescriptorSet_1;
-			rayTracingDescriptorSet_1.AddBinding_accelerationStructure(0, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
-			rayTracingDescriptorSet_1.AddBinding_imageView(1, &litImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			rayTracingDescriptorSet_1.AddBinding_imageView(2, &depthImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			{
-				int i = 3;
-				for (auto* img : gBuffers) rayTracingDescriptorSet_1.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			}
-		
-		r->descriptorSets["1_lighting"] = &lightingDescriptorSet_1;
+		r->descriptorSets["set1_ray_tracing"] = &rayTracingDescriptorSet_1;
 		{
 			int i = 0;
-			for (auto* img : gBuffers) lightingDescriptorSet_1.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
-			lightingDescriptorSet_1.AddBinding_combinedImageSampler(i++, &depthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
-			lightingDescriptorSet_1.AddBinding_combinedImageSampler(i++, &rasterDepthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+			rayTracingDescriptorSet_1.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			rayTracingDescriptorSet_1.AddBinding_imageView(i++, &litImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			rayTracingDescriptorSet_1.AddBinding_imageView(i++, &depthImage, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			{
+				for (auto* img : gBuffers) rayTracingDescriptorSet_1.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			}
 		}
 		
+		r->descriptorSets["set1_lighting_and_fog"] = &lightingAndFogDescriptorSet_1;
+		{
+			int i = 0;
+			for (auto* img : gBuffers) lightingAndFogDescriptorSet_1.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
+			lightingAndFogDescriptorSet_1.AddBinding_combinedImageSampler(i++, &depthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+			lightingAndFogDescriptorSet_1.AddBinding_combinedImageSampler(i++, &rasterDepthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
 		
-		r->descriptorSets["1_thumbnail"] = &thumbnailDescriptorSet_1;
+		r->descriptorSets["set1_thumbnail"] = &thumbnailDescriptorSet_1;
 			thumbnailDescriptorSet_1.AddBinding_combinedImageSampler(0, &litImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			
-		r->descriptorSets["1_ui"] = &uiDescriptorSet_1;
+		r->descriptorSets["set1_overlay"] = &overlayDescriptorSet_1;
 			//...
 		
-		r->descriptorSets["1_postProcessing"] = &postProcessingDescriptorSet_1;
+		r->descriptorSets["set1_postProcessing"] = &postProcessingDescriptorSet_1;
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(0, &litImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(1, &uiImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_inputAttachment(2, &ppImage, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1447,7 +1454,7 @@ extern "C" {
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(4, &depthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 			postProcessingDescriptorSet_1.AddBinding_combinedImageSampler(5, &rasterDepthImage, VK_SHADER_STAGE_FRAGMENT_BIT);
 		
-		r->descriptorSets["1_histogram"] = &histogramDescriptorSet_1;
+		r->descriptorSets["set1_histogram"] = &histogramDescriptorSet_1;
 			histogramDescriptorSet_1.AddBinding_imageView(0, &thumbnailImage, VK_SHADER_STAGE_COMPUTE_BIT);
 			histogramDescriptorSet_1.AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
 		
@@ -1457,13 +1464,13 @@ extern "C" {
 		}
 		// Add specific set 1 to specific layout lists
 		pipelineLayouts["visibility"]->AddDescriptorSet(&visibilityDescriptorSet_1);
-		pipelineLayouts["rayTracing"]->AddDescriptorSet(&rayTracingDescriptorSet_1);
-		pipelineLayouts["lighting"]->AddDescriptorSet(&lightingDescriptorSet_1);
+		pipelineLayouts["ray_tracing"]->AddDescriptorSet(&rayTracingDescriptorSet_1);
+		pipelineLayouts["lighting"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
+		pipelineLayouts["fog"]->AddDescriptorSet(&lightingAndFogDescriptorSet_1);
 		pipelineLayouts["thumbnail"]->AddDescriptorSet(&thumbnailDescriptorSet_1);
-		pipelineLayouts["ui"]->AddDescriptorSet(&uiDescriptorSet_1);
-		pipelineLayouts["postProcessing"]->AddDescriptorSet(&postProcessingDescriptorSet_1);
+		pipelineLayouts["overlay"]->AddDescriptorSet(&overlayDescriptorSet_1);
+		pipelineLayouts["post"]->AddDescriptorSet(&postProcessingDescriptorSet_1);
 		pipelineLayouts["histogram"]->AddDescriptorSet(&histogramDescriptorSet_1);
-		
 	}
 	
 	void ConfigureShaders() {
@@ -1566,28 +1573,6 @@ extern "C" {
 		
 		Geometry::globalBuffers.DefragmentMemory();
 		Geometry::globalBuffers.Allocate(r->renderingDevice, {r->renderingDevice->GetQueue("compute").familyIndex, r->renderingDevice->GetQueue("graphics").familyIndex});
-			
-		/*
-		#define TEST_BUFFER_ALLOC(type, size) {\
-			auto timer = v4d::Timer(true);\
-			Buffer testBuffer {VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT, size_t(size)*1024*1024};\
-			testBuffer.Allocate(renderingDevice, VK_MEMORY_PROPERTY_ ## type ## _BIT);\
-			double allocTime = timer.GetElapsedMilliseconds();\
-			timer.Reset();\
-			testBuffer.Free(renderingDevice);\
-			LOG("" << # type << " " << size << " mb Allocated in " << allocTime << " ms, Freed in " << timer.GetElapsedMilliseconds() << " ms")\
-		}
-		*/
-		
-		// TEST_BUFFER_ALLOC(HOST_COHERENT, 512)
-		// TEST_BUFFER_ALLOC(HOST_COHERENT, 1024)
-		// TEST_BUFFER_ALLOC(HOST_COHERENT, 2048)
-		// TEST_BUFFER_ALLOC(HOST_CACHED, 512)
-		// TEST_BUFFER_ALLOC(HOST_CACHED, 1024)
-		// TEST_BUFFER_ALLOC(HOST_CACHED, 2048)
-		// TEST_BUFFER_ALLOC(DEVICE_LOCAL, 512)
-		// TEST_BUFFER_ALLOC(DEVICE_LOCAL, 1024)
-		// TEST_BUFFER_ALLOC(DEVICE_LOCAL, 2048)
 	}
 	
 	void FreeBuffers() {
@@ -1606,6 +1591,16 @@ extern "C" {
 	}
 
 	void CreatePipelines() {
+		// Sort shaders
+		for (auto&[rs, ss] : rasterShaders) {
+			std::sort(ss.begin(), ss.end(), [](auto* a, auto* b){
+				return a->sortIndex < b->sortIndex;
+			});
+		}
+		std::sort(computeShaders.begin(), computeShaders.end(), [](auto* a, auto* b){
+			return a->sortIndex < b->sortIndex;
+		});
+		
 		// Pipeline layouts
 		for (auto[name,layout] : pipelineLayouts) {
 			layout->Create(r->renderingDevice);
@@ -1948,7 +1943,7 @@ extern "C" {
 	void Render2(VkCommandBuffer commandBuffer) {
 		// UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, uiImage, {{.0,.0,.0,.0}});
-			for (auto* shader : rasterShaders["ui"]) {
+			for (auto* shader : rasterShaders["overlay"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 			#ifdef _ENABLE_IMGUI
