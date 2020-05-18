@@ -84,28 +84,28 @@ Scene* scene = nullptr;
 
 	// Visibility
 	RasterShaderPipeline shader_visibility {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
-		"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
 	}};
 	// #ifdef _DEBUG
 		RasterShaderPipeline shader_debug_wireframe {pl_visibility_raster, {
-			"modules/V4D_hybrid/assets/shaders/raster.visibility.vert",
-			"modules/V4D_hybrid/assets/shaders/raster.visibility.frag",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
 		}};
 	// #endif
 	RasterShaderPipeline shader_material {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster.material.vert",
-		"modules/V4D_hybrid/assets/shaders/raster.material.frag",
+		"modules/V4D_hybrid/assets/shaders/raster_material.vert",
+		"modules/V4D_hybrid/assets/shaders/raster_material.frag",
 	}};
 	RasterShaderPipeline shader_glass {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster.glass.vert",
-		"modules/V4D_hybrid/assets/shaders/raster.glass.frag",
+		"modules/V4D_hybrid/assets/shaders/raster_glass.vert",
+		"modules/V4D_hybrid/assets/shaders/raster_glass.frag",
 	}};
 	
 	// Main Rendering
 	RasterShaderPipeline shader_lighting {pl_lighting_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster.lighting.vert",
-		"modules/V4D_hybrid/assets/shaders/raster.lighting.frag",
+		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
+		"modules/V4D_hybrid/assets/shaders/raster_lighting.frag",
 	}};
 	
 	// Ray Tracing
@@ -196,10 +196,10 @@ Scene* scene = nullptr;
 	// G-Buffers
 	static const int NB_G_BUFFERS = 4;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
-		&img_gBuffer_0,
-		&img_gBuffer_1,
-		&img_gBuffer_2,
-		&img_gBuffer_3,
+		&img_gBuffer_0, // R=snorm8(metallic), G=snorm8(roughness)
+		&img_gBuffer_1, // RGB=sfloat32(normal.xyz), A=sfloat32(packed(uv))
+		&img_gBuffer_2, // RGB=sfloat32(viewPosition.xyz), A=sfloat32(realDistanceFromCamera)
+		&img_gBuffer_3, // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
 	};
 #pragma endregion
 
@@ -654,11 +654,11 @@ Scene* scene = nullptr;
 	}
 	
 	void ConfigureRayTracingShaders() {
-		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx.rmiss");
-		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx.shadow.rmiss");
-		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx.rahit"*/ );
-		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx.sphere.rint");
-		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx.sphere.rint");
+		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rmiss");
+		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.shadow.rmiss");
+		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx_visibility.rahit"*/ );
+		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
 		//TODO sbt_lighting
 	}
 	
@@ -1367,6 +1367,7 @@ Scene* scene = nullptr;
 
 #pragma endregion
 
+///////////////////////////////////////////////////////////
 
 extern "C" {
 	
@@ -1376,7 +1377,7 @@ extern "C" {
 	#pragma region Containers Access
 		
 		Image* GetImage (const std::string& name) {
-			if (std::find(images.begin(), images.end(), name) == images.end()) {
+			if (images.find(name) == images.end()) {
 				throw std::runtime_error(std::string("Image '") + name + "' does not exist");
 				return nullptr;
 			}
@@ -1384,15 +1385,15 @@ extern "C" {
 		}
 		
 		PipelineLayout* GetPipelineLayout (const std::string& name) {
-			if (std::find(pipelineLayouts.begin(), pipelineLayouts.end(), name) == pipelineLayouts.end()) {
+			if (pipelineLayouts.find(name) == pipelineLayouts.end()) {
 				throw std::runtime_error(std::string("Pipeline layout '") + name + "' does not exist");
 				return nullptr;
 			}
 			return pipelineLayouts[name];
 		}
 		
-		void Addshader (const std::string& groupName, RasterShaderPipeline* shader) {
-			if (std::find(shaderGroups.begin(), shaderGroups.end(), groupName) == shaderGroups.end()) {
+		void AddShader (const std::string& groupName, RasterShaderPipeline* shader) {
+			if (shaderGroups.find(groupName) == shaderGroups.end()) {
 				throw std::runtime_error(std::string("Shader group '") + groupName + "' does not exist");
 				return;
 			}
@@ -1400,7 +1401,7 @@ extern "C" {
 		}
 		
 		ShaderBindingTable* GetShaderBindingTable (const std::string& sbtName) {
-			if (std::find(shaderBindingTables.begin(), shaderBindingTables.end(), sbtName) == shaderBindingTables.end()) {
+			if (shaderBindingTables.find(sbtName) == shaderBindingTables.end()) {
 				throw std::runtime_error(std::string("Shader binding table '") + sbtName + "' does not exist");
 				return nullptr;
 			}
@@ -1483,7 +1484,7 @@ extern "C" {
 	#pragma endregion
 	
 	void InitLayouts() {
-		r->descriptorSets["set0_base"] = &set0_base;
+		{r->descriptorSets["set0_base"] = &set0_base;
 			set0_base.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			set0_base.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
 			set0_base.AddBinding_storageBuffer(2, &Geometry::globalBuffers.lightBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
@@ -1496,12 +1497,12 @@ extern "C" {
 				set0_base.AddBinding_storageBuffer(5, &Geometry::globalBuffers.indexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 				set0_base.AddBinding_storageBuffer(6, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 			#endif
+		}
 			
 		r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
 			//...
 			
-		r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
-		{
+		{r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
 			int i = 0;
 			set1_visibility_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			set1_visibility_rays.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
@@ -1511,45 +1512,49 @@ extern "C" {
 			}
 		}
 		
-		r->descriptorSets["set1_lighting_and_fog"] = &set1_lighting_and_fog;
-		{
+		{r->descriptorSets["set1_lighting_and_fog"] = &set1_lighting_and_fog;
 			int i = 0;
 			for (auto* img : gBuffers) set1_lighting_and_fog.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_lighting_and_fog.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_lighting_and_fog.AddBinding_combinedImageSampler(i++, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
-		r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
+		{r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
 			set1_thumbnail.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
-			
+		}
+		
 		r->descriptorSets["set1_overlay"] = &set1_overlay;
 			//...
 		
-		r->descriptorSets["set1_post"] = &set1_post;
+		{r->descriptorSets["set1_post"] = &set1_post;
 			set1_post.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(1, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_inputAttachment(2, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(3, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(4, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(5, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
 		
-		r->descriptorSets["set1_histogram"] = &set1_histogram;
+		{r->descriptorSets["set1_histogram"] = &set1_histogram;
 			set1_histogram.AddBinding_imageView(0, &img_thumbnail, VK_SHADER_STAGE_COMPUTE_BIT);
 			set1_histogram.AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
-		
-		// Add the same set 0 to all pipeline layouts
-		for (auto[name,layout] : pipelineLayouts) {
-			layout->AddDescriptorSet(&set0_base);
 		}
-		// Add specific set 1 to specific layout lists
-		pipelineLayouts["visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
-		pipelineLayouts["visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
-		pipelineLayouts["lighting_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
-		pipelineLayouts["fog_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
-		pipelineLayouts["thumbnail"]->AddDescriptorSet(&set1_thumbnail);
-		pipelineLayouts["overlay"]->AddDescriptorSet(&set1_overlay);
-		pipelineLayouts["post"]->AddDescriptorSet(&set1_post);
-		pipelineLayouts["histogram"]->AddDescriptorSet(&set1_histogram);
+		
+		{ // Assign descriptor sets to layouts
+			// Add the same set 0 to all pipeline layouts
+			for (auto[name, layout] : pipelineLayouts) {
+				layout->AddDescriptorSet(&set0_base);
+			}
+			// Add specific set 1 to specific layout lists
+			pipelineLayouts["pl_visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
+			pipelineLayouts["pl_visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
+			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
+			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
+			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
+			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
+			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
+			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
+		}
 	}
 	
 	#pragma region Load/Upload Renderer

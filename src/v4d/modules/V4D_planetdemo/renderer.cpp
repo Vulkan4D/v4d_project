@@ -66,8 +66,8 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
-		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("visibility_rays");
-		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("fog_raster");
+		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
+		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		// r->descriptorSets["planets"] = &planetsDescriptorSet;
@@ -95,7 +95,7 @@ extern "C" {
 		// planetsDescriptorSet.AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		
 		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
-		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["set1_ray_tracing"]);
+		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["..."]);
 		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
 		// // terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
 		// terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
@@ -107,11 +107,11 @@ extern "C" {
 		planetAtmosphereShader->camera = &scene->camera;
 		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		V4D_Game::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(ATMOSPHERE_SHADER, planetAtmosphereShader);
-		mainRenderModule->AddShader("fog", planetAtmosphereShader);
+		mainRenderModule->AddShader("sg_fog", planetAtmosphereShader);
 	}
 	
 	void ConfigureShaders() {
-		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable();
+		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable("sbt_visibility");
 		
 		// Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.raymarching.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.raymarching.rint");
 		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");

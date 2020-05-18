@@ -1,5 +1,5 @@
 #include "core.glsl"
-#include "Camera.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_fog_raster.glsl"
 
 const int NB_SUNS = 3;
 
@@ -53,10 +53,8 @@ void main() {
 ##################################################################
 #shader frag
 
-// layout(location = 0) out vec4 color;void main() {color = vec4(1);}
-
-#include "core_lightingPass.glsl"
 #include "noise.glsl"
+
 layout(location = 0) in V2F v2f;
 
 const int RAYMARCH_STEPS = 40; // min=24, low=40, high=64, max=100
@@ -72,7 +70,7 @@ void main() {
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
-	float depthDistance = subpassLoad(gBuffer_position_dist).w;
+	float depthDistance = subpassLoad(in_img_gBuffer_2).w;
 	
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
 	depthDistance = max(minStepSize, depthDistance);
@@ -182,10 +180,10 @@ void main() {
 					float depth;
 					switch (camera.renderMode) {
 						case 0: // raster
-							depth = texture(rasterDepthImage, posLightScreenSpace.xy).r;
+							depth = texture(tex_img_tmpDepth, posLightScreenSpace.xy).r;
 						break;
 						case 1: // ray tracing
-							depth = texture(depthImage, posLightScreenSpace.xy).r;
+							depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
 						break;
 					}
 					float depthDistance = float(GetTrueDistanceFromDepthBuffer(depth));
@@ -214,7 +212,7 @@ void main() {
 	}
 	
 	float alpha = clamp(maxDepth/atmosphereHeight, 0, 0.5);
-	out_color = vec4(atmColor, alpha);
+	out_img_lit = vec4(atmColor, alpha);
 	// float alpha = clamp(maxDepth/atmosphereHeight + aurora.a, 0, 0.5);
-	// out_color = vec4(mix(aurora.rgb, atmColor, clamp(length(atmColor)+0.5, 0, 1)), alpha);
+	// out_img_lit = vec4(mix(aurora.rgb, atmColor, clamp(length(atmColor)+0.5, 0, 1)), alpha);
 }

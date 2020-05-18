@@ -1,5 +1,6 @@
 #include "core.glsl"
 #include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
 
 #############################################################
 #shader rgen
@@ -71,13 +72,11 @@ void main() {
 	float depth = float(GetDepthBufferFromTrueDistance(ray.distance));
 	
 	ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
-	imageStore(depthImage, coords, vec4(ray.distance>0? depth:0, 0,0,0));
-	imageStore(litImage, coords, vec4(ray.color, 1.0));
+	imageStore(img_depth, coords, vec4(ray.distance>0? depth:0, 0,0,0));
+	imageStore(img_lit, coords, vec4(ray.color, 1.0));
 	
-	//TODO also write to : 
-	// gBuffer_albedo_geometryIndex
-	// gBuffer_normal_uv
-	imageStore(gBuffer_position_dist, coords, vec4(ray.origin*ray.direction*ray.distance, ray.distance));
+	//TODO also write to other G-Buffers
+	imageStore(img_gBuffer_2, coords, vec4(ray.origin*ray.direction*ray.distance, ray.distance));
 }
 
 

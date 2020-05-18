@@ -7,8 +7,11 @@
 
 #############################################################
 
-#common .*comp
+#common .*rchit
+#include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
 
+#common .*comp
 #include "noise.glsl"
 
 #common .*map.comp
@@ -469,10 +472,10 @@ void main() {
 #############################################################
 #shader terrain.rchit
 
-#include "rtx_base.glsl"
 hitAttributeEXT vec3 hitAttribs;
 layout(location = 0) rayPayloadInEXT RayPayload ray;
 layout(location = 2) rayPayloadEXT bool shadowed;
+
 #include "rtx_pbr.glsl"
 #include "rtx_fragment.glsl"
 

@@ -1,62 +1,57 @@
 #include "core.glsl"
-#include "Camera.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_post.glsl"
 
 const bool humanEyeExposure = true; // otherwise, use full range
 
+struct V2F {
+	vec2 uv;
+};
+
 #common .*frag
 
-layout(location = 0) in vec2 in_uv;
-layout(location = 0) out vec4 out_color;
-layout(set = 1, binding = 0) uniform sampler2D litImage;
-layout(set = 1, binding = 1) uniform sampler2D overlayImage;
-layout(set = 1, input_attachment_index = 0, binding = 2) uniform highp subpassInput ppImage;
-layout(set = 1, binding = 3) uniform sampler2D historyImage; // previous frame
-layout(set = 1, binding = 4) uniform sampler2D depthImage;
-layout(set = 1, binding = 5) uniform sampler2D rasterDepthImage;
-
-#include "core_buffers.glsl"
+layout(location = 0) in V2F v2f;
 
 ##################################################################
 #shader vert
 
-layout (location = 0) out vec2 out_uv;
+layout (location = 0) out V2F v2f;
 
 void main() {
-	out_uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-	gl_Position = vec4(out_uv * 2.0f + -1.0f, 0.0f, 1.0f);
+	v2f.uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+	gl_Position = vec4(v2f.uv * 2.0f + -1.0f, 0.0f, 1.0f);
 }
 
 ##################################################################
 
-#shader txaa.frag
+#shader txaa.frag.0
 void main() {
-	vec2 uvCurrent = in_uv - camera.txaaOffset;
-	vec4 lit = texture(litImage, uvCurrent);
-	out_color = lit;
+	vec2 uvCurrent = v2f.uv - camera.txaaOffset;
+	vec4 lit = texture(tex_img_lit, uvCurrent);
+	out_img_pp = lit;
 	
 	if (TXAA) {
 		float depth;
 		switch (camera.renderMode) {
 			case 0: // raster
-				depth = texture(rasterDepthImage, uvCurrent).r;
+				depth = texture(tex_img_tmpDepth, uvCurrent).r;
 			break;
 			case 1: // ray tracing
-				depth = texture(depthImage, uvCurrent).r;
+				depth = texture(tex_img_depth, uvCurrent).r;
 			break;
 		}
-		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((in_uv * 2 - 1), depth, 1);
+		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((v2f.uv * 2 - 1), depth, 1);
 		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
-		vec4 history = texture(historyImage, uvHistory);
+		vec4 history = texture(tex_img_history, uvHistory);
 		
 		if (length(history.rgb) > 0) {
-			vec3 nearColor0 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1,  0)).rgb;
-			vec3 nearColor1 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 0,  1)).rgb;
-			vec3 nearColor2 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1,  0)).rgb;
-			vec3 nearColor3 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 0, -1)).rgb;
-			// vec3 nearColor4 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1,  1)).rgb;
-			// vec3 nearColor5 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1,  1)).rgb;
-			// vec3 nearColor6 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2( 1, -1)).rgb;
-			// vec3 nearColor7 = textureLodOffset(litImage, uvCurrent, 0.0, ivec2(-1, -1)).rgb;
+			vec3 nearColor0 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  0)).rgb;
+			vec3 nearColor1 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0,  1)).rgb;
+			vec3 nearColor2 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  0)).rgb;
+			vec3 nearColor3 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0, -1)).rgb;
+			// vec3 nearColor4 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  1)).rgb;
+			// vec3 nearColor5 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  1)).rgb;
+			// vec3 nearColor6 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1, -1)).rgb;
+			// vec3 nearColor7 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1, -1)).rgb;
 			
 			vec3 m1 = nearColor0
 					+ nearColor1
@@ -88,20 +83,20 @@ void main() {
 			float factor = 1.0/8.0;
 			// if (depth == 1.0 || depth == 0.0) factor = 1.0;
 			
-			out_color = vec4(mix(history.rgb, lit.rgb, factor), lit.a);
+			out_img_pp = vec4(mix(history.rgb, lit.rgb, factor), lit.a);
 		}
 	}
 }
 
-#shader history_write.frag
+#shader history_write.frag.1
 void main() {
-	out_color = vec4(subpassLoad(ppImage).rgb * (TXAA?2:1), 1);
+	out_img_history = vec4(subpassLoad(in_img_pp).rgb * (TXAA?2:1), 1);
 }
 
-#shader hdr.frag
+#shader hdr.frag.2
 void main() {
-	vec3 color = subpassLoad(ppImage).rgb;
-	vec2 in_uv = gl_FragCoord.st / textureSize(litImage,0).st;
+	vec3 color = subpassLoad(in_img_pp).rgb;
+	vec2 uv = gl_FragCoord.st / textureSize(tex_img_lit,0).st;
 	
 	// HDR ToneMapping (Reinhard)
 	if (HDR) {
@@ -129,15 +124,15 @@ void main() {
 	}
 	
 	// Final color
-	out_color = vec4(max(vec3(0),color.rgb), 1.0);
+	out_swapchain = vec4(max(vec3(0),color.rgb), 1.0);
 }
 
-#shader overlay_apply.frag
+#shader overlay_apply.frag.2
 void main() {
-	vec4 overlay = texture(overlayImage, in_uv);
+	vec4 overlay = texture(tex_img_overlay, v2f.uv);
 	if (length(overlay.rgb) > 0) {
 		overlay.a = length(overlay.rgb) + 0.2;
 	}
-	out_color = overlay;
+	out_swapchain = overlay;
 }
 

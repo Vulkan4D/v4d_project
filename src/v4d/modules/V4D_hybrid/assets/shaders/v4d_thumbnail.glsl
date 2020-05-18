@@ -1,28 +1,26 @@
-#version 460 core
+#include "core.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_thumbnail.glsl"
 
-precision highp int;
-precision highp float;
-precision highp sampler2D;
+struct V2F {
+    vec2 uv;
+};
 
 ##################################################################
 #shader vert
 
-layout (location = 0) out vec2 outUV;
+layout (location = 0) out V2F v2f;
 
 void main() 
 {
-    outUV = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
-    gl_Position = vec4(outUV * 2.0f + -1.0f, 0.0f, 1.0f);
+    v2f.uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+    gl_Position = vec4(v2f.uv * 2.0f + -1.0f, 0.0f, 1.0f);
 }
 
 ##################################################################
 #shader frag
 
-layout(location = 0) in vec2 uv;
-layout(location = 0) out vec4 out_color;
-layout(set = 1, binding = 0) uniform sampler2D litImage;
+layout(location = 0) in V2F v2f;
 
 void main() {
-	out_color = vec4(texture(litImage, uv).rgb, 1.0);
+	out_img_thumbnail = vec4(texture(tex_img_lit, v2f.uv).rgb, 1.0);
 }
-

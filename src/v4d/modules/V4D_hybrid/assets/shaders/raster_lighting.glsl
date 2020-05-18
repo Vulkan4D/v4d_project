@@ -1,104 +1,18 @@
 #include "core.glsl"
-#include "Camera.glsl"
-
-#common visibility.*
-
-layout(std430, push_constant) uniform GeometryPushConstant{
-	uint objectIndex;
-	uint geometryIndex;
-};
-
-struct V2F {
-	vec4 pos;
-	vec4 color;
-	vec4 normal_dist;
-	vec2 uv;
-};
-
-#shader visibility.vert
-
 #define GEOMETRY_BUFFERS_ACCESS readonly
-#define VISIBILITY_VERTEX_SHADER
-#include "core_buffers.glsl"
-
-layout(location = 0) out V2F v2f;
-
-void main() {
-	GeometryInstance geometry = GetGeometryInstance(geometryIndex);
-	Vertex vert = GetVertex();
-	vec4 pos = vec4(vert.pos, 1);
-	
-	v2f.pos = geometry.modelViewTransform * pos;
-	v2f.color = vert.color;
-	v2f.normal_dist = vec4(
-		geometry.normalViewTransform * vert.normal,
-		// True Distance From Camera
-		clamp(distance(vec3(camera.worldPosition), (mat4(geometry.modelTransform) * pos).xyz), float(camera.znear), float(camera.zfar))
-		// length(geometry.viewPosition)
-	);
-	v2f.uv = vert.uv;
-	
-	gl_Position = mat4(camera.projectionMatrix) * v2f.pos;
-}
-
-#shader visibility.frag
-
-layout(location = 0) in V2F v2f;
-
-layout(location = 0) out vec2 gBuffer_albedo_geometryIndex; // r = albedo, g = geometry index
-layout(location = 1) out vec4 gBuffer_normal_uv; // rgb = normal xyz,  a = uv
-layout(location = 2) out vec4 gBuffer_position_dist; // rgb = position xyz,  a = trueDistanceFromCamera
-
-void main() {
-	gBuffer_albedo_geometryIndex = vec2(PackColorAsFloat(v2f.color), uintBitsToFloat(geometryIndex));
-	gBuffer_normal_uv = vec4(v2f.normal_dist.xyz, PackUVasFloat(v2f.uv));
-	gBuffer_position_dist = vec4(v2f.pos.xyz, v2f.normal_dist.w);
-}
-
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_lighting_raster.glsl"
 
 #################################################################################
-
-#shader material.vert
-
-void main() {
-	//TODO
-}
-
-#shader material.frag
-
-void main() {
-	//TODO
-}
-
-
-#################################################################################
-
-#shader glass.vert
-
-void main() {
-	//TODO
-}
-
-#shader glass.frag
-
-void main() {
-	//TODO
-}
-
-
-#################################################################################
-
-#shader lighting.vert
+#shader vert
 
 void main() {
 	vec2 uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
 	gl_Position = vec4(uv * 2.0f + -1.0f, 0.0f, 1.0f);
 }
 
-#shader lighting.frag
+#################################################################################
+#shader frag
 
-#define GEOMETRY_BUFFERS_ACCESS readonly
-#include "core_buffers.glsl"
 #include "core_pbr.glsl"
 
 vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float roughness, float metallic) {
@@ -153,23 +67,21 @@ vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float r
 	return color;
 }
 
-#include "core_lightingPass.glsl"
-
 void main() {
-	vec2 albedo_geometryIndex = subpassLoad(gBuffer_albedo_geometryIndex).rg;
-	vec4 normal_uv = subpassLoad(gBuffer_normal_uv);
-	vec4 position_dist = subpassLoad(gBuffer_position_dist);
+	vec2 albedo_geometryIndex = subpassLoad(in_img_gBuffer_0).rg;
+	vec4 normal_uv = subpassLoad(in_img_gBuffer_1);
+	vec4 position_dist = subpassLoad(in_img_gBuffer_2);
 	vec4 albedo = UnpackColorFromFloat(albedo_geometryIndex.r);
 	uint geometryIndex = floatBitsToUint(albedo_geometryIndex.g);
 	vec3 viewSpaceNormal = normal_uv.xyz;
 	vec2 viewSpaceUV = UnpackUVfromFloat(normal_uv.w);
 	
-	// out_color = vec4(albedo);return;
+	// out_img_lit = vec4(albedo);return;
 	
 	if (camera.debug) {
-		out_color = vec4(viewSpaceNormal, 1);
+		out_img_lit = vec4(viewSpaceNormal, 1);
 		return;
 	}
 	
-	out_color = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, viewSpaceNormal, vec3(0), 0.6, 0.1), 1);
+	out_img_lit = vec4(ApplyPBRShading(position_dist.xyz, albedo.rgb, viewSpaceNormal, vec3(0), 0.6, 0.1), 1);
 }
