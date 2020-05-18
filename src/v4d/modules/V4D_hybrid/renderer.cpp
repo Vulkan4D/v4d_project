@@ -1499,9 +1499,10 @@ extern "C" {
 			#endif
 		}
 			
-		r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
+		{r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
 			//...
-			
+		}
+		
 		{r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
 			int i = 0;
 			set1_visibility_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
@@ -1519,13 +1520,6 @@ extern "C" {
 			set1_lighting_and_fog.AddBinding_combinedImageSampler(i++, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
-		{r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
-			set1_thumbnail.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
-		}
-		
-		r->descriptorSets["set1_overlay"] = &set1_overlay;
-			//...
-		
 		{r->descriptorSets["set1_post"] = &set1_post;
 			set1_post.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(1, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1533,6 +1527,14 @@ extern "C" {
 			set1_post.AddBinding_combinedImageSampler(3, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(4, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(5, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+		
+		{r->descriptorSets["set1_overlay"] = &set1_overlay;
+			//...
+		}
+		
+		{r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
+			set1_thumbnail.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_histogram"] = &set1_histogram;

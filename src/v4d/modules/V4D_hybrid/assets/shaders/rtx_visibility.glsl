@@ -5,7 +5,7 @@
 #############################################################
 #shader rgen
 
-layout(location = 0) rayPayloadEXT RayPayload ray;
+layout(location = 0) rayPayloadEXT RayPayload_visibility ray;
 
 void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
@@ -16,7 +16,7 @@ void main() {
 	vec3 origin = vec3(0); //vec4(inverse(camera.viewMatrix) * dvec4(0,0,0,1)).xyz;
 	vec3 direction = normalize(target); //vec4(inverse(camera.viewMatrix) * dvec4(normalize(target), 0)).xyz;
 
-	int traceMask = SOLID|LIQUID|CLOUD|PARTICLE|TRANSPARENT|CUTOUT|CELESTIAL;
+	int traceMask = SOLID|PARTICLE|CUTOUT|CELESTIAL;
 	#ifndef RENDER_LIGHT_SPHERES_MANUALLY_IN_RGEN
 		traceMask |= EMITTER;
 	#endif
@@ -83,7 +83,7 @@ void main() {
 // #############################################################
 // #shader rahit
 
-// layout(location = 0) rayPayloadInEXT RayPayload ray;
+// layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 // hitAttributeEXT vec3 hitAttribs;
 
 // void main() {
@@ -103,7 +103,7 @@ void main() {
 
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 layout(location = 2) rayPayloadEXT bool shadowed;
 
 #include "rtx_fragment.glsl"
@@ -130,7 +130,7 @@ void main() {
 #############################################################
 #shader rmiss
 
-layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 
 void main() {
 	//... may return a background color if other than black
@@ -188,7 +188,7 @@ void main() {
 
 hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
-layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 layout(location = 2) rayPayloadEXT bool shadowed;
 
 #include "rtx_pbr.glsl"
@@ -213,7 +213,7 @@ void main() {
 
 hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 
-layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 layout(location = 2) rayPayloadEXT bool shadowed;
 
 void main() {
