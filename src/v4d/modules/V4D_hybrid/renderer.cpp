@@ -51,7 +51,7 @@ Scene* scene = nullptr;
 #pragma endregion
 
 #pragma region Images
-	DepthImage img_tmpDepth { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
+	DepthImage img_tmpDepth { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
 	Image img_tmpBuffer { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
 	Image img_gBuffer_0 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R8G8_SNORM }};
@@ -69,11 +69,9 @@ Scene* scene = nullptr;
 #pragma region Pipeline Layouts
 	PipelineLayout pl_visibility_raster;
 	PipelineLayout pl_visibility_rays;
-	PipelineLayout pl_material_raster;
 	PipelineLayout pl_lighting_raster;
 	PipelineLayout pl_lighting_rays;
 	PipelineLayout pl_fog_raster;
-	PipelineLayout pl_glass_raster;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
 	PipelineLayout pl_thumbnail;
@@ -84,19 +82,26 @@ Scene* scene = nullptr;
 
 	// Visibility
 	RasterShaderPipeline shader_visibility {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
+		#ifdef RENDERER_SEPARATE_RASTER_VISIBILITY_MATERIAL_SUBPASS
+			"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
+		#else
+			"modules/V4D_hybrid/assets/shaders/raster_visibility_full.vert",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility_full.frag",
+		#endif
 	}};
 	// #ifdef _DEBUG
 		RasterShaderPipeline shader_debug_wireframe {pl_visibility_raster, {
-			"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
-			"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility_full.vert",
+			"modules/V4D_hybrid/assets/shaders/raster_visibility_full.frag",
 		}};
 	// #endif
-	RasterShaderPipeline shader_material {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_material.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_material.frag",
-	}};
+	#ifdef RENDERER_SEPARATE_RASTER_VISIBILITY_MATERIAL_SUBPASS
+		RasterShaderPipeline shader_material {pl_visibility_raster, {
+			"modules/V4D_hybrid/assets/shaders/raster_material.vert",
+			"modules/V4D_hybrid/assets/shaders/raster_material.frag",
+		}};
+	#endif
 	RasterShaderPipeline shader_glass {pl_visibility_raster, {
 		"modules/V4D_hybrid/assets/shaders/raster_glass.vert",
 		"modules/V4D_hybrid/assets/shaders/raster_glass.frag",
@@ -158,24 +163,23 @@ Scene* scene = nullptr;
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
 		{"pl_visibility_raster", &pl_visibility_raster},
 		{"pl_visibility_rays", &pl_visibility_rays},
-		{"pl_material_raster", &pl_material_raster},
 		{"pl_lighting_raster", &pl_lighting_raster},
 		{"pl_lighting_rays", &pl_lighting_rays},
 		{"pl_fog_raster", &pl_fog_raster},
-		{"pl_glass_raster", &pl_glass_raster},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
 		{"pl_thumbnail", &pl_thumbnail},
 		{"pl_histogram", &pl_histogram},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
-		{"sg_visibility", {
-			&shader_visibility,
+		{"sg_visibility", {&shader_visibility,
 			// #ifdef _DEBUG
 				&shader_debug_wireframe,
 			// #endif
 		}},
-		{"sg_material", {&shader_material}},
+		#ifdef RENDERER_SEPARATE_RASTER_VISIBILITY_MATERIAL_SUBPASS
+			{"sg_material", {&shader_material}},
+		#endif
 		{"sg_lighting", {&shader_lighting}},
 		{"sg_fog", {}},
 		{"sg_glass", {&shader_glass}},
@@ -189,10 +193,6 @@ Scene* scene = nullptr;
 		{"sbt_visibility", &sbt_visibility},
 		{"sbt_lighting", &sbt_lighting},
 	};
-	// FrameBuffers
-	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
-	std::unordered_map<std::string, std::vector<VkFence>> fences {};
-	std::unordered_map<std::string, std::vector<VkCommandBuffer>> commandBuffers {};
 	// G-Buffers
 	static const int NB_G_BUFFERS = 4;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
@@ -201,6 +201,10 @@ Scene* scene = nullptr;
 		&img_gBuffer_2, // RGB=sfloat32(viewPosition.xyz), A=sfloat32(realDistanceFromCamera)
 		&img_gBuffer_3, // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
 	};
+	// FrameBuffers
+	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
+	std::unordered_map<std::string, std::vector<VkFence>> fences {};
+	std::unordered_map<std::string, std::vector<VkCommandBuffer>> commandBuffers {};
 #pragma endregion
 
 #pragma region Render Passes (Rasterization)
@@ -241,12 +245,16 @@ Scene* scene = nullptr;
 			img_tmpDepth.Create(r->renderingDevice, rasterWidth, rasterHeight);
 			r->TransitionImageLayout(commandBuffer, img_tmpDepth, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			
+			img_tmpBuffer.Create(r->renderingDevice, rasterWidth, rasterHeight);
+			r->TransitionImageLayout(commandBuffer, img_tmpBuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
 	void DestroyRasterVisibilityResources() {
 		for (auto* img : gBuffers)
 			img->Destroy(r->renderingDevice);
 		img_tmpDepth.Destroy(r->renderingDevice);
+		img_tmpBuffer.Destroy(r->renderingDevice);
 	}
 	
 	void CreateRenderingResources() {
@@ -266,7 +274,130 @@ Scene* scene = nullptr;
 		img_depth.Destroy(r->renderingDevice);
 	}
 	
+	// Separate visibily and material passes
 	void CreateRasterVisibilityPipeline() {
+	#ifdef RENDERER_SEPARATE_RASTER_VISIBILITY_MATERIAL_SUBPASS
+		std::array<Image*, NB_G_BUFFERS+2> attachmentImages {};
+		std::array<VkAttachmentDescription, NB_G_BUFFERS+2> attachments {};
+		
+		std::array<VkAttachmentReference, 1> colorAttachmentRefs0 {};
+		VkAttachmentReference depthAttachmentRef;
+		
+		std::array<VkAttachmentReference, NB_G_BUFFERS> colorAttachmentRefs1 {};
+		std::array<VkAttachmentReference, 2> inputAttachmentRefs1 {};
+		
+		int i = 0;
+		// G-Buffers
+		for (auto* img : gBuffers) {
+			attachmentImages[i] = img;
+			attachments[i].format = img->format;
+			attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			colorAttachmentRefs1[i] = {
+				visibilityRasterPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			++i;
+		}
+		{ // Depth buffer
+			attachmentImages[i] = &img_tmpDepth;
+			attachments[i].format = img_tmpDepth.format;
+			attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			depthAttachmentRef = {
+				visibilityRasterPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			};
+			inputAttachmentRefs1[0] = {
+				visibilityRasterPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
+			++i;
+		}
+		{ // Tmp buffer
+			attachmentImages[i] = &img_tmpBuffer;
+			attachments[i].format = img_tmpBuffer.format;
+			attachments[i].samples = VK_SAMPLE_COUNT_1_BIT;
+			attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			attachments[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			colorAttachmentRefs0[0] = {
+				visibilityRasterPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			inputAttachmentRefs1[1] = {
+				visibilityRasterPass.AddAttachment(attachments[i]),
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
+			++i;
+		}
+		
+		// SubPasses
+		std::array<VkSubpassDependency, 2> subpassDependencies {
+			VkSubpassDependency{
+				VK_SUBPASS_EXTERNAL,// srcSubpass;
+				0,// dstSubpass;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+				0// dependencyFlags;
+			},
+			VkSubpassDependency{
+				0,// srcSubpass;
+				1,// dstSubpass;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+				VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+				0// dependencyFlags;
+			},
+		};
+		std::array<VkSubpassDescription, 2> subpasses {};
+			subpasses[0] = {};
+			subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpasses[0].colorAttachmentCount = colorAttachmentRefs0.size();
+			subpasses[0].pColorAttachments = colorAttachmentRefs0.data();
+			subpasses[1] = {};
+			subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpasses[1].colorAttachmentCount = colorAttachmentRefs1.size();
+			subpasses[1].pColorAttachments = colorAttachmentRefs1.data();
+			subpasses[1].inputAttachmentCount = inputAttachmentRefs1.size();
+			subpasses[1].pInputAttachments = inputAttachmentRefs1.data();
+		visibilityRasterPass.AddSubpass(subpasses[0]);
+		visibilityRasterPass.AddSubpass(subpasses[1]);
+		visibilityRasterPass.renderPassInfo.dependencyCount = subpassDependencies.size();
+		visibilityRasterPass.renderPassInfo.pDependencies = subpassDependencies.data();
+		
+		// Create the render pass
+		visibilityRasterPass.Create(r->renderingDevice);
+		visibilityRasterPass.CreateFrameBuffers(r->renderingDevice, attachmentImages.data(), attachmentImages.size());
+		
+		// Shaders
+		for (auto* s : shaderGroups["sg_visibility"]) {
+			s->SetRenderPass(*attachmentImages.data(), visibilityRasterPass.handle, 0);
+			for (int i = 0; i < colorAttachmentRefs0.size(); ++i)
+				s->AddColorBlendAttachmentState(VK_FALSE);
+			s->CreatePipeline(r->renderingDevice);
+		}
+		for (auto* s : shaderGroups["sg_material"]) {
+			s->SetRenderPass(*attachmentImages.data(), visibilityRasterPass.handle, 1);
+			for (int i = 0; i < colorAttachmentRefs1.size(); ++i)
+				s->AddColorBlendAttachmentState(VK_FALSE);
+			s->CreatePipeline(r->renderingDevice);
+		}
+	#else
 		std::array<Image*, NB_G_BUFFERS+1> attachmentImages {};
 		std::array<VkAttachmentDescription, NB_G_BUFFERS+1> attachments {};
 		std::array<VkAttachmentReference, NB_G_BUFFERS> colorAttachmentRefs {};
@@ -323,15 +454,20 @@ Scene* scene = nullptr;
 				s->AddColorBlendAttachmentState(VK_FALSE);
 			s->CreatePipeline(r->renderingDevice);
 		}
+	#endif
 	}
 	
 	void DestroyRasterVisibilityPipeline() {
 		for (auto* s : shaderGroups["sg_visibility"]) {
 			s->DestroyPipeline(r->renderingDevice);
 		}
+		#ifdef RENDERER_SEPARATE_RASTER_VISIBILITY_MATERIAL_SUBPASS
+			for (auto* s : shaderGroups["sg_material"]) {
+				s->DestroyPipeline(r->renderingDevice);
+			}
+		#endif
 		visibilityRasterPass.DestroyFrameBuffers(r->renderingDevice);
 		visibilityRasterPass.Destroy(r->renderingDevice);
-		
 	}
 	
 	void CreateLightingPipeline() {
@@ -466,6 +602,14 @@ Scene* scene = nullptr;
 				shader_debug_wireframe.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
 			#endif
 		// #endif
+		
+		for (auto* s : shaderGroups["sg_material"]) {
+			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			s->depthStencilState.depthTestEnable = VK_FALSE;
+			s->depthStencilState.depthWriteEnable = VK_FALSE;
+			s->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+			s->SetData(3);
+		}
 	}
 	
 	void ConfigureLightingShaders() {
@@ -1500,7 +1644,9 @@ extern "C" {
 		}
 			
 		{r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
-			//...
+			int i = 0;
+			set1_visibility_raster.AddBinding_inputAttachment(i++, &img_tmpBuffer, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_visibility_raster.AddBinding_inputAttachment(i++, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
@@ -1521,12 +1667,13 @@ extern "C" {
 		}
 		
 		{r->descriptorSets["set1_post"] = &set1_post;
-			set1_post.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(1, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_inputAttachment(2, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(3, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(4, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(5, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			int i = 0;
+			set1_post.AddBinding_combinedImageSampler(i++, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_inputAttachment(i++, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_tmpDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_overlay"] = &set1_overlay;
@@ -1551,6 +1698,7 @@ extern "C" {
 			pipelineLayouts["pl_visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
 			pipelineLayouts["pl_visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
 			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
+			pipelineLayouts["pl_lighting_rays"]->AddDescriptorSet(&set1_lighting_and_fog);
 			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);

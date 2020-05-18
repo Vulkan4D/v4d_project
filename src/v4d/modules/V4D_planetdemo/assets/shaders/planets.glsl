@@ -96,7 +96,7 @@ void main() {
 #shader terrain.rchit
 
 hitAttributeEXT vec3 hitAttribs;
-layout(location = 0) rayPayloadInEXT RayPayload ray;
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 layout(location = 2) rayPayloadEXT bool shadowed;
 
 #include "rtx_pbr.glsl"
