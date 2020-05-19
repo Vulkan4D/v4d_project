@@ -1,5 +1,4 @@
 #include "core.glsl"
-#define GEOMETRY_BUFFERS_ACCESS readonly
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_lighting_raster.glsl"
 
 #################################################################################

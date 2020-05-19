@@ -1,3 +1,4 @@
+#define GEOMETRY_BUFFERS_ACCESS readonly
 #include "set0_base.glsl"
 
 #ifdef SHADER_FRAG
