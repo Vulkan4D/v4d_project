@@ -1,35 +1,11 @@
 #define _V4D_MODULE
 #include <v4d.h>
 
+#include "camera_options.hh"
+
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
-
-#pragma region Rendering Modes
-
-	enum RenderingMode : int {
-		rasterization,
-		rayTracing,
-	};
-	const char* VISIBILITY_RENDER_MODES_STR = 
-		"Rasterization\0"
-		"Ray-Tracing\0"
-	;
-	enum ShadowType : int {
-		shadows_off,
-		shadows_hard,
-		// shadows_soft,
-	};
-	const char* SHADOW_TYPES_STR = 
-		"Disabled\0"
-		"Hard shadows\0"
-		// "Soft shadows\0"
-	;
-	static const int DEFAULT_VISIBILITY_RENDER_MODE = rasterization;
-	static const int DEFAULT_LIGHTING_RENDER_MODE = rayTracing;
-	static const int DEFAULT_SHADOW_TYPE = shadows_hard;
-
-#pragma endregion
 
 #pragma region Limits
 	const uint32_t MAX_ACTIVE_LIGHTS = 256;
@@ -43,7 +19,8 @@ Scene* scene = nullptr;
 	DescriptorSet set0_base;
 	DescriptorSet set1_visibility_raster;
 	DescriptorSet set1_visibility_rays;
-	DescriptorSet set1_lighting_and_fog;
+	DescriptorSet set1_lighting_raster;
+	DescriptorSet set1_lighting_rays;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
 	DescriptorSet set1_histogram;
@@ -57,7 +34,7 @@ Scene* scene = nullptr;
 	Image img_gBuffer_0 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R8G8_SNORM }};
 	Image img_gBuffer_1 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image img_gBuffer_2 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
-	Image img_gBuffer_3 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
+	Image img_gBuffer_3 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_lit { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_pp { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
@@ -507,7 +484,7 @@ Scene* scene = nullptr;
 					// #endif
 				) {
 					// #ifdef _DEBUG
-						if (scene->camera.debug != (s == &shader_debug_wireframe)) {
+						if ((scene->camera.debugOptions & DEBUG_OPTION_WIREFRAME) != (s == &shader_debug_wireframe)) {
 							continue;
 						}
 					// #endif
@@ -548,7 +525,7 @@ Scene* scene = nullptr;
 		
 	}
 	
-	void RunLighting(Device* device, VkCommandBuffer commandBuffer, bool runSubpass0, bool runSubpass1) {
+	void RunRasterLighting(Device* device, VkCommandBuffer commandBuffer, bool runSubpass0, bool runSubpass1) {
 		if (!runSubpass0 && !runSubpass1) return;
 		lightingRenderPass.Begin(device, commandBuffer, img_lit);
 			if (runSubpass0) {
@@ -656,12 +633,23 @@ Scene* scene = nullptr;
 	}
 	
 	void ConfigureRayTracingShaders() {
+		// Visibility Miss
 		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rmiss");
-		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.shadow.rmiss");
+		
+		// Lighting Miss (Shadow)
+		shaderBindingTables["sbt_lighting"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_lighting.shadow.rmiss");
+		
+		// Standard
 		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx_visibility.rahit"*/ );
+		/*Geometry::rayTracingShaderOffsets["standard"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx_lighting.rahit"*/ );
+		
+		// Sphere
 		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+		/*Geometry::rayTracingShaderOffsets["sphere"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+		
+		// Light
 		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-		//TODO sbt_lighting
+		/*Geometry::rayTracingShaderOffsets["light"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
 	}
 	
 	void RunRayTracingVisibilityCommands(VkCommandBuffer commandBuffer) {
@@ -1221,6 +1209,34 @@ Scene* scene = nullptr;
 		scene->camera.RefreshProjectionMatrix();
 		scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 		
+		// TXAA
+		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::WIREFRAME) {
+			static unsigned long frameCount = 0;
+			static const glm::dvec2 samples8[8] = {
+				glm::dvec2(-7.0, 1.0) / 8.0,
+				glm::dvec2(-5.0, -5.0) / 8.0,
+				glm::dvec2(-1.0, -3.0) / 8.0,
+				glm::dvec2(3.0, -7.0) / 8.0,
+				glm::dvec2(5.0, -1.0) / 8.0,
+				glm::dvec2(7.0, 7.0) / 8.0,
+				glm::dvec2(1.0, 3.0) / 8.0,
+				glm::dvec2(-3.0, 5.0) / 8.0
+			};
+			glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
+			glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
+			scene->camera.projectionMatrix[2].x = subSample.x;
+			scene->camera.projectionMatrix[2].y = subSample.y;
+			// historyTxaaOffset = txaaOffset;
+			scene->camera.txaaOffset = subSample / 2.0;
+			frameCount++;
+			
+			scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
+			
+			// Save Projection and View matrices from previous frame
+			scene->camera.historyViewMatrix = scene->camera.viewMatrix;
+		}
+		
+		
 		// Modules
 		V4D_Game::ForEachSortedModule([](auto* mod){
 			if (mod->RendererFrameUpdate) mod->RendererFrameUpdate();
@@ -1333,6 +1349,8 @@ Scene* scene = nullptr;
 		ClearLitImage(commandBuffer);
 		
 		// Transfer data to rendering device
+		scene->camera.renderOptions = RENDER_OPTIONS::Get();
+		scene->camera.debugOptions = DEBUG_OPTIONS::Get();
 		cameraUniformBuffer.Update(r->renderingDevice, commandBuffer);
 		activeLightsUniformBuffer.Update(r->renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
 		Geometry::globalBuffers.PushObjects(r->renderingDevice, commandBuffer);
@@ -1432,9 +1450,6 @@ extern "C" {
 				return (a->RenderOrderIndex? a->RenderOrderIndex():0) < (b->RenderOrderIndex? b->RenderOrderIndex():0);
 			}, "render");
 			
-			scene->camera.renderMode = DEFAULT_VISIBILITY_RENDER_MODE;
-			scene->camera.shadows = DEFAULT_SHADOW_TYPE;
-			
 			r->queuesInfo.emplace_back("secondary", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 			
 			// Device Extensions
@@ -1478,8 +1493,9 @@ extern "C" {
 			} else {
 				// No Ray-Tracing support
 				LOG_WARN("Ray-Tracing unavailable, using rasterization")
-				scene->camera.renderMode = rasterization;
-				scene->camera.shadows = shadows_off;
+				RENDER_OPTIONS::RAY_TRACED_VISIBILITY = false;
+				RENDER_OPTIONS::RAY_TRACED_LIGHTING = false;
+				RENDER_OPTIONS::HARD_SHADOWS = false;
 			}
 		}
 	
@@ -1507,17 +1523,25 @@ extern "C" {
 		
 		{r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
 			int i = 0;
-			set1_visibility_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
-			set1_visibility_rays.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_visibility_rays.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_visibility_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			for (auto* img : gBuffers) set1_visibility_rays.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_visibility_rays.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
-		{r->descriptorSets["set1_lighting_and_fog"] = &set1_lighting_and_fog;
+		{r->descriptorSets["set1_lighting_rays"] = &set1_lighting_rays;
 			int i = 0;
-			for (auto* img : gBuffers) set1_lighting_and_fog.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_lighting_and_fog.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_lighting_and_fog.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_lighting_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			for (auto* img : gBuffers) set1_lighting_rays.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_lighting_rays.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_lighting_rays.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_lighting_rays.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+		}
+		
+		{r->descriptorSets["set1_lighting_raster"] = &set1_lighting_raster;
+			int i = 0;
+			for (auto* img : gBuffers) set1_lighting_raster.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_lighting_raster.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_lighting_raster.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_post"] = &set1_post;
@@ -1551,9 +1575,9 @@ extern "C" {
 			// Add specific set 1 to specific layout lists
 			pipelineLayouts["pl_visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
 			pipelineLayouts["pl_visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
-			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
-			pipelineLayouts["pl_lighting_rays"]->AddDescriptorSet(&set1_lighting_and_fog);
-			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_lighting_and_fog);
+			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_raster);
+			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_lighting_raster);
+			pipelineLayouts["pl_lighting_rays"]->AddDescriptorSet(&set1_lighting_rays);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
@@ -1939,27 +1963,28 @@ extern "C" {
 	
 	void RunUi() {
 		#ifdef _ENABLE_IMGUI
-			ImGui::SetNextWindowSize({340, 160});
+			ImGui::SetNextWindowSize({340, 150});
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
-				ImGui::Checkbox("Debug Geometry", &scene->camera.debug);
+				ImGui::Checkbox("Debug Wireframe", &DEBUG_OPTIONS::WIREFRAME);
 			// #endif
-			if (scene->camera.debug) {
+			if (DEBUG_OPTIONS::WIREFRAME) {
 				// ...
 			} else {
 				if (r->rayTracingFeatures.rayTracing) {
-					ImGui::Combo("Rendering Mode", &scene->camera.renderMode, VISIBILITY_RENDER_MODES_STR);
+					ImGui::Checkbox("Ray-traced visibility", &RENDER_OPTIONS::RAY_TRACED_VISIBILITY);
+					ImGui::Checkbox("Ray-traced lighting", &RENDER_OPTIONS::RAY_TRACED_LIGHTING);
 				} else {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
-				if (scene->camera.renderMode > 0) {
-					ImGui::Combo("Shadows", &scene->camera.shadows, SHADOW_TYPES_STR);
+				if (r->rayTracingFeatures.rayTracing) {
+					ImGui::Checkbox("Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
 				} else {
-					ImGui::Text("Shadows disabled");
+					ImGui::Text("Shadows unavailable with rasterization");
 				}
-				ImGui::Checkbox("TXAA", &scene->camera.txaa);
-				ImGui::Checkbox("Gamma correction", &scene->camera.gammaCorrection);
-				ImGui::Checkbox("HDR Tone Mapping", &scene->camera.hdr);
+				ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+				ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
+				ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
 				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
 				ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
 				ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
@@ -2012,14 +2037,22 @@ extern "C" {
 	}
 	
 	void Render(VkCommandBuffer commandBuffer) {
-		if (scene->camera.renderMode == rasterization || scene->camera.debug) {
-			// Raster Visibility and lighting
+		if (DEBUG_OPTIONS::WIREFRAME) {
 			RunRasterVisibility(r->renderingDevice, commandBuffer);
-			RunLighting(r->renderingDevice, commandBuffer, true, !scene->camera.debug);
-		} else if (r->rayTracingFeatures.rayTracing) {
-			// Ray Tracing lighting
-			RunRayTracingVisibilityCommands(commandBuffer);
-			RunLighting(r->renderingDevice, commandBuffer, false, true);
+			RunRasterLighting(r->renderingDevice, commandBuffer, true, false);
+		} else {
+			if (RENDER_OPTIONS::RAY_TRACED_VISIBILITY) {
+				RunRayTracingVisibilityCommands(commandBuffer);
+			} else {
+				RunRasterVisibility(r->renderingDevice, commandBuffer);
+			}
+			if (RENDER_OPTIONS::RAY_TRACED_LIGHTING) {
+				RunRayTracingLightingCommands(commandBuffer);
+				// Use Raster Fog Pass (for now)
+				RunRasterLighting(r->renderingDevice, commandBuffer, false, true);
+			} else {
+				RunRasterLighting(r->renderingDevice, commandBuffer, true, true);
+			}
 		}
 	}
 

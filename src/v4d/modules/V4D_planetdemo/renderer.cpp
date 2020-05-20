@@ -66,7 +66,8 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
-		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
+		auto* rayTracingVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
+		auto* rayTracingLightingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_lighting_rays");
 		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
@@ -75,8 +76,9 @@ extern "C" {
 		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
 		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
-		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		// rayTracingPipelineLayout->AddDescriptorSet(&planetsDescriptorSet);
+		rayTracingVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		rayTracingLightingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		// rayTracingVisibilityPipelineLayout->AddDescriptorSet(&planetsDescriptorSet);
 		
 		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
 		// mapsGenDescriptorSet.AddBinding_imageView_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
@@ -111,10 +113,12 @@ extern "C" {
 	}
 	
 	void ConfigureShaders() {
-		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable("sbt_visibility");
+		auto* shaderBindingTableVisibility = mainRenderModule->GetShaderBindingTable("sbt_visibility");
+		auto* shaderBindingTableLighting = mainRenderModule->GetShaderBindingTable("sbt_lighting");
 		
 		// Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.raymarching.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.raymarching.rint");
-		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		/*Geometry::rayTracingShaderOffsets["planet_terrain"]*/shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
 		
 		// Atmosphere
 		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());

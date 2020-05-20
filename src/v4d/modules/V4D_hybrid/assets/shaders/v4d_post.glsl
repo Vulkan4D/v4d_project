@@ -31,13 +31,10 @@ void main() {
 	
 	if (TXAA) {
 		float depth;
-		switch (camera.renderMode) {
-			case 0: // raster
-				depth = texture(tex_img_tmpDepth, uvCurrent).r;
-			break;
-			case 1: // ray tracing
-				depth = texture(tex_img_depth, uvCurrent).r;
-			break;
+		if (RayTracedVisibility) {
+			depth = texture(tex_img_depth, uvCurrent).r;
+		} else {
+			depth = texture(tex_img_rasterDepth, uvCurrent).r;
 		}
 		vec4 clipSpaceCoords = camera.reprojectionMatrix * vec4((v2f.uv * 2 - 1), depth, 1);
 		vec2 uvHistory = (clipSpaceCoords.xy / 2 + 0.5) /* - camera.historyTxaaOffset*/ ;
@@ -96,7 +93,7 @@ void main() {
 #shader hdr.frag.2
 void main() {
 	vec3 color = subpassLoad(in_img_pp).rgb;
-	vec2 uv = gl_FragCoord.st / textureSize(tex_img_lit,0).st;
+	// vec2 uv = gl_FragCoord.st / textureSize(tex_img_lit,0).st;
 	
 	// HDR ToneMapping (Reinhard)
 	if (HDR) {

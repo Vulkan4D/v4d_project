@@ -2,12 +2,14 @@
 	#define GEOMETRY_BUFFERS_ACCESS
 #endif
 
+#include "v4d/modules/V4D_hybrid/camera_options.hh"
+
 // Descriptor Set 0
 layout(set = 0, binding = 0) uniform Camera {
 	int width;
 	int height;
-	bool txaa;
-	bool debug;
+	uint renderOptions;
+	uint debugOptions;
 	
 	vec4 luminance;
 	dvec3 worldPosition;
@@ -22,11 +24,6 @@ layout(set = 0, binding = 0) uniform Camera {
 	mat4 reprojectionMatrix;
 	vec2 txaaOffset;
 	
-	bool hdr;
-	bool gammaCorrection;
-	int renderMode;
-	int shadows;
-
 	float brightness;
 	float contrast;
 	float gamma;
@@ -40,12 +37,12 @@ layout(set = 0, binding = 4) GEOMETRY_BUFFERS_ACCESS buffer GeometryBuffer {floa
 layout(set = 0, binding = 5) GEOMETRY_BUFFERS_ACCESS buffer IndexBuffer {uint indices[];};
 layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 vertices[];};
 
-// Camera Utils
-bool TXAA = camera.txaa && !camera.debug;
-bool HDR = camera.hdr && !camera.debug;
-bool GammaCorrection = camera.gammaCorrection && !camera.debug;
-int RenderMode = camera.debug? 0 : camera.renderMode;
-int ShadowType = camera.debug? 0 : camera.shadows;
+bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
+bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe;
+bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && !DebugWireframe;
+bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && !DebugWireframe;
+bool RayTracedVisibility = (camera.renderOptions & RENDER_OPTION_RAY_TRACED_VISIBILITY)!=0 && !DebugWireframe;
+bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && !DebugWireframe;
 
 double GetTrueDistanceFromDepthBuffer(double depth) {
 	if (depth == 1) return camera.zfar;
@@ -53,7 +50,7 @@ double GetTrueDistanceFromDepthBuffer(double depth) {
 }
 
 double GetDepthBufferFromTrueDistance(double dist) {
-	if (dist == 0) return 1;
+	if (dist == 0) return 0;
 	return (((((2.0 * (camera.zfar * camera.znear)) / dist) - camera.znear - camera.zfar) / (camera.zfar - camera.znear)) + 1) / 2.0;
 }
 

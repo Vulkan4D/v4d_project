@@ -12,24 +12,27 @@ void main() {
 #################################################################################
 #shader frag
 
-#include "raster_pbr.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/raster_pbr.glsl"
 
 void main() {
-	vec2 pbr = subpassLoad(in_img_gBuffer_0).rg;
-	float pbr_metallic = pbr.r;
-	float pbr_roughness = pbr.g;
-	vec4 normal_uv = subpassLoad(in_img_gBuffer_1);
-	vec4 position_dist = subpassLoad(in_img_gBuffer_2);
-	vec4 albedo_emit = subpassLoad(in_img_gBuffer_3);
-	vec3 albedo = albedo_emit.rgb;
-	float emit = albedo_emit.a;
-	vec3 viewSpaceNormal = normal_uv.xyz;
-	vec2 viewSpaceUV = UnpackUVfromFloat(normal_uv.w);
+	ReadPbrGBuffers();
 	
-	if (camera.debug) {
-		out_img_lit = vec4(viewSpaceNormal, 1);
+	if (DebugWireframe) {
+		WriteLitImage(vec4(pbrGBuffers.viewSpaceNormal, 1));
 		return;
 	}
 	
-	out_img_lit = vec4(ApplyPBRShading(position_dist.xyz, albedo, viewSpaceNormal, vec3(0), pbr_roughness, pbr_metallic), 1);
+	vec3 litColor = vec3(0);
+	
+	// Emitter
+	if (pbrGBuffers.emit > 0) {
+		litColor += pbrGBuffers.albedo * pbrGBuffers.emit;
+	}
+	
+	// PBR
+	if (dot(pbrGBuffers.viewSpaceNormal, pbrGBuffers.viewSpaceNormal) > 0) {
+		litColor += ApplyPBRShading(pbrGBuffers.viewSpacePosition, pbrGBuffers.albedo, pbrGBuffers.viewSpaceNormal, /*bump*/vec3(0), pbrGBuffers.roughness, pbrGBuffers.metallic);
+	}
+	
+	WriteLitImage(vec4(litColor, 1));
 }

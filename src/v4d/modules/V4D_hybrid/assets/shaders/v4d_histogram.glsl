@@ -7,7 +7,7 @@ const float maxAcceptedLuminancePerPixel = 100;
 #shader comp
 
 void main() {
-	if (camera.debug) return;
+	if (DebugWireframe) return;
 	
 	uvec2 size = imageSize(img_thumbnail);
 	uvec2 imageOffset = size/4;

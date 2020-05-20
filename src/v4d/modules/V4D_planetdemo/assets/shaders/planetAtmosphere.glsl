@@ -70,7 +70,14 @@ void main() {
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
-	float depthDistance = subpassLoad(in_img_gBuffer_2).w;
+	
+	float depthDistance;
+	if (RayTracedVisibility) {
+		vec2 uv = gl_FragCoord.st / textureSize(tex_img_depth,0).st;
+		depthDistance = float(GetTrueDistanceFromDepthBuffer(texture(tex_img_depth, uv).r));
+	} else {
+		depthDistance = subpassLoad(in_img_gBuffer_2).w;
+	}
 	
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
 	depthDistance = max(minStepSize, depthDistance);
@@ -82,6 +89,8 @@ void main() {
 	
 	float distStart = max(0.1, min(b - det, length(v2f.pos)));
 	float distEnd = max(min(depthDistance, b + det), distStart + 0.01);
+	float lightRayTravelDepthMax = float(GetDepthBufferFromTrueDistance(b + det));
+	
 	// Position on sphere
 	vec3 rayStart = (viewDir * distStart) + p;
 	vec3 rayEnd = (viewDir * distEnd) + p;
@@ -178,16 +187,12 @@ void main() {
 				
 				if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
 					float depth;
-					switch (camera.renderMode) {
-						case 0: // raster
-							depth = texture(tex_img_tmpDepth, posLightScreenSpace.xy).r;
-						break;
-						case 1: // ray tracing
-							depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
-						break;
+					if (RayTracedVisibility) {
+						depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
+					} else {
+						depth = texture(tex_img_rasterDepth, posLightScreenSpace.xy).r;
 					}
-					float depthDistance = float(GetTrueDistanceFromDepthBuffer(depth));
-					if (depth > 0) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
+					if (depth > lightRayTravelDepthMax) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
 				}
 				
 				lightRayOpticalDepth += lightRayDensity;

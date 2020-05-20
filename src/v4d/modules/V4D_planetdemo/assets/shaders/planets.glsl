@@ -96,10 +96,9 @@ void main() {
 #shader terrain.rchit
 
 hitAttributeEXT vec3 hitAttribs;
-layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
-layout(location = 2) rayPayloadEXT bool shadowed;
 
-#include "rtx_pbr.glsl"
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
 #include "rtx_fragment.glsl"
 
 // #include "noise.glsl"
@@ -115,7 +114,6 @@ vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
 void main() {
 	Fragment fragment = GetHitFragment(true);
 
-
 	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
 	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
 	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
@@ -124,15 +122,13 @@ void main() {
 	vec2 uv = (fragment.uv*uvMult+uvOffset);
 	vec4 bump = GetBumpMap(uv, fragment.uv);
 	vec3 normal = normalize(TBN * bump.xyz);
-	vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, normal, /*bump*/fragment.viewSpaceNormal*(bump.w+1.0)*0.001, /*roughness*/0.6, /*metallic*/0.1);
-	vec3 ambient = fragment.color.rgb * 0.001;
 	
-	ray.color = color + ambient;
+	ray.viewSpacePosition = fragment.hitPoint;
+	ray.viewSpaceNormal = normal;
+	ray.albedo = fragment.color.rgb;
+	ray.emit = 0;
+	ray.uv = fragment.uv;
+	ray.metallic = 0.1;
+	ray.roughness = 0.6;
 	ray.distance = gl_HitTEXT;
-	
-	
-	// vec3 color = ApplyPBRShading(fragment.hitPoint, fragment.color.rgb, fragment.viewSpaceNormal, vec3(0), /*roughness*/0.6, /*metallic*/0.1);
-	// ray.color = color;
-	// ray.distance = gl_HitTEXT;
-	
 }

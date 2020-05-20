@@ -39,3 +39,31 @@ ProceduralGeometry GetProceduralGeometry(uint geometryIndex) {
 	
 	return geom;
 }
+
+#ifdef SHADER_RGEN
+
+	struct GBuffersPbr {
+		vec3 viewSpacePosition;
+		vec3 viewSpaceNormal;
+		vec3 albedo;
+		float emit;
+		vec2 uv;
+		float metallic;
+		float roughness;
+		float realDistanceFromCamera;
+	} pbrGBuffers;
+	
+	void WritePbrGBuffers() {
+		const ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
+		imageStore(img_gBuffer_0, coords, vec4(pbrGBuffers.metallic, pbrGBuffers.roughness, 0, 0));
+		imageStore(img_gBuffer_1, coords, vec4(pbrGBuffers.viewSpaceNormal, PackUVasFloat(pbrGBuffers.uv)));
+		imageStore(img_gBuffer_2, coords, vec4(pbrGBuffers.viewSpacePosition, pbrGBuffers.realDistanceFromCamera));
+		imageStore(img_gBuffer_3, coords, vec4(pbrGBuffers.albedo, pbrGBuffers.emit));
+	}
+	
+	void WriteDepthFromHitDistance(float realDistanceFromCamera) {
+		float depth = float(GetDepthBufferFromTrueDistance(realDistanceFromCamera));
+		imageStore(img_depth, ivec2(gl_LaunchIDEXT.xy), vec4(depth, 0,0,0));
+	}
+	
+#endif
