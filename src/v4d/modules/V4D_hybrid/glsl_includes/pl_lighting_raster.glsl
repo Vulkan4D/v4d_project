@@ -32,6 +32,17 @@
 		pbrGBuffers.realDistanceFromCamera = position_dist.w;
 	}
 
+	float GetDepth() {
+		float depth;
+		vec2 uv = gl_FragCoord.st / textureSize(tex_img_depth,0).st;
+		if (RayTracedVisibility) {
+			depth = texture(tex_img_depth, uv).r;
+		} else {
+			depth = texture(tex_img_rasterDepth, uv).r;
+		}
+		return depth;
+	}
+
 	void WriteLitImage(vec4 color) {
 		out_img_lit = color;
 	}

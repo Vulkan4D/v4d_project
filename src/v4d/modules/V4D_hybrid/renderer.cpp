@@ -78,6 +78,10 @@ Scene* scene = nullptr;
 		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
 		"modules/V4D_hybrid/assets/shaders/raster_lighting.frag",
 	}};
+	RasterShaderPipeline shader_lighting_rtx {pl_lighting_raster, {
+		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
+		"modules/V4D_hybrid/assets/shaders/raster_lighting.rtx.frag",
+	}};
 	
 	// Ray Tracing
 	ShaderBindingTable sbt_visibility {pl_visibility_rays, "modules/V4D_hybrid/assets/shaders/rtx_visibility.rgen"};
@@ -144,6 +148,7 @@ Scene* scene = nullptr;
 			// #endif
 		}},
 		{"sg_lighting", {&shader_lighting}},
+		{"sg_lighting_rtx", {&shader_lighting_rtx}},
 		{"sg_fog", {}},
 		{"sg_glass", {&shader_glass}},
 		{"sg_thumbnail", {&shader_thumbnail}},
@@ -394,10 +399,18 @@ Scene* scene = nullptr;
 		lightingRenderPass.CreateFrameBuffers(r->renderingDevice, attachmentImages);
 		
 		// Shaders
-		for (auto* s : shaderGroups["sg_lighting"]) {
-			s->SetRenderPass(&img_lit, lightingRenderPass.handle, 0);
-			s->AddColorBlendAttachmentState();
-			s->CreatePipeline(r->renderingDevice);
+		if (r->rayTracingFeatures.rayQuery) {
+			for (auto* s : shaderGroups["sg_lighting_rtx"]) {
+				s->SetRenderPass(&img_lit, lightingRenderPass.handle, 0);
+				s->AddColorBlendAttachmentState();
+				s->CreatePipeline(r->renderingDevice);
+			}
+		} else {
+			for (auto* s : shaderGroups["sg_lighting"]) {
+				s->SetRenderPass(&img_lit, lightingRenderPass.handle, 0);
+				s->AddColorBlendAttachmentState();
+				s->CreatePipeline(r->renderingDevice);
+			}
 		}
 		for (auto* s : shaderGroups["sg_fog"]) {
 			s->SetRenderPass(&img_lit, lightingRenderPass.handle, 1);
@@ -406,8 +419,14 @@ Scene* scene = nullptr;
 		}
 	}
 	void DestroyLightingPipeline() {
-		for (auto* s : shaderGroups["sg_lighting"]) {
-			s->DestroyPipeline(r->renderingDevice);
+		if (r->rayTracingFeatures.rayQuery) {
+			for (auto* s : shaderGroups["sg_lighting_rtx"]) {
+				s->DestroyPipeline(r->renderingDevice);
+			}
+		} else {
+			for (auto* s : shaderGroups["sg_lighting"]) {
+				s->DestroyPipeline(r->renderingDevice);
+			}
 		}
 		for (auto* s : shaderGroups["sg_fog"]) {
 			s->DestroyPipeline(r->renderingDevice);
@@ -448,7 +467,7 @@ Scene* scene = nullptr;
 	}
 	
 	void ConfigureLightingShaders() {
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_fog") {
+		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_lighting_rtx" || rp == "sg_fog") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -529,8 +548,14 @@ Scene* scene = nullptr;
 		if (!runSubpass0 && !runSubpass1) return;
 		lightingRenderPass.Begin(device, commandBuffer, img_lit);
 			if (runSubpass0) {
-				for (auto* s : shaderGroups["sg_lighting"]) {
-					s->Execute(device, commandBuffer);
+				if (r->rayTracingFeatures.rayQuery) {
+					for (auto* s : shaderGroups["sg_lighting_rtx"]) {
+						s->Execute(device, commandBuffer);
+					}
+				} else {
+					for (auto* s : shaderGroups["sg_lighting"]) {
+						s->Execute(device, commandBuffer);
+					}
 				}
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
@@ -1515,6 +1540,7 @@ extern "C" {
 				set0_base.AddBinding_storageBuffer(5, &Geometry::globalBuffers.indexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 				set0_base.AddBinding_storageBuffer(6, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 			#endif
+			set0_base.AddBinding_accelerationStructure(7, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 			
 		{r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
@@ -1523,17 +1549,15 @@ extern "C" {
 		
 		{r->descriptorSets["set1_visibility_rays"] = &set1_visibility_rays;
 			int i = 0;
-			set1_visibility_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			for (auto* img : gBuffers) set1_visibility_rays.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 			set1_visibility_rays.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_lighting_rays"] = &set1_lighting_rays;
 			int i = 0;
-			set1_lighting_rays.AddBinding_accelerationStructure(i++, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			for (auto* img : gBuffers) set1_lighting_rays.AddBinding_imageView(i++, img, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_lighting_rays.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 			set1_lighting_rays.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_lighting_rays.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 			set1_lighting_rays.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
@@ -1977,7 +2001,7 @@ extern "C" {
 				} else {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
-				if (r->rayTracingFeatures.rayTracing) {
+				if (RENDER_OPTIONS::RAY_TRACED_LIGHTING || r->rayTracingFeatures.rayQuery) {
 					ImGui::Checkbox("Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
 				} else {
 					ImGui::Text("Shadows unavailable with rasterization");

@@ -15,8 +15,8 @@
 // C++ Only, within a module
 #ifdef _V4D_MODULE
 namespace RENDER_OPTIONS {
-	bool RAY_TRACED_VISIBILITY = false;
-	bool RAY_TRACED_LIGHTING = false;
+	bool RAY_TRACED_VISIBILITY = true;
+	bool RAY_TRACED_LIGHTING = true;
 	bool HARD_SHADOWS = true;
 	bool TXAA = true;
 	bool HDR_TONE_MAPPING = true;

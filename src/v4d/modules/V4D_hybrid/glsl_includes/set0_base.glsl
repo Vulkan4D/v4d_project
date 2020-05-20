@@ -37,6 +37,10 @@ layout(set = 0, binding = 4) GEOMETRY_BUFFERS_ACCESS buffer GeometryBuffer {floa
 layout(set = 0, binding = 5) GEOMETRY_BUFFERS_ACCESS buffer IndexBuffer {uint indices[];};
 layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 vertices[];};
 
+#if defined(RAY_TRACING) || defined(RAY_QUERY)
+	layout(set = 0, binding = 7) uniform accelerationStructureEXT topLevelAS;
+#endif
+
 bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
 bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe;
 bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && !DebugWireframe;
