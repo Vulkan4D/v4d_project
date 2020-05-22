@@ -13,7 +13,7 @@
 		float emit;
 		float metallic;
 		float roughness;
-		float realDistanceFromCamera;
+		float distance;
 	} pbrGBuffers;
 
 	void ReadPbrGBuffers() {
@@ -29,7 +29,7 @@
 		pbrGBuffers.emit = albedo_emit.a;
 		pbrGBuffers.metallic = pbr.r;
 		pbrGBuffers.roughness = pbr.g;
-		pbrGBuffers.realDistanceFromCamera = position_dist.w;
+		pbrGBuffers.distance = position_dist.w;
 	}
 
 	float GetDepth() {

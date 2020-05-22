@@ -217,3 +217,10 @@ Not yet determined.
 
 V4D is most likely going to be Open-source, with limited commercial use. 
 Developers/companies that contribute to its development may get a free/reduced price license for commercial use depending on the scale and usability of their contribution. 
+
+----
+----
+
+# Diagrams
+
+![Diagram](res/hybrid_renderer.png)

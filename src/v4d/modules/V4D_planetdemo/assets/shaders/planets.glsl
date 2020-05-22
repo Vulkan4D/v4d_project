@@ -52,9 +52,19 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
-#common terrain.*comp|terrain.rchit
+#common terrain.*comp|terrain.rchit|terrain.frag
 
 layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
+
+// #include "noise.glsl"
+
+vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
+	return vec4(0,0,1,0)
+	//  + texture(bumpMap[0], uv)
+	//  + texture(bumpMap[0], uv*256)
+	 + texture(bumpMap[0], uvChunk)/2.0
+	;
+}
 
 #############################################################
 #shader bump.altitude.map.comp
@@ -101,16 +111,6 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 
 #include "rtx_fragment.glsl"
 
-// #include "noise.glsl"
-
-vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
-	return vec4(0,0,1,0)
-	//  + texture(bumpMap[0], uv)
-	//  + texture(bumpMap[0], uv*256)
-	 + texture(bumpMap[0], uvChunk)/2.0
-	;
-}
-
 void main() {
 	Fragment fragment = GetHitFragment(true);
 
@@ -128,7 +128,46 @@ void main() {
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
 	ray.uv = fragment.uv;
-	ray.metallic = 0.1;
-	ray.roughness = 0.6;
+	ray.metallic = 0;
+	ray.roughness = 0;
 	ray.distance = gl_HitTEXT;
 }
+
+
+###########################################
+#shader terrain.frag
+
+#include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_raster.glsl"
+
+struct V2F {
+	vec4 color;
+	vec4 pos;
+	vec3 normal;
+	vec2 uv;
+};
+
+layout(location = 0) in V2F v2f;
+
+void main() {
+	GeometryInstance geometryInstance = GetGeometryInstance(geometryIndex);
+	vec3 tangentX = normalize(cross(geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, v2f.normal));
+	vec3 tangentY = normalize(cross(v2f.normal, tangentX));
+	mat3 TBN = mat3(tangentX, tangentY, v2f.normal); // viewSpace TBN
+	vec2 uvOffset = geometryInstance.custom3f.xy;
+	vec2 uvMult = vec2(geometryInstance.custom3f.z);
+	vec2 uv = (v2f.uv*uvMult+uvOffset);
+	vec4 bump = GetBumpMap(uv, v2f.uv);
+	vec3 normal = normalize(TBN * bump.xyz);
+
+	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
+	pbrGBuffers.viewSpaceNormal = normal;
+	pbrGBuffers.uv = v2f.uv;
+	pbrGBuffers.albedo = v2f.color.rgb;
+	pbrGBuffers.emit = 0;
+	pbrGBuffers.metallic = 0;
+	pbrGBuffers.roughness = 0;
+	
+	pbrGBuffers.distance = v2f.pos.w;
+	WritePbrGBuffers();
+}
+

@@ -58,6 +58,11 @@ double GetDepthBufferFromTrueDistance(double dist) {
 	return (((((2.0 * (camera.zfar * camera.znear)) / dist) - camera.znear - camera.zfar) / (camera.zfar - camera.znear)) + 1) / 2.0;
 }
 
+float GetFragDepthFromViewSpacePosition(vec3 viewSpacePos) {
+	vec4 clipSpace = mat4(camera.projectionMatrix) * vec4(viewSpacePos, 1);
+	return clipSpace.z / clipSpace.w;
+}
+
 // Object Utils
 
 struct GeometryInstance {
@@ -131,6 +136,36 @@ GeometryInstance GetGeometryInstance(uint index) {
 	geometry.viewPosition = geometry.modelViewTransform[3].xyz;
 	
 	return geometry;
+}
+
+struct ProceduralGeometry {
+	GeometryInstance geometryInstance;
+	
+	uint vertexOffset;
+	uint objectIndex;
+	uint material;
+	
+	vec3 aabbMin;
+	vec3 aabbMax;
+	vec4 color;
+	float custom1;
+};
+
+ProceduralGeometry GetProceduralGeometry(uint geometryIndex) {
+	ProceduralGeometry geom;
+	
+	geom.geometryInstance = GetGeometryInstance(geometryIndex);
+	
+	geom.vertexOffset = geom.geometryInstance.vertexOffset;
+	geom.objectIndex = geom.geometryInstance.objectIndex;
+	geom.material = geom.geometryInstance.material;
+	
+	geom.aabbMin = vertices[geom.vertexOffset*2].xyz;
+	geom.aabbMax = vec3(vertices[geom.vertexOffset*2].w, vertices[geom.vertexOffset*2+1].xy);
+	geom.color = UnpackColorFromFloat(vertices[geom.vertexOffset*2+1].z);
+	geom.custom1 = vertices[geom.vertexOffset*2+1].w;
+	
+	return geom;
 }
 
 struct Vertex {

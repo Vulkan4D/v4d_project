@@ -42,7 +42,6 @@ vec3 PlanetSpaceDir(vec3 dir) {
 #shader vert
 
 layout(location = 0) in vec4 pos;
-
 layout(location = 0) out V2F v2f;
 
 void main() {
@@ -70,14 +69,7 @@ void main() {
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
-	
-	float depthDistance;
-	if (RayTracedVisibility) {
-		vec2 uv = gl_FragCoord.st / textureSize(tex_img_depth,0).st;
-		depthDistance = float(GetTrueDistanceFromDepthBuffer(texture(tex_img_depth, uv).r));
-	} else {
-		depthDistance = subpassLoad(in_img_gBuffer_2).w;
-	}
+	float depthDistance = subpassLoad(in_img_gBuffer_2).w;
 	
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
 	depthDistance = max(minStepSize, depthDistance);

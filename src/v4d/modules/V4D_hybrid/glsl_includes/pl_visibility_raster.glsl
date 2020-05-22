@@ -8,26 +8,38 @@ layout(std430, push_constant) uniform GeometryPushConstant{
 };
 
 #ifdef SHADER_VERT
-	layout(location = 0) in vec3 in_pos;
-	layout(location = 1) in uint _in_color;
-	layout(location = 2) in vec3 in_normal;
-	layout(location = 3) in uint _in_uv;
+	#ifdef PROCEDURAL_GEOMETRY
+		layout(location = 0) in vec3 aabbMin;
+		layout(location = 1) in vec3 aabbMax;
+		layout(location = 2) in uint _in_color;
+		layout(location = 3) in float custom1;
+		
+		vec4 GetColor() {
+			return UnpackColorFromUint(_in_color);
+		}
+	#else
+		layout(location = 0) in vec3 in_pos;
+		layout(location = 1) in uint _in_color;
+		layout(location = 2) in vec3 in_normal;
+		layout(location = 3) in uint _in_uv;
+			
+		Vertex GetVertex() {
+			Vertex v;
+			v.pos = in_pos.xyz;
+			v.color = UnpackColorFromUint(_in_color);
+			v.normal = in_normal.xyz;
+			v.uv = UnpackUVfromUint(_in_uv);
+			return v;
+		}
+	#endif
 
-	Vertex GetVertex() {
-		Vertex v;
-		v.pos = in_pos.xyz;
-		v.color = UnpackColorFromUint(_in_color);
-		v.normal = in_normal.xyz;
-		v.uv = UnpackUVfromUint(_in_uv);
-		return v;
-	}
 	
 #endif
 
 #ifdef SHADER_FRAG
 	layout(location = 0) out vec2 out_img_gBuffer_0; // R=snorm8(metallic), G=snorm8(roughness)
 	layout(location = 1) out vec4 out_img_gBuffer_1; // RGB=sfloat32(normal.xyz32), A=sfloat32(packed(uv16))
-	layout(location = 2) out vec4 out_img_gBuffer_2; // RGB=sfloat32(viewPosition.xyz), A=sfloat32(realDistanceFromCamera)
+	layout(location = 2) out vec4 out_img_gBuffer_2; // RGB=sfloat32(viewPosition.xyz), A=sfloat32(distance)
 	layout(location = 3) out vec4 out_img_gBuffer_3; // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
 	
 	struct GBuffersPbr {
@@ -38,13 +50,13 @@ layout(std430, push_constant) uniform GeometryPushConstant{
 		float emit;
 		float metallic;
 		float roughness;
-		float realDistanceFromCamera;
+		float distance;
 	} pbrGBuffers;
 	
 	void WritePbrGBuffers() {
 		out_img_gBuffer_0 = vec2(pbrGBuffers.metallic, pbrGBuffers.roughness);
 		out_img_gBuffer_1 = vec4(pbrGBuffers.viewSpaceNormal, PackUVasFloat(pbrGBuffers.uv));
-		out_img_gBuffer_2 = vec4(pbrGBuffers.viewSpacePosition, pbrGBuffers.realDistanceFromCamera);
+		out_img_gBuffer_2 = vec4(pbrGBuffers.viewSpacePosition, pbrGBuffers.distance);
 		out_img_gBuffer_3 = vec4(pbrGBuffers.albedo, pbrGBuffers.emit);
 	}
 	

@@ -57,20 +57,47 @@ Scene* scene = nullptr;
 
 #pragma region Shaders
 
+	const std::string rasterTrianglesDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.vert";
+	const std::string rasterAabbDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.vert";
+	const std::string rasterAabbDefaultGeometryShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.geom";
+
 	// Visibility
-	RasterShaderPipeline shader_visibility {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
+	RasterShaderPipeline shader_visibility_basic {pl_visibility_raster, {
+		rasterTrianglesDefaultVertexShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.basic.frag",
+	}};
+	RasterShaderPipeline shader_visibility_standard {pl_visibility_raster, {
+		rasterTrianglesDefaultVertexShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.standard.frag",
+	}};
+	RasterShaderPipeline shader_visibility_terrain {pl_visibility_raster, {
+		rasterTrianglesDefaultVertexShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.terrain.frag",
+	}};
+	RasterShaderPipeline shader_visibility_sphere {pl_visibility_raster, {
+		rasterAabbDefaultVertexShader,
+		rasterAabbDefaultGeometryShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.sphere.frag",
+	}};
+	RasterShaderPipeline shader_visibility_light {pl_visibility_raster, {
+		rasterAabbDefaultVertexShader,
+		rasterAabbDefaultGeometryShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.light.frag",
+	}};
+	RasterShaderPipeline shader_visibility_sun {pl_visibility_raster, {
+		rasterAabbDefaultVertexShader,
+		rasterAabbDefaultGeometryShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.sun.frag",
 	}};
 	// #ifdef _DEBUG
 		RasterShaderPipeline shader_debug_wireframe {pl_visibility_raster, {
-			"modules/V4D_hybrid/assets/shaders/raster_visibility.vert",
-			"modules/V4D_hybrid/assets/shaders/raster_visibility.frag",
+			rasterTrianglesDefaultVertexShader,
+			"modules/V4D_hybrid/assets/shaders/raster_visibility.basic.frag",
 		}};
 	// #endif
 	RasterShaderPipeline shader_glass {pl_visibility_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_glass.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_glass.frag",
+		rasterTrianglesDefaultVertexShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.glass.frag",
 	}};
 	
 	// Main Rendering
@@ -92,7 +119,7 @@ Scene* scene = nullptr;
 		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.frag",
 	}};
-	RasterShaderPipeline shader_txaa {pl_post, {
+	RasterShaderPipeline shader_fx_txaa {pl_post, {
 		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_post.txaa.frag",
 	}, 100};
@@ -100,18 +127,18 @@ Scene* scene = nullptr;
 		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_post.history_write.frag",
 	}};
-	RasterShaderPipeline shader_hdr {pl_post, {
+	RasterShaderPipeline shader_present_hdr {pl_post, {
 		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_post.hdr.frag",
 	}, -100};
-	RasterShaderPipeline shader_overlay_apply {pl_post, {
+	RasterShaderPipeline shader_present_overlay_apply {pl_post, {
 		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
 		"modules/V4D_hybrid/assets/shaders/v4d_post.overlay_apply.frag",
 	}, 100};
 	ComputeShaderPipeline shader_histogram_compute {pl_histogram, 
 		"modules/V4D_hybrid/assets/shaders/v4d_histogram.comp"
 	};
-	 
+	
 #pragma endregion
 
 #pragma region Containers
@@ -142,7 +169,13 @@ Scene* scene = nullptr;
 		{"pl_histogram", &pl_histogram},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
-		{"sg_visibility", {&shader_visibility,
+		{"sg_visibility", {
+			&shader_visibility_basic,
+			&shader_visibility_standard,
+			&shader_visibility_terrain,
+			&shader_visibility_sphere,
+			&shader_visibility_light,
+			&shader_visibility_sun,
 			// #ifdef _DEBUG
 				&shader_debug_wireframe,
 			// #endif
@@ -152,9 +185,9 @@ Scene* scene = nullptr;
 		{"sg_fog", {}},
 		{"sg_glass", {&shader_glass}},
 		{"sg_thumbnail", {&shader_thumbnail}},
-		{"sg_postfx", {&shader_txaa}},
+		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
-		{"sg_present", {&shader_hdr, &shader_overlay_apply}},
+		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
 		{"sg_overlay", {}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
@@ -166,7 +199,7 @@ Scene* scene = nullptr;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
 		&img_gBuffer_0, // R=snorm8(metallic), G=snorm8(roughness)
 		&img_gBuffer_1, // RGB=sfloat32(normal.xyz), A=sfloat32(packed(uv))
-		&img_gBuffer_2, // RGB=sfloat32(viewPosition.xyz), A=sfloat32(realDistanceFromCamera)
+		&img_gBuffer_2, // RGB=sfloat32(viewPosition.xyz), A=sfloat32(distance)
 		&img_gBuffer_3, // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
 	};
 	// FrameBuffers
@@ -438,24 +471,40 @@ Scene* scene = nullptr;
 	void ConfigureRasterVisibilityShaders() {
 		pl_visibility_raster.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		
-		shader_visibility.AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-		#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-			shader_visibility.SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
-		#else
-			shader_visibility.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
-		#endif
-		
-		// #ifdef _DEBUG
-			shader_debug_wireframe.AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-			shader_debug_wireframe.rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-			shader_debug_wireframe.rasterizer.lineWidth = 1;
-			shader_debug_wireframe.rasterizer.cullMode = VK_CULL_MODE_NONE;
-			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-				shader_debug_wireframe.SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
-			#else
-				shader_debug_wireframe.SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
-			#endif
-		// #endif
+		for (auto* s : shaderGroups["sg_visibility"]) {
+			// #ifdef _DEBUG
+				if (s == &shader_debug_wireframe) {
+					s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+					s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+					s->rasterizer.lineWidth = 1;
+					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
+					#else
+						s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
+					#endif
+				} else 
+			// #endif
+			if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
+				s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
+				#else
+					s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
+				#endif
+			} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
+				s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
+				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+				s->rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+				s->depthStencilState.depthTestEnable = true;
+				s->depthStencilState.depthWriteEnable = true;
+				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, 1);
+				#else
+					s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
+				#endif
+			}
+		}
 		
 		for (auto* s : shaderGroups["sg_material"]) {
 			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -495,53 +544,57 @@ Scene* scene = nullptr;
 		
 		// Visibility Raster pass
 		visibilityRasterPass.Begin(r->renderingDevice, commandBuffer, **gBuffers.data(), clearValues);
+			scene->Lock();
 			for (auto* s : shaderGroups["sg_visibility"]) {
 				if (
-					s == &shader_visibility
 					// #ifdef _DEBUG
-						|| s == &shader_debug_wireframe
+						!DEBUG_OPTIONS::WIREFRAME || s == &shader_debug_wireframe
+					// #else
+						// true
 					// #endif
 				) {
-					// #ifdef _DEBUG
-						if ((scene->camera.debugOptions & DEBUG_OPTION_WIREFRAME) != (s == &shader_debug_wireframe)) {
-							continue;
-						}
-					// #endif
-					scene->Lock();
-						for (auto* obj : scene->objectInstances) {
-							if (obj) {
-								// obj->Lock();
-								if (obj->IsActive()) {
-									// Geometries
-									for (auto& geom : obj->GetGeometries()) {
-										if (geom.geometry->active) {
-											// Frustum culling
-											if (scene->camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
-												if (geom.geometry->isProcedural) {
-													//TODO procedural objects
-												} else {
-													s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::VertexBuffer_T);
-													s->indexOffset = geom.geometry->indexOffset * sizeof(Geometry::IndexBuffer_T);
-													s->indexCount = geom.geometry->indexCount;
-													GeometryPushConstant geometryPushConstant {};
-														geometryPushConstant.objectIndex = obj->GetObjectOffset();
-														geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
-													s->Execute(device, commandBuffer, 1, &geometryPushConstant);
-												}
+					for (auto* obj : scene->objectInstances) {
+						if (obj) {
+							// obj->Lock();
+							if (obj->IsActive()) {
+								// Geometries
+								for (auto& geom : obj->GetGeometries()) {
+									if (geom.geometry->active && (
+										// #ifdef _DEBUG
+											(DEBUG_OPTIONS::WIREFRAME && Geometry::geometryRenderTypes[geom.type].rasterShader->inputAssembly.topology == VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) || 
+										// #endif
+										s == Geometry::geometryRenderTypes[geom.type].rasterShader
+										)) {
+										// Frustum culling
+										if (scene->camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
+											if (geom.geometry->isProcedural) {
+												s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::ProceduralVertexBuffer_T);
+												GeometryPushConstant geometryPushConstant {};
+													geometryPushConstant.objectIndex = obj->GetObjectOffset();
+													geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
+												s->Execute(device, commandBuffer, 1, &geometryPushConstant);
+											} else {
+												s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::VertexBuffer_T);
+												s->indexOffset = geom.geometry->indexOffset * sizeof(Geometry::IndexBuffer_T);
+												s->indexCount = geom.geometry->indexCount;
+												GeometryPushConstant geometryPushConstant {};
+													geometryPushConstant.objectIndex = obj->GetObjectOffset();
+													geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
+												s->Execute(device, commandBuffer, 1, &geometryPushConstant);
 											}
 										}
 									}
 								}
-								// obj->Unlock();
 							}
+							// obj->Unlock();
 						}
-					scene->Unlock();
-				} else {
-					s->Execute(device, commandBuffer);
-				}
+					}
+				} // else {
+				// 	s->Execute(device, commandBuffer);
+				// }
 			}
+			scene->Unlock();
 		visibilityRasterPass.End(device, commandBuffer);
-		
 	}
 	
 	void RunRasterLighting(Device* device, VkCommandBuffer commandBuffer, bool runSubpass0, bool runSubpass1) {
@@ -664,17 +717,35 @@ Scene* scene = nullptr;
 		// Lighting Miss (Shadow)
 		shaderBindingTables["sbt_lighting"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_lighting.shadow.rmiss");
 		
+		// Basic
+		Geometry::geometryRenderTypes["basic"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.basic.rchit");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.basic.rchit");
+		
 		// Standard
-		Geometry::rayTracingShaderOffsets["standard"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx_visibility.rahit"*/ );
-		/*Geometry::rayTracingShaderOffsets["standard"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rchit" /*, "modules/V4D_hybrid/assets/shaders/rtx_lighting.rahit"*/ );
+		Geometry::geometryRenderTypes["standard"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.standard.rchit");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.standard.rchit");
+		
+		// Terrain
+		Geometry::geometryRenderTypes["terrain"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
 		
 		// Sphere
-		Geometry::rayTracingShaderOffsets["sphere"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-		/*Geometry::rayTracingShaderOffsets["sphere"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+		Geometry::geometryRenderTypes["sphere"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
 		
 		// Light
-		Geometry::rayTracingShaderOffsets["light"] = shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-		/*Geometry::rayTracingShaderOffsets["light"]*/shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+		Geometry::geometryRenderTypes["light"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+	
+		// Sun
+		Geometry::geometryRenderTypes["sun"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sun.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sun.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
 	}
 	
 	void RunRayTracingVisibilityCommands(VkCommandBuffer commandBuffer) {
@@ -814,7 +885,7 @@ Scene* scene = nullptr;
 		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
 		rayTracingInstances[index].mask = geometryInstance->geometry->rayTracingMask;
-		rayTracingInstances[index].shaderInstanceOffset = Geometry::rayTracingShaderOffsets[geometryInstance->type];
+		rayTracingInstances[index].shaderInstanceOffset = Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
 		rayTracingInstances[index].flags = geometryInstance->geometry->flags;
 		rayTracingInstances[index].transform = glm::mat3x4{0};
 		geometryInstance->rayTracingInstanceIndex = index;
@@ -1497,6 +1568,7 @@ extern "C" {
 			r->deviceFeatures.shaderFloat64 = VK_TRUE;
 			r->deviceFeatures.depthClamp = VK_TRUE;
 			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
+			r->deviceFeatures.geometryShader = VK_TRUE;
 			
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
@@ -1576,6 +1648,9 @@ extern "C" {
 			set1_post.AddBinding_combinedImageSampler(i++, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			
+				// This is there mostly for debugging them.... may remove if it affects performance
+				for (auto* img : gBuffers) set1_post.AddBinding_combinedImageSampler(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_overlay"] = &set1_overlay;
@@ -1607,6 +1682,14 @@ extern "C" {
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
 			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
 		}
+		
+		// Assign raster shader to render types
+		Geometry::geometryRenderTypes["basic"].rasterShader = &shader_visibility_basic;
+		Geometry::geometryRenderTypes["standard"].rasterShader = &shader_visibility_standard;
+		Geometry::geometryRenderTypes["terrain"].rasterShader = &shader_visibility_terrain;
+		Geometry::geometryRenderTypes["sphere"].rasterShader = &shader_visibility_sphere;
+		Geometry::geometryRenderTypes["light"].rasterShader = &shader_visibility_light;
+		Geometry::geometryRenderTypes["sun"].rasterShader = &shader_visibility_sun;
 	}
 	
 	#pragma region Load/Upload Renderer
@@ -2002,9 +2085,9 @@ extern "C" {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
 				if (RENDER_OPTIONS::RAY_TRACED_LIGHTING || r->rayTracingFeatures.rayQuery) {
-					ImGui::Checkbox("Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
+					ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
 				} else {
-					ImGui::Text("Shadows unavailable with rasterization");
+					ImGui::Text("Shadows functionality unavailable");
 				}
 				ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
 				ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);

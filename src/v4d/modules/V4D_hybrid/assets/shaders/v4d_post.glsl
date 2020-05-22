@@ -93,7 +93,7 @@ void main() {
 #shader hdr.frag.2
 void main() {
 	vec3 color = subpassLoad(in_img_pp).rgb;
-	// vec2 uv = gl_FragCoord.st / textureSize(tex_img_lit,0).st;
+	vec2 uv = gl_FragCoord.st / textureSize(tex_img_lit,0).st;
 	
 	// HDR ToneMapping (Reinhard)
 	if (HDR) {
@@ -122,6 +122,17 @@ void main() {
 	
 	// Final color
 	out_swapchain = vec4(max(vec3(0),color.rgb), 1.0);
+	
+	
+	// // Debug G-Buffers or Depth
+	// float depth;
+	// if (RayTracedVisibility) {
+	// 	depth = texture(tex_img_depth, uv).r;
+	// } else {
+	// 	depth = texture(tex_img_rasterDepth, uv).r;
+	// }
+	// out_swapchain = vec4(vec3(depth*2e7),1);
+	
 }
 
 #shader overlay_apply.frag.2

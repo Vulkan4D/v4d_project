@@ -15,7 +15,11 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 #if defined(_DEBUG)
 	// Shaders to watch for modifications to automatically reload the renderer
 	static std::unordered_map<v4d::io::FilePath, double> shaderFilesToWatch {
-		// {"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/v4d_post.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/raster_visibility.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/rtx_visibility.meta", 0},
+		{"modules/V4D_planetdemo/assets/shaders/planets.meta", 0},
+		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
 	};
 #endif
 
@@ -213,9 +217,13 @@ int main() {
 						t = f.GetLastWriteTime();
 					} else if (f.GetLastWriteTime() > t) {
 						t = 0;
+						SLEEP(500ms)
 						renderer->ReloadRenderer();
 						break;
 					}
+				}
+				for (auto&[f, t] : shaderFilesToWatch) {
+					t = f.GetLastWriteTime();
 				}
 			#endif
 			

@@ -16,11 +16,8 @@ void main() {
 	// Trace Visibility Rays for Opaque geometry
 	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, GEOMETRY_ATTR_PRIMARY_VISIBLE, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
 	
-	WriteDepthFromHitDistance(ray.distance);
-	
-	// If we had a Hit
 	if (ray.distance > 0) {
-		
+		// we have a Hit
 		pbrGBuffers.viewSpacePosition = ray.viewSpacePosition;
 		pbrGBuffers.viewSpaceNormal = ray.viewSpaceNormal;
 		pbrGBuffers.uv = ray.uv;
@@ -28,9 +25,11 @@ void main() {
 		pbrGBuffers.emit = ray.emit;
 		pbrGBuffers.metallic = ray.metallic;
 		pbrGBuffers.roughness = ray.roughness;
-		pbrGBuffers.realDistanceFromCamera = ray.distance;
-		
+		pbrGBuffers.distance = ray.distance;
 		WritePbrGBuffers();
+	} else {
+		// miss
+		WriteEmptyPbrGBuffers();
 	}
 }
 
@@ -46,7 +45,7 @@ void main() {
 
 
 #############################################################
-#shader rchit
+#shader basic.rchit
 
 hitAttributeEXT vec3 hitAttribs;
 
@@ -62,8 +61,54 @@ void main() {
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
 	ray.uv = fragment.uv;
-	ray.metallic = 0.1;
-	ray.roughness = 0.6;
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
+	ray.distance = gl_HitTEXT;
+}
+
+
+#############################################################
+#shader standard.rchit
+
+hitAttributeEXT vec3 hitAttribs;
+
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+#include "rtx_fragment.glsl"
+
+void main() {
+	Fragment fragment = GetHitFragment(true);
+	
+	ray.viewSpacePosition = fragment.hitPoint;
+	ray.viewSpaceNormal = fragment.viewSpaceNormal;
+	ray.albedo = fragment.color.rgb;
+	ray.emit = 0;
+	ray.uv = fragment.uv;
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
+	ray.distance = gl_HitTEXT;
+}
+
+
+#############################################################
+#shader terrain.rchit
+
+hitAttributeEXT vec3 hitAttribs;
+
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+#include "rtx_fragment.glsl"
+
+void main() {
+	Fragment fragment = GetHitFragment(true);
+	
+	ray.viewSpacePosition = fragment.hitPoint;
+	ray.viewSpaceNormal = fragment.viewSpaceNormal;
+	ray.albedo = fragment.color.rgb;
+	ray.emit = 0;
+	ray.uv = fragment.uv;
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
 }
 
@@ -122,8 +167,8 @@ void main() {
 	ray.albedo = sphereGeomAttr.color.rgb;
 	ray.emit = 0;
 	ray.uv = vec2(0);
-	ray.metallic = 0.1;
-	ray.roughness = 0.6;
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
 }
 
@@ -158,4 +203,37 @@ void main() {
 	ray.roughness = 0;
 	ray.distance = gl_HitTEXT;
 }
+
+
+#############################################################
+#shader sun.rchit
+
+hitAttributeEXT ProceduralGeometry sphereGeomAttr;
+
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+void main() {
+	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+	
+	LightSource light = GetLight(sphereGeomAttr.material);
+	vec3 lightColor;
+	float emission;
+	if (sphereGeomAttr.color.a > 0) {
+		lightColor = sphereGeomAttr.color.rgb * sphereGeomAttr.color.a;
+		emission = light.intensity/gl_HitTEXT/gl_HitTEXT;
+	} else {
+		lightColor = light.color;
+		emission = light.intensity/gl_HitTEXT;
+	}
+	
+	ray.viewSpacePosition = hitPoint;
+	ray.viewSpaceNormal = vec3(0);
+	ray.albedo = lightColor;
+	ray.emit = emission;
+	ray.uv = vec2(0);
+	ray.metallic = 0;
+	ray.roughness = 0;
+	ray.distance = gl_HitTEXT;
+}
+
 

@@ -11,41 +11,24 @@ PipelineLayout planetsMapGenLayout;
 ComputeShaderPipeline 
 	bumpMapsAltitudeGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.altitude.map.comp"},
 	bumpMapsNormalsGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.normals.map.comp"}
-	// ,mantleMapGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.mantle.map.comp"}
-	// ,tectonicsMapGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.tectonics.map.comp"}
-	// ,heightMapGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.height.map.comp"}
-	// ,volcanoesMapGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.volcanoes.map.comp"}
-	// ,liquidsMapGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.liquids.map.comp"}
 ;
 
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
+RasterShaderPipeline* planetTerrainRasterShader = nullptr;
 
 struct MapGenPushConstant {
 	int planetIndex;
 	float planetHeightVariation;
 } mapGenPushConstant;
 
-DescriptorSet mapsGenDescriptorSet, mapsSamplerDescriptorSet /*, planetsDescriptorSet*/;
+DescriptorSet mapsGenDescriptorSet, mapsSamplerDescriptorSet;
 
 #define MAX_PLANETS 1
 
-// Image mantleMaps[MAX_PLANETS];
-// Image tectonicsMaps[MAX_PLANETS];
-// Image heightMaps[MAX_PLANETS];
-// Image volcanoesMaps[MAX_PLANETS];
-// Image liquidsMaps[MAX_PLANETS];
-
 Image bumpMaps[1] {// xyz=normal, a=altitude
 	Image { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 1, 1, {VK_FORMAT_R32G32B32A32_SFLOAT}},
-	// Image { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 1, 1, {VK_FORMAT_R32G32B32A32_SFLOAT}},
 };
 bool bumpMapsGenerated = false;
-
-// struct PlanetBuffer {
-// 	// glm::dmat4 viewToPlanetPosMatrix {1};
-// 	alignas(16) glm::vec3 northDir;
-// };
-// StagedBuffer planetsBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(PlanetBuffer)*MAX_PLANETS};
 
 #pragma endregion
 
@@ -54,6 +37,11 @@ Scene* scene = nullptr;
 V4D_Renderer* mainRenderModule = nullptr;
 
 extern "C" {
+	
+	void ModuleUnload() {
+		if (planetAtmosphereShader) delete planetAtmosphereShader;
+		if (planetTerrainRasterShader) delete planetTerrainRasterShader;
+	}
 	
 	void Init(Renderer* _r, Scene* _s) {
 		r = _r;
@@ -66,42 +54,24 @@ extern "C" {
 	}
 	
 	void InitLayouts() {
+		auto* rasterVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_raster");
 		auto* rayTracingVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
 		auto* rayTracingLightingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_lighting_rays");
 		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
-		// r->descriptorSets["planets"] = &planetsDescriptorSet;
 		r->descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;
 		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
 		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		
 		rayTracingVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
 		rayTracingLightingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		// rayTracingVisibilityPipelineLayout->AddDescriptorSet(&planetsDescriptorSet);
+		rasterVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
 		
-		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsGenDescriptorSet.AddBinding_imageView_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsGenDescriptorSet.AddBinding_imageView_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsGenDescriptorSet.AddBinding_imageView_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsGenDescriptorSet.AddBinding_imageView_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsGenDescriptorSet.AddBinding_imageView_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_COMPUTE_BIT);
-		
-		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		// mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(1, mantleMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(2, tectonicsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(3, heightMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(4, volcanoesMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		// mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(5, liquidsMaps, MAX_PLANETS, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
-		
-		// planetsDescriptorSet.AddBinding_storageBuffer(0, &planetsBuffer.deviceLocalBuffer, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
-		
-		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
-		// terrainVertexComputeLayout.AddDescriptorSet(r->descriptorSets["..."]);
-		// terrainVertexComputeLayout.AddDescriptorSet(&mapsSamplerDescriptorSet);
-		// // terrainVertexComputeLayout.AddDescriptorSet(planetsDescriptorSet);
-		// terrainVertexComputeLayout.AddPushConstant<TerrainChunkPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
-		
+		// Atmosphere raster shader
 		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*fogPipelineLayout, {
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.vert",
 			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.frag",
@@ -110,21 +80,26 @@ extern "C" {
 		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		V4D_Game::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(ATMOSPHERE_SHADER, planetAtmosphereShader);
 		mainRenderModule->AddShader("sg_fog", planetAtmosphereShader);
+		
+		// Terrain raster shader
+		planetTerrainRasterShader = new RasterShaderPipeline(*rasterVisibilityPipelineLayout, {
+			Geometry::geometryRenderTypes["terrain"].rasterShader->GetShaderPath("vert"),
+			"modules/V4D_planetdemo/assets/shaders/planets.terrain.frag",
+		});
+		mainRenderModule->AddShader("sg_visibility", planetTerrainRasterShader);
 	}
 	
 	void ConfigureShaders() {
 		auto* shaderBindingTableVisibility = mainRenderModule->GetShaderBindingTable("sbt_visibility");
 		auto* shaderBindingTableLighting = mainRenderModule->GetShaderBindingTable("sbt_lighting");
 		
-		// Geometry::rayTracingShaderOffsets["planet_raymarching"] = shaderBindingTable->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.raymarching.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.raymarching.rint");
-		Geometry::rayTracingShaderOffsets["planet_terrain"] = shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
-		/*Geometry::rayTracingShaderOffsets["planet_terrain"]*/shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Geometry::geometryRenderTypes["planet_terrain"].sbtOffset = 
+			shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+			shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Geometry::geometryRenderTypes["planet_terrain"].rasterShader = planetTerrainRasterShader;
 		
 		// Atmosphere
 		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
-		// planetAtmosphereShader->depthStencilState.depthTestEnable = VK_FALSE;
-		// planetAtmosphereShader->depthStencilState.depthWriteEnable = VK_FALSE;
-		// planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
 		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
 			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 			planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
@@ -136,15 +111,6 @@ extern "C" {
 	void ReadShaders() {
 		bumpMapsAltitudeGen.ReadShaders();
 		bumpMapsNormalsGen.ReadShaders();
-		
-		// mantleMapGen.ReadShaders();
-		// tectonicsMapGen.ReadShaders();
-		// heightMapGen.ReadShaders();
-		// volcanoesMapGen.ReadShaders();
-		// liquidsMapGen.ReadShaders();
-		
-		// terrainVertexPosCompute.ReadShaders();
-		// terrainVertexNormalCompute.ReadShaders();
 	}
 	
 	// Images / Buffers / Pipelines
@@ -158,72 +124,31 @@ extern "C" {
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("transfer"));
 			r->TransitionImageLayout(cmdBuffer, bumpMaps[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("transfer"), cmdBuffer);
-		
-		// bumpMaps[1].Create(r->renderingDevice, 4096);
-		// r->TransitionImageLayout(bumpMaps[1], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		
-		// planet.CreateMaps(r->renderingDevice);
-		
-		// r->TransitionImageLayout(planet.mantleMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		// r->TransitionImageLayout(planet.tectonicsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		// r->TransitionImageLayout(planet.heightMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		// r->TransitionImageLayout(planet.volcanoesMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		// r->TransitionImageLayout(planet.liquidsMap, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-		
-		// // Set Maps
-		// mantleMaps[0] = planet.mantleMap;
-		// tectonicsMaps[0] = planet.tectonicsMap;
-		// heightMaps[0] = planet.heightMap;
-		// volcanoesMaps[0] = planet.volcanoesMap;
-		// liquidsMaps[0] = planet.liquidsMap;
 	}
 	
 	void DestroyResources() {
-		// planet.DestroyMaps(r->renderingDevice);
 		bumpMaps[0].Destroy(r->renderingDevice);
-		// bumpMaps[1].Destroy(r->renderingDevice);
 		bumpMapsGenerated = false;
 	}
 	
 	void AllocateBuffers() {
-		// planetsBuffer.Allocate(r->renderingDevice);
+		
 	}
 	
 	void FreeBuffers() {
-		// planetsBuffer.Free(r->renderingDevice);
+		
 	}
 	
 	void CreatePipelines() {
 		planetsMapGenLayout.Create(r->renderingDevice);
-		// terrainVertexComputeLayout.Create(r->renderingDevice);
 		
 		bumpMapsAltitudeGen.CreatePipeline(r->renderingDevice);
 		bumpMapsNormalsGen.CreatePipeline(r->renderingDevice);
-		
-		// mantleMapGen.CreatePipeline(r->renderingDevice);
-		// tectonicsMapGen.CreatePipeline(r->renderingDevice);
-		// heightMapGen.CreatePipeline(r->renderingDevice);
-		// volcanoesMapGen.CreatePipeline(r->renderingDevice);
-		// liquidsMapGen.CreatePipeline(r->renderingDevice);
-		
-		// terrainVertexPosCompute.CreatePipeline(r->renderingDevice);
-		// terrainVertexNormalCompute.CreatePipeline(r->renderingDevice);
 	}
 	
 	void DestroyPipelines() {
 		bumpMapsAltitudeGen.DestroyPipeline(r->renderingDevice);
 		bumpMapsNormalsGen.DestroyPipeline(r->renderingDevice);
-		
-		// mantleMapGen.DestroyPipeline(r->renderingDevice);
-		// tectonicsMapGen.DestroyPipeline(r->renderingDevice);
-		// heightMapGen.DestroyPipeline(r->renderingDevice);
-		// volcanoesMapGen.DestroyPipeline(r->renderingDevice);
-		// liquidsMapGen.DestroyPipeline(r->renderingDevice);
-		
-		// terrainVertexPosCompute.DestroyPipeline(r->renderingDevice);
-		// terrainVertexNormalCompute.DestroyPipeline(r->renderingDevice);
-
-		// terrainVertexComputeLayout.Destroy(r->renderingDevice);
 		planetsMapGenLayout.Destroy(r->renderingDevice);
 	}
 	
