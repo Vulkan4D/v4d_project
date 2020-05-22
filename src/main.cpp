@@ -18,6 +18,8 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 		{"modules/V4D_hybrid/assets/shaders/v4d_post.meta", 0},
 		{"modules/V4D_hybrid/assets/shaders/raster_visibility.meta", 0},
 		{"modules/V4D_hybrid/assets/shaders/rtx_visibility.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/overlay_lines.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/overlay_text.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planets.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
 	};
@@ -93,9 +95,9 @@ int main() {
 	if (settings->modules_list_file != "") {
 		modules = v4d::io::StringListFile::Instance(settings->modules_list_file)->Load();
 		if (modules.size() == 0) {
-			// modules.push_back("V4D_basicscene");
+			modules.push_back("V4D_basicscene");
 			// modules.push_back("V4D_bullet");
-			modules.push_back("V4D_planetdemo");
+			// modules.push_back("V4D_planetdemo");
 		}
 	}
 	for (auto module : modules) {

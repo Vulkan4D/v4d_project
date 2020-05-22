@@ -100,6 +100,16 @@ Scene* scene = nullptr;
 		"modules/V4D_hybrid/assets/shaders/raster_visibility.glass.frag",
 	}};
 	
+	// Overlay
+	RasterShaderPipeline shader_overlay_lines {pl_overlay, {
+		"modules/V4D_hybrid/assets/shaders/overlay_lines.vert",
+		"modules/V4D_hybrid/assets/shaders/overlay_lines.frag",
+	}, -2};
+	RasterShaderPipeline shader_overlay_text {pl_overlay, {
+		"modules/V4D_hybrid/assets/shaders/overlay_text.vert",
+		"modules/V4D_hybrid/assets/shaders/overlay_text.frag",
+	}, -1};
+	
 	// Main Rendering
 	RasterShaderPipeline shader_lighting {pl_lighting_raster, {
 		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
@@ -188,7 +198,7 @@ Scene* scene = nullptr;
 		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
 		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
-		{"sg_overlay", {}},
+		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
 		{"sbt_visibility", &sbt_visibility},
@@ -479,18 +489,18 @@ Scene* scene = nullptr;
 					s->rasterizer.lineWidth = 1;
 					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
+						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 					#else
-						s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
+						s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
 					#endif
 				} else 
 			// #endif
 			if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
 				s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
 				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer);
+					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 				#else
-					s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer);
+					s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
 				#endif
 			} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
 				s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
@@ -504,14 +514,6 @@ Scene* scene = nullptr;
 					s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
 				#endif
 			}
-		}
-		
-		for (auto* s : shaderGroups["sg_material"]) {
-			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-			s->depthStencilState.depthTestEnable = VK_FALSE;
-			s->depthStencilState.depthWriteEnable = VK_FALSE;
-			s->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-			s->SetData(3);
 		}
 	}
 	
@@ -1206,6 +1208,52 @@ Scene* scene = nullptr;
 #pragma region UI
 	float img_overlayScale = 1.0;
 	
+	// Overlay functions
+	static const int MAX_OVERLAY_LINES = 16384;
+	static const int MAX_OVERLAY_TEXT_CHARS = 16384;
+	std::mutex overlayMutex;
+	// Overlay Lines
+	struct OverlayLine {
+		float x;
+		float y;
+		float color;
+		float _unused_ = 0;
+	};
+	Buffer overlayLinesBuffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(OverlayLine) * MAX_OVERLAY_LINES*2};
+	OverlayLine* overlayLines = nullptr;
+	size_t overlayLinesCount = 0;
+	std::queue<float> overlayLineWidths {};
+	void AddOverlayLine(float x1, float y1, float x2, float y2, glm::vec4 color = {1,1,1,1}, float lineWidth = 1) {
+		std::lock_guard lock(overlayMutex);
+		if (overlayLinesCount+2 > MAX_OVERLAY_LINES) {LOG_WARN("Overlay Line buffer overlow") overlayLinesCount=0;overlayLineWidths={};return;}
+		overlayLineWidths.emplace(lineWidth);
+		overlayLines[overlayLinesCount++] = {x1, y1, PackColorAsFloat(color), 0};
+		overlayLines[overlayLinesCount++] = {x2, y2, PackColorAsFloat(color), 0};
+	}
+	// Overlay Text
+	struct OverlayText {
+		float x;
+		float y;
+		float color;
+		float c;
+	};
+	Buffer overlayTextBuffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(OverlayText) * MAX_OVERLAY_TEXT_CHARS};
+	OverlayText* overlayText = nullptr;
+	size_t overlayTextSize = 0;
+	void AddOverlayText(char c, float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t flags = 0) {
+		std::lock_guard lock(overlayMutex);
+		if (overlayTextSize+1 > MAX_OVERLAY_TEXT_CHARS) {LOG_WARN("Overlay Text buffer overlow") overlayTextSize=0;return;}
+		overlayText[overlayTextSize++] = {x, y, PackColorAsFloat(color), glm::uintBitsToFloat((size << 16) | (c << 8) | flags)};
+	}
+	void AddOverlayText(const std::string& text, float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t flags = 0, float letterSpacing = 0) {
+		const float letterWidth = (float(size)+letterSpacing) / scene->camera.width * 2;
+		x -= letterWidth * float(text.length()-1) / 2;
+		for (int i = 0; i < text.length(); ++i) {
+			AddOverlayText(text[i], x, y, color, size, flags);
+			x += letterWidth;
+		}
+	}
+	
 	void CreateUiResources() {
 		img_overlay.Create(r->renderingDevice, 
 			(uint)((float)r->swapChain->extent.width * img_overlayScale), 
@@ -1262,8 +1310,22 @@ Scene* scene = nullptr;
 		uiRenderPass.Destroy(r->renderingDevice);
 	}
 	
-	void ConfigureUiShaders() {
-		//...
+	void ConfigureOverlayShaders() {
+		// Lines
+		shader_overlay_lines.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
+		shader_overlay_lines.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+		shader_overlay_lines.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		shader_overlay_lines.depthStencilState.depthTestEnable = false;
+		shader_overlay_lines.depthStencilState.depthWriteEnable = false;
+		shader_overlay_lines.SetData(&overlayLinesBuffer, 0);
+		
+		// Text
+		shader_overlay_text.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
+		shader_overlay_text.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		shader_overlay_text.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		shader_overlay_text.depthStencilState.depthTestEnable = false;
+		shader_overlay_text.depthStencilState.depthWriteEnable = false;
+		shader_overlay_text.SetData(&overlayTextBuffer, 0);
 	}
 	
 	#ifdef _ENABLE_IMGUI
@@ -1569,6 +1631,7 @@ extern "C" {
 			r->deviceFeatures.depthClamp = VK_TRUE;
 			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
 			r->deviceFeatures.geometryShader = VK_TRUE;
+			r->deviceFeatures.wideLines = VK_TRUE;
 			
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
@@ -1699,7 +1762,7 @@ extern "C" {
 			ConfigureRayTracingShaders();
 			ConfigureLightingShaders();
 			ConfigurePostProcessingShaders();
-			ConfigureUiShaders();
+			ConfigureOverlayShaders();
 		}
 
 		void ReadShaders() {
@@ -1781,6 +1844,14 @@ extern "C" {
 			// Uniform Buffers
 			cameraUniformBuffer.Allocate(r->renderingDevice);
 			activeLightsUniformBuffer.Allocate(r->renderingDevice);
+			
+			// Overlays
+			overlayLinesBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayLinesBuffer.MapMemory(r->renderingDevice);
+			overlayLines = (OverlayLine*)overlayLinesBuffer.data;
+			overlayTextBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayTextBuffer.MapMemory(r->renderingDevice);
+			overlayText = (OverlayText*)overlayTextBuffer.data;
 
 			AllocatePostProcessingBuffers();
 			if (r->rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
@@ -1793,6 +1864,14 @@ extern "C" {
 			scene->ClenupObjectInstancesGeometries();
 			activeRayTracedGeometries.clear();
 			scene->CollectGarbage();
+			
+			// Overlays
+			overlayLinesBuffer.UnmapMemory(r->renderingDevice);
+			overlayLinesBuffer.Free(r->renderingDevice);
+			overlayLines = nullptr;
+			overlayTextBuffer.UnmapMemory(r->renderingDevice);
+			overlayTextBuffer.Free(r->renderingDevice);
+			overlayText = nullptr;
 			
 			// Uniform Buffers
 			cameraUniformBuffer.Free(r->renderingDevice);
@@ -2132,10 +2211,46 @@ extern "C" {
 	// Render pipelines
 	
 	void Render2(VkCommandBuffer commandBuffer) {
-		// UI
+		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
-			for (auto* shader : shaderGroups["sg_overlay"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
+			{
+				// Adjust lines and text buffers
+				std::lock_guard lock(overlayMutex);
+				shader_overlay_lines.vertexOffset = 0;
+				shader_overlay_lines.vertexCount = overlayLinesCount;
+				shader_overlay_text.vertexOffset = 0;
+				shader_overlay_text.vertexCount = overlayTextSize;
+				
+				for (auto* shader : shaderGroups["sg_overlay"]) {
+					if (shader == &shader_overlay_lines) {
+						if (overlayLinesCount == 0) continue;
+						float lineWidth = 0;
+						int index = 0;
+						while (!overlayLineWidths.empty()) {
+							lineWidth = overlayLineWidths.front();
+							overlayLineWidths.pop();
+							if (shader->rasterizer.lineWidth != lineWidth) {
+								shader_overlay_lines.vertexCount = index - shader_overlay_lines.vertexOffset/sizeof(OverlayLine);
+								shader->Execute(r->renderingDevice, commandBuffer); // execute with potentially vertexCount=0, but we still need this because it binds the pipeline so that we can run CmdSetLineWidth()
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, lineWidth);
+								shader->rasterizer.lineWidth = lineWidth;
+								shader_overlay_lines.vertexOffset = index*sizeof(OverlayLine);
+								shader_overlay_lines.vertexCount = overlayLinesCount - index;
+							}
+							index += 2;
+						}
+						if (shader_overlay_lines.vertexCount > 0) {
+							shader->Execute(r->renderingDevice, commandBuffer);
+						}
+					} else if (shader == &shader_overlay_text) {
+						if (overlayTextSize == 0) continue;
+						shader->Execute(r->renderingDevice, commandBuffer);
+					} else {
+						shader->Execute(r->renderingDevice, commandBuffer);
+					}
+				}
+				overlayLinesCount = 0;
+				overlayTextSize = 0;
 			}
 			#ifdef _ENABLE_IMGUI
 				DrawImGui(commandBuffer);
