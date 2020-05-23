@@ -26,3 +26,6 @@
 [submodule "src/bullet3"]
 	path = src/v4d/modules/V4D_bullet/bullet3
 	url = git@github.com:bulletphysics/bullet3.git
+[submodule "src/stb"]
+	path = src/stb
+	url = git@github.com:nothings/stb.git

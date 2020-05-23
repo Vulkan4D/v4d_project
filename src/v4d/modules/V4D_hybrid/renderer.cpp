@@ -1,6 +1,7 @@
 #define _V4D_MODULE
 #include <v4d.h>
 
+#include "Texture2D.hpp"
 #include "camera_options.hh"
 
 using namespace v4d::graphics;
@@ -14,6 +15,9 @@ using namespace v4d::graphics::vulkan::rtx;
 // Application
 Renderer* r = nullptr;
 Scene* scene = nullptr;
+
+// Textures
+Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_font_atlas.png", STBI_grey_alpha};
 
 #pragma region Descriptor Sets
 	DescriptorSet set0_base;
@@ -1255,8 +1259,8 @@ Scene* scene = nullptr;
 		if (overlayTextSize+1 > MAX_OVERLAY_TEXT_CHARS) {LOG_WARN("Overlay Text buffer overlow") overlayTextSize=0;return;}
 		overlayText[overlayTextSize++] = {x, y, PackColorAsFloat(color), glm::uintBitsToFloat((size << 16) | (c << 8) | flags)};
 	}
-	void AddOverlayText(const std::string& text, float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t flags = 0, float letterSpacing = 0) {
-		const float letterWidth = (float(size)+letterSpacing) / scene->camera.width * 2;
+	void AddOverlayText(const std::string& text, float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t flags = 0, float letterSpacing = 0, float fontSizeRatio = 0.5) {
+		const float letterWidth = (float(size)*fontSizeRatio+letterSpacing) / scene->camera.width * 2;
 		x -= letterWidth * float(text.length()-1) / 2;
 		for (int i = 0; i < text.length(); ++i) {
 			AddOverlayText(text[i], x, y, color, size, flags);
@@ -1774,7 +1778,7 @@ extern "C" {
 		}
 		
 		{r->descriptorSets["set1_overlay"] = &set1_overlay;
-			//...
+			set1_overlay.AddBinding_combinedImageSampler(0, tex_img_font_atlas.GetImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
@@ -1878,6 +1882,16 @@ extern "C" {
 			if (r->rayTracingFeatures.rayTracing) CreateRayTracingResources();
 			CreateRasterVisibilityResources();
 			
+			// Textures
+			tex_img_font_atlas.SetMipLevels();
+			// tex_img_font_atlas.SetSamplerAnisotropy(16);
+			tex_img_font_atlas.AllocateAndWriteStagingMemory(r->renderingDevice);
+			tex_img_font_atlas.CreateImage(r->renderingDevice);
+			auto commandBuffer = r->renderingDevice->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
+				tex_img_font_atlas.CopyStagingBufferToImage(r->renderingDevice, commandBuffer);
+			r->renderingDevice->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
+			tex_img_font_atlas.FreeStagingMemory(r->renderingDevice);
+
 			// Modules
 			V4D_Game::ForEachSortedModule([](auto* mod){
 				if (mod->RendererCreateResources) mod->RendererCreateResources(r->renderingDevice);
@@ -1891,6 +1905,9 @@ extern "C" {
 			if (r->rayTracingFeatures.rayTracing) DestroyRayTracingResources();
 			DestroyRasterVisibilityResources();
 			
+			// Textures
+			tex_img_font_atlas.DestroyImage(r->renderingDevice);
+
 			// Modules
 			V4D_Game::ForEachSortedModule([](auto* mod){
 				if (mod->RendererDestroyResources) mod->RendererDestroyResources(r->renderingDevice);
@@ -1915,7 +1932,7 @@ extern "C" {
 			overlaySquaresBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 			overlaySquaresBuffer.MapMemory(r->renderingDevice);
 			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
-
+			
 			AllocatePostProcessingBuffers();
 			if (r->rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
 			
@@ -2280,7 +2297,6 @@ extern "C" {
 	// Render pipelines
 	
 	void Render2(VkCommandBuffer commandBuffer) {
-		
 		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
 			{
