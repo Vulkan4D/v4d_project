@@ -39,8 +39,8 @@ Scene* scene = nullptr;
 	Image img_pp { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_thumbnail { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
-	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_SNORM }};
-	
+	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
+
 #pragma endregion
 
 #pragma region Pipeline Layouts
@@ -101,6 +101,14 @@ Scene* scene = nullptr;
 	}};
 	
 	// Overlay
+	RasterShaderPipeline shader_overlay_circles {pl_overlay, {
+		"modules/V4D_hybrid/assets/shaders/overlay_shapes.vert",
+		"modules/V4D_hybrid/assets/shaders/overlay_shapes.circle.frag",
+	}, -4};
+	RasterShaderPipeline shader_overlay_squares {pl_overlay, {
+		"modules/V4D_hybrid/assets/shaders/overlay_shapes.vert",
+		"modules/V4D_hybrid/assets/shaders/overlay_shapes.square.frag",
+	}, -3};
 	RasterShaderPipeline shader_overlay_lines {pl_overlay, {
 		"modules/V4D_hybrid/assets/shaders/overlay_lines.vert",
 		"modules/V4D_hybrid/assets/shaders/overlay_lines.frag",
@@ -198,7 +206,7 @@ Scene* scene = nullptr;
 		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
 		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
-		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text}},
+		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
 		{"sbt_visibility", &sbt_visibility},
@@ -1208,9 +1216,11 @@ Scene* scene = nullptr;
 #pragma region UI
 	float img_overlayScale = 1.0;
 	
-	// Overlay functions
-	static const int MAX_OVERLAY_LINES = 16384;
+	// Overlay functions (Total of 1.0 mb allocated)
+	static const int MAX_OVERLAY_LINES = 8192;
 	static const int MAX_OVERLAY_TEXT_CHARS = 16384;
+	static const int MAX_OVERLAY_CIRCLES = 4096;
+	static const int MAX_OVERLAY_SQUARES = 4096;
 	std::mutex overlayMutex;
 	// Overlay Lines
 	struct OverlayLine {
@@ -1252,6 +1262,36 @@ Scene* scene = nullptr;
 			AddOverlayText(text[i], x, y, color, size, flags);
 			x += letterWidth;
 		}
+	}
+	// Overlay Circles
+	struct OverlayCircle {
+		float x;
+		float y;
+		float color;
+		float size;
+	};
+	Buffer overlayCirclesBuffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(OverlayCircle) * MAX_OVERLAY_CIRCLES};
+	OverlayCircle* overlayCircles = nullptr;
+	size_t overlayCirclesCount = 0;
+	void AddOverlayCircle(float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t border = 0) {
+		std::lock_guard lock(overlayMutex);
+		if (overlayCirclesCount+1 > MAX_OVERLAY_CIRCLES) {LOG_WARN("Overlay Circles buffer overlow") overlayCirclesCount=0;return;}
+		overlayCircles[overlayCirclesCount++] = {x, y, PackColorAsFloat(color), glm::uintBitsToFloat((size << 20) | (size << 8) | border)};
+	}
+	// Overlay Squares
+	struct OverlaySquare {
+		float x;
+		float y;
+		float color;
+		float size;
+	};
+	Buffer overlaySquaresBuffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(OverlaySquare) * MAX_OVERLAY_SQUARES};
+	OverlaySquare* overlaySquares = nullptr;
+	size_t overlaySquaresCount = 0;
+	void AddOverlaySquare(float x, float y, glm::vec4 color = {1,1,1,1}, glm::mediump_u16vec2 size = {20,20}, uint8_t border = 0) {
+		std::lock_guard lock(overlayMutex);
+		if (overlaySquaresCount+1 > MAX_OVERLAY_SQUARES) {LOG_WARN("Overlay Squares buffer overlow") overlaySquaresCount=0;return;}
+		overlaySquares[overlaySquaresCount++] = {x, y, PackColorAsFloat(color), glm::uintBitsToFloat((size.x << 20) | (size.y << 8) | border)};
 	}
 	
 	void CreateUiResources() {
@@ -1326,6 +1366,22 @@ Scene* scene = nullptr;
 		shader_overlay_text.depthStencilState.depthTestEnable = false;
 		shader_overlay_text.depthStencilState.depthWriteEnable = false;
 		shader_overlay_text.SetData(&overlayTextBuffer, 0);
+		
+		// Circles
+		shader_overlay_circles.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
+		shader_overlay_circles.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		shader_overlay_circles.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		shader_overlay_circles.depthStencilState.depthTestEnable = false;
+		shader_overlay_circles.depthStencilState.depthWriteEnable = false;
+		shader_overlay_circles.SetData(&overlayCirclesBuffer, 0);
+		
+		// Squares
+		shader_overlay_squares.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
+		shader_overlay_squares.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		shader_overlay_squares.rasterizer.cullMode = VK_CULL_MODE_NONE;
+		shader_overlay_squares.depthStencilState.depthTestEnable = false;
+		shader_overlay_squares.depthStencilState.depthWriteEnable = false;
+		shader_overlay_squares.SetData(&overlaySquaresBuffer, 0);
 	}
 	
 	#ifdef _ENABLE_IMGUI
@@ -1339,6 +1395,7 @@ Scene* scene = nullptr;
 				init_info.DescriptorPool = r->descriptorPool;
 				init_info.MinImageCount = r->swapChain->images.size();
 				init_info.ImageCount = r->swapChain->images.size();
+				init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 			ImGui_ImplVulkan_Init(&init_info, uiRenderPass.handle);
 			// Font Upload
 			auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
@@ -1852,6 +1909,12 @@ extern "C" {
 			overlayTextBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 			overlayTextBuffer.MapMemory(r->renderingDevice);
 			overlayText = (OverlayText*)overlayTextBuffer.data;
+			overlayCirclesBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayCirclesBuffer.MapMemory(r->renderingDevice);
+			overlayCircles = (OverlayCircle*)overlayCirclesBuffer.data;
+			overlaySquaresBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlaySquaresBuffer.MapMemory(r->renderingDevice);
+			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
 
 			AllocatePostProcessingBuffers();
 			if (r->rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
@@ -1872,6 +1935,12 @@ extern "C" {
 			overlayTextBuffer.UnmapMemory(r->renderingDevice);
 			overlayTextBuffer.Free(r->renderingDevice);
 			overlayText = nullptr;
+			overlayCirclesBuffer.UnmapMemory(r->renderingDevice);
+			overlayCirclesBuffer.Free(r->renderingDevice);
+			overlayCircles = nullptr;
+			overlaySquaresBuffer.UnmapMemory(r->renderingDevice);
+			overlaySquaresBuffer.Free(r->renderingDevice);
+			overlaySquares = nullptr;
 			
 			// Uniform Buffers
 			cameraUniformBuffer.Free(r->renderingDevice);
@@ -2211,15 +2280,17 @@ extern "C" {
 	// Render pipelines
 	
 	void Render2(VkCommandBuffer commandBuffer) {
+		
 		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
 			{
 				// Adjust lines and text buffers
 				std::lock_guard lock(overlayMutex);
-				shader_overlay_lines.vertexOffset = 0;
+				auto tmpCurrentLinesVertexBufferOffset = shader_overlay_lines.vertexOffset;
 				shader_overlay_lines.vertexCount = overlayLinesCount;
-				shader_overlay_text.vertexOffset = 0;
 				shader_overlay_text.vertexCount = overlayTextSize;
+				shader_overlay_circles.vertexCount = overlayCirclesCount;
+				shader_overlay_squares.vertexCount = overlaySquaresCount;
 				
 				for (auto* shader : shaderGroups["sg_overlay"]) {
 					if (shader == &shader_overlay_lines) {
@@ -2230,11 +2301,11 @@ extern "C" {
 							lineWidth = overlayLineWidths.front();
 							overlayLineWidths.pop();
 							if (shader->rasterizer.lineWidth != lineWidth) {
-								shader_overlay_lines.vertexCount = index - shader_overlay_lines.vertexOffset/sizeof(OverlayLine);
+								shader_overlay_lines.vertexCount = index - (shader_overlay_lines.vertexOffset-tmpCurrentLinesVertexBufferOffset)/sizeof(OverlayLine);
 								shader->Execute(r->renderingDevice, commandBuffer); // execute with potentially vertexCount=0, but we still need this because it binds the pipeline so that we can run CmdSetLineWidth()
 								r->renderingDevice->CmdSetLineWidth(commandBuffer, lineWidth);
 								shader->rasterizer.lineWidth = lineWidth;
-								shader_overlay_lines.vertexOffset = index*sizeof(OverlayLine);
+								shader_overlay_lines.vertexOffset = index*sizeof(OverlayLine) + tmpCurrentLinesVertexBufferOffset;
 								shader_overlay_lines.vertexCount = overlayLinesCount - index;
 							}
 							index += 2;
@@ -2242,15 +2313,18 @@ extern "C" {
 						if (shader_overlay_lines.vertexCount > 0) {
 							shader->Execute(r->renderingDevice, commandBuffer);
 						}
-					} else if (shader == &shader_overlay_text) {
-						if (overlayTextSize == 0) continue;
-						shader->Execute(r->renderingDevice, commandBuffer);
 					} else {
+						if (shader == &shader_overlay_text && overlayTextSize == 0) continue;
+						if (shader == &shader_overlay_circles && overlayCirclesCount == 0) continue;
+						if (shader == &shader_overlay_squares && overlaySquaresCount == 0) continue;
 						shader->Execute(r->renderingDevice, commandBuffer);
 					}
 				}
+				shader_overlay_lines.vertexOffset = tmpCurrentLinesVertexBufferOffset;
 				overlayLinesCount = 0;
 				overlayTextSize = 0;
+				overlayCirclesCount = 0;
+				overlaySquaresCount = 0;
 			}
 			#ifdef _ENABLE_IMGUI
 				DrawImGui(commandBuffer);

@@ -20,6 +20,7 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 		{"modules/V4D_hybrid/assets/shaders/rtx_visibility.meta", 0},
 		{"modules/V4D_hybrid/assets/shaders/overlay_lines.meta", 0},
 		{"modules/V4D_hybrid/assets/shaders/overlay_text.meta", 0},
+		{"modules/V4D_hybrid/assets/shaders/overlay_shapes.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planets.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
 	};
@@ -149,6 +150,7 @@ int main() {
 		ImGuiIO& io = ImGui::GetIO(); // (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 		ImGui::StyleColorsDark();
+		ImGui::GetStyle().Alpha = 0.8f;
 		ImGui_ImplGlfw_InitForVulkan(window->GetHandle(), true);
 	#endif
 	

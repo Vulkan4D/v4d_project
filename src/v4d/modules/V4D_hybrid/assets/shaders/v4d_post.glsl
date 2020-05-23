@@ -137,10 +137,6 @@ void main() {
 
 #shader overlay_apply.frag.2
 void main() {
-	vec4 overlay = texture(tex_img_overlay, v2f.uv);
-	if (length(overlay.rgb) > 0) {
-		overlay.a = length(overlay.rgb) + 0.2;
-	}
-	out_swapchain = overlay;
+	out_swapchain = texture(tex_img_overlay, v2f.uv);
 }
 
