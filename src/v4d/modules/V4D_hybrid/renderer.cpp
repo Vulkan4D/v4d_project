@@ -2081,6 +2081,19 @@ extern "C" {
 		}
 	
 	#pragma endregion
+	
+	void DrawOverlayLine(float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
+		AddOverlayLine(x1, y1, x2, y2, color, lineWidth);
+	}
+	void DrawOverlayText(const char* text, float x, float y, glm::vec4 color, float size) {
+		AddOverlayText(std::string(text), x, y, color, uint16_t(size));
+	}
+	void DrawOverlayCircle(float x, float y, glm::vec4 color, float size, float borderSize) {
+		AddOverlayCircle(x, y, color, uint16_t(size), uint8_t(borderSize));
+	}
+	void DrawOverlaySquare(float x, float y, glm::vec4 color, glm::vec2 size, float borderSize) {
+		AddOverlaySquare(x, y, color, size, uint8_t(borderSize));
+	}
 
 	void Update() {
 		
