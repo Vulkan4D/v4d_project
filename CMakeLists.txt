@@ -19,7 +19,7 @@ option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
 option(USE_CCACHE "Use ccache" ON)
 option(ENABLE_IMGUI "Enable ImGUI" ON)
-option(ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
+option(ADDRESS_SANITIZER "Enable Address Sanitizer" ON)
 
 # Global specs
 enable_language(CXX)

@@ -3,16 +3,90 @@
 
 #include "btBulletDynamicsCommon.h"
 
+v4d::graphics::Renderer* r = nullptr;
+v4d::graphics::Scene* scene = nullptr;
+
+V4D_Renderer* rendererModule = nullptr;
+
 btCollisionConfiguration* collisionConfiguration = nullptr;
 btDispatcher* dispatcher = nullptr;
 btBroadphaseInterface* overlappingPairCache = nullptr;
 btConstraintSolver* solver = nullptr;
 btDynamicsWorld* dynamicsWorld = nullptr;
+btAlignedObjectArray<btCollisionShape*> collisionShapes {};
+btAlignedObjectArray<btTriangleMesh*> triangleMeshes {};
 
-v4d::graphics::Renderer* r = nullptr;
-v4d::graphics::Scene* scene = nullptr;
+void RemovePhysicsObject(v4d::graphics::ObjectInstance* obj) {
+	obj->LockPhysics();
+		//...
+		obj->physicsObject = nullptr;
+		obj->removePhysicsCallback = nullptr;
+	obj->UnlockPhysics();
+}
 
-V4D_Renderer* rendererModule = nullptr;
+void AddPhysicsObject(v4d::graphics::ObjectInstance* obj) {
+	//... obj->physicsObject = 
+	obj->removePhysicsCallback = RemovePhysicsObject;
+}
+
+void UpdatePhysicsObject(v4d::graphics::ObjectInstance* obj) {
+	for (auto& geometryInstance : obj->GetGeometries()) {
+		auto geom = geometryInstance.geometry;
+		btCollisionShape* collisionShape = (btCollisionShape*)geom->colliderShapeObject;
+		if (geom->colliderDirty) {
+			// Delete old collision shape
+			if (collisionShape) {
+				for (int i = 0; i < collisionShapes.size(); ++i) {
+					if (collisionShapes[i] == collisionShape) {
+						collisionShapes[i] = collisionShapes[collisionShapes.size()-1];
+						collisionShapes.pop_back();
+						break;
+					}
+				}
+				delete collisionShape;
+				collisionShape = nullptr;
+			}
+			// Add new collision shape
+			if (geom->colliderType != v4d::graphics::Geometry::ColliderType::NONE) {
+				switch (geom->colliderType) {
+					case v4d::graphics::Geometry::ColliderType::SPHERE:
+						collisionShape = new btSphereShape(btScalar(geom->boundingDistance));
+					break;
+					case v4d::graphics::Geometry::ColliderType::BOX:
+						collisionShape = new btBoxShape(btVector3(btScalar(geom->boundingBoxSize.x), btScalar(geom->boundingBoxSize.y), btScalar(geom->boundingBoxSize.z)));
+					break;
+					case v4d::graphics::Geometry::ColliderType::TRIANGLE_MESH:
+						{
+							auto* mesh = new btTriangleMesh();
+							triangleMeshes.push_back(mesh);
+							auto* indices = geom->GetIndexPtr(0);
+							auto* vertices = geom->GetVertexPtr(0);
+							for (int i = 0; i < geom->indexCount; i+=3) {
+								btVector3 v0(vertices[indices[i]].pos.x, vertices[indices[i]].pos.y, vertices[indices[i]].pos.z);
+								btVector3 v1(vertices[indices[i+1]].pos.x, vertices[indices[i+1]].pos.y, vertices[indices[i+1]].pos.z);
+								btVector3 v2(vertices[indices[i+2]].pos.x, vertices[indices[i+2]].pos.y, vertices[indices[i+2]].pos.z);
+								mesh->addTriangle(v0, v1, v2, true);
+							}
+							collisionShape = new btBvhTriangleMeshShape(mesh, true);
+						}
+					break;
+					case v4d::graphics::Geometry::ColliderType::STATIC_PLANE:
+						collisionShape = new btStaticPlaneShape(btVector3(0, 1, 0), 0);
+					break;
+					// case v4d::graphics::Geometry::ColliderType::HEIGHTFIELD:
+					// 	collisionShape = 
+					// break;
+				}
+				if (collisionShape) collisionShapes.push_back(collisionShape);
+			}
+			// Assign collision shape
+			geom->colliderShapeObject = collisionShape;
+			geom->colliderDirty = false;
+		}
+	}
+	//...
+	obj->physicsDirty = false;
+}
 
 extern "C" {
 	
@@ -45,6 +119,21 @@ extern "C" {
 	}
 	
 	void UnloadScene() {
+		
+		for (int i = 0; i < collisionShapes.size(); i++) {
+			auto* obj = collisionShapes[i];
+			collisionShapes[i] = 0;
+			delete obj;
+		}
+		collisionShapes.clear();
+		
+		for (int i = 0; i < triangleMeshes.size(); i++) {
+			auto* obj = triangleMeshes[i];
+			triangleMeshes[i] = 0;
+			delete obj;
+		}
+		triangleMeshes.clear();
+		
 		delete dynamicsWorld;
 		delete solver;
 		delete overlappingPairCache;
@@ -57,7 +146,23 @@ extern "C" {
 	}
 	
 	void StepSimulation(double deltaTime) {
-		
+		scene->Lock();
+			for (auto* obj : scene->objectInstances) {
+				obj->LockPhysics();
+					if (!obj->physicsObject && obj->rigidbodyType != v4d::graphics::ObjectInstance::RigidBodyType::NONE) {
+						AddPhysicsObject(obj);
+					}
+					if (obj->physicsDirty) {
+						if (obj->rigidbodyType == v4d::graphics::ObjectInstance::RigidBodyType::NONE) {
+							RemovePhysicsObject(obj);
+						} else {
+							UpdatePhysicsObject(obj);
+						}
+					}
+				obj->UnlockPhysics();
+			}
+		scene->Unlock();
+		dynamicsWorld->stepSimulation(deltaTime);
 	}
 	
 }
@@ -66,63 +171,36 @@ extern "C" {
 
 		
 		
-		// ///-----includes_end-----
-
-		// int i;
-		// ///-----initialization_start-----
-
-		// ///collision configuration contains default setup for memory, collision setup. Advanced users can create their own configuration.
-		// btDefaultCollisionConfiguration* collisionConfiguration = new btDefaultCollisionConfiguration();
-
-		// ///use the default collision dispatcher. For parallel processing you can use a diffent dispatcher (see Extras/BulletMultiThreaded)
-		// btCollisionDispatcher* dispatcher = new btCollisionDispatcher(collisionConfiguration);
-
-		// ///btDbvtBroadphase is a good general purpose broadphase. You can also try out btAxis3Sweep.
-		// btBroadphaseInterface* overlappingPairCache = new btDbvtBroadphase();
-
-		// ///the default constraint solver. For parallel processing you can use a different solver (see Extras/BulletMultiThreaded)
-		// btSequentialImpulseConstraintSolver* solver = new btSequentialImpulseConstraintSolver;
-
-		// btDiscreteDynamicsWorld* dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
-
-		// dynamicsWorld->setGravity(btVector3(0, -10, 0));
-
-		// ///-----initialization_end-----
-
-		// //keep track of the shapes, we release memory at exit.
-		// //make sure to re-use collision shapes among rigid bodies whenever possible!
-		// btAlignedObjectArray<btCollisionShape*> collisionShapes;
-
 		// ///create a few basic rigid bodies
 
 		// //the ground is a cube of side 100 at position y = -56.
 		// //the sphere will hit it at y = -6, with center at -5
 		// {
-		// 	btCollisionShape* groundShape = new btBoxShape(btVector3(btScalar(50.), btScalar(50.), btScalar(50.)));
+						// 	btCollisionShape* groundShape = new btBoxShape(btVector3(btScalar(50.), btScalar(50.), btScalar(50.)));
 
-		// 	collisionShapes.push_back(groundShape);
+						// 	collisionShapes.push_back(groundShape);
 
-		// 	btTransform groundTransform;
-		// 	groundTransform.setIdentity();
-		// 	groundTransform.setOrigin(btVector3(0, -56, 0));
+						// 	btTransform groundTransform;
+						// 	groundTransform.setIdentity();
+						// 	groundTransform.setOrigin(btVector3(0, -56, 0));
 
-		// 	btScalar mass(0.);
+						// 	btScalar mass(0.);
 
-		// 	//rigidbody is dynamic if and only if mass is non zero, otherwise static
-		// 	bool isDynamic = (mass != 0.f);
+						// 	//rigidbody is dynamic if and only if mass is non zero, otherwise static
+						// 	bool isDynamic = (mass != 0.f);
 
-		// 	btVector3 localInertia(0, 0, 0);
-		// 	if (isDynamic)
-		// 		groundShape->calculateLocalInertia(mass, localInertia);
+						// 	btVector3 localInertia(0, 0, 0);
+						// 	if (isDynamic)
+						// 		groundShape->calculateLocalInertia(mass, localInertia);
 
-		// 	//using motionstate is optional, it provides interpolation capabilities, and only synchronizes 'active' objects
-		// 	btDefaultMotionState* myMotionState = new btDefaultMotionState(groundTransform);
-		// 	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, groundShape, localInertia);
-		// 	btRigidBody* body = new btRigidBody(rbInfo);
+								// 	//using motionstate is optional, it provides interpolation capabilities, and only synchronizes 'active' objects
+								// 	btDefaultMotionState* myMotionState = new btDefaultMotionState(groundTransform);
+								// 	btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, myMotionState, groundShape, localInertia);
+								// 	btRigidBody* body = new btRigidBody(rbInfo);
 
-		// 	//add the body to the dynamics world
-		// 	dynamicsWorld->addRigidBody(body);
-		// }
+								// 	//add the body to the dynamics world
+								// 	dynamicsWorld->addRigidBody(body);
+						// }
 
 		// {
 		// 	//create a dynamic rigidbody
@@ -198,29 +276,3 @@ extern "C" {
 		// 	dynamicsWorld->removeCollisionObject(obj);
 		// 	delete obj;
 		// }
-
-		// //delete collision shapes
-		// for (int j = 0; j < collisionShapes.size(); j++)
-		// {
-		// 	btCollisionShape* shape = collisionShapes[j];
-		// 	collisionShapes[j] = 0;
-		// 	delete shape;
-		// }
-
-		// //delete dynamics world
-		// delete dynamicsWorld;
-
-		// //delete solver
-		// delete solver;
-
-		// //delete broadphase
-		// delete overlappingPairCache;
-
-		// //delete dispatcher
-		// delete dispatcher;
-
-		// delete collisionConfiguration;
-
-		// //next line is optional: it will be cleared by the destructor when the array goes out of scope
-		// collisionShapes.clear();
-		

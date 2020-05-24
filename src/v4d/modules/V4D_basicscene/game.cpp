@@ -4,6 +4,8 @@
 using namespace v4d::graphics;
 
 void CreateCornellBox(ObjectInstance* obj) {
+	obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+	obj->mass = 1000;
 
 	auto geom1 = obj->AddGeometry(28, 42);
 	
@@ -86,7 +88,9 @@ extern "C" {
 		
 		// Ground
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
 			auto plane = obj->AddGeometry(4, 6);
+			// plane->colliderType = Geometry::ColliderType::STATIC_PLANE;
 			plane->SetVertex(0, /*pos*/{-80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 			plane->SetVertex(1, /*pos*/{ 80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
 			plane->SetVertex(2, /*pos*/{ 80000.0, 80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
