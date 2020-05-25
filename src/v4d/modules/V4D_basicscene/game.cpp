@@ -2,6 +2,7 @@
 #include <v4d.h>
 
 using namespace v4d::graphics;
+using namespace v4d::scene;
 
 void CreateCornellBox(ObjectInstance* obj) {
 	obj->rigidbodyType = ObjectInstance::RigidBodyType::KINEMATIC;
@@ -61,7 +62,7 @@ void CreateCornellBox(ObjectInstance* obj) {
 	
 }
 
-std::vector<ObjectInstance*> objects {};
+std::vector<ObjectInstancePtr> objects {};
 Scene* scene = nullptr;
 
 extern "C" {
@@ -136,7 +137,7 @@ extern "C" {
 	}
 	
 	void UnloadScene() {
-		for (auto* obj : objects) {
+		for (auto obj : objects) {
 			scene->RemoveObjectInstance(obj);
 		}
 		objects.clear();

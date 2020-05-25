@@ -5,6 +5,7 @@
 #include "PlanetAtmosphere.hpp"
 #include "Noise.hpp"
 
+using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 
@@ -124,7 +125,7 @@ struct PlanetTerrain {
 		
 		#pragma region Data
 		std::vector<Chunk*> subChunks {};
-		ObjectInstance* obj = nullptr;
+		ObjectInstancePtr obj = nullptr;
 		std::shared_ptr<Geometry> geometry = nullptr;
 		std::recursive_mutex generatorMutex;
 		#pragma endregion

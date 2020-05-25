@@ -1,6 +1,7 @@
 #pragma once
 #include <v4d.h>
 
+using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 

@@ -2,6 +2,7 @@
 #include "../sample/common.hpp"
 
 using namespace v4d::graphics;
+using namespace v4d::scene;
 
 #pragma region Planet
 
@@ -43,14 +44,15 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 			if (chunk->computedLevel == 0) {
 				chunk->obj->SetGeometriesDirty();
 				chunk->obj->PushGeometries(device, commandBuffer);
-			
 				chunk->computedLevel = 2;
-				chunk->obj->SetGenerated();
+				chunk->obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
 				if (chunk->geometry->blas) {
 					chunk->geometry->blas->built = false;
 					LOG_WARN("BLAS already created but should not be...")
 				}
 				chunk->geometry->active = true;
+				chunk->geometry->colliderDirty = true;
+				chunk->obj->SetGenerated();
 			}
 		}
 	}
@@ -149,7 +151,7 @@ namespace TerrainGeneratorLib {
 
 #pragma endregion
 
-ObjectInstance* sun = nullptr;
+ObjectInstancePtr sun = nullptr;
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
@@ -174,11 +176,11 @@ extern "C" {
 	void Init(Scene* _s) {
 		scene = _s;
 		
-		// v4d::graphics::Geometry::globalBuffers.lightBuffer.Extend(16384);
-		// v4d::graphics::Geometry::globalBuffers.objectBuffer.Extend(16384);
-		// v4d::graphics::Geometry::globalBuffers.geometryBuffer.Extend(65536);
-		v4d::graphics::Geometry::globalBuffers.vertexBuffer.Extend(16777216); // 16 million @ 32 bytes each = 512 mb
-		v4d::graphics::Geometry::globalBuffers.indexBuffer.Extend(16777216*6); // 100 million @ 4 bytes each = 384 mb
+		// v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(16384);
+		// v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(16384);
+		// v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(65536);
+		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(16777216); // 16 million @ 32 bytes each = 512 mb
+		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(16777216*6); // 100 million @ 4 bytes each = 384 mb
 	}
 	
 	void LoadScene() {

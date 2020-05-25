@@ -16,7 +16,7 @@
 // C++ Only, within this module only
 #ifdef V4D_HYBRID_RENDERER_MODULE
 namespace RENDER_OPTIONS {
-	bool RAY_TRACED_VISIBILITY = false;
+	bool RAY_TRACED_VISIBILITY = true;
 	bool RAY_TRACED_LIGHTING = true;
 	bool HARD_SHADOWS = true;
 	bool TXAA = true;

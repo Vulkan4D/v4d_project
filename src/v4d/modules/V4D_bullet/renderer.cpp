@@ -5,7 +5,7 @@
 #include "../V4D_hybrid/camera_options.hh"
 
 v4d::graphics::Renderer* r = nullptr;
-v4d::graphics::Scene* scene = nullptr;
+v4d::scene::Scene* scene = nullptr;
 V4D_Renderer* primaryRenderModule = nullptr;
 
 btDynamicsWorld* world = nullptr;
@@ -44,7 +44,7 @@ class DebugDrawer : public btIDebugDraw {
 
 extern "C" {
 	
-	void Init(v4d::graphics::Renderer* _r, v4d::graphics::Scene* _s) {
+	void Init(v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
 		r = _r;
 		scene = _s;
 		primaryRenderModule = V4D_Renderer::GetPrimaryModule();

@@ -1,6 +1,7 @@
 #include <v4d.h>
 
 using namespace v4d::graphics;
+using namespace v4d::scene;
 
 // Settings file
 #include "settings.hh"
@@ -94,6 +95,8 @@ int main() {
 	std::vector<std::string> modules {};
 	if (settings->modules_list_file != "") {
 		modules = v4d::io::StringListFile::Instance(settings->modules_list_file)->Load();
+		
+		// Default Modules when modules.txt is empty
 		if (modules.size() == 0) {
 			modules.push_back("V4D_basicscene");
 			modules.push_back("V4D_bullet");
@@ -106,7 +109,7 @@ int main() {
 		V4D_Renderer::LoadModule(module);
 		V4D_Physics::LoadModule(module);
 	}
-	if (!V4D_Renderer::GetPrimaryModule()) {
+	if (!V4D_Renderer::GetPrimaryModule()) { // We need at least one primary Renderer module
 		V4D_Renderer::LoadModule("V4D_hybrid");
 	}
 	
@@ -187,6 +190,9 @@ int main() {
 	
 	// Load Scene
 	V4D_Physics::ForEachSortedModule([](auto* mod){
+		if (mod->LoadScene) mod->LoadScene();
+	});
+	V4D_Renderer::ForEachSortedModule([](auto* mod){
 		if (mod->LoadScene) mod->LoadScene();
 	});
 	V4D_Game::ForEachSortedModule([](auto* mod){
@@ -408,10 +414,15 @@ int main() {
 	V4D_Game::ForEachSortedModule([](auto* mod){
 		if (mod->UnloadScene) mod->UnloadScene();
 	});
+	V4D_Renderer::ForEachSortedModule([](auto* mod){
+		if (mod->UnloadScene) mod->UnloadScene();
+	});
 	V4D_Physics::ForEachSortedModule([](auto* mod){
 		if (mod->UnloadScene) mod->UnloadScene();
 	});
-
+	
+	scene.ClearAllRemainingObjects();
+	
 	// Unload Modules
 	V4D_Game::UnloadModules();
 	V4D_Input::UnloadModules();

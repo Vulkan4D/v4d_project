@@ -1,10 +1,11 @@
 #define _V4D_MODULE
-#include <v4d.h>
-
-#include "Texture2D.hpp"
 #define V4D_HYBRID_RENDERER_MODULE
+
+#include <v4d.h>
+#include "Texture2D.hpp"
 #include "camera_options.hh"
 
+using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
@@ -568,7 +569,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 						// true
 					// #endif
 				) {
-					for (auto* obj : scene->objectInstances) {
+					for (auto obj : scene->objectInstances) {
 						if (obj) {
 							// obj->Lock();
 							if (obj->IsActive()) {
@@ -642,7 +643,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 	AccelerationStructure topLevelAccelerationStructure {};
 	Buffer rayTracingShaderBindingTableBuffer_visibility {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR};
 	Buffer rayTracingShaderBindingTableBuffer_lighting {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR};
-	std::mutex rayTracingInstanceMutex, blasBuildQueueMutex;
+	std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 	std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 	std::vector<VkAccelerationStructureBuildOffsetInfoKHR*> blasQueueBuildOffsetInfos {};
 	Buffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
@@ -652,7 +653,9 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 	static const bool globalScratchDynamicSize = false;
 	static const int maxBlasBuildsPerFrame = 8;
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeRayTracedGeometries {};
-	std::vector<std::shared_ptr<AccelerationStructure>> inactiveBlas {};
+	std::vector<GeometryInstance> geometriesToRemoveFromRayTracingInstances {};
+	std::mutex geometriesToRemoveFromRayTracingInstancesMutex;
+	// std::vector<std::shared_ptr<AccelerationStructure>> inactiveBlas {};
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};
 	
 	void ResetRayTracingBlasBuilds() {
@@ -672,7 +675,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		topLevelAccelerationStructure.Destroy(r->renderingDevice);
 		
 		activeRayTracedGeometries.clear();
-		inactiveBlas.clear();
+		// inactiveBlas.clear();
 		blasBuildsForGlobalScratchBufferReallocation.clear();
 		ResetRayTracingBlasBuilds();
 	}
@@ -682,14 +685,10 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		rayTracingInstanceBuffer.MapMemory(r->renderingDevice);
 		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.data;
 		
-		// LOG_VERBOSE("Allocated instance buffer " << std::hex << r->renderingDevice->GetBufferDeviceAddress(rayTracingInstanceBuffer.buffer))
-		
 		if (AccelerationStructure::useGlobalScratchBuffer) {
 			globalScratchBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
 			topLevelAccelerationStructure.SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
 		}
-		
-		// LOG_VERBOSE("Allocated global scratch buffer " << std::hex << r->renderingDevice->GetBufferDeviceAddress(globalScratchBuffer.buffer))
 	}
 	void FreeRayTracingBuffers() {
 		rayTracingInstances = nullptr;
@@ -907,30 +906,45 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
 	}
 	
-	void RemoveRayTracingInstance(GeometryInstance* geometryInstance) {
+	void RemoveRayTracingInstance(GeometryInstance& geometryInstance) {
 		std::lock_guard lock(rayTracingInstanceMutex);
-		if (geometryInstance->rayTracingInstanceIndex == -1) return;
-		int lastIndex = --nbRayTracingInstances;
-		int index = geometryInstance->rayTracingInstanceIndex;
-		geometryInstance->rayTracingInstanceIndex = -1;
-		rayTracingInstances[index] = rayTracingInstances[lastIndex];
-		rayTracingInstances[lastIndex].accelerationStructureHandle = 0;
-	
-		// inactiveBlas.push_back(activeRayTracedGeometries[index]->blas);
-		activeRayTracedGeometries[index] = activeRayTracedGeometries[lastIndex];
-		activeRayTracedGeometries[lastIndex] = nullptr;
+		if (nbRayTracingInstances == 0) return;
+		if (geometryInstance.rayTracingInstanceIndex == -1) return;
 		
-		if (rayTracingInstances[index].accelerationStructureHandle != 0) {
-			for (auto* obj : scene->objectInstances) {
-				for (auto& geom : obj->GetGeometries()) {
+		#ifdef RENDERER_RAY_TRACING_INSTANCES_DEFRAG_MODE_INDIVIDUAL_DELETE
+			int lastIndex = --nbRayTracingInstances;
+			int index = geometryInstance.rayTracingInstanceIndex;
+			geometryInstance.rayTracingInstanceIndex = -1;
+			rayTracingInstances[index] = rayTracingInstances[lastIndex];
+			rayTracingInstances[lastIndex].accelerationStructureHandle = 0;
+		
+			// inactiveBlas.push_back(activeRayTracedGeometries[index]->blas);
+			activeRayTracedGeometries[index] = activeRayTracedGeometries[lastIndex];
+			activeRayTracedGeometries[lastIndex] = nullptr;
+			
+			if (rayTracingInstances[index].accelerationStructureHandle != 0) {
+				for (auto obj : scene->objectInstances) {
+					for (auto& geom : obj->GetGeometries()) {
+						if (geom.rayTracingInstanceIndex == lastIndex) {
+							geom.rayTracingInstanceIndex = index;
+							goto Next;
+						}
+					}
+				}
+				Next:
+				for (auto& geom : geometriesToRemoveFromRayTracingInstances) {
 					if (geom.rayTracingInstanceIndex == lastIndex) {
 						geom.rayTracingInstanceIndex = index;
 						return;
 					}
 				}
+				// LOG_ERROR("Object Instance to move to deleted instance index : Not Found") // If we dont find it, it's most likely okay because it means its already deleted from the scene and this event would have been fired as well for that other geometry
 			}
-			LOG_ERROR("Object Instance to move to deleted instance index : Not Found")
-		}
+		#else
+			rayTracingInstances[geometryInstance.rayTracingInstanceIndex].accelerationStructureHandle = 0;
+			activeRayTracedGeometries[geometryInstance.rayTracingInstanceIndex] = nullptr;
+			geometryInstance.rayTracingInstanceIndex = -1;
+		#endif
 	}
 	
 #pragma endregion
@@ -1215,6 +1229,34 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 			scene->camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
 		}
 	}
+	void RunTXAA() {
+		// TXAA
+		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
+			static unsigned long frameCount = 0;
+			static const glm::dvec2 samples8[8] = {
+				glm::dvec2(-7.0, 1.0) / 8.0,
+				glm::dvec2(-5.0, -5.0) / 8.0,
+				glm::dvec2(-1.0, -3.0) / 8.0,
+				glm::dvec2(3.0, -7.0) / 8.0,
+				glm::dvec2(5.0, -1.0) / 8.0,
+				glm::dvec2(7.0, 7.0) / 8.0,
+				glm::dvec2(1.0, 3.0) / 8.0,
+				glm::dvec2(-3.0, 5.0) / 8.0
+			};
+			glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
+			glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
+			scene->camera.projectionMatrix[2].x = subSample.x;
+			scene->camera.projectionMatrix[2].y = subSample.y;
+			// historyTxaaOffset = txaaOffset;
+			scene->camera.txaaOffset = subSample / 2.0;
+			frameCount++;
+			
+			scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
+			
+			// Save Projection and View matrices from previous frame
+			scene->camera.historyViewMatrix = scene->camera.viewMatrix;
+		}
+	}
 	
 #pragma endregion
 
@@ -1429,33 +1471,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		scene->camera.RefreshProjectionMatrix();
 		scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 		
-		// TXAA
-		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
-			static unsigned long frameCount = 0;
-			static const glm::dvec2 samples8[8] = {
-				glm::dvec2(-7.0, 1.0) / 8.0,
-				glm::dvec2(-5.0, -5.0) / 8.0,
-				glm::dvec2(-1.0, -3.0) / 8.0,
-				glm::dvec2(3.0, -7.0) / 8.0,
-				glm::dvec2(5.0, -1.0) / 8.0,
-				glm::dvec2(7.0, 7.0) / 8.0,
-				glm::dvec2(1.0, 3.0) / 8.0,
-				glm::dvec2(-3.0, 5.0) / 8.0
-			};
-			glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
-			glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
-			scene->camera.projectionMatrix[2].x = subSample.x;
-			scene->camera.projectionMatrix[2].y = subSample.y;
-			// historyTxaaOffset = txaaOffset;
-			scene->camera.txaaOffset = subSample / 2.0;
-			frameCount++;
-			
-			scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
-			
-			// Save Projection and View matrices from previous frame
-			scene->camera.historyViewMatrix = scene->camera.viewMatrix;
-		}
-		
+		RunTXAA();
 		
 		// Modules
 		V4D_Game::ForEachSortedModule([](auto* mod){
@@ -1469,67 +1485,99 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		}
 		if (r->rayTracingFeatures.rayTracing) {
 			ResetRayTracingBlasBuilds();
-			inactiveBlas.clear();
+			// inactiveBlas.clear();
 		}
-		
-		scene->CollectGarbage();
 		
 		// Update object transforms and light sources (Use all lights for now)
 		scene->Lock();
+			std::scoped_lock lock(geometriesToRemoveFromRayTracingInstancesMutex, rayTracingInstanceMutex);
 			nbActiveLights = 0;
-			for (auto* obj : scene->objectInstances) {
-				if (obj) {
-					// obj->Lock();
-					if (obj->IsActive()) {
-						if (!obj->IsGenerated()) obj->GenerateGeometries();
-						// Matrices
-						obj->WriteMatrices(scene->camera.viewMatrix);
-						// Light sources
-						for (auto* lightSource : obj->GetLightSources()) {
-							activeLights[nbActiveLights++] = lightSource->lightOffset;
-						}
-						// Geometries
-						if (r->rayTracingFeatures.rayTracing) {
-							for (auto& geom : obj->GetGeometries()) {
-								if (geom.geometry->active) {
-									if (!geom.geometry->blas) {
-										MakeRayTracingBlas(&geom);
-									}
-									if (geom.geometry->blas && !geom.geometry->blas->built) {
-										
-										// Global Scratch Buffer
-										if (AccelerationStructure::useGlobalScratchBuffer) {
-											VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
-											if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
-												continue;
-											}
-											geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
-											geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
-											globalScratchBufferSize += scratchSize;
-											if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
-										}
-										
-										AddRayTracingBlasBuild(geom.geometry->blas);
-									}
-									if (geom.geometry->blas && geom.geometry->blas->built) {
-										if (geom.rayTracingInstanceIndex == -1) {
-											AddRayTracingInstance(&geom);
-										}
-										SetRayTracingInstanceTransform(&geom, scene->camera.viewMatrix * obj->GetWorldTransform());
-									}
-								} else if (geom.rayTracingInstanceIndex != -1) {
-									RemoveRayTracingInstance(&geom);
+			for (auto obj : scene->objectInstances) {
+				if (obj->IsActive()) {
+					if (!obj->IsGenerated()) obj->GenerateGeometries();
+					// Matrices
+					obj->WriteMatrices(scene->camera.viewMatrix);
+					// Light sources
+					for (auto* lightSource : obj->GetLightSources()) {
+						activeLights[nbActiveLights++] = lightSource->lightOffset;
+					}
+					// Geometries
+					if (r->rayTracingFeatures.rayTracing) {
+						for (auto& geom : obj->GetGeometries()) {
+							if (geom.geometry->active) {
+								if (!geom.geometry->blas) {
+									MakeRayTracingBlas(&geom);
 								}
+								if (geom.geometry->blas && !geom.geometry->blas->built) {
+									
+									// Global Scratch Buffer
+									if (AccelerationStructure::useGlobalScratchBuffer) {
+										VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+										if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
+											continue;
+										}
+										geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
+										geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
+										globalScratchBufferSize += scratchSize;
+										if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
+									}
+									
+									AddRayTracingBlasBuild(geom.geometry->blas);
+								}
+								if (geom.geometry->blas && geom.geometry->blas->built) {
+									if (geom.rayTracingInstanceIndex == -1) {
+										AddRayTracingInstance(&geom);
+									}
+									SetRayTracingInstanceTransform(&geom, scene->camera.viewMatrix * obj->GetWorldTransform());
+								}
+							} else if (geom.rayTracingInstanceIndex != -1) {
+								RemoveRayTracingInstance(geom);
 							}
 						}
-					} else if (r->rayTracingFeatures.rayTracing) {
-						for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
-							RemoveRayTracingInstance(&geom);
-						}
 					}
-					// obj->Unlock();
+				} else if (r->rayTracingFeatures.rayTracing) {
+					for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
+						RemoveRayTracingInstance(geom);
+					}
 				}
 			}
+			if (r->rayTracingFeatures.rayTracing) {
+				// Remove deleted geometries
+				for (auto& geom : geometriesToRemoveFromRayTracingInstances) {
+					RemoveRayTracingInstance(geom);
+				}
+				geometriesToRemoveFromRayTracingInstances.clear();
+				#ifndef RENDERER_RAY_TRACING_INSTANCES_DEFRAG_MODE_INDIVIDUAL_DELETE
+					// Defragment ray tracing instances
+					for (int i = 0; i < nbRayTracingInstances; ++i) {
+						if (!activeRayTracedGeometries[i]) {
+							for (int j = nbRayTracingInstances-1; j > i; --j) {
+								nbRayTracingInstances = j;
+								if (activeRayTracedGeometries[j]) {
+									activeRayTracedGeometries[i] = activeRayTracedGeometries[j];
+									activeRayTracedGeometries[j] = nullptr;
+									rayTracingInstances[i] = rayTracingInstances[j];
+									rayTracingInstances[j].accelerationStructureHandle = 0;
+									for (auto obj : scene->objectInstances) {
+										for (auto& geom : obj->GetGeometries()) {
+											if (geom.rayTracingInstanceIndex == j) {
+												geom.rayTracingInstanceIndex = i;
+												goto NextInactiveGeometry;
+											}
+										}
+									}
+								}
+							}
+							// if (nbRayTracingInstances > i) {
+							// 	LOG_ERROR("Ray-Tracing instance defragmentation may be corrupted, Geometry Instance to move to deleted instance index was Not Found")
+							// }
+							NextInactiveGeometry:
+							(void)nbRayTracingInstances;
+						}
+					}
+				#endif
+			}
+				
 		scene->Unlock();
 		
 		// Global Scratch Buffer
@@ -1582,7 +1630,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		} else {
 			// Geometry::globalBuffers.PushGeometriesInfo(r->renderingDevice, commandBuffer);
 			scene->Lock();
-				for (auto* obj : scene->objectInstances) if (obj && obj->IsActive()) {
+				for (auto obj : scene->objectInstances) if (obj && obj->IsActive()) {
 					for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
 						if (geom.geometry) geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 					}
@@ -1613,6 +1661,19 @@ extern "C" {
 	
 	bool ModuleIsPrimary() {return true;}
 	int OrderIndex() {return -1000;}
+	
+	void LoadScene() {
+		scene->objectInstanceRemovedCallbacks[THIS_MODULE] = [](ObjectInstancePtr obj) {
+			std::lock_guard lock(geometriesToRemoveFromRayTracingInstancesMutex);
+			for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
+				geometriesToRemoveFromRayTracingInstances.push_back(geom);
+			}
+		};
+	}
+	
+	void UnloadScene() {
+		scene->objectInstanceRemovedCallbacks.erase(THIS_MODULE);
+	}
 	
 	#pragma region Containers Access
 		
@@ -1650,7 +1711,7 @@ extern "C" {
 		
 	#pragma endregion
 	
-	#pragma region Graphics configuration
+	#pragma region Graphics configuration / Init
 		
 		void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
 			// Higher score for Ray Tracing support
@@ -1944,7 +2005,7 @@ extern "C" {
 		void FreeBuffers() {
 			scene->ClenupObjectInstancesGeometries();
 			activeRayTracedGeometries.clear();
-			scene->CollectGarbage();
+			geometriesToRemoveFromRayTracingInstances.clear();
 			
 			// Overlays
 			overlayLinesBuffer.UnmapMemory(r->renderingDevice);

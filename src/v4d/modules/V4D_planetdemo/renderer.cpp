@@ -1,5 +1,6 @@
 #include "common.hh"
 
+using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
