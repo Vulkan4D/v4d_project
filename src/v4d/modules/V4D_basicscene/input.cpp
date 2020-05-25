@@ -4,13 +4,18 @@
 using namespace v4d::scene;
 Scene* scene = nullptr;
 
+std::vector<ObjectInstancePtr>* balls {};
+
 extern "C" {
 	
 	std::string CallbackName() {return THIS_MODULE;}
 	
 	void Init(v4d::graphics::Window* w, v4d::graphics::Renderer* r, v4d::scene::Scene* s) {
 		scene = s;
-		v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(2048);
+	}
+	
+	void ModuleSetCustomPtr(int, void* ptr) {
+		balls = (std::vector<ObjectInstancePtr>*)ptr;
 	}
 	
 	void MouseButtonCallback(int button, int action, int mods) {
@@ -40,8 +45,6 @@ extern "C" {
 		}
 	}
 	
-	std::vector<ObjectInstancePtr> balls {};
-	
 	void KeyCallback(int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
@@ -61,7 +64,20 @@ extern "C" {
 							obj->SetSphereGeometry("sphere", 1, {0.5,0.5,0.5, 1});
 						}, scene->camera.worldPosition + scene->camera.lookDirection * 5.0);
 						ball->AddImpulse(scene->camera.lookDirection*40.0);
-						balls.push_back(ball);
+						balls->push_back(ball);
+					}
+					break;
+				case GLFW_KEY_N:
+					for (int i = 0; i < 10; ++i) {
+						// Launch ball
+						auto ball = scene->AddObjectInstance();
+						ball->Configure([](ObjectInstance* obj){
+							obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+							obj->mass = 1;
+							obj->SetSphereGeometry("sphere", 1, {0.5,0.5,0.5, 1});
+						}, scene->camera.worldPosition + scene->camera.lookDirection * 5.0);
+						ball->AddImpulse(scene->camera.lookDirection*100.0);
+						balls->push_back(ball);
 					}
 					break;
 				case GLFW_KEY_L:
@@ -74,14 +90,14 @@ extern "C" {
 							obj->SetSphereLightSource("light", 2, 100000);
 						}, scene->camera.worldPosition + scene->camera.lookDirection * 5.0);
 						ball->AddImpulse(scene->camera.lookDirection*40.0);
-						balls.push_back(ball);
+						balls->push_back(ball);
 					}
 					break;
 				case GLFW_KEY_C:
-					for (auto ball : balls) {
+					for (auto ball : *balls) {
 						scene->RemoveObjectInstance(ball);
 					}
-					balls.clear();
+					balls->clear();
 					break;
 				
 			}
