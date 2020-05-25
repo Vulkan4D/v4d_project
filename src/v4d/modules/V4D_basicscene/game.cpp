@@ -4,8 +4,7 @@
 using namespace v4d::graphics;
 
 void CreateCornellBox(ObjectInstance* obj) {
-	obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-	obj->mass = 1000;
+	obj->rigidbodyType = ObjectInstance::RigidBodyType::KINEMATIC;
 
 	auto geom1 = obj->AddGeometry(28, 42);
 	
@@ -102,23 +101,35 @@ extern "C" {
 		
 		// Lights
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereLightSource("light", 20, 10000000);
 		}, {10,-2000,10});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereLightSource("light", 200, 100000000);
 		}, {10,-500,1000});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereLightSource("light", 2, 10000);
 		}, {10,270,10});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {210,270,-20});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereLightSource("light", 1, 10000);
 		}, {-190,270,-15});
 		
 		// Red Sphere
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			obj->mass = 10;
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
 		

@@ -42,7 +42,8 @@ layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 v
 #endif
 
 bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
-bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe;
+bool DebugPhysics = (camera.debugOptions & DEBUG_OPTION_PHYSICS)!=0;
+bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe && !DebugPhysics;
 bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && !DebugWireframe;
 bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && !DebugWireframe;
 bool RayTracedVisibility = (camera.renderOptions & RENDER_OPTION_RAY_TRACED_VISIBILITY)!=0 && !DebugWireframe;

@@ -2,6 +2,7 @@
 #include <v4d.h>
 
 #include "Texture2D.hpp"
+#define V4D_HYBRID_RENDERER_MODULE
 #include "camera_options.hh"
 
 using namespace v4d::graphics;
@@ -1220,9 +1221,9 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 #pragma region UI
 	float img_overlayScale = 1.0;
 	
-	// Overlay functions (Total of 1.0 mb allocated)
-	static const int MAX_OVERLAY_LINES = 8192;
-	static const int MAX_OVERLAY_TEXT_CHARS = 16384;
+	// Overlay functions (Total of 2.0 mb allocated)
+	static const int MAX_OVERLAY_LINES = 32768;
+	static const int MAX_OVERLAY_TEXT_CHARS = 24576;
 	static const int MAX_OVERLAY_CIRCLES = 4096;
 	static const int MAX_OVERLAY_SQUARES = 4096;
 	std::mutex overlayMutex;
@@ -1429,7 +1430,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
 		
 		// TXAA
-		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::WIREFRAME) {
+		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
 			static unsigned long frameCount = 0;
 			static const glm::dvec2 samples8[8] = {
 				glm::dvec2(-7.0, 1.0) / 8.0,
@@ -2252,6 +2253,7 @@ extern "C" {
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
 				ImGui::Checkbox("Debug Wireframe", &DEBUG_OPTIONS::WIREFRAME);
+				ImGui::Checkbox("Debug Physics", &DEBUG_OPTIONS::PHYSICS);
 			// #endif
 			if (DEBUG_OPTIONS::WIREFRAME) {
 				// ...
@@ -2267,7 +2269,9 @@ extern "C" {
 				} else {
 					ImGui::Text("Shadows functionality unavailable");
 				}
-				ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+				if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
+					ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+				}
 				ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
 				ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
 				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);

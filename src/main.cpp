@@ -26,8 +26,6 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 	};
 #endif
 
-Loader vulkanLoader;
-
 std::atomic<bool> appRunning = true;
 std::mutex inputMutex;
 
@@ -112,6 +110,8 @@ int main() {
 		V4D_Renderer::LoadModule("V4D_hybrid");
 	}
 	
+	V4D_Physics* primaryPhysicsModule = V4D_Physics::GetPrimaryModule();
+	
 	// Sort Modules
 	V4D_Game::SortModules([](auto* a, auto* b){
 		return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
@@ -128,12 +128,12 @@ int main() {
 	
 	#pragma endregion
 
+	// Load Vulkan
+	Loader vulkanLoader;
 	// Validation layers
 	#if defined(_DEBUG) && defined(_LINUX)
 		vulkanLoader.requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 	#endif
-	
-	// Vulkan
 	if (!vulkanLoader()) 
 		throw std::runtime_error("Failed to load Vulkan library");
 	
@@ -148,8 +148,8 @@ int main() {
 	#ifdef _ENABLE_IMGUI
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
-		ImGuiIO& io = ImGui::GetIO(); // (void)io;
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		ImGuiIO& imGuiIO = ImGui::GetIO();
+		imGuiIO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 		ImGui::StyleColorsDark();
 		ImGui::GetStyle().Alpha = 0.8f;
 		ImGui_ImplGlfw_InitForVulkan(window->GetHandle(), true);
@@ -248,9 +248,14 @@ int main() {
 				if (mod->Update) mod->Update(deltaTime);
 			});
 			
-			V4D_Physics::ForEachSortedModule([&scene](auto* mod){
-				if (mod->StepSimulation) mod->StepSimulation(deltaTime);
-			});
+			// Run physics
+			if (primaryPhysicsModule && primaryPhysicsModule->StepSimulation) {
+				primaryPhysicsModule->StepSimulation(deltaTime);
+			} else {
+				V4D_Physics::ForEachSortedModule([&scene](auto* mod){
+					if (mod->StepSimulation) mod->StepSimulation(deltaTime);
+				});
+			}
 			
 			LIMIT_FRAMERATE(60, gameLoopFrameTime)
 		}
@@ -260,16 +265,17 @@ int main() {
 		// ImGui
 		static bool showOtherUI = true;
 		#ifdef _ENABLE_IMGUI
-			{
+			if (imGuiIO.Fonts->IsBuilt()) {
 				std::lock_guard inputLock(inputMutex);
 				
 				ImGui_ImplVulkan_NewFrame();
+				
 				
 				ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
 				// The quick fix is simply to always fetch the mouse position right here...
 				double mouse_x, mouse_y;
 				glfwGetCursorPos(window->GetHandle(), &mouse_x, &mouse_y);
-				io.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
+				imGuiIO.MousePos = ImVec2((float)mouse_x, (float)mouse_y);
 				
 				
 				ImGui::NewFrame();
@@ -405,6 +411,12 @@ int main() {
 	V4D_Physics::ForEachSortedModule([](auto* mod){
 		if (mod->UnloadScene) mod->UnloadScene();
 	});
+
+	// Unload Modules
+	V4D_Game::UnloadModules();
+	V4D_Input::UnloadModules();
+	V4D_Renderer::UnloadModules();
+	V4D_Physics::UnloadModules();
 	
 	// ImGui
 	#ifdef _ENABLE_IMGUI
