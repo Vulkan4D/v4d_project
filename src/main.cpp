@@ -98,9 +98,9 @@ int main() {
 		
 		// Default Modules when modules.txt is empty
 		if (modules.size() == 0) {
-			modules.push_back("V4D_basicscene");
-			modules.push_back("V4D_bullet");
-			// modules.push_back("V4D_planetdemo");
+			// modules.push_back("V4D_basicscene");
+			// modules.push_back("V4D_bullet");
+			modules.push_back("V4D_planetdemo");
 		}
 	}
 	for (auto module : modules) {

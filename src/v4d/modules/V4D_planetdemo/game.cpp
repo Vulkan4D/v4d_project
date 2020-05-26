@@ -76,10 +76,16 @@ namespace TerrainGeneratorLib {
 	std::thread* autoReloaderThread = nullptr;
 	std::mutex mu;
 	
+	void Unload() {
+		PlanetTerrain::EndChunkGenerator();
+		PlanetTerrain::generatorFunction = nullptr;
+		PlanetTerrain::generateColor = nullptr;
+		TerrainGenerator::UnloadModule(THIS_MODULE);
+	}
 	void Load() {
 		std::lock_guard generatorLock(mu);
 		if (generatorLib) {
-			TerrainGenerator::UnloadModule(THIS_MODULE);
+			Unload();
 		}
 		generatorLib = TerrainGenerator::LoadModule(THIS_MODULE);
 		if (!generatorLib) {
@@ -114,13 +120,7 @@ namespace TerrainGeneratorLib {
 			}
 		//
 		LOG_SUCCESS("terrain generator submodule Loaded")
-		// PlanetTerrain::StartChunkGenerator();
-	}
-	void Unload() {
-		// PlanetTerrain::EndChunkGenerator();
-		PlanetTerrain::generatorFunction = nullptr;
-		PlanetTerrain::generateColor = nullptr;
-		TerrainGenerator::UnloadModule(THIS_MODULE);
+		PlanetTerrain::StartChunkGenerator();
 	}
 	void Start() {
 		if (running) return;

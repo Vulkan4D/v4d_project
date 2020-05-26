@@ -63,6 +63,19 @@
             "label": "Profile demo",
             "type": "shell",
             "command": "clear; cd build/debug; rm callgrind.out.*; valgrind --tool=callgrind ./demo; kcachegrind `ls callgrind.out.*`",
+        },
+        
+        // Custom scripts for reloading modules dynamically when modifying source code, without restarting the app
+        {
+            "label": "[V4D_planetdemo] AutoRebuild TerrainGenerator",
+            "type": "shell",
+            "command": "clear; src/v4d/modules/V4D_planetdemo/TerrainGenerator/autobuild.sh",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+        },
+        {
+            "label": "[V4D_planetdemo] AutoRebuild TerrainGenerator (ON REMOTE WINDOWS MACHINE)",
+            "type": "shell",
+            "command": "clear; src/v4d/modules/V4D_planetdemo/TerrainGenerator/autobuild_windows.sh",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
         },
     ]
