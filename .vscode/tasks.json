@@ -55,7 +55,7 @@
         {
             "label": "send package",
             "type": "shell",
-            "command": "clear; workspace/sendPackage.sh",
+            "command": "clear; workspace/sendReleasePackage.sh",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },

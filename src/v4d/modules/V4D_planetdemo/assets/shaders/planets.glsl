@@ -161,6 +161,7 @@ void main() {
 
 	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
 	pbrGBuffers.viewSpaceNormal = normal;
+	// pbrGBuffers.viewSpaceNormal = v2f.normal;
 	pbrGBuffers.uv = v2f.uv;
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;

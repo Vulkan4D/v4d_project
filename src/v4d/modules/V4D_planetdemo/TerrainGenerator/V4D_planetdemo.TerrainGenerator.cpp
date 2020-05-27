@@ -1,14 +1,11 @@
-#include <iostream>
-
-// GLM
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
+#include <iostream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/texture.hpp>
-
 using namespace glm;
 
 #pragma region noise functions
@@ -249,8 +246,9 @@ double terrain( dvec3 p, int octaves) {
 
 double solidRadius = 8000000;
 double heightVariation = 10000;
-double avgPlateDiameter = 2000000;
 
+/* // Tectonic plates
+// double avgPlateDiameter = 2000000;
 // const int plateDistributionMaxRetries = 1000;
 // // const int nbClosestPlates = 4;
 // const double plateDistributionRetryDistanceThreshold = avgPlateDiameter/solidRadius * 0.5; // 0.75 is very homogeneous and can fit all
@@ -339,10 +337,14 @@ double avgPlateDiameter = 2000000;
 // 	}
 // 	return {first, second, third};
 // }
+*/
+
 
 extern "C" {
 	void Init() {
-		// // Tectonic plates
+		
+		
+		/*// // Tectonic plates
 		// if (plates.size() == 0) {
 		// 	plates.reserve(nbPlates);
 			
@@ -386,13 +388,14 @@ extern "C" {
 		// 	// 	}
 		// 	// }
 		// }
+		*/
 	}
 
-	
-	double GetHeightMap(dvec3* const pos) {
+	/*double GetHeightMap(dvec3* const pos) {
 		double baseHeight = 0; // expected to be a value between 0.0 and 1.0
 		double detail = 0; // expected to be a value between ~ -10 to +10 km
 		dvec3& normalizedPos = *pos;
+		
 		// dvec3 normalizedPosDistorted = normalizedPos;
 		// dvec3 tan = normalize(cross(referenceArbitraryVector, normalizedPos));
 		// dvec3 bitan = normalize(cross(normalizedPos, tan));
@@ -420,7 +423,6 @@ extern "C" {
 		
 		// baseHeight = pow((closestPlate.distance + secondClosestPlate.distance + thirdClosestPlate.distance)*3.1415926536, 6);
 		
-		
 		double mountainsStrength = max(0.0, FastSimplexFractal(normalizedPos*solidRadius/100000.0, 2));
 		double mountains = 0;
 		if (mountainsStrength > 0.0) {
@@ -436,20 +438,59 @@ extern "C" {
 		
 		// convert baseHeight from 0.0_+1.0 to -heightVariation_+heightVariation
 		return (baseHeight*2.0-1.0)*heightVariation*1.0 + detail;
+	}*/
+	
+	
+	double GetHeightMap(dvec3* const pos) {
+		dvec3& normalizedPos = *pos;
+		double res = 0;
+		
+		double biome = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5);
+		double biome1 = glm::max(0.0, biome);
+		double biome2 = glm::max(0.0, -biome);
+		
+		double groundDetail = (FastSimplexFractal(normalizedPos*solidRadius*2.0, 2))*0.04;
+		
+		
+		if (biome1 > 0) {
+			double mountainsStrength = max(0.0, FastSimplexFractal(normalizedPos*solidRadius/100000.0, 2));
+			double mountains = 0;
+			if (mountainsStrength > 0.0) {
+				mountains += mountainsStrength * max(0.0, FastSimplexFractal(normalizedPos*solidRadius/100000.0, 2)*heightVariation);
+				mountains += mountainsStrength * abs(FastSimplexFractal(normalizedPos*solidRadius/10000.0, 8, 2.4, 0.4)*heightVariation);
+			}
+			res += biome1 * (mountains);
+		}
+		
+		if (biome2 > 0) {
+			double peaks = FastSimplexFractal(normalizedPos*solidRadius/70000.0, 10, 2.2, 0.4, [](double d){return 1.0-glm::abs(d);}) * 20000;
+			res += biome2 * (peaks);
+		}
+		
+		res += groundDetail;
+		
+		res += terrain(normalizedPos*solidRadius/4000.0, 10)*200.0;
+		
+		return res;
 	}
 	
 	
 	vec3 GetColor(double heightMap) {
+		
+		
 		// if (heightMap >= heightVariation) return {1,1,0}; // yellow when too high
 		// if (heightMap <= -heightVariation) return {1,0,0}; // red when too low
 		// if (heightMap < -heightVariation+1.0) return {1,0,1}; // pink when below one meter from bottom altitude
 		// if (heightMap == 0.0) return {0,1,0}; // green when zero
 		// if (heightMap > -10.0 && heightMap < 10.0) return {0,0,1}; // blue when near zero
 		// if (heightMap > heightVariation*0.5) return {0,1,1}; // turquoise when 75% from top altitude
-		
 		// // convert heightMap from -heightVariation_+heightVariation to 0.0_+1.0
 		// return vec3(heightMap/heightVariation / 2.0 + 0.5); // grayscale for between -heightVariation and +heightVariation
 		
-		return {0.5f, 0.4f, 0.3f};
+		
+		
+		// return {0.5f, 0.4f, 0.3f};
+		
+		return {0.4f, 0.15f, 0.03f};
 	}
 }
