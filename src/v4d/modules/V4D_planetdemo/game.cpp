@@ -59,14 +59,14 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 }
 
 class TerrainGenerator {
-	V4D_MODULE_CLASS_H(TerrainGenerator
+	V4D_MODULE_CLASS_HEADER(TerrainGenerator
 		,Init
 		,GetHeightMap
 		,GetColor
 	)
-	V4D_MODULE_FUNC(void, Init)
-	V4D_MODULE_FUNC(double, GetHeightMap, glm::dvec3* const pos)
-	V4D_MODULE_FUNC(glm::vec3, GetColor, double heightMap)
+	V4D_MODULE_FUNC_DECLARE(void, Init)
+	V4D_MODULE_FUNC_DECLARE(double, GetHeightMap, glm::dvec3* const pos)
+	V4D_MODULE_FUNC_DECLARE(glm::vec3, GetColor, double heightMap)
 };
 V4D_MODULE_CLASS_CPP(TerrainGenerator)
 
@@ -156,16 +156,16 @@ PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Game) {
 	
-	void ModuleLoad() {
+	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
 		V4D_Renderer::LoadModule(THIS_MODULE);
 		((PlayerView*)V4D_Input::LoadModule("V4D_sample")->ModuleGetCustomPtr(PLAYER))->camSpeed = 100000;
 		V4D_Game::LoadModule("V4D_sample");
 	}
 	
-	void ModuleSetCustomPtr(int what, void* ptr) {
+	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int what, void* ptr) {
 		switch (what) {
 			case ATMOSPHERE_SHADER: 
 				planetAtmosphereShader = (PlanetAtmosphereShaderPipeline*) ptr;
@@ -173,7 +173,7 @@ extern "C" {
 		}
 	}
 	
-	void Init(Scene* _s) {
+	V4D_MODULE_FUNC(void, Init, Scene* _s) {
 		scene = _s;
 		
 		// v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(16384);
@@ -183,7 +183,7 @@ extern "C" {
 		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(16777216*6); // 100 million @ 4 bytes each = 384 mb
 	}
 	
-	void LoadScene() {
+	V4D_MODULE_FUNC(void, LoadScene) {
 		TerrainGeneratorLib::Start();
 		
 		// Light source
@@ -194,18 +194,18 @@ extern "C" {
 		
 	}
 	
-	void UnloadScene() {
+	V4D_MODULE_FUNC(void, UnloadScene) {
 		TerrainGeneratorLib::Stop();
 	}
 	
 	// Images / Buffers / Pipelines
-	void RendererCreateResources(Device* device) {
+	V4D_MODULE_FUNC(void, RendererCreateResources, Device* device) {
 		renderingDevice = device;
 		// Chunk Generator
 		PlanetTerrain::StartChunkGenerator();
 	}
 	
-	void RendererDestroyResources(Device* device) {
+	V4D_MODULE_FUNC(void, RendererDestroyResources, Device* device) {
 		// Chunk Generator
 		PlanetTerrain::EndChunkGenerator();
 		if (terrain) {
@@ -219,7 +219,7 @@ extern "C" {
 		}
 	}
 	
-	void RendererFrameUpdate() {
+	V4D_MODULE_FUNC(void, RendererFrameUpdate) {
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
 			if (!terrain) {
@@ -276,7 +276,7 @@ extern "C" {
 		//
 	}
 	
-	void RendererFrameUpdate2() {
+	V4D_MODULE_FUNC(void, RendererFrameUpdate2) {
 		// for each planet
 			if (terrain) {
 				std::lock_guard lock(terrain->chunksMutex);
@@ -289,7 +289,7 @@ extern "C" {
 		// PlanetTerrain::CollectGarbage(renderingDevice);
 	}
 	
-	void RendererFrameCompute(VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, RendererFrameCompute, VkCommandBuffer commandBuffer) {
 		// for each planet
 			if (terrain) {
 				// planet.GenerateMaps(renderingDevice, commandBuffer);
@@ -305,7 +305,7 @@ extern "C" {
 		//
 	}
 	
-	void RendererRunUi() {
+	V4D_MODULE_FUNC(void, RendererRunUi) {
 		#ifdef _ENABLE_IMGUI
 			// for each planet
 				ImGui::Separator();
@@ -332,7 +332,7 @@ extern "C" {
 			//
 		#endif
 	}
-	void RendererRunUiDebug() {
+	V4D_MODULE_FUNC(void, RendererRunUiDebug) {
 		// #ifdef _DEBUG
 			#ifdef _ENABLE_IMGUI
 				if (terrain) {
@@ -352,4 +352,4 @@ extern "C" {
 		// #endif
 	}
 	
-}
+};

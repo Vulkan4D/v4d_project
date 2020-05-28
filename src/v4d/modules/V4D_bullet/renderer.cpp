@@ -42,25 +42,25 @@ class DebugDrawer : public btIDebugDraw {
 	}
 } debugDrawer;
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Renderer) {
 	
-	void Init(v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
+	V4D_MODULE_FUNC(void, Init, v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
 		r = _r;
 		scene = _s;
 		primaryRenderModule = V4D_Renderer::GetPrimaryModule();
 	}
 	
-	void* ModuleGetCustomPtr(int) {
+	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
 		return &debugDrawer;
 	}
-	void ModuleSetCustomPtr(int, void* ptr) {
+	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int, void* ptr) {
 		world = (btDynamicsWorld*)ptr;
 	}
 	
-	void Render2(VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, Render2, VkCommandBuffer commandBuffer) {
 		if (world && (scene->camera.debugOptions & DEBUG_OPTION_PHYSICS)) {
 			world->debugDrawWorld();
 		}
 	}
 	
-}
+};

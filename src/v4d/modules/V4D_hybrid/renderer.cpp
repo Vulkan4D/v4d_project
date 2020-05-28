@@ -1657,12 +1657,12 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 
 ///////////////////////////////////////////////////////////
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Renderer) {
 	
-	bool ModuleIsPrimary() {return true;}
-	int OrderIndex() {return -1000;}
+	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {return true;}
+	V4D_MODULE_FUNC(int, OrderIndex) {return -1000;}
 	
-	void LoadScene() {
+	V4D_MODULE_FUNC(void, LoadScene) {
 		scene->objectInstanceRemovedCallbacks[THIS_MODULE] = [](ObjectInstancePtr obj) {
 			std::lock_guard lock(geometriesToRemoveFromRayTracingInstancesMutex);
 			for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
@@ -1671,13 +1671,13 @@ extern "C" {
 		};
 	}
 	
-	void UnloadScene() {
+	V4D_MODULE_FUNC(void, UnloadScene) {
 		scene->objectInstanceRemovedCallbacks.erase(THIS_MODULE);
 	}
 	
 	#pragma region Containers Access
 		
-		Image* GetImage (const std::string& name) {
+		V4D_MODULE_FUNC(Image,* GetImage, const std::string& name) {
 			if (images.find(name) == images.end()) {
 				throw std::runtime_error(std::string("Image '") + name + "' does not exist");
 				return nullptr;
@@ -1685,7 +1685,7 @@ extern "C" {
 			return images[name];
 		}
 		
-		PipelineLayout* GetPipelineLayout (const std::string& name) {
+		V4D_MODULE_FUNC(PipelineLayout*, GetPipelineLayout, const std::string& name) {
 			if (pipelineLayouts.find(name) == pipelineLayouts.end()) {
 				throw std::runtime_error(std::string("Pipeline layout '") + name + "' does not exist");
 				return nullptr;
@@ -1693,7 +1693,7 @@ extern "C" {
 			return pipelineLayouts[name];
 		}
 		
-		void AddShader (const std::string& groupName, RasterShaderPipeline* shader) {
+		V4D_MODULE_FUNC(void, AddShader, const std::string& groupName, RasterShaderPipeline* shader) {
 			if (shaderGroups.find(groupName) == shaderGroups.end()) {
 				throw std::runtime_error(std::string("Shader group '") + groupName + "' does not exist");
 				return;
@@ -1701,7 +1701,7 @@ extern "C" {
 			shaderGroups[groupName].push_back(shader);
 		}
 		
-		ShaderBindingTable* GetShaderBindingTable (const std::string& sbtName) {
+		V4D_MODULE_FUNC(ShaderBindingTable*, GetShaderBindingTable, const std::string& sbtName) {
 			if (shaderBindingTables.find(sbtName) == shaderBindingTables.end()) {
 				throw std::runtime_error(std::string("Shader binding table '") + sbtName + "' does not exist");
 				return nullptr;
@@ -1713,7 +1713,7 @@ extern "C" {
 	
 	#pragma region Graphics configuration / Init
 		
-		void ScorePhysicalDeviceSelection(int& score, PhysicalDevice* physicalDevice) {
+		V4D_MODULE_FUNC(void, ScorePhysicalDeviceSelection, int& score, PhysicalDevice* physicalDevice) {
 			// Higher score for Ray Tracing support
 			if (physicalDevice->GetRayTracingFeatures().rayTracing) {
 				score += 2;
@@ -1723,7 +1723,7 @@ extern "C" {
 			}
 		}
 		
-		void Init(Renderer* _r, Scene* _s) {
+		V4D_MODULE_FUNC(void, Init, Renderer* _r, Scene* _s) {
 			r = _r;
 			scene = _s;
 			
@@ -1749,7 +1749,7 @@ extern "C" {
 			AccelerationStructure::useGlobalScratchBuffer = true;
 		}
 		
-		void InitDeviceFeatures() {
+		V4D_MODULE_FUNC(void, InitDeviceFeatures) {
 			r->deviceFeatures.shaderFloat64 = VK_TRUE;
 			r->deviceFeatures.depthClamp = VK_TRUE;
 			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
@@ -1764,7 +1764,7 @@ extern "C" {
 			}
 		}
 		
-		void ConfigureRenderer() {
+		V4D_MODULE_FUNC(void, ConfigureRenderer) {
 			if (r->rayTracingFeatures.rayTracing) {
 				LOG_SUCCESS("Ray-Tracing Supported")
 				// Query the ray tracing properties of the current implementation
@@ -1784,7 +1784,7 @@ extern "C" {
 	
 	#pragma endregion
 	
-	void InitLayouts() {
+	V4D_MODULE_FUNC(void, InitLayouts) {
 		{r->descriptorSets["set0_base"] = &set0_base;
 			set0_base.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			set0_base.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
@@ -1880,7 +1880,7 @@ extern "C" {
 	
 	#pragma region Load/Upload Renderer
 		
-		void ConfigureShaders() {
+		V4D_MODULE_FUNC(void, ConfigureShaders) {
 			ConfigureRasterVisibilityShaders();
 			ConfigureRayTracingShaders();
 			ConfigureLightingShaders();
@@ -1888,7 +1888,7 @@ extern "C" {
 			ConfigureOverlayShaders();
 		}
 
-		void ReadShaders() {
+		V4D_MODULE_FUNC(void, ReadShaders) {
 			for (auto&[grpName, shaderList] : shaderGroups) {
 				for (auto* shader : shaderList) {
 					shader->ReadShaders();
@@ -1902,7 +1902,7 @@ extern "C" {
 			shader_histogram_compute.ReadShaders();
 		}
 		
-		void CreateSyncObjects() {
+		V4D_MODULE_FUNC(void, CreateSyncObjects) {
 			semaphores["imageAvailable"].resize(r->NB_FRAMES_IN_FLIGHT);
 			semaphores["staticRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
 			semaphores["dynamicRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
@@ -1930,14 +1930,14 @@ extern "C" {
 			}
 		}
 
-		void DestroySyncObjects() {
+		V4D_MODULE_FUNC(void, DestroySyncObjects) {
 			for (int i = 0; i < r->NB_FRAMES_IN_FLIGHT; i++) {
 				for (auto&[name, s] : semaphores) r->renderingDevice->DestroySemaphore(s[i], nullptr);
 				for (auto&[name, f] : fences) r->renderingDevice->DestroyFence(f[i], nullptr);
 			}
 		}
 
-		void CreateResources() {
+		V4D_MODULE_FUNC(void, CreateResources) {
 			CreateUiResources();
 			CreateRenderingResources();
 			CreatePostProcessingResources();
@@ -1960,7 +1960,7 @@ extern "C" {
 			});
 		}
 		
-		void DestroyResources() {
+		V4D_MODULE_FUNC(void, DestroyResources) {
 			DestroyUiResources();
 			DestroyRenderingResources();
 			DestroyPostProcessingResources();
@@ -1976,7 +1976,7 @@ extern "C" {
 			});
 		}
 		
-		void AllocateBuffers() {
+		V4D_MODULE_FUNC(void, AllocateBuffers) {
 			// Uniform Buffers
 			cameraUniformBuffer.Allocate(r->renderingDevice);
 			activeLightsUniformBuffer.Allocate(r->renderingDevice);
@@ -2002,7 +2002,7 @@ extern "C" {
 			Geometry::globalBuffers.Allocate(r->renderingDevice, {r->renderingDevice->GetQueue("compute").familyIndex, r->renderingDevice->GetQueue("graphics").familyIndex});
 		}
 		
-		void FreeBuffers() {
+		V4D_MODULE_FUNC(void, FreeBuffers) {
 			scene->ClenupObjectInstancesGeometries();
 			activeRayTracedGeometries.clear();
 			geometriesToRemoveFromRayTracingInstances.clear();
@@ -2031,7 +2031,7 @@ extern "C" {
 			Geometry::globalBuffers.Free(r->renderingDevice);
 		}
 
-		void CreatePipelines() {
+		V4D_MODULE_FUNC(void, CreatePipelines) {
 			// Sort shaders
 			for (auto&[rs, ss] : shaderGroups) {
 				std::sort(ss.begin(), ss.end(), [](auto* a, auto* b){
@@ -2063,7 +2063,7 @@ extern "C" {
 			CreatePostProcessingPipeline();
 		}
 		
-		void DestroyPipelines() {
+		V4D_MODULE_FUNC(void, DestroyPipelines) {
 			// UI
 			#ifdef _ENABLE_IMGUI
 				UnloadImGui();
@@ -2088,7 +2088,7 @@ extern "C" {
 			}
 		}
 		
-		void CreateCommandBuffers() {
+		V4D_MODULE_FUNC(void, CreateCommandBuffers) {
 			VkCommandBufferAllocateInfo allocInfo = {};
 			allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 			allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -2137,27 +2137,27 @@ extern "C" {
 			}
 		}
 
-		void DestroyCommandBuffers() {
+		V4D_MODULE_FUNC(void, DestroyCommandBuffers) {
 			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphics"].size()), commandBuffers["graphics"].data());
 			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphicsDynamic"].size()), commandBuffers["graphicsDynamic"].data());
 		}
 	
 	#pragma endregion
 	
-	void DrawOverlayLine(float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
+	V4D_MODULE_FUNC(void, DrawOverlayLine, float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
 		AddOverlayLine(x1, y1, x2, y2, color, lineWidth);
 	}
-	void DrawOverlayText(const char* text, float x, float y, glm::vec4 color, float size) {
+	V4D_MODULE_FUNC(void, DrawOverlayText, const char* text, float x, float y, glm::vec4 color, float size) {
 		AddOverlayText(std::string(text), x, y, color, uint16_t(size));
 	}
-	void DrawOverlayCircle(float x, float y, glm::vec4 color, float size, float borderSize) {
+	V4D_MODULE_FUNC(void, DrawOverlayCircle, float x, float y, glm::vec4 color, float size, float borderSize) {
 		AddOverlayCircle(x, y, color, uint16_t(size), uint8_t(borderSize));
 	}
-	void DrawOverlaySquare(float x, float y, glm::vec4 color, glm::vec2 size, float borderSize) {
+	V4D_MODULE_FUNC(void, DrawOverlaySquare, float x, float y, glm::vec4 color, glm::vec2 size, float borderSize) {
 		AddOverlaySquare(x, y, color, size, uint8_t(borderSize));
 	}
 
-	void Update() {
+	V4D_MODULE_FUNC(void, Update) {
 		
 		uint64_t timeout = 1000UL * 1000 * 1000 * 10; // 10 seconds
 
@@ -2289,7 +2289,7 @@ extern "C" {
 		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
 	}
 	
-	void Update2() {
+	V4D_MODULE_FUNC(void, Update2) {
 		FrameUpdate2();
 	
 		// Dynamic compute
@@ -2308,7 +2308,7 @@ extern "C" {
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
-	void RunUi() {
+	V4D_MODULE_FUNC(void, RunUi) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::SetNextWindowSize({340, 150});
 			ImGui::Begin("Settings and Modules");
@@ -2374,7 +2374,7 @@ extern "C" {
 	
 	// Render pipelines
 	
-	void Render2(VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, Render2, VkCommandBuffer commandBuffer) {
 		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
 			{
@@ -2426,7 +2426,7 @@ extern "C" {
 		uiRenderPass.End(r->renderingDevice, commandBuffer);
 	}
 	
-	void Render(VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, Render, VkCommandBuffer commandBuffer) {
 		if (DEBUG_OPTIONS::WIREFRAME) {
 			RunRasterVisibility(r->renderingDevice, commandBuffer);
 			RunRasterLighting(r->renderingDevice, commandBuffer, true, false);
@@ -2446,4 +2446,4 @@ extern "C" {
 		}
 	}
 
-}
+};

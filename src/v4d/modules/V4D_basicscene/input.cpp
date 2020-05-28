@@ -6,19 +6,19 @@ Scene* scene = nullptr;
 
 std::vector<ObjectInstancePtr>* balls {};
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Input) {
 	
-	std::string CallbackName() {return THIS_MODULE;}
+	V4D_MODULE_FUNC(std::string, CallbackName) {return THIS_MODULE;}
 	
-	void Init(v4d::graphics::Window* w, v4d::graphics::Renderer* r, v4d::scene::Scene* s) {
+	V4D_MODULE_FUNC(void, Init, v4d::graphics::Window* w, v4d::graphics::Renderer* r, v4d::scene::Scene* s) {
 		scene = s;
 	}
 	
-	void ModuleSetCustomPtr(int, void* ptr) {
+	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int, void* ptr) {
 		balls = (std::vector<ObjectInstancePtr>*)ptr;
 	}
 	
-	void MouseButtonCallback(int button, int action, int mods) {
+	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
 		if (action == GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
 				&& !ImGui::IsAnyWindowFocused()
@@ -45,7 +45,7 @@ extern "C" {
 		}
 	}
 	
-	void KeyCallback(int key, int scancode, int action, int mods) {
+	V4D_MODULE_FUNC(void, KeyCallback, int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
 				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
@@ -104,4 +104,4 @@ extern "C" {
 		}
 	}
 	
-}
+};

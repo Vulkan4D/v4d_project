@@ -1,6 +1,5 @@
 #define _V4D_MODULE
 #include <v4d.h>
-
 #include "btBulletDynamicsCommon.h"
 
 btCollisionConfiguration* globalCollisionConfiguration = nullptr;
@@ -244,24 +243,24 @@ void UpdatePhysicsObject(v4d::scene::ObjectInstancePtr obj) {
 	physicsObjects[obj.get()].Refresh();
 }
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Physics) {
 	
-	bool ModuleIsPrimary() {
+	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {
 		return true;
 	}
 	
-	void ModuleLoad() {
+	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// #ifdef _DEBUG
 			rendererModule = V4D_Renderer::LoadModule(THIS_MODULE);
 		// #endif
 	}
 	
-	void Init(v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
+	V4D_MODULE_FUNC(void, Init, v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
 		r = _r;
 		scene = _s;
 	}
 	
-	void LoadScene() {
+	V4D_MODULE_FUNC(void, LoadScene) {
 		globalCollisionConfiguration = new btDefaultCollisionConfiguration();
 		globalPhysicsDispatcher = new btCollisionDispatcher(globalCollisionConfiguration);
 		globalOverlappingPairCache = new btDbvtBroadphase();
@@ -283,7 +282,7 @@ extern "C" {
 		};
 	}
 	
-	void UnloadScene() {
+	V4D_MODULE_FUNC(void, UnloadScene) {
 		scene->objectInstanceRemovedCallbacks.erase(THIS_MODULE);
 		
 		for (int i = 0; i < globalCollisionShapes.size(); i++) {
@@ -307,11 +306,11 @@ extern "C" {
 		delete globalCollisionConfiguration;
 	}
 	
-	void RunUi() {
+	V4D_MODULE_FUNC(void, RunUi) {
 		
 	}
 	
-	void StepSimulation(double deltaTime) {
+	V4D_MODULE_FUNC(void, StepSimulation, double deltaTime) {
 		// scene->Lock();
 			// Refresh info from scene objects
 			for (auto obj : scene->objectInstances) if (obj->IsActive() || obj->physicsDirty) {
@@ -372,7 +371,7 @@ extern "C" {
 		globalDynamicsWorld->stepSimulation(deltaTime);
 	}
 	
-	bool RayCastClosest(v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	V4D_MODULE_FUNC(bool, RayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
 		if (!hit) {
 			LOG_ERROR("RayCastClosest: The given hit pointer is null")
 			return false;
@@ -401,7 +400,7 @@ extern "C" {
 		return false;
 	}
 	
-	int RayCastAll(std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	V4D_MODULE_FUNC(int, RayCastAll, std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
 		if (!hits) {
 			LOG_ERROR("RayCastAll: The given hits pointer is null")
 			return 0;
@@ -428,4 +427,4 @@ extern "C" {
 		return 0;
 	}
 	
-}
+};

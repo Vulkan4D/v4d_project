@@ -67,23 +67,23 @@ Scene* scene = nullptr;
 
 std::vector<ObjectInstancePtr> balls {};
 
-extern "C" {
+V4D_MODULE_CLASS(V4D_Game) {
 	
-	void ModuleLoad() {
+	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
 		V4D_Input::LoadModule(THIS_MODULE)->ModuleSetCustomPtr(0, &balls);
 		V4D_Input::LoadModule("V4D_sample");
 		V4D_Game::LoadModule("V4D_sample");
 	}
 	
-	void Init(Scene* _s) {
+	V4D_MODULE_FUNC(void, Init, Scene* _s) {
 		scene = _s;
 		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(1000000);
 		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(1000000);
 		v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(4096);
 	}
 	
-	void LoadScene() {
+	V4D_MODULE_FUNC(void, LoadScene) {
 		
 		// Cornell boxes
 		objects.emplace_back(scene->AddObjectInstance())->Configure(CreateCornellBox, {0,250,-30}, 180.0);
@@ -142,7 +142,7 @@ extern "C" {
 		
 	}
 	
-	void UnloadScene() {
+	V4D_MODULE_FUNC(void, UnloadScene) {
 		for (auto obj : objects) {
 			scene->RemoveObjectInstance(obj);
 		}
@@ -150,8 +150,8 @@ extern "C" {
 		scene->ClenupObjectInstancesGeometries();
 	}
 	
-	void RendererRunUiDebug() {
+	V4D_MODULE_FUNC(void, RendererRunUiDebug) {
 		ImGui::Text("%d balls", balls.size());
 	}
 	
-}
+};

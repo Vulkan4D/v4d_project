@@ -1,10 +1,10 @@
 #include <v4d.h>
 
 class V4D_Test {
-	V4D_MODULE_CLASS_H(V4D_Test, init, test1, test2)
-	V4D_MODULE_FUNC(void, init)
-	V4D_MODULE_FUNC(int, test1, double)
-	V4D_MODULE_FUNC(int, test2)
+	V4D_MODULE_CLASS_HEADER(V4D_Test, init, test1, test2)
+	V4D_MODULE_FUNC_DECLARE(void, init)
+	V4D_MODULE_FUNC_DECLARE(int, test1, double)
+	V4D_MODULE_FUNC_DECLARE(int, test2)
 };
 
 V4D_MODULE_CLASS_CPP(V4D_Test);
