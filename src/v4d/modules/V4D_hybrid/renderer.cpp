@@ -66,6 +66,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 	const std::string rasterTrianglesDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.vert";
 	const std::string rasterAabbDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.vert";
 	const std::string rasterAabbDefaultGeometryShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.geom";
+	const std::string rasterAabbSphereDefaultGeometryShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.sphere.geom";
 
 	// Visibility
 	RasterShaderPipeline shader_visibility_basic {pl_visibility_raster, {
@@ -80,19 +81,24 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		rasterTrianglesDefaultVertexShader,
 		"modules/V4D_hybrid/assets/shaders/raster_visibility.terrain.frag",
 	}};
-	RasterShaderPipeline shader_visibility_sphere {pl_visibility_raster, {
+	RasterShaderPipeline shader_visibility_aabb {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
 		rasterAabbDefaultGeometryShader,
+		"modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.frag",
+	}};
+	RasterShaderPipeline shader_visibility_sphere {pl_visibility_raster, {
+		rasterAabbDefaultVertexShader,
+		rasterAabbSphereDefaultGeometryShader,
 		"modules/V4D_hybrid/assets/shaders/raster_visibility.sphere.frag",
 	}};
 	RasterShaderPipeline shader_visibility_light {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
-		rasterAabbDefaultGeometryShader,
+		rasterAabbSphereDefaultGeometryShader,
 		"modules/V4D_hybrid/assets/shaders/raster_visibility.light.frag",
 	}};
 	RasterShaderPipeline shader_visibility_sun {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
-		rasterAabbDefaultGeometryShader,
+		rasterAabbSphereDefaultGeometryShader,
 		"modules/V4D_hybrid/assets/shaders/raster_visibility.sun.frag",
 	}};
 	// #ifdef _DEBUG
@@ -197,6 +203,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 			&shader_visibility_basic,
 			&shader_visibility_standard,
 			&shader_visibility_terrain,
+			&shader_visibility_aabb,
 			&shader_visibility_sphere,
 			&shader_visibility_light,
 			&shader_visibility_sun,
@@ -745,6 +752,11 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		Geometry::geometryRenderTypes["terrain"].sbtOffset = 
 			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
 			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
+		
+		// Sphere
+		Geometry::geometryRenderTypes["aabb"].sbtOffset = 
+			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rint");
+			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rint");
 		
 		// Sphere
 		Geometry::geometryRenderTypes["sphere"].sbtOffset = 
@@ -1873,6 +1885,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		Geometry::geometryRenderTypes["basic"].rasterShader = &shader_visibility_basic;
 		Geometry::geometryRenderTypes["standard"].rasterShader = &shader_visibility_standard;
 		Geometry::geometryRenderTypes["terrain"].rasterShader = &shader_visibility_terrain;
+		Geometry::geometryRenderTypes["aabb"].rasterShader = &shader_visibility_aabb;
 		Geometry::geometryRenderTypes["sphere"].rasterShader = &shader_visibility_sphere;
 		Geometry::geometryRenderTypes["light"].rasterShader = &shader_visibility_light;
 		Geometry::geometryRenderTypes["sun"].rasterShader = &shader_visibility_sun;

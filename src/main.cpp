@@ -24,6 +24,7 @@ auto settings = ProjectSettings::Instance("settings.ini", 1000);
 		{"modules/V4D_hybrid/assets/shaders/overlay_shapes.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planets.meta", 0},
 		{"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.meta", 0},
+		{"modules/V4D_basicscene/assets/shaders/test.meta", 0},
 	};
 #endif
 

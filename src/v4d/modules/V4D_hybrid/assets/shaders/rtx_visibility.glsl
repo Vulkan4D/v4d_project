@@ -114,6 +114,69 @@ void main() {
 
 
 #############################################################
+#shader aabb.rint
+
+hitAttributeEXT ProceduralGeometry aabbGeomAttr;
+
+float hitAabb(const vec3 minimum, const vec3 maximum) {
+	vec3  invDir = 1.0 / gl_ObjectRayDirectionEXT;
+	vec3  tbot   = invDir * (minimum - gl_ObjectRayOriginEXT);
+	vec3  ttop   = invDir * (maximum - gl_ObjectRayOriginEXT);
+	vec3  tmin   = min(ttop, tbot);
+	vec3  tmax   = max(ttop, tbot);
+	float t0     = max(tmin.x, max(tmin.y, tmin.z));
+	float t1     = min(tmax.x, min(tmax.y, tmax.z));
+	return t1 > max(t0, 0.0) ? t0 : -1.0;
+}
+
+void main() {
+	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
+	float tHit = hitAabb(
+		geom.aabbMin, 
+		geom.aabbMax
+	);
+	aabbGeomAttr = geom;
+	reportIntersectionEXT(max(tHit,gl_RayTminEXT), 0);
+}
+
+
+#############################################################
+#shader aabb.rchit
+
+hitAttributeEXT ProceduralGeometry aabbGeomAttr;
+
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+void main() {
+	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+	vec4 color = aabbGeomAttr.color;
+	
+	// Calculate normal for a cube (will most likely NOT work with any non-uniform cuboid)
+	const vec3 hitPointObj = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
+	vec3 normal = normalize(hitPointObj - (aabbGeomAttr.aabbMin + aabbGeomAttr.aabbMax)/2.0);
+	vec3 absN = abs(normal);
+	float maxC = max(max(absN.x, absN.y), absN.z);
+	normal = aabbGeomAttr.geometryInstance.normalViewTransform * (
+		(maxC == absN.x) ?
+			vec3(sign(normal.x), 0, 0) :
+			((maxC == absN.y) ? 
+				vec3(0, sign(normal.y), 0) : 
+				vec3(0, 0, sign(normal.z))
+			)
+	);
+	
+	ray.viewSpacePosition = hitPoint;
+	ray.viewSpaceNormal = normal;
+	ray.albedo = color.rgb;
+	ray.emit = 0;
+	ray.uv = vec2(0);
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
+	ray.distance = gl_HitTEXT;
+}
+
+
+#############################################################
 #shader sphere.rint
 
 hitAttributeEXT ProceduralGeometry sphereGeomAttr;
@@ -155,16 +218,15 @@ hitAttributeEXT ProceduralGeometry sphereGeomAttr;
 layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 
 void main() {
-	vec3 spherePosition = sphereGeomAttr.geometryInstance.viewPosition;
-	float sphereRadius = sphereGeomAttr.aabbMax.x;
-	
-	// Hit World Position
 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	const vec3 normal = normalize(hitPoint - spherePosition);
+	vec4 color = sphereGeomAttr.color;
+	
+	// Calculate normal for a sphere
+	const vec3 normal = normalize(hitPoint - sphereGeomAttr.geometryInstance.viewPosition);
 	
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = normal;
-	ray.albedo = sphereGeomAttr.color.rgb;
+	ray.albedo = color.rgb;
 	ray.emit = 0;
 	ray.uv = vec2(0);
 	ray.metallic = 0.0;
@@ -183,6 +245,7 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 void main() {
 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
+	// Get color and emission from Light Source
 	LightSource light = GetLight(sphereGeomAttr.material);
 	vec3 lightColor;
 	float emission;
@@ -215,6 +278,7 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 void main() {
 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
+	// Get color and emission from Light Source
 	LightSource light = GetLight(sphereGeomAttr.material);
 	vec3 lightColor;
 	float emission;

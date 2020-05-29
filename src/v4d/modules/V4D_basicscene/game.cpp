@@ -110,12 +110,12 @@ V4D_MODULE_CLASS(V4D_Game) {
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
 			obj->mass = 10;
-			obj->SetSphereLightSource("light", 20, 10000000);
+			obj->SetSphereLightSource("light", 20, 100000000);
 		}, {10,-2000,10});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
 			obj->mass = 10;
-			obj->SetSphereLightSource("light", 200, 100000000);
+			obj->SetSphereLightSource("light", 200, 1000000000);
 		}, {10,-500,1000});
 		objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 			obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
@@ -139,6 +139,18 @@ V4D_MODULE_CLASS(V4D_Game) {
 			obj->mass = 10;
 			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
 		}, {60,300,500});
+		
+		// // AABB test
+		// objects.emplace_back(scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
+		// 	// obj->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+		// 	// obj->mass = 10;
+		// 	auto cube = obj->AddProceduralGeometry("aabb", 1);
+		// 		cube->SetProceduralVertex(0, glm::vec3(-40), glm::vec3(40), glm::vec4(1));
+		// 		cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
+		// 	auto sphere = obj->AddProceduralGeometry("sphere", 1);
+		// 		sphere->SetProceduralVertex(0, glm::vec3(-20)+glm::vec3(0,0,130), glm::vec3(20)+glm::vec3(0,0,130), glm::vec4(1,1,0,1));
+		// 		sphere->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
+		// }, {0,100,20});
 		
 	}
 	
