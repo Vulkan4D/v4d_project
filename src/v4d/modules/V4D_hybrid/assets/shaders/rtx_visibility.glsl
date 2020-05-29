@@ -168,7 +168,7 @@ void main() {
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = normal;
 	ray.albedo = color.rgb;
-	ray.emit = 0;
+	ray.emit = aabbGeomAttr.custom1;
 	ray.uv = vec2(0);
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;

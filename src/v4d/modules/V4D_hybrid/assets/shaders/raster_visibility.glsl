@@ -70,6 +70,7 @@ layout(location = 0) in V2G v2g[];
 layout(location = 0) out vec4 out_pos;
 layout(location = 1) out flat vec4 out_color;
 layout(location = 2) out flat vec3 out_normal;
+layout(location = 3) out flat float out_custom1;
 //TODO : UVs ?
 
 void main() {
@@ -135,6 +136,7 @@ void main() {
 		gl_Position = mat4(camera.projectionMatrix) * out_pos;
 		out_normal = normalize(geometry.normalViewTransform * cubeNormals[i]);
 		out_pos.w = clamp(distance(vec3(camera.worldPosition), (mat4(geometry.modelTransform) * vec4(cubeVertices[cubeIndices[i]],1)).xyz), float(camera.znear), float(camera.zfar));
+		out_custom1 = v2g[0].custom1;
 		EmitVertex();
 	}
 	
@@ -249,6 +251,7 @@ void main() {
 layout(location = 0) in vec4 in_pos;
 layout(location = 1) in flat vec4 in_color;
 layout(location = 2) in flat vec3 in_normal;
+layout(location = 3) in flat float in_custom1;
 
 void main() {
 	pbrGBuffers.viewSpacePosition = in_pos.xyz;
@@ -256,7 +259,7 @@ void main() {
 	pbrGBuffers.albedo = in_color.rgb;
 	pbrGBuffers.metallic = 0.0;
 	pbrGBuffers.roughness = 0.0;
-	pbrGBuffers.emit = 0;
+	pbrGBuffers.emit = in_custom1;
 	pbrGBuffers.uv = vec2(0);
 	pbrGBuffers.distance = in_pos.w;
 	
