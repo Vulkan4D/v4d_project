@@ -66,31 +66,51 @@ int main(const int argc, const char** argv) {
 	// Application is ready to loop here
 	/////////////////////////////////////
 	{
+		const std::string serverIP = "127.0.0.1";
+		const int serverPort = 8881;
+		
+		v4d::crypto::RSA* serverRSA = nullptr;
+		app::Server* server = nullptr;
 		// Server
-		if (app::isServer) {
-			//... server starts listening
+		if (app::isServer) {// server starts listening
+			serverRSA = new v4d::crypto::RSA(2048, 3);
+			server = new app::Server(v4d::io::TCP, serverRSA);
+			server->Start(serverPort);
+			if (!app::isClient) LOG("Server has started listening...")
 		}
 		
 		// Client
-		if (app::isClient) {
-			//... client connects to server
-			
-			// Game Loops
-			if (app::renderer) {
-				app::SlowGameLoop slowGameLoop(app::IsRunning, 0);
-				app::GameLoop gameLoop(app::IsRunning, 1);
-				app::RenderingLoop renderingLoop(app::IsRunning, 2);
-				app::input::UpdateLoop([](){return app::window->IsActive();});
-				app::isRunning = false;
+		if (app::isClient) {// client connects to server
+			auto rsaPublicKey = v4d::crypto::RSA::FromPublicKeyPEM(app::Client{v4d::io::TCP}.GetServerPublicKey(serverIP, serverPort));
+			app::Client client(v4d::io::TCP, &rsaPublicKey);
+			if (client.Connect(serverIP, serverPort, 1/*ClientType*/)) {
+				if (!server) {
+					LOG_SUCCESS("Connected to remote server")
+				}
+				
+				// Game Loops
+				if (app::renderer) {
+					app::SlowGameLoop slowGameLoop(app::IsRunning, 0);
+					app::GameLoop gameLoop(app::IsRunning, 1);
+					app::RenderingLoop renderingLoop(app::IsRunning, 2);
+					app::input::UpdateLoop([](){return app::window->IsActive();});
+					app::isRunning = false;
+				} else {
+					// No graphics, still a client (compute cluster, admin console,...)
+					//...
+				}
+			} else if (server) {
+				LOG_ERROR("Failed to connect to local server (SOLO MODE)")
 			} else {
-				// No graphics, still a client (compute cluster, admin console,...)
-				//...
+				LOG_ERROR("Failed to connect to remote server " << serverIP << " on port " << serverPort)
 			}
 		}
 		
 		// Server
-		if (app::isServer) {
-			//... server stops listening
+		if (server) {
+			// server stops listening
+			delete server;
+			if (!app::isClient) LOG("Server has stopped listening")
 		}
 	}
 	///////////////////////////////////

@@ -68,3 +68,11 @@ namespace app {
 	bool hasGraphics = true;
 
 }
+
+// namespace v4d::networking::ZAP::data {
+// 	ZAPDATA( Auth, 
+// 		String username;
+// 		String password;
+// 		Vector<Int32> stuff;
+// 	)
+// }
