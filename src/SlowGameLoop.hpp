@@ -12,9 +12,9 @@ namespace app {
 			
 			#ifdef _DEBUG
 				// Shaders to watch for modifications to automatically reload the app::renderer
-				v4d::io::StringListFile::Instance("watchedShaders.txt", 1000)->Load([this](auto* file){
+				v4d::io::StringListFile::Instance("watchedShaders.txt", 1000)->Load([this](v4d::io::ASCIIFile* file){
 					shaderFilesToWatch.clear();
-					for (auto& shader : file->lines) shaderFilesToWatch[shader] = 0;
+					for (auto& shader : ((v4d::io::StringListFile*)file)->lines) shaderFilesToWatch[shader] = 0;
 				});
 			#endif
 			

@@ -33,7 +33,6 @@ namespace app {
 		
 		void Stop() override {
 			ListeningServer::Stop();
-			LOG("Server has stopped listening")
 			app::isRunning = false;
 		}
 

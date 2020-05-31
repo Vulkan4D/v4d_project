@@ -51,6 +51,20 @@ namespace app {
 		if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
 		t.Reset();\
 	}
+	
+	enum class ARG {invalid_arg=0
+		,server
+		,client
+		,host
+		,port
+	};
+	ARG Arg(std::string arg) {
+		if (arg == "server") return ARG::server;
+		if (arg == "client") return ARG::client;
+		if (arg == "host") return ARG::host;
+		if (arg == "port") return ARG::port;
+		return ARG::invalid_arg;
+	}
 
 	std::vector<std::string> modulesList {};
 
@@ -63,10 +77,9 @@ namespace app {
 		ImGuiIO* imGuiIO = nullptr;
 	#endif
 
-	bool isServer = true;
-	bool isClient = true;
+	bool isServer = false;
+	bool isClient = false;
 	bool hasGraphics = true;
-
 
 	void Start();
 	void Run();

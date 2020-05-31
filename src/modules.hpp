@@ -8,7 +8,10 @@ namespace app::modules {
 
 	void Load() {
 		if (app::settings->modules_list_file != "") {
-			app::modulesList = v4d::io::StringListFile::Instance(app::settings->modules_list_file)->Load();
+			// Load modules list from modules.txt when given list is empty
+			if (app::modulesList.size() == 0) {
+				app::modulesList = v4d::io::StringListFile::Instance(app::settings->modules_list_file)->Load();
+			}
 			
 			// Default Modules when modules.txt is empty
 			if (app::modulesList.size() == 0) {

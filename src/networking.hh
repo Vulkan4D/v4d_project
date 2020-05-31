@@ -1,6 +1,9 @@
 #pragma once
 #include <v4d.h>
 
+namespace app::networking {
+	
+}
 
 // namespace v4d::networking::ZAP::data {
 // 	ZAPDATA( Auth, 

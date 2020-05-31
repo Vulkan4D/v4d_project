@@ -7,6 +7,7 @@
 #include <v4d.h>
 #include "app.hh"
 #include "networking.hh"
+#include "crypto.hh"
 #include "Server.hpp"
 #include "Client.hpp"
 #include "events.hpp"
@@ -20,11 +21,11 @@
 
 app::ServerPtr server = nullptr;
 
-std::string serverIP = "127.0.0.1";
-int serverPort = 8881;
+std::string remoteHost = "";
+int serverPort = 0;
 
 // Cryptography
-v4d::crypto::RSA* serverRsaKey = nullptr;
+std::shared_ptr<v4d::crypto::RSA> serverRsaKey = nullptr;
 
 void app::Start() {
 	// Bind Events
@@ -64,10 +65,7 @@ void app::Start() {
 	
 	// Server
 	if (app::isServer) {// server starts listening
-		if (!serverRsaKey) {
-			serverRsaKey = new v4d::crypto::RSA(2048, 3);
-		}
-		server = std::make_shared<app::Server>(v4d::io::TCP, serverRsaKey);
+		server = std::make_shared<app::Server>(v4d::io::TCP, serverRsaKey.get());
 		app::modules::InitServer(server);
 		server->Start(serverPort);
 		if (!app::isClient) LOG("Server has started listening")
@@ -79,7 +77,8 @@ void app::Stop() {
 	
 	if (server) {
 		server->Stop();
-		if (serverRsaKey) delete serverRsaKey;
+		if (!app::isClient) LOG("Server has stopped listening")
+		if (serverRsaKey) serverRsaKey.reset();
 	}
 	
 	// Unload Renderer
@@ -110,16 +109,16 @@ void app::Stop() {
 		app::vulkan::Unload();
 	}
 
-	LOG("\n\nApplication terminated\n\n");
+	LOG("\nApplication terminated\n");
 }
 
 void app::Run() {
 	
 	// Client
 	if (app::isClient) {// client connects to server
-		auto rsaPublicKey = v4d::crypto::RSA::FromPublicKeyPEM(app::Client{v4d::io::TCP}.GetServerPublicKey(serverIP, serverPort));
-		app::ClientPtr client = std::make_shared<app::Client>(v4d::io::TCP, &rsaPublicKey);
-		if (client->Connect(serverIP, serverPort, 1/*ClientType*/)) {
+		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(remoteHost, serverPort);
+		app::ClientPtr client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
+		if (client->Connect(remoteHost, serverPort, 1/*ClientType*/)) {
 			app::modules::InitClient(client);
 			if (!server) LOG_SUCCESS("Connected to remote server")
 			
@@ -137,11 +136,10 @@ void app::Run() {
 		} else if (server) {
 			LOG_ERROR("Failed to connect to local server (SOLO MODE)")
 		} else {
-			LOG_ERROR("Failed to connect to remote server " << serverIP << " on port " << serverPort)
+			LOG_ERROR("Failed to connect to remote server " << remoteHost << " on port " << serverPort)
 		}
 		
 		client->Disconnect();
-		if (!server) LOG("Disconnected from remote server")
 	}
 	
 	// Wait for Server to terminate
@@ -149,7 +147,7 @@ void app::Run() {
 		if (app::isClient) {
 			server->Stop();
 		} else {
-			// Wait for server to finish
+			// Wait for server to finish listening
 			while (app::IsRunning()) {
 				//...
 				SLEEP(10ms)
@@ -159,12 +157,55 @@ void app::Run() {
 }
 
 int main(const int argc, const char** argv) {
-	//TODO handle command line arguments
+	// handle command line arguments
+	if (argc > 1) for (int i = 1; i < argc; ++i) {
+		if (*argv[i] == '-') {
+			app::ARG arg = app::Arg(std::string(argv[i]+1));
+			std::string nextValue = i+1<argc? argv[i+1] : "";
+			switch (arg) {
+				case app::ARG::server: {
+					app::isServer = true;
+					app::hasGraphics = false;
+				break;}
+				case app::ARG::client: {
+					app::isClient = true;
+				break;}
+				case app::ARG::host: {
+					app::isServer = false;
+					app::isClient = true;
+					remoteHost = nextValue;
+				break;}
+				case app::ARG::port: {
+					serverPort = atoi(nextValue.c_str());
+					++i;
+				break;}
+				case app::ARG::invalid_arg:default:{
+					LOG_ERROR("Invalid option: " << std::string(argv[i]))
+				break;}
+			}
+		} else {
+			app::modulesList.push_back(argv[i]);
+		}
+	}
 	
 	// Load settings.ini
 	app::settings->Load();
 	
-	//TODO Load serverRsaKey
+	if (remoteHost == "") remoteHost = "127.0.0.1";
+	if (serverPort == 0) serverPort = app::settings->default_server_port;
+	
+	// Solo when no arguments defining server or client
+	if (!app::isClient && !app::isServer) {
+		app::isClient = true;
+		app::isServer = true;
+		remoteHost = "127.0.0.1";
+		if (serverPort == 0) serverPort = APP_NETWORKING_DEFAULT_SOLO_PORT;
+	}
+	
+	// Load serverRsaKey
+	#ifdef APP_NETWORKING_USE_RSA_KEY
+		serverRsaKey = app::crypto::LoadOrCreateServerPrivateKey();
+	#endif
 	
 	// set main thread to run only on core 0
 	SET_CPU_AFFINITY(0)

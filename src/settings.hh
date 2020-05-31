@@ -15,6 +15,9 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 		int framerate_limit_ui = 30;
 	#endif
 
+	// Networking
+	int default_server_port = 0;
+	
 private:
 	void ReadConfig() override {
 		CONFIGFILE_READ_FROM_INI_WRITE("application", log_verbose)
@@ -23,6 +26,7 @@ private:
 		#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
 			CONFIGFILE_READ_FROM_INI_WRITE("graphics", framerate_limit_ui)
 		#endif
+		CONFIGFILE_READ_FROM_INI_WRITE("networking", default_server_port)
 		
 		LOGGER_INSTANCE->SetVerbose(log_verbose);
 	}
@@ -33,5 +37,6 @@ private:
 		#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
 			CONFIGFILE_WRITE_TO_INI("graphics", framerate_limit_ui)
 		#endif
+		CONFIGFILE_WRITE_TO_INI("networking", default_server_port)
 	}
 };
