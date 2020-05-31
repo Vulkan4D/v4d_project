@@ -14,42 +14,45 @@ namespace CubeToSphere {
 	};
 
 	constexpr std::tuple<glm::dvec3, glm::dvec3, glm::dvec3> GetFaceVectors(int face) {
-		glm::dvec3 dir {0};
-		glm::dvec3 top {0};
-		glm::dvec3 right {0};
 		switch (face) {
 			case FRONT:
-				dir = glm::dvec3(0, 0, 1);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(1, 0, 0);
-				break;
+				return {
+					glm::dvec3(0, 0, 1),
+					glm::dvec3(0, 1, 0),
+					glm::dvec3(1, 0, 0)
+				};
 			case BACK:
-				dir = glm::dvec3(0, 0, -1);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(-1, 0, 0);
-				break;
+				return {
+					glm::dvec3(0, 0, -1),
+					glm::dvec3(0, 1, 0),
+					glm::dvec3(-1, 0, 0)
+				};
 			case RIGHT:
-				dir = glm::dvec3(1, 0, 0);
-				top = glm::dvec3(0, 1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
+				return {
+					glm::dvec3(1, 0, 0),
+					glm::dvec3(0, 1, 0),
+					glm::dvec3(0, 0, -1)
+				};
 			case LEFT:
-				dir = glm::dvec3(-1, 0, 0);
-				top = glm::dvec3(0, -1, 0);
-				right = glm::dvec3(0, 0, -1);
-				break;
+				return {
+					glm::dvec3(-1, 0, 0),
+					glm::dvec3(0, -1, 0),
+					glm::dvec3(0, 0, -1)
+				};
 			case TOP:
-				dir = glm::dvec3(0, 1, 0);
-				top = glm::dvec3(0, 0, 1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
+				return {
+					glm::dvec3(0, 1, 0),
+					glm::dvec3(0, 0, 1),
+					glm::dvec3(-1, 0, 0)
+				};
 			case BOTTOM:
-				dir = glm::dvec3(0, -1, 0);
-				top = glm::dvec3(0, 0, -1);
-				right = glm::dvec3(-1, 0, 0);
-				break;
+				return {
+					glm::dvec3(0, -1, 0),
+					glm::dvec3(0, 0, -1),
+					glm::dvec3(-1, 0, 0)
+				};
 		}
-		return {dir, top, right};
+		return {glm::dvec3(0,0,0), glm::dvec3(0,0,0), glm::dvec3(0,0,0)};
 	}
 	
 	glm::dvec3 Spherify(glm::dvec3 point, int face) {

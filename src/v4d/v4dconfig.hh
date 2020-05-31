@@ -1,5 +1,10 @@
 #pragma once
 
+// GLM Configuration
+#define GLM_FORCE_INTRINSICS
+#define GLM_FORCE_SIMD_AVX2
+#define GLM_FORCE_CXX17
+
 // Needed for ImGui
 namespace VkFunctions {}
 #define XVK_EXPOSE_NATIVE_VULKAN_FUNCTIONS_NAMESPACE VkFunctions

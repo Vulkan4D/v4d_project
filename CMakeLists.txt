@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-# Vulkan4D Project Build Template 0.4
+# Vulkan4D Project Build Template 0.5
 ###########################################################################################
 # Project Setup
 
@@ -29,10 +29,10 @@ include("${V4D_PROJECT_DIR}/src/v4d/core/global_build_config.cmake")
 
 # Compiler Warnings
 if(WIN32)
-	set(BUILD_FLAGS "-W -Wno-cast-function-type")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -W -Wno-cast-function-type")
 else()
 	# Warnings		https://gcc.gnu.org/onlinedocs/gcc-9.2.0/gcc/Warning-Options.html
-	set(BUILD_FLAGS "-Wall")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wall")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -fmax-errors=1")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wfatal-errors")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wextra")
