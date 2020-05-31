@@ -9,12 +9,11 @@ namespace app {
 		std::atomic<ulong> nextClientId = 1;
 	public:
 		using ListeningServer::ListeningServer;
-
 		std::string GetAppName() const override {
-			return "V4D";
+			return APP_NETWORKING_APPNAME;
 		}
 		std::string GetVersion() const override {
-			return "0.0.0";
+			return APP_NETWORKING_VERSION;
 		}
 
 		ulong Authenticate(v4d::data::ReadOnlyStream* authStream) override {
@@ -28,14 +27,9 @@ namespace app {
 		}
 
 		void RunClient(v4d::io::SharedSocket, std::shared_ptr<v4d::networking::IncomingClient>, byte /*clientType*/) override {
-			LOG_VERBOSE("[SERVER] Client is running...")
+			LOG_VERBOSE("[SERVER] IncomingClient is running...")
 		}
 		
-		void Stop() override {
-			ListeningServer::Stop();
-			app::isRunning = false;
-		}
-
 	};
 	
 	typedef std::shared_ptr<Server> ServerPtr;

@@ -15,9 +15,7 @@ namespace app::modules {
 			
 			// Default Modules when modules.txt is empty
 			if (app::modulesList.size() == 0) {
-				app::modulesList.push_back("V4D_basicscene");
-				app::modulesList.push_back("V4D_bullet");
-				// app::modulesList.push_back("V4D_planetdemo");
+				app::modulesList = {APP_DEFAULT_MODULES};
 			}
 		}
 		for (auto module : app::modulesList) {
@@ -29,7 +27,7 @@ namespace app::modules {
 			V4D_Client::LoadModule(module);
 		}
 		if (!V4D_Renderer::GetPrimaryModule()) { // We need at least one primary Renderer module
-			V4D_Renderer::LoadModule("V4D_hybrid");
+			V4D_Renderer::LoadModule(APP_DEFAULT_RENDERER_MODULE);
 		}
 		// Sort Modules
 		V4D_Game::SortModules([](auto* a, auto* b){

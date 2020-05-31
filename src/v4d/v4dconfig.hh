@@ -1,5 +1,8 @@
 #pragma once
 
+// #define ZAP_USE_REINTERPRET_CAST_INSTEAD_OF_MEMCPY
+// #define EVENT_DEFINITIONS_VARIADIC
+	
 // GLM Configuration
 #define GLM_FORCE_INTRINSICS
 #define GLM_FORCE_SIMD_AVX2

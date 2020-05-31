@@ -114,6 +114,9 @@ void app::Stop() {
 
 void app::Run() {
 	
+	// set main thread & input to run only on a specific core
+	SET_CPU_AFFINITY(APP_CPU_AFFINITY_MAIN)
+	
 	// Client
 	if (app::isClient) {// client connects to server
 		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(remoteHost, serverPort);
@@ -124,9 +127,9 @@ void app::Run() {
 			
 			// Game Loops
 			if (app::renderer) {
-				app::SlowGameLoop slowGameLoop(app::IsRunning, 0);
-				app::GameLoop gameLoop(app::IsRunning, 1);
-				app::RenderingLoop renderingLoop(app::IsRunning, 2);
+				app::SlowGameLoop slowGameLoop(app::IsRunning, APP_CPU_AFFINITY_MAIN);
+				app::GameLoop gameLoop(app::IsRunning, APP_CPU_AFFINITY_GAME);
+				app::RenderingLoop renderingLoop(app::IsRunning, APP_CPU_AFFINITY_RENDER_PRIMARY, APP_CPU_AFFINITY_RENDER_SECONDARY);
 				app::input::UpdateLoop([](){return app::window->IsActive();});
 				app::isRunning = false;
 			} else {
@@ -206,9 +209,6 @@ int main(const int argc, const char** argv) {
 	#ifdef APP_NETWORKING_USE_RSA_KEY
 		serverRsaKey = app::crypto::LoadOrCreateServerPrivateKey();
 	#endif
-	
-	// set main thread to run only on core 0
-	SET_CPU_AFFINITY(0)
 	
 	// Load V4D Core
 	if (!v4d::Init()) return -1;

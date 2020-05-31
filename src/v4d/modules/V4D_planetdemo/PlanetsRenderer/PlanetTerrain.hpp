@@ -5,6 +5,8 @@
 #include "PlanetAtmosphere.hpp"
 #include "Noise.hpp"
 
+#define APP_CPU_AFFINITY_GENERATE 3
+
 using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
@@ -28,7 +30,6 @@ struct PlanetTerrain {
 	static const int vertexSubdivisionsPerChunk = 100; // low=40, medium=100, high=180,   extreme=250
 	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
 	static constexpr float targetVertexSeparationInMeters = 0.1f; // approximative vertex separation in meters for the most precise level of detail
-	static const int chunkGeneratorNbThreads = 2;
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
@@ -710,10 +711,13 @@ struct PlanetTerrain {
 	static void StartChunkGenerator() {
 		if (chunkGeneratorActive) return;
 		chunkGeneratorActive = true;
-		chunkGeneratorThreads.reserve(chunkGeneratorNbThreads);
-		for (int i = 0; i < chunkGeneratorNbThreads; ++i) {
+		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - APP_CPU_AFFINITY_GENERATE);
+		chunkGeneratorThreads.reserve(nbThreads);
+		LOG_VERBOSE("Using " << nbThreads << " threads to render planet terrain")
+		for (int i = 0; i < nbThreads; ++i) {
 			chunkGeneratorThreads.emplace_back([threadIndex=i](){
-				SET_CPU_AFFINITY(4+threadIndex)
+				int cpuIndex = APP_CPU_AFFINITY_GENERATE + threadIndex;
+				if (cpuIndex < std::thread::hardware_concurrency()) SET_CPU_AFFINITY(cpuIndex)
 				while (chunkGeneratorActive) {
 					Chunk* chunk = nullptr;
 					double closestChunkDistance = std::numeric_limits<double>::max();

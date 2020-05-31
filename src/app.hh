@@ -13,7 +13,7 @@ namespace app {
 
 	double primaryAvgFrameRate = 0;
 	double primaryFrameTime = 0;
-	#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+	#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 		double secondaryAvgFrameRate = 0;
 		double secondaryFrameTime = 0;
 	#endif

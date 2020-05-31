@@ -5,7 +5,7 @@ namespace app {
 
 	class RenderingLoop {
 		std::thread thread;
-		#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+		#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 			std::thread thread2;
 		#endif
 		bool (*loopCheckRunning)() = nullptr;
@@ -35,7 +35,7 @@ namespace app {
 					ImGui::Begin("Vulkan4D: Renderer (Incubator)");
 					#ifdef V4D_DEMO_DEBUG_FULL_FRAMERATE
 						ImGui::Text("Primary rendering : %.1f / %d FPS (%d ms)", app::primaryAvgFrameRate, (int)std::round(1000.0/app::primaryFrameTime), (int)std::round(app::primaryFrameTime));
-						#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+						#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 							ImGui::Text("Secondary rendering & UI : %.1f / %d FPS (%d ms)", app::secondaryAvgFrameRate, (int)std::round(1000.0/app::secondaryFrameTime), (int)std::round(app::secondaryFrameTime));
 						#endif
 						ImGui::Text("Input thread : %.1f / %d FPS (%d ms)", app::inputAvgFrameRate, (int)std::round(1000.0/app::inputFrameTime), (int)std::round(app::inputFrameTime));
@@ -46,7 +46,7 @@ namespace app {
 							ImGui::Text("Primary rendering : %.1f avg FPS (limited)", app::primaryAvgFrameRate);
 						else
 							ImGui::Text("Primary rendering : %.1f avg FPS (unlimited)", app::primaryAvgFrameRate);
-						#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+						#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 							if (settings->framerate_limit_ui)
 								ImGui::Text("Secondary rendering & UI : %.1f avg FPS (limited)", app::secondaryAvgFrameRate);
 							else
@@ -88,13 +88,13 @@ namespace app {
 		};
 
 	public:
-		RenderingLoop(bool (*loopCheckRunningFunc)(), int cpuCoreIndex = -1) : loopCheckRunning(loopCheckRunningFunc) {
+		RenderingLoop(bool (*loopCheckRunningFunc)(), int cpuCoreIndexPrimary = -1, int cpuCoreIndexSecondary = -1) : loopCheckRunning(loopCheckRunningFunc) {
 			thread = std::thread{[&]{
-				if (cpuCoreIndex >= 0) SET_CPU_AFFINITY(cpuCoreIndex)
+				if (cpuCoreIndexPrimary >= 0) SET_CPU_AFFINITY(cpuCoreIndexPrimary)
 				while (loopCheckRunning()) {
 					CALCULATE_AVG_FRAMERATE(app::primaryAvgFrameRate)
 					
-					#ifndef RENDER_SECONDARY_IN_ANOTHER_THREAD
+					#ifndef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 						RunSecondaryRendering();
 					#endif
 					
@@ -103,13 +103,13 @@ namespace app {
 					if (settings->framerate_limit_rendering) LIMIT_FRAMERATE(settings->framerate_limit_rendering, app::primaryFrameTime)
 				}
 			}};
-			#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+			#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 				// Low-Priority Rendering Loop
 				thread2 = std::thread{[&]{
-					if (cpuCoreIndex >= 0) SET_CPU_AFFINITY(cpuCoreIndex+1)
-					while (appIsRunning) {
+					if (cpuCoreIndexSecondary >= 0) SET_CPU_AFFINITY(cpuCoreIndexSecondary)
+					while (loopCheckRunning()) {
 						CALCULATE_AVG_FRAMERATE(app::secondaryAvgFrameRate)
-						if (!appIsRunning) break;
+						if (!loopCheckRunning()) break;
 						if (!app::renderer->graphicsLoadedToDevice || app::renderer->mustReload) continue;
 						
 						RunSecondaryRendering();
@@ -121,7 +121,7 @@ namespace app {
 		}
 		~RenderingLoop() {
 			thread.join();
-			#ifdef RENDER_SECONDARY_IN_ANOTHER_THREAD
+			#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 				thread2.join();
 			#endif
 		}

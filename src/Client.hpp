@@ -8,12 +8,11 @@ namespace app {
 	class Client : public v4d::networking::OutgoingConnection {
 	public:
 		using OutgoingConnection::OutgoingConnection;
-
 		std::string GetAppName() const override {
-			return "V4D";
+			return APP_NETWORKING_APPNAME;
 		}
 		std::string GetVersion() const override {
-			return "0.0.0";
+			return APP_NETWORKING_VERSION;
 		}
 
 		void Authenticate(v4d::data::Stream* authStream) override {
