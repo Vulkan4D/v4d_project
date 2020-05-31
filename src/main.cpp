@@ -5,7 +5,8 @@
 #define APPLICATION_VERSION_PATCH 0
 
 #include <v4d.h>
-#include "globalscope.hh"
+#include "app.hh"
+#include "networking.hh"
 #include "Server.hpp"
 #include "Client.hpp"
 #include "events.hpp"
@@ -17,20 +18,19 @@
 #include "SlowGameLoop.hpp"
 #include "RenderingLoop.hpp"
 
-int main(const int argc, const char** argv) {
-	//TODO handle command line arguments
-	
-	// Load settings.ini
-	app::settings->Load();
-	
-	// set main thread to run only on core 0
-	SET_CPU_AFFINITY(0)
-	
-	// Load V4D Core
-	if (!v4d::Init()) return -1;
-	
+app::ServerPtr server = nullptr;
+
+std::string serverIP = "127.0.0.1";
+int serverPort = 8881;
+
+// Cryptography
+v4d::crypto::RSA* serverRsaKey = nullptr;
+
+void app::Start() {
 	// Bind Events
 	app::events::Bind();
+	v4d::event::APP_KILLED << [](int){app::Stop();};
+	v4d::event::APP_ERROR << [](int){app::Stop();};
 	
 	// Load Modules
 	app::modules::Load();
@@ -62,60 +62,25 @@ int main(const int argc, const char** argv) {
 		app::graphics::LoadRenderer();
 	}
 	
-	/////////////////////////////////////
-	// Application is ready to loop here
-	/////////////////////////////////////
-	{
-		const std::string serverIP = "127.0.0.1";
-		const int serverPort = 8881;
-		
-		v4d::crypto::RSA* serverRSA = nullptr;
-		app::Server* server = nullptr;
-		// Server
-		if (app::isServer) {// server starts listening
-			serverRSA = new v4d::crypto::RSA(2048, 3);
-			server = new app::Server(v4d::io::TCP, serverRSA);
-			server->Start(serverPort);
-			if (!app::isClient) LOG("Server has started listening...")
+	// Server
+	if (app::isServer) {// server starts listening
+		if (!serverRsaKey) {
+			serverRsaKey = new v4d::crypto::RSA(2048, 3);
 		}
-		
-		// Client
-		if (app::isClient) {// client connects to server
-			auto rsaPublicKey = v4d::crypto::RSA::FromPublicKeyPEM(app::Client{v4d::io::TCP}.GetServerPublicKey(serverIP, serverPort));
-			app::Client client(v4d::io::TCP, &rsaPublicKey);
-			if (client.Connect(serverIP, serverPort, 1/*ClientType*/)) {
-				if (!server) {
-					LOG_SUCCESS("Connected to remote server")
-				}
-				
-				// Game Loops
-				if (app::renderer) {
-					app::SlowGameLoop slowGameLoop(app::IsRunning, 0);
-					app::GameLoop gameLoop(app::IsRunning, 1);
-					app::RenderingLoop renderingLoop(app::IsRunning, 2);
-					app::input::UpdateLoop([](){return app::window->IsActive();});
-					app::isRunning = false;
-				} else {
-					// No graphics, still a client (compute cluster, admin console,...)
-					//...
-				}
-			} else if (server) {
-				LOG_ERROR("Failed to connect to local server (SOLO MODE)")
-			} else {
-				LOG_ERROR("Failed to connect to remote server " << serverIP << " on port " << serverPort)
-			}
-		}
-		
-		// Server
-		if (server) {
-			// server stops listening
-			delete server;
-			if (!app::isClient) LOG("Server has stopped listening")
-		}
+		server = std::make_shared<app::Server>(v4d::io::TCP, serverRsaKey);
+		app::modules::InitServer(server);
+		server->Start(serverPort);
+		if (!app::isClient) LOG("Server has started listening")
 	}
-	///////////////////////////////////
-	// Application is terminating here
-	///////////////////////////////////
+}
+
+void app::Stop() {
+	app::isRunning = false;
+	
+	if (server) {
+		server->Stop();
+		if (serverRsaKey) delete serverRsaKey;
+	}
 	
 	// Unload Renderer
 	if (app::renderer) {
@@ -146,4 +111,68 @@ int main(const int argc, const char** argv) {
 	}
 
 	LOG("\n\nApplication terminated\n\n");
+}
+
+void app::Run() {
+	
+	// Client
+	if (app::isClient) {// client connects to server
+		auto rsaPublicKey = v4d::crypto::RSA::FromPublicKeyPEM(app::Client{v4d::io::TCP}.GetServerPublicKey(serverIP, serverPort));
+		app::ClientPtr client = std::make_shared<app::Client>(v4d::io::TCP, &rsaPublicKey);
+		if (client->Connect(serverIP, serverPort, 1/*ClientType*/)) {
+			app::modules::InitClient(client);
+			if (!server) LOG_SUCCESS("Connected to remote server")
+			
+			// Game Loops
+			if (app::renderer) {
+				app::SlowGameLoop slowGameLoop(app::IsRunning, 0);
+				app::GameLoop gameLoop(app::IsRunning, 1);
+				app::RenderingLoop renderingLoop(app::IsRunning, 2);
+				app::input::UpdateLoop([](){return app::window->IsActive();});
+				app::isRunning = false;
+			} else {
+				// No graphics, still a client (compute cluster, admin console,...)
+				//...
+			}
+		} else if (server) {
+			LOG_ERROR("Failed to connect to local server (SOLO MODE)")
+		} else {
+			LOG_ERROR("Failed to connect to remote server " << serverIP << " on port " << serverPort)
+		}
+		
+		client->Disconnect();
+		if (!server) LOG("Disconnected from remote server")
+	}
+	
+	// Wait for Server to terminate
+	if (server) {
+		if (app::isClient) {
+			server->Stop();
+		} else {
+			// Wait for server to finish
+			while (app::IsRunning()) {
+				//...
+				SLEEP(10ms)
+			}
+		}
+	}
+}
+
+int main(const int argc, const char** argv) {
+	//TODO handle command line arguments
+	
+	// Load settings.ini
+	app::settings->Load();
+	
+	//TODO Load serverRsaKey
+	
+	// set main thread to run only on core 0
+	SET_CPU_AFFINITY(0)
+	
+	// Load V4D Core
+	if (!v4d::Init()) return -1;
+	
+	app::Start();
+	app::Run();
+	app::Stop();
 }

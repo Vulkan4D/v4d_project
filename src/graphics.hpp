@@ -1,5 +1,5 @@
 #pragma once
-#include "globalscope.hh"
+#include "app.hh"
 
 // Fix for a microsoft macro that is not respecting the C++ standards
 #ifdef CreateWindow

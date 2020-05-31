@@ -1,5 +1,6 @@
 #pragma once
-#include "globalscope.hh"
+#include "app.hh"
+#include "networking.hh"
 
 namespace app {
 	using namespace zapdata;
@@ -24,4 +25,6 @@ namespace app {
 		}
 
 	};
+	
+	typedef std::shared_ptr<Client> ClientPtr;
 }

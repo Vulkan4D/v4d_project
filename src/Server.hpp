@@ -1,5 +1,6 @@
 #pragma once
-#include "globalscope.hh"
+#include "app.hh"
+#include "networking.hh"
 
 namespace app {
 	using namespace zapdata;
@@ -29,6 +30,14 @@ namespace app {
 		void RunClient(v4d::io::SharedSocket, std::shared_ptr<v4d::networking::IncomingClient>, byte /*clientType*/) override {
 			LOG_VERBOSE("[SERVER] Client is running...")
 		}
+		
+		void Stop() override {
+			ListeningServer::Stop();
+			LOG("Server has stopped listening")
+			app::isRunning = false;
+		}
 
 	};
+	
+	typedef std::shared_ptr<Server> ServerPtr;
 }

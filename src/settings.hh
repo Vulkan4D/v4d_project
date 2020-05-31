@@ -1,5 +1,5 @@
 #pragma once
-#include "globalscope.hh"
+#include "app.hh"
 
 // Settings
 struct ProjectSettings : public v4d::io::ConfigFile {

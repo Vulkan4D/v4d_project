@@ -1,5 +1,8 @@
 #pragma once
-#include "globalscope.hh"
+#include "app.hh"
+#include "networking.hh"
+#include "Server.hpp"
+#include "Client.hpp"
 
 namespace app::modules {
 
@@ -19,6 +22,8 @@ namespace app::modules {
 			V4D_Input::LoadModule(module);
 			V4D_Renderer::LoadModule(module);
 			V4D_Physics::LoadModule(module);
+			V4D_Server::LoadModule(module);
+			V4D_Client::LoadModule(module);
 		}
 		if (!V4D_Renderer::GetPrimaryModule()) { // We need at least one primary Renderer module
 			V4D_Renderer::LoadModule("V4D_hybrid");
@@ -36,12 +41,20 @@ namespace app::modules {
 		V4D_Physics::SortModules([](auto* a, auto* b){
 			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 		});
+		V4D_Server::SortModules([](auto* a, auto* b){
+			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+		});
+		V4D_Client::SortModules([](auto* a, auto* b){
+			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+		});
 	}
 	void Unload() {
 		V4D_Game::UnloadModules();
 		V4D_Input::UnloadModules();
 		V4D_Renderer::UnloadModules();
 		V4D_Physics::UnloadModules();
+		V4D_Server::UnloadModules();
+		V4D_Client::UnloadModules();
 	}
 
 	void Init() {
@@ -61,6 +74,16 @@ namespace app::modules {
 				if (mod->Init) mod->Init(app::window, app::renderer, app::scene);
 			});
 		}
+	}
+	void InitServer(app::ServerPtr server) {
+		V4D_Server::ForEachSortedModule([server](auto* mod){
+			if (mod->Init) mod->Init(server, app::scene);
+		});
+	}
+	void InitClient(app::ClientPtr client) {
+		V4D_Client::ForEachSortedModule([client](auto* mod){
+			if (mod->Init) mod->Init(client, app::scene);
+		});
 	}
 
 	void LoadScene() {
