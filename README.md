@@ -17,7 +17,7 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 - [x] Core Graphics utilities (Vulkan API)
 - [x] Hybrid Ray-Tracing Renderer module
 - [x] Physics Module (Bullet3)
-- [ ] Multiplayer Module
+- [x] Multiplayer/Networking utilities
 - [ ] In-game coding framework (XenonCode)
 - [ ] Audio utilities
 - [ ] Demo game (Galaxy4D)

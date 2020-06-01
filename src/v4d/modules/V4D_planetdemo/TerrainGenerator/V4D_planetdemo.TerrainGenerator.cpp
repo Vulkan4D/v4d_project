@@ -14,12 +14,12 @@ using namespace glm;
 
 #pragma region noise functions
 
-dvec4 mod(dvec4 x, double f) {return x - f * floor(x/f);}
-vec4 mod(vec4 x, float f) {return x - f * floor(x/f);}
-vec4 _permute(vec4 x){return mod(((x*34.0f)+1.0f)*x, 289.0f);} // used for Simplex noise
-dvec4 _permute(dvec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+dvec4 mod(const dvec4& x, double f) {return x - f * floor(x/f);}
+vec4 mod(const vec4& x, float f) {return x - f * floor(x/f);}
+vec4 _permute(const vec4& x){return mod(((x*34.0f)+1.0f)*x, 289.0f);} // used for Simplex noise
+dvec4 _permute(const dvec4& x){return mod(((x*34.0)+1.0)*x, 289.0);}
 // Returns a well-distributed range between -0.5 and +0.5
-vec3 Noise3(vec3 pos) { // used for FastSimplex
+vec3 Noise3(const vec3& pos) { // used for FastSimplex
 	float j = 4096.0f*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
 	vec3 r;
 	r.z = fract(512.0f*j);
@@ -29,7 +29,7 @@ vec3 Noise3(vec3 pos) { // used for FastSimplex
 	r.y = fract(512.0f*j);
 	return r-0.5f;
 }
-dvec3 Noise3(dvec3 pos) { // used for FastSimplex
+dvec3 Noise3(const dvec3& pos) { // used for FastSimplex
 	double j = 4096.0*sin(dot(pos,dvec3(17.0, 59.4, 15.0)));
 	dvec3 r;
 	r.z = fract(512.0*j);
@@ -59,29 +59,29 @@ float QuickNoise(float pos){
 double QuickNoise(double pos){
 	return fract(sin(pos) * 13159.527140783267);
 }
-float QuickNoise(vec2 pos) {
+float QuickNoise(const vec2& pos) {
 	return fract(sin(dot(pos, vec2(13.657f,9.558f))) * 24097.524f);
 }
-float QuickNoise(vec3 pos) {
+float QuickNoise(const vec3& pos) {
 	return fract(sin(dot(pos, vec3(13.657f,9.558f,11.606f))) * 24097.524f);
 }
-double QuickNoise(dvec3 pos) {
+double QuickNoise(const dvec3& pos) {
 	return fract(sin(dot(pos, dvec3(13.657023817,9.5580981772,11.606065918))) * 24097.5240569198);
 }
-double QuickNoise(dvec2 pos) {
+double QuickNoise(const dvec2& pos) {
 	return fract(sin(dot(pos, dvec2(13.657023817,9.5580981772))) * 24097.5240569198);
 }
 // Returns a uniformly distributed integer value between 0 and n-1, suitable for pseudo-random enum value where n is the number of elements
-int QuickNoiseIntegral(vec2 pos, int n) {
+int QuickNoiseIntegral(const vec2& pos, int n) {
 	return (int)floor(QuickNoise(pos)*n);
 }
-int QuickNoiseIntegral(vec3 pos, int n) {
+int QuickNoiseIntegral(const vec3& pos, int n) {
 	return (int)floor(QuickNoise(pos)*n);
 }
-int QuickNoiseIntegral(dvec2 pos, int n) {
+int QuickNoiseIntegral(const dvec2& pos, int n) {
 	return (int)floor(QuickNoise(pos)*n);
 }
-int QuickNoiseIntegral(dvec3 pos, int n) {
+int QuickNoiseIntegral(const dvec3& pos, int n) {
 	return (int)floor(QuickNoise(pos)*n);
 }
 
@@ -101,17 +101,17 @@ double Noise(double pos) {
 
 // Simple 2D noise suitable for pos range (-100k, +100k) with a step of 0.1 and gradient of 0.5
 // Returns a float value between 0.00 and 1.00 with a distribution that tends a little bit towards the center (0.5)
-float Noise(vec2 pos) {
+float Noise(const vec2& pos) {
 	const vec2 d = vec2(0.0, 1.0);
 	vec2 b = floor(pos), f = smoothstep(vec2(0.0), vec2(1.0), fract(pos));
 	return mix(mix(QuickNoise(b), QuickNoise(b + vec2(d.y, d.x)), f.x), mix(QuickNoise(b + vec2(d.x, d.y)), QuickNoise(b + vec2(d.y)), f.x), f.y);
 }
-double Noise(dvec2 pos) {
+double Noise(const dvec2& pos) {
 	const dvec2 d = dvec2(0.0, 1.0);
 	dvec2 b = floor(pos), f = smoothstep(dvec2(0.0), dvec2(1.0), fract(pos));
 	return mix(mix(QuickNoise(b), QuickNoise(b + dvec2(d.y, d.x)), f.x), mix(QuickNoise(b + dvec2(d.x, d.y)), QuickNoise(b + dvec2(d.y)), f.x), f.y);
 }
-double Noise(dvec3 pos3) {
+double Noise(const dvec3& pos3) {
 	dvec2 pos = dvec2(pos3) + pos3.z;
 	const dvec2 d = dvec2(0.0, 1.0);
 	dvec2 b = floor(pos), f = smoothstep(dvec2(0.0), dvec2(1.0), fract(pos));
@@ -120,7 +120,7 @@ double Noise(dvec3 pos3) {
 
 // Faster Simplex noise, less precise and not well tested, seems suitable for pos ranges (-10k, +10k) with a step of 0.01 and gradient of 0.5
 // Returns a float value between -1.00 and +1.00 with a distribution that strongly tends towards the center (0.5)
-double FastSimplex(dvec3 pos) {
+double FastSimplex(const dvec3& pos) {
 	const double F3 = 0.33333333333333333;
 	const double G3 = 0.16666666666666667;
 
@@ -158,7 +158,7 @@ double FastSimplex(dvec3 pos) {
 
 
 
-double FastSimplexFractal(dvec3 pos, int octaves = 1, double lacunarity = 2.0, double gain = 0.5, std::function<double(double)> func = [](double x){return x;}) {
+double FastSimplexFractal(const dvec3& pos, int octaves = 1, double lacunarity = 2.0, double gain = 0.5, std::function<double(double)> func = [](double x){return x;}) {
 	double amplitude = 0.53333333333333333333333;
 	double frequency = 1.0;
 	double f = func(FastSimplex(pos * frequency));
@@ -169,11 +169,11 @@ double FastSimplexFractal(dvec3 pos, int octaves = 1, double lacunarity = 2.0, d
 	}
 	return f;
 }
-double FastSimplexFractal(dvec3 pos, int octaves, std::function<double(double)> func) {
+double FastSimplexFractal(const dvec3& pos, int octaves, std::function<double(double)> func) {
 	return FastSimplexFractal(pos, octaves, 2.0, 0.5, func);
 }
 
-dvec4 noised(dvec3 x) {
+dvec4 noised(const dvec3& x) {
 	dvec3 p = floor(x);
 	dvec3 w = fract(x);
 
@@ -204,45 +204,46 @@ dvec4 noised(dvec3 x) {
 								k3 + k6*u.x + k5*u.y + k7*u.x*u.y ) );
 }
 
-dvec4 fbm( dvec3 x, int octaves ) {
-	const dmat3 m3  = dmat3( 0.00,  0.80,  0.60,
-						-0.80,  0.36, -0.48,
-						-0.60, -0.48,  0.64 );
-	const dmat3 m3i = dmat3( 0.00, -0.80, -0.60,
-						0.80,  0.36, -0.48,
-						0.60, -0.48,  0.64 );
+// dvec4 fbm( dvec3 x, int octaves ) {
+// 	const dmat3 m3  = dmat3( 0.00,  0.80,  0.60,
+// 						-0.80,  0.36, -0.48,
+// 						-0.60, -0.48,  0.64 );
+// 	const dmat3 m3i = dmat3( 0.00, -0.80, -0.60,
+// 						0.80,  0.36, -0.48,
+// 						0.60, -0.48,  0.64 );
 						
-	double f = 1.98;  // could be 2.0
-	double s = 0.49;  // could be 0.5
-	double a = 0.0;
-	double b = 0.5;
-	dvec3  d = dvec3(0.0);
-	dmat3  m = dmat3(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0);
-	for( int i=0; i < octaves; i++ )
-	{
-		dvec4 n = noised(x);
-		a += b*n.x;          // accumulate values
-		d += b*m*dvec3(n.y,n.z,n.w);      // accumulate derivatives
-		b *= s;
-		x = f*m3*x;
-		m = f*m3i*m;
-	}
-	return dvec4( a, d );
-}
+// 	double f = 1.98;  // could be 2.0
+// 	double s = 0.49;  // could be 0.5
+// 	double a = 0.0;
+// 	double b = 0.5;
+// 	dvec3  d = dvec3(0.0);
+// 	dmat3  m = dmat3(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0);
+// 	for( int i=0; i < octaves; i++ )
+// 	{
+// 		dvec4 n = noised(x);
+// 		a += b*n.x;          // accumulate values
+// 		d += b*m*dvec3(n.y,n.z,n.w);      // accumulate derivatives
+// 		b *= s;
+// 		x = f*m3*x;
+// 		m = f*m3i*m;
+// 	}
+// 	return dvec4( a, d );
+// }
 
-double terrain( dvec3 p, int octaves) {
+double terrain( const dvec3& p, int octaves) {
 	const dmat3 m  = dmat3( 0.00,  0.80,  0.60,
 						-0.80,  0.36, -0.48,
 						-0.60, -0.48,  0.64 );
 	double a = 0.0;
 	double b = 1.0;
 	dvec3  d = dvec3(0.0);
+	dvec3 pp = p;
 	for( int i=0; i<octaves; i++ ) {
-		dvec4 n=noised(p);
+		dvec4 n=noised(pp);
 		d += dvec3(n.y,n.z,n.w);
 		a += b*n.x/(1.0+dot(d,d));
 		b *= 0.5;
-		p = m*p*2.0;
+		pp = m*pp*2.0;
 	}
 	return a;
 }

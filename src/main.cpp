@@ -177,8 +177,16 @@ void app::Run() {
 	if (app::isClient) {// client connects to server
 		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(app::networking::remoteHost, app::networking::serverPort);
 		std::shared_ptr<app::Client> client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
+		app::modules::InitClient(client);
+		client->SetAsync();
+		
+		// Force TCP for burst socket if host is localhost (SOLO or Testing) otherwise the UDP listener with conflict between client and server
+		if ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost") {
+			client->burstSocketType = v4d::io::TCP;
+		}
+		
+		// Connect to server
 		if (client->Connect(app::networking::remoteHost, app::networking::serverPort, 1/*ClientType*/)) {
-			app::modules::InitClient(client);
 			if (!app::networking::server) LOG_SUCCESS("Connected to remote server")
 			
 			// Game Loops
