@@ -76,12 +76,12 @@ namespace app::modules {
 			});
 		}
 	}
-	void InitServer(app::ServerPtr server) {
+	void InitServer(std::shared_ptr<app::Server> server) {
 		V4D_Server::ForEachSortedModule([server](auto* mod){
 			if (mod->Init) mod->Init(server, app::scene);
 		});
 	}
-	void InitClient(app::ClientPtr client) {
+	void InitClient(std::shared_ptr<app::Client> client) {
 		V4D_Client::ForEachSortedModule([client](auto* mod){
 			if (mod->Init) mod->Init(client, app::scene);
 		});

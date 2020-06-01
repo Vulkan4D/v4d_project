@@ -31,6 +31,4 @@ namespace app {
 		}
 		
 	};
-	
-	typedef std::shared_ptr<Server> ServerPtr;
 }

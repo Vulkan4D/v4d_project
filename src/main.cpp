@@ -19,13 +19,69 @@
 #include "SlowGameLoop.hpp"
 #include "RenderingLoop.hpp"
 
-app::ServerPtr server = nullptr;
-
-std::string remoteHost = "";
-int serverPort = 0;
-
-// Cryptography
-std::shared_ptr<v4d::crypto::RSA> serverRsaKey = nullptr;
+int main(const int argc, const char** argv) {
+	// handle command line arguments
+	if (argc > 1) for (int i = 1; i < argc; ++i) {
+		if (*argv[i] == '-') {
+			app::ARG arg = app::Arg(std::string(argv[i]+1));
+			auto nextArg = [&i, &argc, &argv](){
+				return ++i < argc? argv[i] : "";
+			};
+			switch (arg) {
+				case app::ARG::server: {
+					app::isServer = true;
+					app::hasGraphics = false;
+				break;}
+				case app::ARG::client: {
+					app::isClient = true;
+				break;}
+				case app::ARG::host: {
+					app::isServer = false;
+					app::isClient = true;
+					app::networking::remoteHost = nextArg();
+				break;}
+				case app::ARG::port: {
+					app::networking::serverPort = atoi(nextArg());
+				break;}
+				case app::ARG::invalid_arg:default:{
+					LOG_ERROR("Invalid option: " << std::string(argv[i]))
+				break;}
+			}
+		} else {
+			app::modulesList.push_back(argv[i]);
+		}
+	}
+	
+	// Load settings.ini
+	app::settings->Load();
+	
+	// Default networking settings
+	if (app::networking::remoteHost == "")
+		app::networking::remoteHost = APP_NETWORKING_DEFAULT_HOST;
+	if (app::networking::serverPort == 0)
+		app::networking::serverPort = app::settings->default_server_port > 0 ? 
+			app::settings->default_server_port : APP_NETWORKING_DEFAULT_PORT;
+	
+	// when no arguments defining server or client, use Solo mode
+	#ifdef APP_ENABLE_SOLO
+		if (!app::isClient && !app::isServer) {
+			app::isClient = true;
+			app::isServer = true;
+		}
+	#endif
+	
+	// Load serverRsaKey
+	#ifdef APP_NETWORKING_USE_RSA_KEY
+		serverRsaKey = app::crypto::LoadOrCreateServerPrivateKey();
+	#endif
+	
+	// Load V4D Core
+	if (!v4d::Init()) return -1;
+	
+	app::Start();
+	app::Run();
+	app::Stop();
+}
 
 void app::Start() {
 	// Bind Events
@@ -65,9 +121,9 @@ void app::Start() {
 	
 	// Server
 	if (app::isServer) {// server starts listening
-		server = std::make_shared<app::Server>(v4d::io::TCP, serverRsaKey.get());
-		app::modules::InitServer(server);
-		server->Start(serverPort);
+		app::networking::server = std::make_shared<app::Server>(v4d::io::TCP, app::networking::serverRsaKey.get());
+		app::modules::InitServer(app::networking::server);
+		app::networking::server->Start(app::networking::serverPort);
 		if (!app::isClient) LOG("Server has started listening")
 	}
 }
@@ -75,10 +131,10 @@ void app::Start() {
 void app::Stop() {
 	app::isRunning = false;
 	
-	if (server) {
-		server->Stop();
+	if (app::networking::server) {
+		app::networking::server->Stop();
 		if (!app::isClient) LOG("Server has stopped listening")
-		if (serverRsaKey) serverRsaKey.reset();
+		if (app::networking::serverRsaKey) app::networking::serverRsaKey.reset();
 	}
 	
 	// Unload Renderer
@@ -119,11 +175,11 @@ void app::Run() {
 	
 	// Client
 	if (app::isClient) {// client connects to server
-		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(remoteHost, serverPort);
-		app::ClientPtr client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
-		if (client->Connect(remoteHost, serverPort, 1/*ClientType*/)) {
+		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(app::networking::remoteHost, app::networking::serverPort);
+		std::shared_ptr<app::Client> client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
+		if (client->Connect(app::networking::remoteHost, app::networking::serverPort, 1/*ClientType*/)) {
 			app::modules::InitClient(client);
-			if (!server) LOG_SUCCESS("Connected to remote server")
+			if (!app::networking::server) LOG_SUCCESS("Connected to remote server")
 			
 			// Game Loops
 			if (app::renderer) {
@@ -136,19 +192,19 @@ void app::Run() {
 				// No graphics, still a client (compute cluster, admin console,...)
 				//...
 			}
-		} else if (server) {
+		} else if (app::networking::server) {
 			LOG_ERROR("Failed to connect to local server (SOLO MODE)")
 		} else {
-			LOG_ERROR("Failed to connect to remote server " << remoteHost << " on port " << serverPort)
+			LOG_ERROR("Failed to connect to remote server " << app::networking::remoteHost << " on port " << app::networking::serverPort)
 		}
 		
 		client->Disconnect();
 	}
 	
 	// Wait for Server to terminate
-	if (server) {
+	if (app::networking::server) {
 		if (app::isClient) {
-			server->Stop();
+			app::networking::server->Stop();
 		} else {
 			// Wait for server to finish listening
 			while (app::IsRunning()) {
@@ -157,63 +213,4 @@ void app::Run() {
 			}
 		}
 	}
-}
-
-int main(const int argc, const char** argv) {
-	// handle command line arguments
-	if (argc > 1) for (int i = 1; i < argc; ++i) {
-		if (*argv[i] == '-') {
-			app::ARG arg = app::Arg(std::string(argv[i]+1));
-			std::string nextValue = i+1<argc? argv[i+1] : "";
-			switch (arg) {
-				case app::ARG::server: {
-					app::isServer = true;
-					app::hasGraphics = false;
-				break;}
-				case app::ARG::client: {
-					app::isClient = true;
-				break;}
-				case app::ARG::host: {
-					app::isServer = false;
-					app::isClient = true;
-					remoteHost = nextValue;
-				break;}
-				case app::ARG::port: {
-					serverPort = atoi(nextValue.c_str());
-					++i;
-				break;}
-				case app::ARG::invalid_arg:default:{
-					LOG_ERROR("Invalid option: " << std::string(argv[i]))
-				break;}
-			}
-		} else {
-			app::modulesList.push_back(argv[i]);
-		}
-	}
-	
-	// Load settings.ini
-	app::settings->Load();
-	
-	if (remoteHost == "") remoteHost = "127.0.0.1";
-	if (serverPort == 0) serverPort = app::settings->default_server_port;
-	
-	// Solo when no arguments defining server or client
-	if (!app::isClient && !app::isServer) {
-		app::isClient = true;
-		app::isServer = true;
-		remoteHost = "127.0.0.1";
-		if (serverPort == 0) serverPort = APP_NETWORKING_DEFAULT_SOLO_PORT;
-	}
-	
-	// Load serverRsaKey
-	#ifdef APP_NETWORKING_USE_RSA_KEY
-		serverRsaKey = app::crypto::LoadOrCreateServerPrivateKey();
-	#endif
-	
-	// Load V4D Core
-	if (!v4d::Init()) return -1;
-	
-	app::Start();
-	app::Run();
-	app::Stop();
 }

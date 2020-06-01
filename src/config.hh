@@ -9,7 +9,9 @@
 	#define LOGGER_INSTANCE v4d::io::Logger::ConsoleInstance()
 
 // Networking
-	#define APP_NETWORKING_DEFAULT_SOLO_PORT 12345
+	#define APP_ENABLE_SOLO
+	#define APP_NETWORKING_DEFAULT_HOST "127.0.0.1"
+	#define APP_NETWORKING_DEFAULT_PORT 12345
 	// #define APP_NETWORKING_USE_RSA_KEY
 
 // Threads

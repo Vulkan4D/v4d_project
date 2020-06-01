@@ -24,6 +24,4 @@ namespace app {
 		}
 
 	};
-	
-	typedef std::shared_ptr<Client> ClientPtr;
 }
