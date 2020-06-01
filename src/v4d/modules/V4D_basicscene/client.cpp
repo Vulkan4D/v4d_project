@@ -12,11 +12,11 @@ V4D_MODULE_CLASS(V4D_Client) {
 		scene = _s;
 	}
 	
-	V4D_MODULE_FUNC(void, ReceiveAction, v4d::io::Socket& socket) {
+	V4D_MODULE_FUNC(void, ReceiveAction, v4d::io::SocketPtr socket) {
 		
 	}
 	
-	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::io::Socket& burstSocket) {
+	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::io::SocketPtr burstSocket) {
 		
 	}
 	

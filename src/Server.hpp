@@ -29,13 +29,13 @@ namespace app {
 			}
 		}
 
-		void HandleIncomingBurst(v4d::io::Socket& socket) {
-			BURST_ACTION action = socket.Read<BURST_ACTION>();
+		void HandleIncomingBurst(v4d::io::SocketPtr socket) {
+			BURST_ACTION action = socket->Read<BURST_ACTION>();
 			switch (action) {
 				case BURST_ACTION::QUIT:default:break;
 				
 				case BURST_ACTION::MODULE:{
-					v4d::modular::ModuleID moduleID(socket.Read<uint64_t>(), socket.Read<uint64_t>());
+					v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
 					auto module = V4D_Server::GetModule(moduleID.String());
 					if (module && module->ReceiveBurst) {
 						module->ReceiveBurst(socket);
@@ -45,13 +45,13 @@ namespace app {
 			}
 		}
 		
-		void HandleIncomingAction(v4d::io::Socket& socket) {
-			ACTION action = socket.Read<ACTION>();
+		void HandleIncomingAction(v4d::io::SocketPtr socket) {
+			ACTION action = socket->Read<ACTION>();
 			switch (action) {
 				case ACTION::QUIT:default:break;
 				
 				case ACTION::MODULE:{
-					v4d::modular::ModuleID moduleID(socket.Read<uint64_t>(), socket.Read<uint64_t>());
+					v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
 					auto module = V4D_Server::GetModule(moduleID.String());
 					if (module && module->ReceiveAction) {
 						module->ReceiveAction(socket);
@@ -73,7 +73,7 @@ namespace app {
 			burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP);
 			burstSocket->Bind(app::networking::serverPort);
 			burstSocket->StartListeningThread(10, [this](v4d::io::SocketPtr socket){
-				HandleIncomingBurst(*socket);
+				HandleIncomingBurst(socket);
 			});
 		}
 		
@@ -85,7 +85,7 @@ namespace app {
 					LOG_ERROR("Server ClientRUN Socket Poll error, disconnecting...")
 					break;
 				}
-				HandleIncomingAction(*socket);
+				HandleIncomingAction(socket);
 			}
 			socket->Disconnect();
 		}
