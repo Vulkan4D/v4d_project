@@ -100,7 +100,7 @@ namespace app {
 					
 					app::renderer->Update();
 				
-					if (settings->framerate_limit_rendering) LIMIT_FRAMERATE(settings->framerate_limit_rendering, app::primaryFrameTime)
+					if (settings->framerate_limit_rendering) LIMIT_FRAMERATE_FRAMETIME(settings->framerate_limit_rendering, app::primaryFrameTime)
 				}
 			}};
 			#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
@@ -114,7 +114,7 @@ namespace app {
 						
 						RunSecondaryRendering();
 						
-						if (settings->framerate_limit_ui) LIMIT_FRAMERATE(settings->framerate_limit_ui, app::secondaryFrameTime)
+						if (settings->framerate_limit_ui) LIMIT_FRAMERATE_FRAMETIME(settings->framerate_limit_ui, app::secondaryFrameTime)
 					}
 				}};
 			#endif

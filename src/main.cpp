@@ -124,13 +124,21 @@ void app::Start() {
 		app::networking::server = std::make_shared<app::Server>(v4d::io::TCP, app::networking::serverRsaKey.get());
 		app::modules::InitServer(app::networking::server);
 		app::networking::server->Start(app::networking::serverPort);
+		#ifdef APP_ENABLE_BURST_STREAMS
+			app::networking::burstServer = std::make_shared<app::BurstServer>(v4d::io::UDP, *app::networking::server);
+		#endif
 		if (!app::isClient) LOG("Server has started listening")
 	}
 }
 
 void app::Stop() {
 	app::isRunning = false;
-	
+
+	#ifdef APP_ENABLE_BURST_STREAMS
+		if (app::networking::burstServer) {
+			app::networking::burstServer->Stop();
+		}
+	#endif
 	if (app::networking::server) {
 		app::networking::server->Stop();
 		if (!app::isClient) LOG("Server has stopped listening")
@@ -178,16 +186,21 @@ void app::Run() {
 		v4d::crypto::RSA rsaPublicKey = app::crypto::GetServerPublicKey(app::networking::remoteHost, app::networking::serverPort);
 		std::shared_ptr<app::Client> client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
 		app::modules::InitClient(client);
-		client->SetAsync();
 		
-		// Force TCP for burst socket if host is localhost (SOLO or Testing) otherwise the UDP listener with conflict between client and server
-		if ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost") {
-			client->burstSocketType = v4d::io::TCP;
-		}
+		#ifdef APP_ENABLE_BURST_STREAMS
+			// Force TCP for burst client if host is localhost (SOLO or Testing) otherwise the UDP listener with conflict between client and server
+			bool useTcpBurstClient = ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost");
+		#endif
 		
 		// Connect to server
-		if (client->Connect(app::networking::remoteHost, app::networking::serverPort, 1/*ClientType*/)) {
+		if (client->ConnectRunAsync(app::networking::remoteHost, app::networking::serverPort, app::networking::CLIENT_TYPE::INITIAL)) {
 			if (!app::networking::server) LOG_SUCCESS("Connected to remote server")
+			
+			#ifdef APP_ENABLE_BURST_STREAMS
+				// Connect Burst socket
+				std::shared_ptr<app::BurstClient> burstClient = std::make_shared<app::BurstClient>(useTcpBurstClient? v4d::io::TCP : v4d::io::UDP , *client);
+				burstClient->Start(app::networking::CLIENT_TYPE::BURST);
+			#endif
 			
 			// Game Loops
 			if (app::renderer) {
@@ -200,6 +213,11 @@ void app::Run() {
 				// No graphics, still a client (compute cluster, admin console,...)
 				//...
 			}
+			
+			#ifdef APP_ENABLE_BURST_STREAMS
+				burstClient->Stop();
+			#endif
+		
 		} else if (app::networking::server) {
 			LOG_ERROR("Failed to connect to local server (SOLO MODE)")
 		} else {
@@ -211,9 +229,7 @@ void app::Run() {
 	
 	// Wait for Server to terminate
 	if (app::networking::server) {
-		if (app::isClient) {
-			app::networking::server->Stop();
-		} else {
+		if (!app::isClient) {
 			// Wait for server to finish listening
 			while (app::IsRunning()) {
 				//...

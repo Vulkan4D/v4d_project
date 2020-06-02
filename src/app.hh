@@ -43,10 +43,18 @@ namespace app {
 		t.Reset();\
 	}
 
-	#define LIMIT_FRAMERATE(targetFps, frameTimeRef) {\
+	#define LIMIT_FRAMERATE_FRAMETIME(targetFps, frameTimeRef) {\
 		static v4d::Timer t(true);\
 		double elapsedTime = t.GetElapsedSeconds();\
 		frameTimeRef = std::max(0.10001, elapsedTime * 1000.0);\
+		double timeToSleep = 1.0/targetFps - 1.0*elapsedTime;\
+		if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
+		t.Reset();\
+	}
+	
+	#define LIMIT_FRAMERATE(targetFps) {\
+		static v4d::Timer t(true);\
+		double elapsedTime = t.GetElapsedSeconds();\
 		double timeToSleep = 1.0/targetFps - 1.0*elapsedTime;\
 		if (timeToSleep > 0.001) SLEEP(1.0s * timeToSleep)\
 		t.Reset();\

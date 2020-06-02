@@ -30,7 +30,7 @@ namespace app {
 						});
 					}
 					
-					LIMIT_FRAMERATE(60, app::gameLoopFrameTime)
+					LIMIT_FRAMERATE_FRAMETIME(60, app::gameLoopFrameTime)
 				}
 			}};
 		}

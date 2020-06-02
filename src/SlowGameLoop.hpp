@@ -52,7 +52,7 @@ namespace app {
 						}
 					#endif
 					
-					LIMIT_FRAMERATE(4, app::slowLoopFrameTime)
+					LIMIT_FRAMERATE_FRAMETIME(4, app::slowLoopFrameTime)
 				}
 			}};
 		}

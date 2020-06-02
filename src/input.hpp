@@ -30,7 +30,7 @@ namespace app::input {
 				});
 			}
 			
-			LIMIT_FRAMERATE(100, app::inputFrameTime)
+			LIMIT_FRAMERATE_FRAMETIME(100, app::inputFrameTime)
 		}
 	}
 
