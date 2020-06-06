@@ -19,6 +19,7 @@ namespace app::modules {
 			}
 		}
 		for (auto module : app::modulesList) {
+			V4D_Objects::LoadModule(module);
 			V4D_Game::LoadModule(module);
 			V4D_Input::LoadModule(module);
 			V4D_Renderer::LoadModule(module);
@@ -30,6 +31,9 @@ namespace app::modules {
 			V4D_Renderer::LoadModule(APP_DEFAULT_RENDERER_MODULE);
 		}
 		// Sort Modules
+		V4D_Objects::SortModules([](auto* a, auto* b){
+			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
+		});
 		V4D_Game::SortModules([](auto* a, auto* b){
 			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 		});
@@ -50,6 +54,7 @@ namespace app::modules {
 		});
 	}
 	void Unload() {
+		V4D_Objects::UnloadModules();
 		V4D_Game::UnloadModules();
 		V4D_Input::UnloadModules();
 		V4D_Renderer::UnloadModules();
@@ -64,6 +69,9 @@ namespace app::modules {
 				if (mod->Init) mod->Init(app::renderer, app::scene);
 			});
 		}
+		V4D_Objects::ForEachSortedModule([](auto* mod){
+			if (mod->Init) mod->Init();
+		});
 		V4D_Game::ForEachSortedModule([](auto* mod){
 			if (mod->Init) mod->Init(app::scene);
 		});

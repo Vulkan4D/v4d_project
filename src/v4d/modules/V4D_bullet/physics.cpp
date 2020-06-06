@@ -12,8 +12,8 @@ btAlignedObjectArray<btTriangleMesh*> globalTriangleMeshes {};
 
 glm::dvec3 BulletToGlm(const btVector3& v) { return glm::dvec3(v.getX(), v.getY(), v.getZ()); }
 btVector3 GlmToBullet(const glm::dvec3& v) { return btVector3(v.x, v.y, v.z); }
-glm::quat BulletToGlm(const btQuaternion& q) { return glm::quat(q.getW(), q.getX(), q.getY(), q.getZ()); }
-btQuaternion GlmToBullet(const glm::quat& q) { return btQuaternion(q.x, q.y, q.z, q.w); }
+glm::dquat BulletToGlm(const btQuaternion& q) { return glm::dquat(q.getW(), q.getX(), q.getY(), q.getZ()); }
+btQuaternion GlmToBullet(const glm::dquat& q) { return btQuaternion(q.x, q.y, q.z, q.w); }
 btMatrix3x3 GlmToBullet(const glm::dmat3& m) { return btMatrix3x3(m[0][0], m[1][0], m[2][0], m[0][1], m[1][1], m[2][1], m[0][2], m[1][2], m[2][2]); }
 btTransform GlmToBullet(const glm::dmat4& m) {
     glm::dmat3 m3(m);

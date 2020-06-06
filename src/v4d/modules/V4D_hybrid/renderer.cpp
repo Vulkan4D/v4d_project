@@ -903,14 +903,14 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(glm::mat4(objectViewTransform * geometryInstance->transform));
 	}
 	
-	void AddRayTracingInstance(GeometryInstance* geometryInstance) {
+	void AddRayTracingInstance(ObjectInstancePtr obj, GeometryInstance* geometryInstance) {
 		std::lock_guard lock(rayTracingInstanceMutex);
 		if (geometryInstance->rayTracingInstanceIndex != -1) return;
 		if (!geometryInstance->geometry->blas || !geometryInstance->geometry->blas->handle) return;
 		int index = nbRayTracingInstances++;
 		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
-		rayTracingInstances[index].mask = geometryInstance->geometry->rayTracingMask;
+		rayTracingInstances[index].mask = (geometryInstance->geometry->rayTracingMask | obj->rayTracingMaskAdded) & ~obj->rayTracingMaskRemoved;
 		rayTracingInstances[index].shaderInstanceOffset = Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
 		rayTracingInstances[index].flags = geometryInstance->geometry->flags;
 		rayTracingInstances[index].transform = glm::mat3x4{0};
@@ -1538,7 +1538,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 								}
 								if (geom.geometry->blas && geom.geometry->blas->built) {
 									if (geom.rayTracingInstanceIndex == -1) {
-										AddRayTracingInstance(&geom);
+										AddRayTracingInstance(obj, &geom);
 									}
 									SetRayTracingInstanceTransform(&geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 								}

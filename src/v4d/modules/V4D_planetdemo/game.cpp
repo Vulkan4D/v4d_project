@@ -161,8 +161,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
 		V4D_Renderer::LoadModule(THIS_MODULE);
-		((PlayerView*)V4D_Input::LoadModule("V4D_sample")->ModuleGetCustomPtr(PLAYER))->camSpeed = 100000;
-		V4D_Game::LoadModule("V4D_sample");
+		((PlayerView*)V4D_Input::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(PLAYER))->camSpeed = 100000;
 	}
 	
 	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int what, void* ptr) {
