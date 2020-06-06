@@ -12,19 +12,19 @@ V4D_MODULE_CLASS(V4D_Server) {
 		scene = _s;
 	}
 	
-	V4D_MODULE_FUNC(void, SendActions, std::vector<v4d::data::Stream>& streams, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, SendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		
 	}
 	
-	V4D_MODULE_FUNC(void, SendBursts, std::vector<v4d::data::Stream>& streams, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, SendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		
 	}
 	
-	V4D_MODULE_FUNC(void, ReceiveAction, v4d::data::ReadOnlyStream& stream, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, ReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		
 	}
 	
-	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::data::ReadOnlyStream& burstStream, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		
 	}
 	
