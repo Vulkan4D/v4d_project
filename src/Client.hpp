@@ -5,6 +5,7 @@
 namespace app {
 	using namespace zapdata;
 	using namespace app::networking;
+	using namespace v4d::modular;
 	
 	class Client : public v4d::networking::OutgoingConnection {
 		std::thread* actionsThread = nullptr;
@@ -49,7 +50,9 @@ namespace app {
 					case BURST_ACTION::QUIT: return false;
 					
 					case BURST_ACTION::MODULE:{
-						v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
+						auto _vendor = socket->Read<typeof ModuleID::vendor>();
+						auto _module = socket->Read<typeof ModuleID::module>();
+						ModuleID moduleID(_vendor, _module);
 						auto module = V4D_Client::GetModule(moduleID.String());
 						DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
 						if (module && module->ReceiveBurst) {
@@ -79,7 +82,9 @@ namespace app {
 				case ACTION::QUIT: return false;
 				
 				case ACTION::MODULE:{
-					v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
+					auto _vendor = socket->Read<typeof ModuleID::vendor>();
+					auto _module = socket->Read<typeof ModuleID::module>();
+					ModuleID moduleID(_vendor, _module);
 					auto module = V4D_Client::GetModule(moduleID.String());
 					DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
 					if (module && module->ReceiveAction) {
@@ -106,7 +111,7 @@ namespace app {
 						if (mod->SendActions) {
 							
 							socket->Begin = [this, socket, mod](){
-								v4d::modular::ModuleID moduleID(mod->ModuleName());
+								ModuleID moduleID(mod->ModuleName());
 								// socket->LockWrite();
 								*socket << ACTION::MODULE;
 								*socket << moduleID.vendor << moduleID.module;
@@ -176,7 +181,7 @@ namespace app {
 						V4D_Client::ForEachSortedModule([this, clientType](auto* mod){
 							if (mod->SendBursts) {
 								socket->Begin = [this, clientType, mod](){
-									v4d::modular::ModuleID moduleID(mod->ModuleName());
+									ModuleID moduleID(mod->ModuleName());
 									// socket->LockWrite();
 									if (socket->IsUDP()) {
 										Connect("", 0, clientType);

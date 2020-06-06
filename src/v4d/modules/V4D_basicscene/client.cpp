@@ -19,7 +19,7 @@ std::queue<v4d::data::Stream> actionQueue {};
 
 V4D_MODULE_CLASS(V4D_Client) {
 	
-	void* ModuleGetCustomPtr(int) {
+	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
 		return &objects;
 	}
 	
@@ -67,7 +67,9 @@ V4D_MODULE_CLASS(V4D_Client) {
 		auto action = stream->Read<app::networking::Action>();
 		switch (action) {
 			case ADD_OBJECT:{
-				auto moduleID = ModuleID(stream->Read<typeof ModuleID::vendor>(), stream->Read<typeof ModuleID::module>());
+				auto _vendor = stream->Read<typeof ModuleID::vendor>();
+				auto _module = stream->Read<typeof ModuleID::module>();
+				ModuleID moduleID(_vendor, _module);
 				auto type = stream->Read<NetworkGameObject::Type>();
 				auto parent = stream->Read<NetworkGameObject::Parent>();
 				auto id = stream->Read<NetworkGameObject::Id>();

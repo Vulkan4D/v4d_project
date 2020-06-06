@@ -13,10 +13,11 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		V4D_Input::LoadModule(THIS_MODULE);
 		clientObjects = (ClientObjects*)V4D_Client::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(0);
-		// V4D_Input::LoadModule("V4D_sample");
-		// V4D_Game::LoadModule("V4D_sample");
+	}
+	
+	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
+		return &player;
 	}
 	
 	V4D_MODULE_FUNC(int, OrderIndex) {return -1000;}

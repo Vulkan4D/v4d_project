@@ -5,6 +5,7 @@
 namespace app {
 	using namespace zapdata;
 	using namespace app::networking;
+	using namespace v4d::modular;
 	
 	#ifdef APP_ENABLE_BURST_STREAMS
 		namespace BurstCache {
@@ -86,7 +87,9 @@ namespace app {
 					case BURST_ACTION::QUIT: return false;
 					
 					case BURST_ACTION::MODULE:{
-						v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
+						auto _vendor = socket->Read<typeof ModuleID::vendor>();
+						auto _module = socket->Read<typeof ModuleID::module>();
+						ModuleID moduleID(_vendor, _module);
 						auto module = V4D_Server::GetModule(moduleID.String());
 						DEBUG_ASSERT_ERROR(module, "Server::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
 						if (module && module->ReceiveBurst) {
@@ -116,7 +119,9 @@ namespace app {
 				case ACTION::QUIT: return false;
 				
 				case ACTION::MODULE:{
-					v4d::modular::ModuleID moduleID(socket->Read<uint64_t>(), socket->Read<uint64_t>());
+					auto _vendor = socket->Read<typeof ModuleID::vendor>();
+					auto _module = socket->Read<typeof ModuleID::module>();
+					ModuleID moduleID(_vendor, _module);
 					auto module = V4D_Server::GetModule(moduleID.String());
 					DEBUG_ASSERT_ERROR(module, "Server::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
 					if (module && module->ReceiveAction) {
@@ -154,10 +159,11 @@ namespace app {
 								V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
 									if (mod->SendActions) {
 										socket->Begin = [this, socket, mod](){
-											v4d::modular::ModuleID moduleID(mod->ModuleName());
+											ModuleID moduleID(mod->ModuleName());
 											// socket->LockWrite();
 											*socket << ACTION::MODULE;
-											*socket << moduleID.vendor << moduleID.module;
+											*socket << moduleID.vendor;
+											*socket << moduleID.module;
 											
 										};
 										socket->End = [this, socket, mod](){
@@ -194,10 +200,10 @@ namespace app {
 								while(socket->IsConnected()) {
 									v4d::io::SocketPtr currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
 									V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
-										v4d::modular::ModuleID moduleID(mod->ModuleName());
+										ModuleID moduleID(mod->ModuleName());
 										if (mod->SendBursts) {
 											currentBurstSocket->Begin = [this, currentBurstSocket, mod, client](){
-												v4d::modular::ModuleID moduleID(mod->ModuleName());
+												ModuleID moduleID(mod->ModuleName());
 												// currentBurstSocket->LockWrite();
 												if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
 													currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
@@ -206,7 +212,8 @@ namespace app {
 													*currentBurstSocket << ACTION::BURST;
 												}
 												*currentBurstSocket << BURST_ACTION::MODULE;
-												*currentBurstSocket << moduleID.vendor << moduleID.module;
+												*currentBurstSocket << moduleID.vendor;
+												*currentBurstSocket << moduleID.module;
 											};
 											currentBurstSocket->End = [this, currentBurstSocket, mod](){
 												DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
