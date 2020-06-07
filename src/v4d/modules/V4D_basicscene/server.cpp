@@ -22,6 +22,7 @@ NetworkGameObjectPtr AddNewObject(ModuleID moduleID, NetworkGameObject::Type typ
 	NetworkGameObjectPtr obj = std::make_shared<NetworkGameObject>(moduleID, type, parent);
 	objects[obj->id] = obj;
 	obj->active = true;
+	LOG_DEBUG("Server AddNewObject " << obj->id)
 	return obj;
 }
 
@@ -38,9 +39,9 @@ V4D_MODULE_CLASS(V4D_Server) {
 			->SetTransform({200,250,-30}, 120.0);
 		AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
 			->SetTransform({-200,250,-30}, -120.0);
-		for (int i = 0; i < 100; ++i)
-			AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-				->SetTransform({0,500,-30 + (i*90)}, 180.0);
+		// for (int i = 0; i < 100; ++i)
+		// 	AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
+		// 		->SetTransform({0,500,-30 + (i*90)}, 180.0);
 	}
 	
 	V4D_MODULE_FUNC(void, SlowGameLoop) {
@@ -68,6 +69,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 		obj->physicsControl = client->id;
 		obj->isDynamic = true;
 		players[client->id] = obj;
+		LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
 		v4d::data::Stream stream(sizeof(ASSIGN) + sizeof(obj->id));
 			stream << ASSIGN;
 			stream << obj->id;
@@ -75,7 +77,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 	}
 	
 	V4D_MODULE_FUNC(void, SendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		v4d::data::WriteOnlyStream tmpStream(512);
+		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_DATA_INITIAL_STREAM_SIZE);
 		{std::lock_guard lock(objectsMutex);
 			for (auto& [objID, obj] : objects) {
 				if (obj->active) {
@@ -83,12 +85,14 @@ V4D_MODULE_CLASS(V4D_Server) {
 					if (obj->iteration > clientIteration) {
 						stream->Begin();
 							if (clientIteration == 0) {
+								LOG_DEBUG("Server SendAction ADD_OBJECT for obj id " << obj->id << ", client " << client->id)
 								// Add
 								*stream << ADD_OBJECT;
 								*stream << obj->moduleID.vendor;
 								*stream << obj->moduleID.module;
 								*stream << obj->type;
 							} else {
+								LOG_DEBUG("Server SendAction UPDATE_OBJECT for obj id " << obj->id << ", client " << client->id)
 								// Update
 								*stream << UPDATE_OBJECT;
 							}
@@ -116,6 +120,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 					try {
 						uint32_t& clientIteration = obj->clientIterations.at(objID);
 						v4d::data::WriteOnlyStream removeStream(8);
+						LOG_DEBUG("Server SendAction REMOVE_OBJECT for obj id " << objID << ", client " << client->id)
 						removeStream << REMOVE_OBJECT;
 						removeStream << objID;
 						EnqueueAction(removeStream, client);
@@ -128,6 +133,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 		std::lock_guard lock(actionQueueMutex);
 		auto& actionQueue = actionQueuePerClient[client->id];
 		while (actionQueue.size()) {
+			LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
 			stream->Begin();
 				*stream << actionQueue.front();
 				actionQueue.pop();
@@ -136,11 +142,12 @@ V4D_MODULE_CLASS(V4D_Server) {
 	}
 	
 	V4D_MODULE_FUNC(void, SendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		v4d::data::WriteOnlyStream tmpStream(256);
+		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE);
 		std::lock_guard lock(objectsMutex);
 		for (auto& [objID, obj] : objects) {
 			if (obj->active && obj->isDynamic && obj->physicsClientID != client->id) {
 				if (obj->iteration == obj->clientIterations[client->id]) {
+					LOG("Server Sending Burst !!!!!!!!!!!!!!")
 					stream->Begin();
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
@@ -151,6 +158,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 						
 						tmpStream.ClearWriteBuffer();
 						if (mod && mod->SendStreamCustomTransformData) mod->SendStreamCustomTransformData(obj, tmpStream);
+						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Server::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
 						stream->WriteStream(tmpStream);
 						
 					stream->End();
@@ -203,7 +211,10 @@ V4D_MODULE_CLASS(V4D_Server) {
 					}
 				}
 			}break;
-			
+		
+			default: 
+				LOG_ERROR("Server ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
 		}
 	}
 	
@@ -231,6 +242,10 @@ V4D_MODULE_CLASS(V4D_Server) {
 					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
 				}
 			}break;
+			
+			default: 
+				LOG_ERROR("Server ReceiveBurst UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
 		}
 	}
 	

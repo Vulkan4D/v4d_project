@@ -44,7 +44,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 	}
 	
 	V4D_MODULE_FUNC(void, SendBursts, v4d::io::SocketPtr stream) {
-		v4d::data::WriteOnlyStream tmpStream(256);
+		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE);
 		std::lock_guard lock(objectsMutex);
 		for (auto&[objID, obj] : objects) {
 			if (obj->physicsControl) {
@@ -59,6 +59,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 					
 					tmpStream.ClearWriteBuffer();
 					if (mod && mod->SendStreamCustomTransformData) mod->SendStreamCustomTransformData(obj, tmpStream);
+					DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Client::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
 					stream->WriteStream(tmpStream);
 					
 				stream->End();
@@ -101,6 +102,8 @@ V4D_MODULE_CLASS(V4D_Client) {
 							obj->UpdateObjectInstance();
 							obj->UpdateObjectInstanceTransform();
 						}
+					} else {
+						LOG_ERROR("Client ReceiveAction ADD_OBJECT : module " << moduleID.String() << " is not loaded")
 					}
 					
 					objects[id] = obj;
@@ -119,6 +122,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto tmpStream2 = stream->ReadStream();
 				try {
 					std::lock_guard lock(objectsMutex);
+					LOG_DEBUG("Client ReceiveAction UPDATE_OBJECT for obj id " << id)
 					
 					auto obj = objects.at(id);
 					obj->parent = parent;
@@ -140,6 +144,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 			}break;
 			case REMOVE_OBJECT:{
 				auto id = stream->Read<NetworkGameObject::Id>();
+				LOG_DEBUG("Client ReceiveAction REMOVE_OBJECT for obj id " << id)
 				try {
 					std::lock_guard lock(objectsMutex);
 					
@@ -159,25 +164,29 @@ V4D_MODULE_CLASS(V4D_Client) {
 				}
 			}break;
 			case ASSIGN:{ // assign object to client for camera
-				auto objectID = stream->Read<NetworkGameObject::Id>();
+				auto id = stream->Read<NetworkGameObject::Id>();
+				LOG_DEBUG("Client ReceiveAction ASSIGN for obj id " << id)
 				try {
 					std::lock_guard lock(objectsMutex);
-					auto obj = objects.at(objectID);
+					auto obj = objects.at(id);
 					scene->cameraParent = obj->objectInstance;
 					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN : " << err.what())
 				}
 			}break;
+			default: 
+				LOG_ERROR("Client ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
 		}
 	}
 	
 	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::io::SocketPtr stream) {
 		auto action = stream->Read<app::networking::Action>();
 		switch (action) {
-			case SYNC_OBJECT_TRANSFORM:
-				auto id = stream->Read<uint32_t>();
-				auto iteration = stream->Read<uint32_t>();
+			case SYNC_OBJECT_TRANSFORM:{
+				auto id = stream->Read<NetworkGameObject::Id>();
+				auto iteration = stream->Read<NetworkGameObject::Iteration>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
 				auto tmpStream = stream->ReadStream();
 				try {
@@ -194,8 +203,12 @@ V4D_MODULE_CLASS(V4D_Client) {
 						obj->UpdateObjectInstanceTransform();
 					}
 				} catch(std::exception& err) {
-					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
+					LOG_ERROR("Client ReceiveBurst SYNC_OBJECT_TRANSFORM : " << err.what())
 				}
+			}break;
+			
+			default: 
+				LOG_ERROR("Client ReceiveBurst UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
 			break;
 		}
 	}

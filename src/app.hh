@@ -107,7 +107,7 @@ namespace app {
 					while (app::isRunning) {
 						{std::lock_guard lock(activeThreadsMutex);
 							for (auto&[name, time] : threadTickTimes) {
-								activeThreads[name] = (time > v4d::Timer::GetCurrentTimestamp() - threadMaxDeltas[name]);
+								if (time != 0) activeThreads[name] = (time > v4d::Timer::GetCurrentTimestamp() - threadMaxDeltas[name]);
 							}
 						}
 						SLEEP(100ms)
@@ -131,10 +131,15 @@ namespace app {
 			app::threads::threadTickTimes[_threadName] = v4d::Timer::GetCurrentTimestamp();\
 			app::threads::threadMaxDeltas[_threadName] = maxDeltaTime;\
 		}
-		#define THREAD_END {\
+		#define THREAD_END(keep) {\
 			std::lock_guard lock(app::threads::activeThreadsMutex);\
-			app::threads::activeThreads.erase(_threadName);\
-			app::threads::threadTickTimes.erase(_threadName);\
+			if (keep) {\
+				app::threads::activeThreads[_threadName] = false;\
+				app::threads::threadTickTimes[_threadName] = 0;\
+			} else {\
+				app::threads::activeThreads.erase(_threadName);\
+				app::threads::threadTickTimes.erase(_threadName);\
+			}\
 		}
 		#define THREAD_TICK {\
 			std::lock_guard lock(app::threads::activeThreadsMutex);\
@@ -142,7 +147,7 @@ namespace app {
 		}
 	#else
 		#define THREAD_BEGIN(threadName, maxDeltaTime)
-		#define THREAD_END
+		#define THREAD_END(keep)
 		#define THREAD_TICK
 	#endif
 

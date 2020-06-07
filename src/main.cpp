@@ -217,7 +217,7 @@ void app::Run() {
 				app::SlowGameLoop slowGameLoop(app::IsRunning, APP_CPU_AFFINITY_MAIN);
 				app::GameLoop gameLoop(app::IsRunning, APP_CPU_AFFINITY_GAME);
 				app::RenderingLoop renderingLoop(app::IsRunning, APP_CPU_AFFINITY_RENDER_PRIMARY, APP_CPU_AFFINITY_RENDER_SECONDARY);
-				app::input::UpdateLoop([](){return app::window->IsActive();});
+				app::input::UpdateLoop([](){return app::IsRunning() && app::window->IsActive();});
 				app::isRunning = false;
 			} else {
 				// No graphics, still a client (compute cluster, admin console,...)

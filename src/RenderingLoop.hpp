@@ -67,8 +67,10 @@ namespace app {
 							for (auto&[name, active] : activeThreads) {
 								if (active) {
 									ImGui::TextColored({0,1,0,1}, std::string(name + " : active").c_str());
+								} else if (threadTickTimes[name]) {
+									ImGui::TextColored({1,1,0,1}, std::string(name + " : frozen").c_str());
 								} else {
-									ImGui::TextColored({1,0,1,1}, std::string(name + " : frozen").c_str());
+									ImGui::TextColored({1,0,1,1}, std::string(name + " : ended").c_str());
 								}
 							}
 						}

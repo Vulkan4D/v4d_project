@@ -44,6 +44,7 @@ namespace app {
 			actionThreads.clear();
 			
 			#ifdef APP_ENABLE_BURST_STREAMS
+				std::lock_guard lock(BurstCache::burstMutex);
 				for (auto&[id, s] : BurstCache::burstSockets) {
 					s->Disconnect();
 				}
@@ -104,7 +105,10 @@ namespace app {
 						LOG("SERVER Received Client initial burst")
 					break;
 					
-					default:break;
+					default: 
+						LOG_ERROR("Server ReceiveBurst UNRECOGNIZED ACTION " << std::to_string((int)action))
+						return false;
+					break;
 				}
 				return true;
 			}
@@ -138,7 +142,10 @@ namespace app {
 					break;
 				#endif
 				
-				default: break;
+				default: 
+					LOG_ERROR("Server ReceiveAction UNRECOGNIZED ACTION " << std::to_string((int)action))
+					return false;
+				break;
 			}
 			return true;
 		}
@@ -147,9 +154,11 @@ namespace app {
 			if (clientType == CLIENT_TYPE::INITIAL) {
 				{std::lock_guard lock(clientsMutex);
 					#ifdef APP_ENABLE_BURST_STREAMS
-						BurstCache::burstClientSocketTypes[client->id] = v4d::io::TCP;
-						BurstCache::burstIncrementsFromServer[client->id] = 0;
-						BurstCache::burstSockets[client->id] = nullptr;
+						{std::lock_guard lock(BurstCache::burstMutex);
+							BurstCache::burstClientSocketTypes[client->id] = v4d::io::TCP;
+							BurstCache::burstIncrementsFromServer[client->id] = 0;
+							BurstCache::burstSockets[client->id] = nullptr;
+						}
 					#endif
 					
 					// Actions
@@ -157,110 +166,112 @@ namespace app {
 						actionThreads.at(client->id);
 					} catch(...) {
 						actionThreads[client->id] = std::thread([this, client, socket](){
-							THREAD_BEGIN("Server SendActions " + std::to_string(client->id), 1)
-							
-							while(socket->IsConnected()) {
-								THREAD_TICK
+							THREAD_BEGIN("Server SendActions " + std::to_string(client->id), 1) {
 								
-								V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
-									if (mod->SendActions) {
-										socket->Begin = [this, socket, mod](){
-											ModuleID moduleID(mod->ModuleName());
-											// socket->LockWrite();
-											*socket << ACTION::MODULE;
-											*socket << moduleID.vendor;
-											*socket << moduleID.module;
-											
-										};
-										socket->End = [this, socket, mod](){
-											DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Server::SendActions for module '" << mod->ModuleName() << "' stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
-											socket->Flush();
-											// socket->UnlockWrite();
-										};
-										mod->SendActions(socket, client);
-									}
-								});
+								while(socket->IsConnected()) {
+									THREAD_TICK
+									
+									V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
+										if (mod->SendActions) {
+											socket->Begin = [this, socket, mod](){
+												ModuleID moduleID(mod->ModuleName());
+												socket->LockWrite();
+												*socket << ACTION::MODULE;
+												*socket << moduleID.vendor;
+												*socket << moduleID.module;
+											};
+											socket->End = [this, socket, mod](){
+												DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Server::SendActions for module '" << mod->ModuleName() << "' stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
+												socket->Flush();
+												socket->UnlockWrite();
+											};
+											mod->SendActions(socket, client);
+										}
+									});
+									
+									LIMIT_FRAMERATE(APP_NETWORKING_MAX_ACTION_STREAMS_PER_SECOND)
+								}
 								
-								LIMIT_FRAMERATE(APP_NETWORKING_MAX_ACTION_STREAMS_PER_SECOND)
-							}
-							
-							THREAD_END
+							}THREAD_END(app::isClient)
 						});
 					}
 					
 					#ifdef APP_ENABLE_BURST_STREAMS
 						// Bursts
+						std::lock_guard lockBurst(BurstCache::burstMutex);
 						try {
 							BurstCache::burstThreads.at(client->id);
 						} catch(...) {
 							BurstCache::burstThreads[client->id] = std::thread([this, client, socket](){
-								THREAD_BEGIN("Server SendBursts " + std::to_string(client->id), 1)
-							
-								v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
-								burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
-								burstSocket->Connect();
-								BurstCache::burstSockets[client->id] = burstSocket;
-								if (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP) {
-									*burstSocket << BURST_ACTION::INIT;
-									burstSocket->Flush();
-								}
+								THREAD_BEGIN("Server SendBursts " + std::to_string(client->id), 1) {
 								
-								LOG_VERBOSE("Server SendBurstThread started")
-								while(socket->IsConnected()) {
-									THREAD_TICK
+									v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
+									burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
+									burstSocket->Connect();
 									
-									v4d::io::SocketPtr currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
-									V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
-										ModuleID moduleID(mod->ModuleName());
-										if (mod->SendBursts) {
-											currentBurstSocket->Begin = [this, currentBurstSocket, mod, client](){
-												ModuleID moduleID(mod->ModuleName());
-												// currentBurstSocket->LockWrite();
-												if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
-													currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
-													currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
-												} else {
-													*currentBurstSocket << ACTION::BURST;
-												}
-												*currentBurstSocket << BURST_ACTION::MODULE;
-												*currentBurstSocket << moduleID.vendor;
-												*currentBurstSocket << moduleID.module;
-											};
-											currentBurstSocket->End = [this, currentBurstSocket, mod](){
-												DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
-												currentBurstSocket->Flush();
-												// currentBurstSocket->UnlockWrite();
-											};
-											mod->SendBursts(currentBurstSocket, client);
+									{std::lock_guard lock(BurstCache::burstMutex);
+										BurstCache::burstSockets[client->id] = burstSocket;
+										if (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP) {
+											*burstSocket << BURST_ACTION::INIT;
+											burstSocket->Flush();
 										}
-									});
+									}
 									
-									LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
-								}
-								
-								THREAD_END
+									LOG_VERBOSE("Server SendBurstThread started")
+									while(socket->IsConnected()) {
+										THREAD_TICK
+										
+										v4d::io::SocketPtr currentBurstSocket;
+										{std::lock_guard lock(BurstCache::burstMutex);
+											currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
+										}
+										V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
+											ModuleID moduleID(mod->ModuleName());
+											if (mod->SendBursts) {
+												currentBurstSocket->Begin = [this, currentBurstSocket, mod, client](){
+													ModuleID moduleID(mod->ModuleName());
+													currentBurstSocket->LockWrite();
+													if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
+														currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
+														currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
+													} else {
+														*currentBurstSocket << ACTION::BURST;
+													}
+													*currentBurstSocket << BURST_ACTION::MODULE;
+													*currentBurstSocket << moduleID.vendor;
+													*currentBurstSocket << moduleID.module;
+												};
+												currentBurstSocket->End = [this, currentBurstSocket, mod](){
+													DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
+													currentBurstSocket->Flush();
+													currentBurstSocket->UnlockWrite();
+												};
+												mod->SendBursts(currentBurstSocket, client);
+											}
+										});
+										
+										LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
+									}
+									
+								}THREAD_END(app::isClient)
 							});
 						}
 					#endif
 				}
 				
-				THREAD_BEGIN("Server ReceiveActions " + std::to_string(client->id), 1)
-			
-				while (socket->IsConnected()) {
-					THREAD_TICK
-					
-					int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
-					if (polled == 0) continue; // timeout, keep going
-					if (polled == -1) { // error, stop here
-						LOG_ERROR("Server ClientRUN Socket Poll error, disconnecting...")
-						break;
-					}
-					if (!socket->IsConnected()) break;
-					if (!HandleIncomingAction(socket, client, clientType)) break;
-				}
-				socket->SetConnected(false);
+				THREAD_BEGIN("Server ReceiveActions " + std::to_string(client->id), 1) {
 				
-				THREAD_END
+					while (socket->IsConnected()) {
+						THREAD_TICK
+						
+						int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
+						if (polled == 0) continue; // timeout, no data yet, stay in the loop
+						if (polled == -1) break; // Disconnected (or error, either way we must disconnect)
+						if (!HandleIncomingAction(socket, client, clientType)) break;
+					}
+					socket->SetConnected(false);
+					
+				}THREAD_END(app::isClient)
 			}
 		}
 		
