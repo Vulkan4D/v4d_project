@@ -34,6 +34,18 @@ namespace app {
 						if (mod->SlowStepSimulation) mod->SlowStepSimulation(deltaTime);
 					});
 					
+					if (app::isServer) {
+						V4D_Server::ForEachSortedModule([](auto* mod){
+							if (mod->SlowGameLoop) mod->SlowGameLoop();
+						});
+					}
+					
+					if (app::isClient) {
+						V4D_Client::ForEachSortedModule([](auto* mod){
+							if (mod->SlowGameLoop) mod->SlowGameLoop();
+						});
+					}
+					
 					// Auto-reload modified shaders
 					#if defined(_DEBUG)
 						// Watch shader modifications to automatically reload the app::renderer

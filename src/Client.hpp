@@ -105,8 +105,11 @@ namespace app {
 		
 		virtual void Run(v4d::io::SocketPtr socket) override {
 			actionsThread = new std::thread([this, socket](){
-				LOG_VERBOSE("Client SendActionThread started")
-				while(socket->IsConnected()) {
+				THREAD_BEGIN("Client SendActions", 1)
+				
+				while (socket->IsConnected()) {
+					THREAD_TICK
+					
 					V4D_Client::ForEachSortedModule([this, socket](auto* mod){
 						if (mod->SendActions) {
 							
@@ -127,11 +130,15 @@ namespace app {
 					
 					LIMIT_FRAMERATE(APP_NETWORKING_MAX_ACTION_STREAMS_PER_SECOND)
 				}
-				LOG_VERBOSE("Client SendActionThread terminated")
+				
+				THREAD_END
 			});
 			
-			LOG_VERBOSE("Client Run started")
+			THREAD_BEGIN("Client ReceiveActions", 1)
+			
 			while (socket->IsConnected()) {
+				THREAD_TICK
+				
 				int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
 				if (polled == 0) continue; // timeout, keep going
 				if (polled == -1) { // error, stop here
@@ -142,7 +149,8 @@ namespace app {
 				if (!HandleIncomingAction(socket)) break;
 			}
 			socket->SetConnected(false);
-			LOG_VERBOSE("Client Run terminated")
+			
+			THREAD_END
 		}
 
 	};
@@ -170,7 +178,8 @@ namespace app {
 			void Start(byte clientType) {
 				ConnectRunAsync("", 0, clientType);
 				burstsThread = new std::thread([this, clientType](){
-					LOG_VERBOSE("Client SendBurstThread started")
+					THREAD_BEGIN("Client SendBursts", 1)
+					
 					if (socket->IsTCP()) {
 						*socket << ACTION::BURST;
 					}
@@ -178,6 +187,8 @@ namespace app {
 					socket->Flush();
 					
 					while(socket->IsConnected()) {
+						THREAD_TICK
+						
 						V4D_Client::ForEachSortedModule([this, clientType](auto* mod){
 							if (mod->SendBursts) {
 								socket->Begin = [this, clientType, mod](){
@@ -202,7 +213,8 @@ namespace app {
 						
 						LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
 					}
-					LOG_VERBOSE("Client SendBurstThread terminated")
+					
+					THREAD_END
 				});
 			}
 			
@@ -221,10 +233,13 @@ namespace app {
 			virtual void Authenticate(v4d::data::Stream* authStream) override {} // No authentication should be used for bursts
 			
 			virtual void Run(v4d::io::SocketPtr socket) override {
+				THREAD_BEGIN("Client ReceiveBursts", 1)
+				
 				static uint64_t serverIncrement = 0;
 				socket->Bind();
-				LOG_VERBOSE("BurstClient Run started")
 				while (socket->IsConnected()) {
+					THREAD_TICK
+					
 					int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
 					if (polled <= 0) continue; // timeout, keep going
 					if (!socket->IsConnected()) break;
@@ -239,7 +254,8 @@ namespace app {
 				}
 				socket->Unbind();
 				socket->SetConnected(false);
-				LOG_VERBOSE("BurstClient Run terminated")
+				
+				THREAD_END
 			}
 
 		};

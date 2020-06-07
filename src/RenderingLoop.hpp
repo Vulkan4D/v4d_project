@@ -57,6 +57,23 @@ namespace app {
 						ImGui::Text("Slow Loop thread : %.1f avg FPS (limited)", app::slowLoopAvgFrameRate);
 					#endif
 					ImGui::Checkbox("Show other UI windows", &showOtherUI);
+					
+					#ifdef _DEBUG
+						ImGui::Separator();
+						ImGui::Text("Thread Watcher");
+						{
+							using namespace app::threads;
+							std::lock_guard lock(activeThreadsMutex);
+							for (auto&[name, active] : activeThreads) {
+								if (active) {
+									ImGui::TextColored({0,1,0,1}, std::string(name + " : active").c_str());
+								} else {
+									ImGui::TextColored({1,0,1,1}, std::string(name + " : frozen").c_str());
+								}
+							}
+						}
+					#endif
+					
 					ImGui::End();
 					ImGui::SetNextWindowPos({425,0});
 			#endif

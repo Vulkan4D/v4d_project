@@ -93,4 +93,57 @@ namespace app {
 	void Run();
 	void Stop();
 
+	// Thread Watcher
+	#ifdef _DEBUG
+		namespace threads {
+			std::thread* threadWatcher = nullptr;
+			std::mutex activeThreadsMutex;
+			std::unordered_map<std::string, double> threadTickTimes {};
+			std::unordered_map<std::string, bool> activeThreads {};
+			std::unordered_map<std::string, double> threadMaxDeltas {};
+			
+			void StartThreadWatcher() {
+				threadWatcher = new std::thread([](){
+					while (app::isRunning) {
+						{std::lock_guard lock(activeThreadsMutex);
+							for (auto&[name, time] : threadTickTimes) {
+								activeThreads[name] = (time > v4d::Timer::GetCurrentTimestamp() - threadMaxDeltas[name]);
+							}
+						}
+						SLEEP(100ms)
+					}
+				});
+			}
+			
+			void EndThreadWatcher() {
+				std::lock_guard lock(activeThreadsMutex);
+				if (threadWatcher && threadWatcher->joinable()) {
+					threadWatcher->join();
+					delete threadWatcher;
+					threadWatcher = nullptr;
+				}
+			}
+		}
+		
+		#define THREAD_BEGIN(threadName, maxDeltaTime) std::string _threadName {threadName}; {\
+			std::lock_guard lock(app::threads::activeThreadsMutex);\
+			app::threads::activeThreads[_threadName] = true;\
+			app::threads::threadTickTimes[_threadName] = v4d::Timer::GetCurrentTimestamp();\
+			app::threads::threadMaxDeltas[_threadName] = maxDeltaTime;\
+		}
+		#define THREAD_END {\
+			std::lock_guard lock(app::threads::activeThreadsMutex);\
+			app::threads::activeThreads.erase(_threadName);\
+			app::threads::threadTickTimes.erase(_threadName);\
+		}
+		#define THREAD_TICK {\
+			std::lock_guard lock(app::threads::activeThreadsMutex);\
+			app::threads::threadTickTimes[_threadName] = v4d::Timer::GetCurrentTimestamp();\
+		}
+	#else
+		#define THREAD_BEGIN(threadName, maxDeltaTime)
+		#define THREAD_END
+		#define THREAD_TICK
+	#endif
+
 }

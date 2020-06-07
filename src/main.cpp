@@ -89,6 +89,11 @@ void app::Start() {
 	v4d::event::APP_KILLED << [](int){app::Stop();};
 	v4d::event::APP_ERROR << [](int){app::Stop();};
 	
+	// ThreadWatcher
+	#ifdef _DEBUG
+		app::threads::StartThreadWatcher();
+	#endif
+	
 	// Load Modules
 	app::modules::Load();
 
@@ -173,6 +178,11 @@ void app::Stop() {
 		app::vulkan::Unload();
 	}
 
+	// ThreadWatcher
+	#ifdef _DEBUG
+		app::threads::EndThreadWatcher();
+	#endif
+	
 	LOG("\nApplication terminated\n");
 }
 

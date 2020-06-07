@@ -11,10 +11,10 @@ using namespace v4d::modular;
 std::shared_ptr<OutgoingConnection> client = nullptr;
 Scene* scene = nullptr;
 
-std::mutex objectsMutex;
+std::recursive_mutex objectsMutex;
 ClientObjects objects {};
 
-std::mutex actionQueueMutex;
+std::recursive_mutex actionQueueMutex;
 std::queue<v4d::data::Stream> actionQueue {};
 
 V4D_MODULE_CLASS(V4D_Client) {
@@ -44,6 +44,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 	}
 	
 	V4D_MODULE_FUNC(void, SendBursts, v4d::io::SocketPtr stream) {
+		v4d::data::WriteOnlyStream tmpStream(256);
 		std::lock_guard lock(objectsMutex);
 		for (auto&[objID, obj] : objects) {
 			if (obj->physicsControl) {
@@ -55,9 +56,11 @@ V4D_MODULE_CLASS(V4D_Client) {
 					*stream << obj->GetNetworkTransform();
 					
 					auto mod = V4D_Objects::GetModule(obj->moduleID.String());
-					if (mod && mod->SendStreamCustomTransformData) {
-						mod->SendStreamCustomTransformData(obj, stream);
-					}
+					
+					tmpStream.ClearWriteBuffer();
+					if (mod && mod->SendStreamCustomTransformData) mod->SendStreamCustomTransformData(obj, tmpStream);
+					stream->WriteStream(tmpStream);
+					
 				stream->End();
 			}
 		}
@@ -77,8 +80,11 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto tmpStream1 = stream->ReadStream();
+				auto tmpStream2 = stream->ReadStream();
 				if (moduleID.IsValid()) {
 					std::lock_guard lock(objectsMutex);
+					LOG_DEBUG("Client ReceiveAction ADD_OBJECT for obj id " << id)
 					
 					auto obj = std::make_shared<NetworkGameObject>(moduleID, type, parent, id);
 					obj->physicsControl = physicsControl;
@@ -87,16 +93,14 @@ V4D_MODULE_CLASS(V4D_Client) {
 					obj->SetTransformFromNetwork(transform);
 					
 					auto* mod = V4D_Objects::GetModule(moduleID.String());
-					if (mod && mod->ReceiveStreamCustomObjectData) {
-						mod->ReceiveStreamCustomObjectData(obj, stream);
-					}
-					if (mod && mod->ReceiveStreamCustomTransformData) {
-						mod->ReceiveStreamCustomTransformData(obj, stream);
-					}
-					if (mod && mod->BuildObject) {
-						mod->BuildObject(obj, scene);
-						obj->UpdateObjectInstance();
-						obj->UpdateObjectInstanceTransform();
+					if (mod) {
+						if (mod->ReceiveStreamCustomObjectData) mod->ReceiveStreamCustomObjectData(obj, tmpStream1);
+						if (mod->ReceiveStreamCustomTransformData) mod->ReceiveStreamCustomTransformData(obj, tmpStream2);
+						if (mod->BuildObject) {
+							mod->BuildObject(obj, scene);
+							obj->UpdateObjectInstance();
+							obj->UpdateObjectInstanceTransform();
+						}
 					}
 					
 					objects[id] = obj;
@@ -111,6 +115,8 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto tmpStream1 = stream->ReadStream();
+				auto tmpStream2 = stream->ReadStream();
 				try {
 					std::lock_guard lock(objectsMutex);
 					
@@ -122,21 +128,35 @@ V4D_MODULE_CLASS(V4D_Client) {
 					obj->SetTransformFromNetwork(transform);
 					
 					auto* mod = V4D_Objects::GetModule(obj->moduleID.String());
-					if (mod && mod->ReceiveStreamCustomObjectData) {
-						mod->ReceiveStreamCustomObjectData(obj, stream);
+					if (mod) {
+						if (mod->ReceiveStreamCustomObjectData) mod->ReceiveStreamCustomObjectData(obj, tmpStream1);
+						if (mod->ReceiveStreamCustomTransformData) mod->ReceiveStreamCustomTransformData(obj, tmpStream2);
 					}
-					if (mod && mod->ReceiveStreamCustomTransformData) {
-						mod->ReceiveStreamCustomTransformData(obj, stream);
-					}
-					
 					obj->UpdateObjectInstance();
 					obj->UpdateObjectInstanceTransform();
-				} catch(...) {
-					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT")
+				} catch(std::exception& err) {
+					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
 				}
 			}break;
 			case REMOVE_OBJECT:{
-				//TODO
+				auto id = stream->Read<NetworkGameObject::Id>();
+				try {
+					std::lock_guard lock(objectsMutex);
+					
+					auto obj = objects.at(id);
+					
+					auto* mod = V4D_Objects::GetModule(obj->moduleID.String());
+					if (mod) {
+						if (mod->DestroyObject) mod->DestroyObject(obj, scene);
+					}
+					
+					obj->RemoveObjectInstance(scene);
+					
+					objects.erase(obj->id);
+					
+				} catch(std::exception& err) {
+					LOG_ERROR("Client ReceiveAction REMOVE_OBJECT : " << err.what())
+				}
 			}break;
 			case ASSIGN:{ // assign object to client for camera
 				auto objectID = stream->Read<NetworkGameObject::Id>();
@@ -145,8 +165,8 @@ V4D_MODULE_CLASS(V4D_Client) {
 					auto obj = objects.at(objectID);
 					scene->cameraParent = obj->objectInstance;
 					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
-				} catch (...) {
-					LOG_ERROR("Client ReceiveAction ASSIGN")
+				} catch (std::exception& err) {
+					LOG_ERROR("Client ReceiveAction ASSIGN : " << err.what())
 				}
 			}break;
 		}
@@ -159,22 +179,22 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto id = stream->Read<uint32_t>();
 				auto iteration = stream->Read<uint32_t>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto tmpStream = stream->ReadStream();
 				try {
 					std::lock_guard lock(objectsMutex);
+					LOG_DEBUG("Client ReceiveBurst for obj id " << id)
 					auto obj = objects.at(id);
 					if (obj->iteration == iteration) {
 						obj->SetTransformFromNetwork(transform);
 						
-						//TODO fix this... will crash when (obj->iteration != iteration)
 						auto* mod = V4D_Objects::GetModule(obj->moduleID.String());
-						if (mod && mod->ReceiveStreamCustomTransformData) {
-							mod->ReceiveStreamCustomTransformData(obj, stream);
+						if (mod) {
+							if (mod->ReceiveStreamCustomTransformData) mod->ReceiveStreamCustomTransformData(obj, tmpStream);
 						}
-						
 						obj->UpdateObjectInstanceTransform();
 					}
-				} catch(...) {
-					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT")
+				} catch(std::exception& err) {
+					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
 				}
 			break;
 		}

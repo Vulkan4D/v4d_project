@@ -10,26 +10,29 @@ namespace app {
 	#ifdef APP_ENABLE_BURST_STREAMS
 		namespace BurstCache {
 			std::mutex burstMutex;
-			std::unordered_map<ulong, v4d::io::SOCKET_TYPE> burstClientSocketTypes {};
-			std::unordered_map<ulong, uint64_t> burstIncrementsFromServer {};
-			std::unordered_map<ulong, v4d::io::SocketPtr> burstSockets {};
-			std::unordered_map<ulong, std::thread> burstThreads {};
+			std::unordered_map<uint64_t /* clientID */, v4d::io::SOCKET_TYPE> burstClientSocketTypes {};
+			std::unordered_map<uint64_t /* clientID */, uint64_t> burstIncrementsFromServer {};
+			std::unordered_map<uint64_t /* clientID */, v4d::io::SocketPtr> burstSockets {};
+			std::unordered_map<uint64_t /* clientID */, std::thread> burstThreads {};
 		};
 	#endif
 	
 	// This must only be instanciated ONCE, Otherwise we need to fix the clearing of BurstCache in the Stop() method.
 	class Server : public v4d::networking::ListeningServer {
-		std::atomic<ulong> nextClientId = 1;
+		std::atomic<uint64_t> nextClientId = 1;
 		
 		std::mutex clientsMutex;
-		std::unordered_map<ulong, std::thread> actionThreads {};
-
+		std::unordered_map<uint64_t /* clientID */, std::thread> actionThreads {};
 	public:
 		using ListeningServer::ListeningServer;
 		
 		virtual ~Server() {
 			Stop();
 			LOG_VERBOSE("~Server")
+		}
+		
+		virtual void Start(uint16_t port) override {
+			ListeningServer::Start(port);
 		}
 		
 		virtual void Stop() {
@@ -154,8 +157,11 @@ namespace app {
 						actionThreads.at(client->id);
 					} catch(...) {
 						actionThreads[client->id] = std::thread([this, client, socket](){
-							LOG_VERBOSE("Server SendActionThread started")
+							THREAD_BEGIN("Server SendActions " + std::to_string(client->id), 1)
+							
 							while(socket->IsConnected()) {
+								THREAD_TICK
+								
 								V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
 									if (mod->SendActions) {
 										socket->Begin = [this, socket, mod](){
@@ -177,7 +183,8 @@ namespace app {
 								
 								LIMIT_FRAMERATE(APP_NETWORKING_MAX_ACTION_STREAMS_PER_SECOND)
 							}
-							LOG_VERBOSE("Server SendActionThread terminated")
+							
+							THREAD_END
 						});
 					}
 					
@@ -187,6 +194,8 @@ namespace app {
 							BurstCache::burstThreads.at(client->id);
 						} catch(...) {
 							BurstCache::burstThreads[client->id] = std::thread([this, client, socket](){
+								THREAD_BEGIN("Server SendBursts " + std::to_string(client->id), 1)
+							
 								v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
 								burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
 								burstSocket->Connect();
@@ -198,6 +207,8 @@ namespace app {
 								
 								LOG_VERBOSE("Server SendBurstThread started")
 								while(socket->IsConnected()) {
+									THREAD_TICK
+									
 									v4d::io::SocketPtr currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
 									V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
 										ModuleID moduleID(mod->ModuleName());
@@ -226,14 +237,18 @@ namespace app {
 									
 									LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
 								}
-								LOG_VERBOSE("Server SendBurstThread terminated")
+								
+								THREAD_END
 							});
 						}
 					#endif
 				}
 				
-				LOG_VERBOSE("Server RunClient started")
+				THREAD_BEGIN("Server ReceiveActions " + std::to_string(client->id), 1)
+			
 				while (socket->IsConnected()) {
+					THREAD_TICK
+					
 					int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
 					if (polled == 0) continue; // timeout, keep going
 					if (polled == -1) { // error, stop here
@@ -244,7 +259,8 @@ namespace app {
 					if (!HandleIncomingAction(socket, client, clientType)) break;
 				}
 				socket->SetConnected(false);
-				LOG_VERBOSE("Server RunClient terminated")
+				
+				THREAD_END
 			}
 		}
 		
