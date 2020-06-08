@@ -36,10 +36,11 @@ V4D_MODULE_CLASS(V4D_Client) {
 	V4D_MODULE_FUNC(void, SendActions, v4d::io::SocketPtr stream) {
 		std::lock_guard lock(actionQueueMutex);
 		while (actionQueue.size()) {
+			// LOG_DEBUG("Client SendActionFromQueue")
 			stream->Begin();
-				*stream << actionQueue.front();
-				actionQueue.pop();
+				stream->EmplaceStream(actionQueue.front());
 			stream->End();
+			actionQueue.pop();
 		}
 	}
 	
@@ -85,7 +86,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto tmpStream2 = stream->ReadStream();
 				if (moduleID.IsValid()) {
 					std::lock_guard lock(objectsMutex);
-					LOG_DEBUG("Client ReceiveAction ADD_OBJECT for obj id " << id)
+					// LOG_DEBUG("Client ReceiveAction ADD_OBJECT for obj id " << id)
 					
 					auto obj = std::make_shared<NetworkGameObject>(moduleID, type, parent, id);
 					obj->physicsControl = physicsControl;
@@ -165,7 +166,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 			}break;
 			case ASSIGN:{ // assign object to client for camera
 				auto id = stream->Read<NetworkGameObject::Id>();
-				LOG_DEBUG("Client ReceiveAction ASSIGN for obj id " << id)
+				// LOG_DEBUG("Client ReceiveAction ASSIGN for obj id " << id)
 				try {
 					std::lock_guard lock(objectsMutex);
 					auto obj = objects.at(id);

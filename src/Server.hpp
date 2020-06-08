@@ -152,6 +152,14 @@ namespace app {
 		
 		virtual void RunClient(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) override {
 			if (clientType == CLIENT_TYPE::INITIAL) {
+				
+				// IncomingClient
+				V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
+					if (mod->IncomingClient) {
+						mod->IncomingClient(client);
+					}
+				});
+				
 				{std::lock_guard lock(clientsMutex);
 					#ifdef APP_ENABLE_BURST_STREAMS
 						{std::lock_guard lock(BurstCache::burstMutex);
@@ -173,9 +181,9 @@ namespace app {
 									
 									V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
 										if (mod->SendActions) {
+											socket->LockWrite();
 											socket->Begin = [this, socket, mod](){
 												ModuleID moduleID(mod->ModuleName());
-												socket->LockWrite();
 												*socket << ACTION::MODULE;
 												*socket << moduleID.vendor;
 												*socket << moduleID.module;
@@ -183,9 +191,9 @@ namespace app {
 											socket->End = [this, socket, mod](){
 												DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Server::SendActions for module '" << mod->ModuleName() << "' stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
 												socket->Flush();
-												socket->UnlockWrite();
 											};
 											mod->SendActions(socket, client);
+											socket->UnlockWrite();
 										}
 									});
 									
@@ -228,9 +236,9 @@ namespace app {
 										V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
 											ModuleID moduleID(mod->ModuleName());
 											if (mod->SendBursts) {
+												currentBurstSocket->LockWrite();
 												currentBurstSocket->Begin = [this, currentBurstSocket, mod, client](){
 													ModuleID moduleID(mod->ModuleName());
-													currentBurstSocket->LockWrite();
 													if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
 														currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
 														currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
@@ -244,9 +252,9 @@ namespace app {
 												currentBurstSocket->End = [this, currentBurstSocket, mod](){
 													DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
 													currentBurstSocket->Flush();
-													currentBurstSocket->UnlockWrite();
 												};
 												mod->SendBursts(currentBurstSocket, client);
+												currentBurstSocket->UnlockWrite();
 											}
 										});
 										

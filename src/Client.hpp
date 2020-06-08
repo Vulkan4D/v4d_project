@@ -97,7 +97,7 @@ namespace app {
 				
 				#ifdef APP_ENABLE_BURST_STREAMS
 					case ACTION::BURST:
-						LOG("Client incoming burst....")
+						LOG("Client incoming burst from socket " << socket->GetFd())
 						HandleIncomingBurst(socket);
 					break;
 				#endif
@@ -119,19 +119,18 @@ namespace app {
 						
 						V4D_Client::ForEachSortedModule([this, socket](auto* mod){
 							if (mod->SendActions) {
-								
+								socket->LockWrite();
 								socket->Begin = [this, socket, mod](){
 									ModuleID moduleID(mod->ModuleName());
-									socket->LockWrite();
 									*socket << ACTION::MODULE;
 									*socket << moduleID.vendor << moduleID.module;
 								};
 								socket->End = [this, socket, mod](){
 									DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Client::SendActions for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
 									socket->Flush();
-									socket->UnlockWrite();
 								};
 								mod->SendActions(socket);
+								socket->UnlockWrite();
 							}
 						});
 						
@@ -200,9 +199,9 @@ namespace app {
 							
 							V4D_Client::ForEachSortedModule([this, clientType](auto* mod){
 								if (mod->SendBursts) {
+									socket->LockWrite();
 									socket->Begin = [this, clientType, mod](){
 										ModuleID moduleID(mod->ModuleName());
-										socket->LockWrite();
 										if (socket->IsUDP()) {
 											Connect("", 0, clientType);
 										} else {
@@ -214,9 +213,9 @@ namespace app {
 									socket->End = [this, mod](){
 										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Client::SendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
 										socket->Flush();
-										socket->UnlockWrite();
 									};
 									mod->SendBursts(socket);
+									socket->UnlockWrite();
 								}
 							});
 							

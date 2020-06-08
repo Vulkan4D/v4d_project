@@ -22,7 +22,7 @@ NetworkGameObjectPtr AddNewObject(ModuleID moduleID, NetworkGameObject::Type typ
 	NetworkGameObjectPtr obj = std::make_shared<NetworkGameObject>(moduleID, type, parent);
 	objects[obj->id] = obj;
 	obj->active = true;
-	LOG_DEBUG("Server AddNewObject " << obj->id)
+	// LOG_DEBUG("Server AddNewObject " << obj->id)
 	return obj;
 }
 
@@ -39,9 +39,9 @@ V4D_MODULE_CLASS(V4D_Server) {
 			->SetTransform({200,250,-30}, 120.0);
 		AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
 			->SetTransform({-200,250,-30}, -120.0);
-		// for (int i = 0; i < 100; ++i)
-		// 	AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-		// 		->SetTransform({0,500,-30 + (i*90)}, 180.0);
+		for (int i = 0; i < 100; ++i)
+			AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
+				->SetTransform({0,500,-30 + (i*90)}, 180.0);
 	}
 	
 	V4D_MODULE_FUNC(void, SlowGameLoop) {
@@ -64,12 +64,13 @@ V4D_MODULE_CLASS(V4D_Server) {
 	}
 	
 	V4D_MODULE_FUNC(void, IncomingClient, IncomingClientPtr client) {
+		LOG("Server: IncomingClient " << client->id)
 		std::lock_guard lock(objectsMutex);
 		auto obj = AddNewObject(THIS_MODULE, OBJECT_TYPE::Player);
-		obj->physicsControl = client->id;
+		obj->physicsClientID = client->id;
 		obj->isDynamic = true;
 		players[client->id] = obj;
-		LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
+		// LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
 		v4d::data::Stream stream(sizeof(ASSIGN) + sizeof(obj->id));
 			stream << ASSIGN;
 			stream << obj->id;
@@ -85,7 +86,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 					if (obj->iteration > clientIteration) {
 						stream->Begin();
 							if (clientIteration == 0) {
-								LOG_DEBUG("Server SendAction ADD_OBJECT for obj id " << obj->id << ", client " << client->id)
+								// LOG_DEBUG("Server SendAction ADD_OBJECT for obj id " << obj->id << ", client " << client->id)
 								// Add
 								*stream << ADD_OBJECT;
 								*stream << obj->moduleID.vendor;
@@ -120,9 +121,9 @@ V4D_MODULE_CLASS(V4D_Server) {
 					try {
 						uint32_t& clientIteration = obj->clientIterations.at(objID);
 						v4d::data::WriteOnlyStream removeStream(8);
-						LOG_DEBUG("Server SendAction REMOVE_OBJECT for obj id " << objID << ", client " << client->id)
-						removeStream << REMOVE_OBJECT;
-						removeStream << objID;
+							LOG_DEBUG("Server SendAction REMOVE_OBJECT for obj id " << objID << ", client " << client->id)
+							removeStream << REMOVE_OBJECT;
+							removeStream << objID;
 						EnqueueAction(removeStream, client);
 						obj->clientIterations.erase(objID);
 					} catch(...) {}
@@ -133,11 +134,11 @@ V4D_MODULE_CLASS(V4D_Server) {
 		std::lock_guard lock(actionQueueMutex);
 		auto& actionQueue = actionQueuePerClient[client->id];
 		while (actionQueue.size()) {
-			LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
+			// LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
 			stream->Begin();
-				*stream << actionQueue.front();
-				actionQueue.pop();
+				stream->EmplaceStream(actionQueue.front());
 			stream->End();
+			actionQueue.pop();
 		}
 	}
 	
