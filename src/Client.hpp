@@ -34,7 +34,7 @@ namespace app {
 		}
 
 		virtual void Authenticate(v4d::data::Stream* authStream) override {
-			// *authStream << zapdata::Auth{"bob", "12345", {4,16,512}};
+			*authStream << std::string("Bob");
 		}
 		
 		#ifdef APP_ENABLE_BURST_STREAMS

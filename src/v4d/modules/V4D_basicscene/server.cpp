@@ -119,14 +119,13 @@ V4D_MODULE_CLASS(V4D_Server) {
 					}
 				} else /* obj is not active */ {
 					try {
-						uint32_t& clientIteration = obj->clientIterations.at(objID);
+						uint32_t& clientIteration = obj->clientIterations.at(client->id);
 						v4d::data::WriteOnlyStream removeStream(8);
-							LOG_DEBUG("Server SendAction REMOVE_OBJECT for obj id " << objID << ", client " << client->id)
 							removeStream << REMOVE_OBJECT;
 							removeStream << objID;
 						EnqueueAction(removeStream, client);
-						obj->clientIterations.erase(objID);
-					} catch(...) {}
+						obj->clientIterations.erase(client->id);
+					} catch(...) {}// NO ERROR HERE
 				}
 			}
 		}
@@ -148,7 +147,6 @@ V4D_MODULE_CLASS(V4D_Server) {
 		for (auto& [objID, obj] : objects) {
 			if (obj->active && obj->isDynamic && obj->physicsClientID != client->id) {
 				if (obj->iteration == obj->clientIterations[client->id]) {
-					LOG("Server Sending Burst !!!!!!!!!!!!!!")
 					stream->Begin();
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
@@ -177,31 +175,34 @@ V4D_MODULE_CLASS(V4D_Server) {
 				NetworkGameObjectPtr player = players.at(client->id);
 				
 				if (key == "ball") {
+					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(objectsMutex);
 					// Launch ball
 					auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Ball);
-					ball->SetTransform(player->GetWorldPosition() + player->GetLookDirection() * 5.0);
-					ball->velocity = player->GetLookDirection()*40.0;
+					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
 				else if (key == "balls") {
 					std::lock_guard lock(objectsMutex);
+					auto dir = stream->Read<DVector3>();
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Ball);
-						ball->SetTransform(player->GetWorldPosition() + player->GetLookDirection() * 5.0);
-						ball->velocity = player->GetLookDirection()*100.0;
+						ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+						ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*100.0;
 						ball->isDynamic = true;
 						ball->physicsClientID = client->id;
 					}
 				}
 				else if (key == "light") {
+					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(objectsMutex);
 					// Launch light
 					auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Light);
-					ball->SetTransform(player->GetWorldPosition() + player->GetLookDirection() * 5.0);
-					ball->velocity = player->GetLookDirection()*40.0;
+					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}

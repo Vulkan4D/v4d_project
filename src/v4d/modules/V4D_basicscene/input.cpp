@@ -95,25 +95,28 @@ V4D_MODULE_CLASS(V4D_Input) {
 				
 				// Throw stuff
 				case GLFW_KEY_B:{
-					v4d::data::Stream stream(8);
+					v4d::data::WriteOnlyStream stream(32);
 						stream << app::networking::action::CUSTOM;
 						stream << std::string("ball");
+						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
 					clientModule->EnqueueAction(stream);
 				}break;
 				case GLFW_KEY_N:{
-					v4d::data::Stream stream(8);
+					v4d::data::WriteOnlyStream stream(32);
 						stream << app::networking::action::CUSTOM;
 						stream << std::string("balls");
+						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
 					clientModule->EnqueueAction(stream);
 				}break;
 				case GLFW_KEY_L:{
-					v4d::data::Stream stream(8);
+					v4d::data::WriteOnlyStream stream(32);
 						stream << app::networking::action::CUSTOM;
 						stream << std::string("light");
+						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
 					clientModule->EnqueueAction(stream);
 				}break;
 				case GLFW_KEY_C:{
-					v4d::data::Stream stream(8);
+					v4d::data::WriteOnlyStream stream(8);
 						stream << app::networking::action::CUSTOM;
 						stream << std::string("clear");
 					clientModule->EnqueueAction(stream);

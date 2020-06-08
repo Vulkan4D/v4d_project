@@ -145,7 +145,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 			}break;
 			case REMOVE_OBJECT:{
 				auto id = stream->Read<NetworkGameObject::Id>();
-				LOG_DEBUG("Client ReceiveAction REMOVE_OBJECT for obj id " << id)
+				// LOG_DEBUG("Client ReceiveAction REMOVE_OBJECT for obj id " << id)
 				try {
 					std::lock_guard lock(objectsMutex);
 					
