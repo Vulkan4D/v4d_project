@@ -186,7 +186,7 @@ namespace app {
 			void Start(byte clientType) {
 				ConnectRunAsync("", 0, clientType);
 				burstsThread = new std::thread([this, clientType](){
-					THREAD_BEGIN("Client SendBursts", 1) {
+					THREAD_BEGIN(std::string("Client SendBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
 						
 						if (socket->IsTCP()) {
 							*socket << ACTION::BURST;
@@ -208,7 +208,8 @@ namespace app {
 											*socket << ACTION::BURST;
 										}
 										*socket << BURST_ACTION::MODULE;
-										*socket << moduleID.vendor << moduleID.module;
+										*socket << moduleID.vendor;
+										*socket << moduleID.module;
 									};
 									socket->End = [this, mod](){
 										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Client::SendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")

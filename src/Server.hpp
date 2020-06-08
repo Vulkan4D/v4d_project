@@ -103,7 +103,7 @@ namespace app {
 					}break;
 					
 					case BURST_ACTION::INIT:
-						LOG("SERVER Received Client initial burst")
+						LOG("SERVER Received Client " << client->id << " initial burst")
 					break;
 					
 					default: 
@@ -113,6 +113,68 @@ namespace app {
 				}
 				return true;
 			}
+				
+			static void StartBurstSenderThread(v4d::io::SocketPtr socket, IncomingClientPtr client) {
+				try {
+					BurstCache::burstThreads.at(client->id);
+				} catch(...) {
+					BurstCache::burstIncrementsFromServer[client->id] = 0;
+					BurstCache::burstSockets[client->id] = nullptr;
+					BurstCache::burstThreads[client->id] = std::thread([client, socket](){
+						THREAD_BEGIN("Server SendBursts " + std::to_string(client->id) + (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP? " UDP" : " TCP"), 1) {
+						
+							v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
+							burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
+							burstSocket->Connect();
+							
+							{std::lock_guard lock(BurstCache::burstMutex);
+								BurstCache::burstSockets[client->id] = burstSocket;
+								if (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP) {
+									*burstSocket << BURST_ACTION::INIT;
+									burstSocket->Flush();
+								}
+							}
+							
+							while(socket->IsConnected()) {
+								THREAD_TICK
+								
+								v4d::io::SocketPtr currentBurstSocket;
+								{std::lock_guard lock(BurstCache::burstMutex);
+									currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
+								}
+								V4D_Server::ForEachSortedModule([client, currentBurstSocket](auto* mod){
+									ModuleID moduleID(mod->ModuleName());
+									if (mod->SendBursts) {
+										currentBurstSocket->LockWrite();
+										currentBurstSocket->Begin = [currentBurstSocket, mod, client](){
+											ModuleID moduleID(mod->ModuleName());
+											if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
+												currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
+												currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
+											} else {
+												*currentBurstSocket << ACTION::BURST;
+											}
+											*currentBurstSocket << BURST_ACTION::MODULE;
+											*currentBurstSocket << moduleID.vendor;
+											*currentBurstSocket << moduleID.module;
+										};
+										currentBurstSocket->End = [currentBurstSocket, mod](){
+											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
+											currentBurstSocket->Flush();
+										};
+										mod->SendBursts(currentBurstSocket, client);
+										currentBurstSocket->UnlockWrite();
+									}
+								});
+								
+								LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
+							}
+							
+						}THREAD_END(app::isClient)
+					});
+				}
+			}
+			
 		#endif
 		
 		static bool HandleIncomingAction(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) {
@@ -200,71 +262,14 @@ namespace app {
 					
 				}
 				
-			} else if (clientType == CLIENT_TYPE::BURST) {
-				std::scoped_lock lock(clientsMutex, BurstCache::burstMutex);
-				#ifdef APP_ENABLE_BURST_STREAMS
+			} 
+			#ifdef APP_ENABLE_BURST_STREAMS
+				else if (clientType == CLIENT_TYPE::BURST) {
+					std::scoped_lock lock(BurstCache::burstMutex);
 					BurstCache::burstClientSocketTypes[client->id] = v4d::io::TCP;
-					BurstCache::burstIncrementsFromServer[client->id] = 0;
-					BurstCache::burstSockets[client->id] = nullptr;
-					try {
-						BurstCache::burstThreads.at(client->id);
-					} catch(...) {
-						BurstCache::burstThreads[client->id] = std::thread([this, client, socket](){
-							THREAD_BEGIN("Server SendBursts " + std::to_string(client->id), 1) {
-							
-								v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
-								burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
-								burstSocket->Connect();
-								
-								{std::lock_guard lock(BurstCache::burstMutex);
-									BurstCache::burstSockets[client->id] = burstSocket;
-									if (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP) {
-										*burstSocket << BURST_ACTION::INIT;
-										burstSocket->Flush();
-									}
-								}
-								
-								LOG_VERBOSE("Server SendBurstThread started")
-								while(socket->IsConnected()) {
-									THREAD_TICK
-									
-									v4d::io::SocketPtr currentBurstSocket;
-									{std::lock_guard lock(BurstCache::burstMutex);
-										currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
-									}
-									V4D_Server::ForEachSortedModule([this, client, currentBurstSocket](auto* mod){
-										ModuleID moduleID(mod->ModuleName());
-										if (mod->SendBursts) {
-											currentBurstSocket->LockWrite();
-											currentBurstSocket->Begin = [this, currentBurstSocket, mod, client](){
-												ModuleID moduleID(mod->ModuleName());
-												if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
-													currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
-													currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
-												} else {
-													*currentBurstSocket << ACTION::BURST;
-												}
-												*currentBurstSocket << BURST_ACTION::MODULE;
-												*currentBurstSocket << moduleID.vendor;
-												*currentBurstSocket << moduleID.module;
-											};
-											currentBurstSocket->End = [this, currentBurstSocket, mod](){
-												DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
-												currentBurstSocket->Flush();
-											};
-											mod->SendBursts(currentBurstSocket, client);
-											currentBurstSocket->UnlockWrite();
-										}
-									});
-									
-									LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
-								}
-								
-							}THREAD_END(app::isClient)
-						});
-					}
-				#endif
-			}
+					StartBurstSenderThread(socket, client);
+				}
+			#endif
 			
 			THREAD_BEGIN("Server ReceiveActions client(" + std::to_string(client->id) + ") type(" + std::to_string(clientType) + ")", 1) {
 			
@@ -303,6 +308,10 @@ namespace app {
 			
 			virtual void RunClient(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) override {
 				if (!socket->IsConnected()) return;
+				{std::scoped_lock lock(BurstCache::burstMutex);
+					BurstCache::burstClientSocketTypes[client->id] = v4d::io::UDP;
+					Server::StartBurstSenderThread(socket, client);
+				}
 				Server::HandleIncomingBurst(socket, client, clientType);
 			}
 			

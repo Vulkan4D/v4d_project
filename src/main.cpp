@@ -199,7 +199,7 @@ void app::Run() {
 		
 		#ifdef APP_ENABLE_BURST_STREAMS
 			// Force TCP for burst client if host is localhost (SOLO or Testing) otherwise the UDP listener with conflict between client and server
-			bool useTcpBurstClient = ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost");
+			bool useTcpBurstClient = settings->bursts_force_tcp || ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost");
 		#endif
 		
 		// Connect to server

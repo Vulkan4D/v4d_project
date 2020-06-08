@@ -72,8 +72,7 @@ V4D_MODULE_CLASS(V4D_Objects) {
 						cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
 					obj->AddLightSource({0,1.0,0}, 100000, {0,1,0.5}, 1, 0);
 				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-				obj->objectInstance->mass = 10;
+				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
 			}break;
 			case OBJECT_TYPE::CornellBox:{
 				(obj->objectInstance = scene->AddObjectInstance())->Configure(CreateCornellBox);

@@ -93,10 +93,13 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	V4D_MODULE_FUNC(void, RendererFrameUpdate) {
-		std::lock_guard lock(player.mu);
-		scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
+		{std::lock_guard lock(player.mu);
+			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
+		}
 		if (scene->cameraParent) {
-			scene->cameraParent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix));
+			scene->cameraParent->Lock();
+				scene->cameraParent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix));
+			scene->cameraParent->Unlock();
 		}
 	}
 	

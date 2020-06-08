@@ -192,7 +192,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto tmpStream = stream->ReadStream();
 				try {
 					std::lock_guard lock(objectsMutex);
-					LOG_DEBUG("Client ReceiveBurst for obj id " << id)
+					// LOG_DEBUG("Client ReceiveBurst for obj id " << id)
 					auto obj = objects.at(id);
 					if (obj->iteration == iteration) {
 						obj->SetTransformFromNetwork(transform);
