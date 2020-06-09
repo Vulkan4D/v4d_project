@@ -131,6 +131,7 @@ void app::Start() {
 		app::networking::server->Start(app::networking::serverPort);
 		#ifdef APP_ENABLE_BURST_STREAMS
 			app::networking::burstServer = std::make_shared<app::BurstServer>(v4d::io::UDP, *app::networking::server);
+			app::networking::burstServer->Start(app::networking::serverPort);
 		#endif
 		if (!app::isClient) LOG("Server has started listening")
 	}
@@ -142,10 +143,12 @@ void app::Stop() {
 	#ifdef APP_ENABLE_BURST_STREAMS
 		if (app::networking::burstServer) {
 			app::networking::burstServer->Stop();
+			app::networking::burstServer = nullptr;
 		}
 	#endif
 	if (app::networking::server) {
 		app::networking::server->Stop();
+		app::networking::server = nullptr;
 		if (!app::isClient) LOG("Server has stopped listening")
 		if (app::networking::serverRsaKey) app::networking::serverRsaKey.reset();
 	}

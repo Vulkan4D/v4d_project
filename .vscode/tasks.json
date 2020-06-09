@@ -18,6 +18,13 @@
             "group": "test"
         },
         {
+            "label": "quick build all platforms debug",
+            "type": "shell",
+            "command": "clear; cd build && rm -f CMakeCache.txt && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && rm -f CMakeCache.txt && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "test"
+        },
+        {
             "label": "quick build windows debug & run remotely",
             "type": "shell",
             "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && ../crosscompile/windows/run.sh debug demo",

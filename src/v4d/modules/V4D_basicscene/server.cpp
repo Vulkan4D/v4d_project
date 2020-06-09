@@ -125,7 +125,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 							removeStream << objID;
 						EnqueueAction(removeStream, client);
 						obj->clientIterations.erase(client->id);
-					} catch(...) {}// NO ERROR HERE
+					} catch(...) {}// NO ERROR HERE, it's normal that the object has already been removed for this client
 				}
 			}
 		}

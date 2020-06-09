@@ -26,6 +26,27 @@
             "preLaunchTask": "quick build"
         },
         {
+            "name": "Debug Demo (rebuild also on windows)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/demo",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/debug",
+            "environment": [
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "quick build all platforms debug"
+        },
+        {
             "name": "Debug Tests",
             "type": "cppdbg",
             "request": "launch",

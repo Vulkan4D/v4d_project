@@ -26,10 +26,10 @@ namespace app {
 			}
 		}
 		
-		std::string GetAppName() const override {
-			return APP_NETWORKING_APPNAME;
+		uint64_t GetAppName() const override {
+			return v4d::BaseN::EncodeStringToUInt64(APP_NETWORKING_APPNAME, v4d::BASE40_UPPER_CHARS);
 		}
-		std::string GetVersion() const override {
+		uint16_t GetVersion() const override {
 			return APP_NETWORKING_VERSION;
 		}
 
@@ -166,7 +166,8 @@ namespace app {
 	#ifdef APP_ENABLE_BURST_STREAMS
 		class BurstClient : public v4d::networking::OutgoingConnection {
 			v4d::io::SocketPtr burstSocket;
-			std::thread* burstsThread = nullptr;
+			std::thread* burstsSendThread = nullptr;
+			std::thread* burstsReceiveThread = nullptr;
 			
 		public:
 			using OutgoingConnection::OutgoingConnection;
@@ -175,24 +176,29 @@ namespace app {
 				Stop();
 				LOG_VERBOSE("~BurstClient")
 			}
-			
-			std::string GetAppName() const override {
-				return APP_NETWORKING_APPNAME;
+				
+			uint64_t GetAppName() const override {
+				return v4d::BaseN::EncodeStringToUInt64(APP_NETWORKING_APPNAME, v4d::BASE40_UPPER_CHARS);
 			}
-			std::string GetVersion() const override {
+			uint16_t GetVersion() const override {
 				return APP_NETWORKING_VERSION;
 			}
 
 			void Start(byte clientType) {
-				ConnectRunAsync("", 0, clientType);
-				burstsThread = new std::thread([this, clientType](){
+				if (!Connect("", 0, clientType)) {
+					LOG_ERROR("Client unable to connect Bursts socket")
+					return;
+				}
+				
+				if (socket->IsTCP()) {
+					*socket << ACTION::BURST;
+				}
+				*socket << BURST_ACTION::INIT;
+				socket->FlushDebug();
+				
+				// Send Bursts
+				burstsSendThread = new std::thread([this, clientType](){
 					THREAD_BEGIN(std::string("Client SendBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
-						
-						if (socket->IsTCP()) {
-							*socket << ACTION::BURST;
-						}
-						*socket << BURST_ACTION::INIT;
-						socket->Flush();
 						
 						while(socket->IsConnected()) {
 							THREAD_TICK
@@ -212,7 +218,7 @@ namespace app {
 										*socket << moduleID.module;
 									};
 									socket->End = [this, mod](){
-										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Client::SendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
+										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Client::SendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 										socket->Flush();
 									};
 									mod->SendBursts(socket);
@@ -225,6 +231,42 @@ namespace app {
 						
 					}THREAD_END(true)
 				});
+				
+				// Receive Bursts
+				burstsReceiveThread = new std::thread([this](){
+					THREAD_BEGIN(std::string("Client ReceiveBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
+					
+						static uint64_t serverIncrement = 0;
+						socket->Bind();
+						while (socket->IsConnected()) {
+							THREAD_TICK
+							
+							int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
+							if (polled == 0) continue; // timeout, no data yet, stay in the loop
+							if (polled == -1) break; // Disconnected (or error, either way we must disconnect)
+							if (socket->IsUDP()) {
+								std::string token = socket->ReadEncrypted<std::string>(&aes);
+								uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);
+								if (token != this->token) continue;
+								if (increment <= serverIncrement) continue;
+								serverIncrement = increment;
+							} else {
+								try {
+									if (socket->Read<app::networking::ACTION>() != app::networking::ACTION::BURST) {
+										LOG_ERROR("Client ReceiveBursts on TCP burst socket : did not receive BURST ACTION")
+										throw std::runtime_error("");
+									}
+								} catch(...) {
+									break;
+								}
+							}
+							if (!Client::HandleIncomingBurst(socket)) break;
+						}
+						socket->Unbind();
+						socket->SetConnected(false);
+						
+					}THREAD_END(true)
+				});
 			}
 			
 			void Stop() {
@@ -232,49 +274,21 @@ namespace app {
 				if (burstSocket) {
 					burstSocket->Disconnect();
 				}
-				if (burstsThread) {
-					if (burstsThread->joinable()) burstsThread->join();
-					delete burstsThread;
-					burstsThread = nullptr;
+				if (burstsSendThread) {
+					if (burstsSendThread->joinable()) burstsSendThread->join();
+					delete burstsSendThread;
+					burstsSendThread = nullptr;
+				}
+				if (burstsReceiveThread) {
+					if (burstsReceiveThread->joinable()) burstsReceiveThread->join();
+					delete burstsReceiveThread;
+					burstsReceiveThread = nullptr;
 				}
 			}
 
 			virtual void Authenticate(v4d::data::Stream* authStream) override {} // No authentication should be used for bursts
 			
-			virtual void Run(v4d::io::SocketPtr socket) override {
-				THREAD_BEGIN("Client ReceiveBursts", 1) {
-				
-					static uint64_t serverIncrement = 0;
-					socket->Bind();
-					while (socket->IsConnected()) {
-						THREAD_TICK
-						
-						int polled = socket->Poll(APP_NETWORKING_POLL_TIMEOUT_MS);
-						if (polled == 0) continue; // timeout, no data yet, stay in the loop
-						if (polled == -1) break; // Disconnected (or error, either way we must disconnect)
-						if (socket->IsUDP()) {
-							std::string token = socket->ReadEncrypted<std::string>(&aes);
-							uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);
-							if (token != this->token) continue;
-							if (increment <= serverIncrement) continue;
-							serverIncrement = increment;
-						} else {
-							try {
-								if (socket->Read<app::networking::ACTION>() != app::networking::ACTION::BURST) {
-									LOG_ERROR("Client ReceiveBursts on TCP burst socket : did not receive BURST ACTION")
-									throw std::runtime_error("");
-								}
-							} catch(...) {
-								break;
-							}
-						}
-						if (!Client::HandleIncomingBurst(socket)) break;
-					}
-					socket->Unbind();
-					socket->SetConnected(false);
-					
-				}THREAD_END(true)
-			}
+			virtual void Run(v4d::io::SocketPtr socket) override {}
 
 		};
 	#endif

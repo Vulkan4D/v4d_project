@@ -58,10 +58,10 @@ namespace app {
 			#endif
 		}
 
-		std::string GetAppName() const override {
-			return APP_NETWORKING_APPNAME;
+		uint64_t GetAppName() const override {
+			return v4d::BaseN::EncodeStringToUInt64(APP_NETWORKING_APPNAME, v4d::BASE40_UPPER_CHARS);
 		}
-		std::string GetVersion() const override {
+		uint16_t GetVersion() const override {
 			return APP_NETWORKING_VERSION;
 		}
 
@@ -159,7 +159,7 @@ namespace app {
 											*currentBurstSocket << moduleID.module;
 										};
 										currentBurstSocket->End = [currentBurstSocket, mod](){
-											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_SIZE_PER_MODULE << " bytes")
+											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 											currentBurstSocket->Flush();
 										};
 										mod->SendBursts(currentBurstSocket, client);
@@ -297,10 +297,10 @@ namespace app {
 				LOG_VERBOSE("~BurstServer")
 			}
 			
-			std::string GetAppName() const override {
-				return APP_NETWORKING_APPNAME;
+			uint64_t GetAppName() const override {
+				return v4d::BaseN::EncodeStringToUInt64(APP_NETWORKING_APPNAME, v4d::BASE40_UPPER_CHARS);
 			}
-			std::string GetVersion() const override {
+			uint16_t GetVersion() const override {
 				return APP_NETWORKING_VERSION;
 			}
 
