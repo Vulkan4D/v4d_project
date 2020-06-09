@@ -118,13 +118,14 @@ namespace app {
 				try {
 					BurstCache::burstThreads.at(client->id);
 				} catch(...) {
+					auto remoteAddr = socket->GetIncomingAddr();
 					BurstCache::burstIncrementsFromServer[client->id] = 0;
 					BurstCache::burstSockets[client->id] = nullptr;
-					BurstCache::burstThreads[client->id] = std::thread([client, socket](){
+					BurstCache::burstThreads[client->id] = std::thread([client, socket, remoteAddr](){
 						THREAD_BEGIN("Server SendBursts " + std::to_string(client->id) + (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP? " UDP" : " TCP"), 1) {
 						
 							v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
-							burstSocket->SetRemoteAddr(socket->GetRemoteAddr());
+							burstSocket->SetRemoteAddr(remoteAddr);
 							burstSocket->Connect();
 							
 							{std::lock_guard lock(BurstCache::burstMutex);
@@ -149,8 +150,12 @@ namespace app {
 										currentBurstSocket->Begin = [currentBurstSocket, mod, client](){
 											ModuleID moduleID(mod->ModuleName());
 											if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
-												currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
-												currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
+												
+												// Protection against attackers pretending to be the server over UDP... 
+												// Not working at the moment because of a logisitcs issue on client side, see similar comment in Client.hpp with same line as above
+													// currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
+													// currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
+											
 											} else {
 												*currentBurstSocket << ACTION::BURST;
 											}
@@ -307,7 +312,6 @@ namespace app {
 			virtual ulong Authenticate(v4d::data::ReadOnlyStream*) override {return 0;}
 			
 			virtual void RunClient(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) override {
-				if (!socket->IsConnected()) return;
 				{std::scoped_lock lock(BurstCache::burstMutex);
 					BurstCache::burstClientSocketTypes[client->id] = v4d::io::UDP;
 					Server::StartBurstSenderThread(socket, client);

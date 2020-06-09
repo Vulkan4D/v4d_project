@@ -184,7 +184,7 @@ namespace app {
 				return APP_NETWORKING_VERSION;
 			}
 
-			void Start(byte clientType) {
+			void Start(const std::string& host, uint16_t port, byte clientType) {
 				if (!Connect("", 0, clientType)) {
 					LOG_ERROR("Client unable to connect Bursts socket")
 					return;
@@ -194,22 +194,22 @@ namespace app {
 					*socket << ACTION::BURST;
 				}
 				*socket << BURST_ACTION::INIT;
-				socket->FlushDebug();
+				socket->Flush();
 				
 				// Send Bursts
-				burstsSendThread = new std::thread([this, clientType](){
+				burstsSendThread = new std::thread([this, host, port, clientType](){
 					THREAD_BEGIN(std::string("Client SendBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
 						
 						while(socket->IsConnected()) {
 							THREAD_TICK
 							
-							V4D_Client::ForEachSortedModule([this, clientType](auto* mod){
+							V4D_Client::ForEachSortedModule([this, host, port, clientType](auto* mod){
 								if (mod->SendBursts) {
 									socket->LockWrite();
-									socket->Begin = [this, clientType, mod](){
+									socket->Begin = [this, host, port, clientType, mod](){
 										ModuleID moduleID(mod->ModuleName());
 										if (socket->IsUDP()) {
-											Connect("", 0, clientType);
+											Connect(host, port, clientType);
 										} else {
 											*socket << ACTION::BURST;
 										}
@@ -233,11 +233,10 @@ namespace app {
 				});
 				
 				// Receive Bursts
-				burstsReceiveThread = new std::thread([this](){
+				burstsReceiveThread = new std::thread([this, host, port](){
 					THREAD_BEGIN(std::string("Client ReceiveBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
 					
-						static uint64_t serverIncrement = 0;
-						socket->Bind();
+						socket->Bind(port, host);
 						while (socket->IsConnected()) {
 							THREAD_TICK
 							
@@ -245,11 +244,16 @@ namespace app {
 							if (polled == 0) continue; // timeout, no data yet, stay in the loop
 							if (polled == -1) break; // Disconnected (or error, either way we must disconnect)
 							if (socket->IsUDP()) {
-								std::string token = socket->ReadEncrypted<std::string>(&aes);
-								uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);
-								if (token != this->token) continue;
-								if (increment <= serverIncrement) continue;
-								serverIncrement = increment;
+								
+								// Protection against attackers pretending to be the server over UDP... 
+								// Not working because we cannot "continue" without reading the remaining data and removing it from the buffer, will fix this later. 
+									// static uint64_t serverIncrement = 0;
+									// std::string token = socket->ReadEncrypted<std::string>(&aes);
+									// uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);
+									// if (token != this->token) continue;
+									// if (increment <= serverIncrement) continue;
+									// serverIncrement = increment;
+									
 							} else {
 								try {
 									if (socket->Read<app::networking::ACTION>() != app::networking::ACTION::BURST) {

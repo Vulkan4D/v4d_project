@@ -212,7 +212,7 @@ void app::Run() {
 			#ifdef APP_ENABLE_BURST_STREAMS
 				// Connect Burst socket
 				std::shared_ptr<app::BurstClient> burstClient = std::make_shared<app::BurstClient>(useTcpBurstClient? v4d::io::TCP : v4d::io::UDP , *client);
-				burstClient->Start(app::networking::CLIENT_TYPE::BURST);
+				burstClient->Start(app::networking::remoteHost, app::networking::serverPort, app::networking::CLIENT_TYPE::BURST);
 			#endif
 			
 			// Game Loops

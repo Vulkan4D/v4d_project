@@ -172,6 +172,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 					auto obj = objects.at(id);
 					scene->cameraParent = obj->objectInstance;
 					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
+					obj->objectInstance->SetGeometriesDirty();
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN : " << err.what())
 				}
@@ -204,7 +205,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 						obj->UpdateObjectInstanceTransform();
 					}
 				} catch(std::exception& err) {
-					LOG_ERROR("Client ReceiveBurst SYNC_OBJECT_TRANSFORM : " << err.what())
+					LOG_ERROR_VERBOSE("Client ReceiveBurst SYNC_OBJECT_TRANSFORM : " << err.what())
 				}
 			}break;
 			

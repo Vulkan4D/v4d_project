@@ -25,9 +25,16 @@
             "group": "test"
         },
         {
-            "label": "quick build windows debug & run remotely",
+            "label": "quick build windows debug & run demo remotely",
             "type": "shell",
             "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && ../crosscompile/windows/run.sh debug demo",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "test"
+        },
+        {
+            "label": "quick build windows debug & run tests remotely",
+            "type": "shell",
+            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && ../crosscompile/windows/run_console.sh debug tests",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },

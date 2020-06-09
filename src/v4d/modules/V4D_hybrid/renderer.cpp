@@ -579,7 +579,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 					for (auto obj : scene->objectInstances) {
 						if (obj) {
 							// obj->Lock();
-							if (obj->IsActive()) {
+							if (obj->IsActive() && (obj->rayTracingMaskRemoved & GEOMETRY_ATTR_PRIMARY_VISIBLE)==0) {
 								// Geometries
 								for (auto& geom : obj->GetGeometries()) {
 									if (geom.geometry->active && (
@@ -897,9 +897,11 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		geometryInstance->geometry->blas->Allocate(r->renderingDevice);
 	}
 	
-	void SetRayTracingInstanceTransform(GeometryInstance* geometryInstance, const glm::dmat4& objectViewTransform) {
+	void SetRayTracingInstanceTransform(ObjectInstancePtr obj, GeometryInstance* geometryInstance, const glm::dmat4& objectViewTransform) {
 		std::lock_guard lock(rayTracingInstanceMutex);
 		if (geometryInstance->rayTracingInstanceIndex == -1) return;
+		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].mask = (geometryInstance->geometry->rayTracingMask | obj->rayTracingMaskAdded) & ~obj->rayTracingMaskRemoved;
+		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].flags = geometryInstance->geometry->flags;
 		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].transform = glm::transpose(glm::mat4(objectViewTransform * geometryInstance->transform));
 	}
 	
@@ -910,10 +912,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 		int index = nbRayTracingInstances++;
 		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
-		rayTracingInstances[index].mask = (geometryInstance->geometry->rayTracingMask | obj->rayTracingMaskAdded) & ~obj->rayTracingMaskRemoved;
 		rayTracingInstances[index].shaderInstanceOffset = Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
-		rayTracingInstances[index].flags = geometryInstance->geometry->flags;
-		rayTracingInstances[index].transform = glm::mat3x4{0};
 		geometryInstance->rayTracingInstanceIndex = index;
 		activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
 	}
@@ -1540,7 +1539,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 									if (geom.rayTracingInstanceIndex == -1) {
 										AddRayTracingInstance(obj, &geom);
 									}
-									SetRayTracingInstanceTransform(&geom, scene->camera.viewMatrix * obj->GetWorldTransform());
+									SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 								}
 							} else if (geom.rayTracingInstanceIndex != -1) {
 								RemoveRayTracingInstance(geom);
@@ -1553,7 +1552,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 					}
 				}
 			}
-			if (r->rayTracingFeatures.rayTracing) {
+			if (r->rayTracingFeatures.rayTracing && geometriesToRemoveFromRayTracingInstances.size()) {
 				// Remove deleted geometries
 				for (auto& geom : geometriesToRemoveFromRayTracingInstances) {
 					RemoveRayTracingInstance(geom);
