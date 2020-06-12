@@ -6,42 +6,42 @@
         {
             "label": "quick build",
             "type": "shell",
-            "command": "clear; cd build && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8",
+            "command": "clear; cd build && cmake --build . --parallel 8",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
         {
             "label": "quick build windows debug",
             "type": "shell",
-            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug",
+            "command": "clear; crosscompile/windows/build.sh && crosscompile/windows/send.sh debug",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "quick build all platforms debug",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && rm -f CMakeCache.txt && cmake -DCMAKE_BUILD_TYPE=Debug .. && cmake --build . --parallel 8",
+            "command": "clear; crosscompile/windows/build.sh && crosscompile/windows/send.sh debug && cd build && cmake --build . --parallel 8",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "quick build windows debug & run demo remotely",
             "type": "shell",
-            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && ../crosscompile/windows/run.sh debug demo",
+            "command": "clear; crosscompile/windows/build.sh && crosscompile/windows/send.sh debug && crosscompile/windows/run.sh debug demo",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "quick build windows debug & run tests remotely",
             "type": "shell",
-            "command": "clear; cd build && ../crosscompile/windows/build.sh Debug && ../crosscompile/windows/send.sh debug && ../crosscompile/windows/run_console.sh debug tests",
+            "command": "clear; crosscompile/windows/build.sh && crosscompile/windows/send.sh debug && crosscompile/windows/run_console.sh debug tests",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
         {
             "label": "cmake reset",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt debug/tests debug/demo;",
+            "command": "clear; cd build && rm -f CMakeCache.txt debug/tests debug/demo ../crosscompile/windows/build/CMakeCache.txt; cmake -DCMAKE_BUILD_TYPE=Debug ..; ../crosscompile/windows/cmake.sh",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },
@@ -69,7 +69,7 @@
         {
             "label": "unit tests linux",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt && cmake .. -DCMAKE_BUILD_TYPE=Debug && cmake --build . --parallel 8 && cd debug && ./tests",
+            "command": "clear; cd build && cmake --build . --parallel 8 && cd debug && ./tests",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "test"
         },
