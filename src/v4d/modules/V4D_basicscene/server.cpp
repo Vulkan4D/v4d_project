@@ -58,20 +58,20 @@ V4D_MODULE_CLASS(V4D_Server) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(void, EnqueueAction, v4d::data::Stream& stream, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, EnqueueAction, v4d::data::WriteOnlyStream& stream, IncomingClientPtr client) {
 		std::lock_guard lock(actionQueueMutex);
 		actionQueuePerClient[client->id].emplace(stream);
 	}
 	
 	V4D_MODULE_FUNC(void, IncomingClient, IncomingClientPtr client) {
 		LOG("Server: IncomingClient " << client->id)
-		std::lock_guard lock(objectsMutex);
+		std::scoped_lock lock(objectsMutex, actionQueueMutex);
 		auto obj = AddNewObject(THIS_MODULE, OBJECT_TYPE::Player);
 		obj->physicsClientID = client->id;
 		obj->isDynamic = true;
 		players[client->id] = obj;
 		// LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
-		v4d::data::Stream stream(sizeof(ASSIGN) + sizeof(obj->id));
+		v4d::data::WriteOnlyStream stream(sizeof(ASSIGN) + sizeof(obj->id));
 			stream << ASSIGN;
 			stream << obj->id;
 		EnqueueAction(stream, client);
@@ -79,10 +79,17 @@ V4D_MODULE_CLASS(V4D_Server) {
 	
 	V4D_MODULE_FUNC(void, SendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_DATA_INITIAL_STREAM_SIZE);
-		{std::lock_guard lock(objectsMutex);
+		{std::scoped_lock lock(objectsMutex, actionQueueMutex);
 			for (auto& [objID, obj] : objects) {
 				if (obj->active) {
-					uint32_t& clientIteration = obj->clientIterations[client->id];
+					
+					uint32_t clientIteration;
+					try {
+						clientIteration = obj->clientIterations.at(client->id);
+					} catch (...) {
+						clientIteration = obj->clientIterations[client->id] = 0;
+					}
+					
 					if (obj->iteration > clientIteration) {
 						stream->Begin();
 							if (clientIteration == 0) {
@@ -115,7 +122,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 							stream->WriteStream(tmpStream);
 							
 						stream->End();
-						clientIteration = obj->iteration;
+						obj->clientIterations[client->id] = obj->iteration;
 					}
 				} else /* obj is not active */ {
 					try {
@@ -128,16 +135,15 @@ V4D_MODULE_CLASS(V4D_Server) {
 					} catch(...) {}// NO ERROR HERE, it's normal that the object has already been removed for this client
 				}
 			}
-		}
-		
-		std::lock_guard lock(actionQueueMutex);
-		auto& actionQueue = actionQueuePerClient[client->id];
-		while (actionQueue.size()) {
-			// LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
-			stream->Begin();
-				stream->EmplaceStream(actionQueue.front());
-			stream->End();
-			actionQueue.pop();
+			
+			auto& actionQueue = actionQueuePerClient[client->id];
+			while (actionQueue.size()) {
+				// LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
+				stream->Begin();
+					stream->EmplaceStream(actionQueue.front());
+				stream->End();
+				actionQueue.pop();
+			}
 		}
 	}
 	
@@ -241,7 +247,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 						obj->UpdateObjectInstanceTransform();
 					}
 				} catch(std::exception& err) {
-					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
+					LOG_ERROR("Server ReceiveAction SYNC_OBJECT_TRANSFORM : " << err.what())
 				}
 			}break;
 			

@@ -28,7 +28,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 		scene = _s;
 	}
 	
-	V4D_MODULE_FUNC(void, EnqueueAction, v4d::data::Stream& stream) {
+	V4D_MODULE_FUNC(void, EnqueueAction, v4d::data::WriteOnlyStream& stream) {
 		std::lock_guard lock(actionQueueMutex);
 		actionQueue.emplace(stream);
 	}
@@ -174,7 +174,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
 					obj->objectInstance->SetGeometriesDirty();
 				} catch (std::exception& err) {
-					LOG_ERROR("Client ReceiveAction ASSIGN : " << err.what())
+					LOG_ERROR("Client ReceiveAction ASSIGN ("<<id<<") : " << err.what())
 				}
 			}break;
 			default: 
