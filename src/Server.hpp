@@ -9,7 +9,7 @@ namespace app {
 	
 	#ifdef APP_ENABLE_BURST_STREAMS
 		namespace BurstCache {
-			std::mutex burstMutex;
+			std::recursive_mutex burstMutex;
 			std::unordered_map<uint64_t /* clientID */, v4d::io::SOCKET_TYPE> burstClientSocketTypes {};
 			std::unordered_map<uint64_t /* clientID */, uint64_t> burstIncrementsFromServer {};
 			std::unordered_map<uint64_t /* clientID */, v4d::io::SocketPtr> burstSockets {};
@@ -46,7 +46,7 @@ namespace app {
 			#ifdef APP_ENABLE_BURST_STREAMS
 				std::lock_guard lock(BurstCache::burstMutex);
 				for (auto&[id, s] : BurstCache::burstSockets) {
-					s->Disconnect();
+					if (s) s->Disconnect();
 				}
 				for (auto&[id, t] : BurstCache::burstThreads) {
 					if (t.joinable()) t.join();
@@ -103,7 +103,7 @@ namespace app {
 					}break;
 					
 					case BURST_ACTION::INIT:
-						LOG("SERVER Received Client " << client->id << " initial burst")
+						LOG("SERVER Received Client " << client->id << " initial burst from " << socket->GetIncomingIP() << ":" << socket->GetIncomingPort())
 					break;
 					
 					default: 
@@ -119,13 +119,14 @@ namespace app {
 					BurstCache::burstThreads.at(client->id);
 				} catch(...) {
 					auto remoteAddr = socket->GetIncomingAddr();
+					auto remoteIP = socket->GetIncomingIP();
+					LOG("Starting burst sender for client " << client->id << " sending to " << socket->GetIncomingIP()<<":"<<socket->GetIncomingPort())
 					BurstCache::burstIncrementsFromServer[client->id] = 0;
 					BurstCache::burstSockets[client->id] = nullptr;
-					BurstCache::burstThreads[client->id] = std::thread([client, socket, remoteAddr](){
+					BurstCache::burstThreads[client->id] = std::thread([client, socket, remoteAddr, remoteIP](){
 						THREAD_BEGIN("Server SendBursts " + std::to_string(client->id) + (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP? " UDP" : " TCP"), 1) {
 						
-							v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(v4d::io::UDP, socket->GetProtocol());
-							burstSocket->SetRemoteAddr(remoteAddr);
+							v4d::io::SocketPtr burstSocket = std::make_shared<v4d::io::Socket>(socket->GetFd(), remoteAddr, v4d::io::UDP, socket->GetProtocol());
 							burstSocket->Connect();
 							
 							{std::lock_guard lock(BurstCache::burstMutex);
@@ -136,7 +137,7 @@ namespace app {
 								}
 							}
 							
-							while(socket->IsConnected()) {
+							while(burstSocket->IsConnected()) {
 								THREAD_TICK
 								
 								v4d::io::SocketPtr currentBurstSocket;
@@ -152,7 +153,6 @@ namespace app {
 											if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
 												
 												// Protection against attackers pretending to be the server over UDP... 
-												// Not working at the moment because of a logisitcs issue on client side, see similar comment in Client.hpp with same line as above
 													// currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
 													// currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
 											
@@ -163,7 +163,7 @@ namespace app {
 											*currentBurstSocket << moduleID.vendor;
 											*currentBurstSocket << moduleID.module;
 										};
-										currentBurstSocket->End = [currentBurstSocket, mod](){
+										currentBurstSocket->End = [currentBurstSocket, mod, client](){
 											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 											currentBurstSocket->Flush();
 										};
@@ -174,6 +174,8 @@ namespace app {
 								
 								LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
 							}
+								
+							LOG_ERROR("Server SendBursts thread STOPPED for client " << client->id)
 							
 						}THREAD_END(app::isClient)
 					});
@@ -287,6 +289,13 @@ namespace app {
 					if (!HandleIncomingAction(socket, client, clientType)) break;
 				}
 				socket->SetConnected(false);
+				std::scoped_lock lock(BurstCache::burstMutex);
+				try {
+					if (BurstCache::burstSockets.at(client->id)) {
+						BurstCache::burstSockets[client->id]->SetConnected(false);
+						BurstCache::burstSockets[client->id] = nullptr;
+					}
+				} catch (...) {} // No error here, maybe burstSockets has been cleared or burstSockets[client->id] has already been nulled and it's all right
 				
 			}THREAD_END(app::isClient)
 		}
@@ -317,6 +326,7 @@ namespace app {
 					Server::StartBurstSenderThread(socket, client);
 				}
 				Server::HandleIncomingBurst(socket, client, clientType);
+				socket->ResetReadBuffer();
 			}
 			
 		};

@@ -200,18 +200,13 @@ void app::Run() {
 		std::shared_ptr<app::Client> client = std::make_shared<app::Client>(v4d::io::TCP, rsaPublicKey.GetSize()? &rsaPublicKey:nullptr);
 		app::modules::InitClient(client);
 		
-		#ifdef APP_ENABLE_BURST_STREAMS
-			// Force TCP for burst client if host is localhost (SOLO or Testing) otherwise the UDP listener with conflict between client and server
-			bool useTcpBurstClient = settings->bursts_force_tcp || ((app::isClient && app::isServer) || app::networking::remoteHost == "127.0.0.1" || app::networking::remoteHost == "localhost");
-		#endif
-		
 		// Connect to server
 		if (client->ConnectRunAsync(app::networking::remoteHost, app::networking::serverPort, app::networking::CLIENT_TYPE::INITIAL)) {
 			if (!app::networking::server) LOG_SUCCESS("Connected to remote server")
 			
 			#ifdef APP_ENABLE_BURST_STREAMS
 				// Connect Burst socket
-				std::shared_ptr<app::BurstClient> burstClient = std::make_shared<app::BurstClient>(useTcpBurstClient? v4d::io::TCP : v4d::io::UDP , *client);
+				std::shared_ptr<app::BurstClient> burstClient = std::make_shared<app::BurstClient>(settings->bursts_force_tcp? v4d::io::TCP : v4d::io::UDP , *client);
 				burstClient->Start(app::networking::remoteHost, app::networking::serverPort, app::networking::CLIENT_TYPE::BURST);
 			#endif
 			

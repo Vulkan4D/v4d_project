@@ -209,7 +209,7 @@ namespace app {
 									socket->Begin = [this, host, port, clientType, mod](){
 										ModuleID moduleID(mod->ModuleName());
 										if (socket->IsUDP()) {
-											Connect(host, port, clientType);
+											Connect("", 0, clientType);
 										} else {
 											*socket << ACTION::BURST;
 										}
@@ -236,7 +236,6 @@ namespace app {
 				burstsReceiveThread = new std::thread([this, host, port](){
 					THREAD_BEGIN(std::string("Client ReceiveBursts ") + (socket->IsUDP()? "UDP":"TCP"), 1) {
 					
-						socket->Bind(port, host);
 						while (socket->IsConnected()) {
 							THREAD_TICK
 							
@@ -244,9 +243,9 @@ namespace app {
 							if (polled == 0) continue; // timeout, no data yet, stay in the loop
 							if (polled == -1) break; // Disconnected (or error, either way we must disconnect)
 							if (socket->IsUDP()) {
+								socket->ResetReadBuffer();
 								
 								// Protection against attackers pretending to be the server over UDP... 
-								// Not working because we cannot "continue" without reading the remaining data and removing it from the buffer, will fix this later. 
 									// static uint64_t serverIncrement = 0;
 									// std::string token = socket->ReadEncrypted<std::string>(&aes);
 									// uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);
@@ -268,6 +267,8 @@ namespace app {
 						}
 						socket->Unbind();
 						socket->SetConnected(false);
+						
+						LOG_ERROR("Client ReceiveBursts thread STOPPED !!!")
 						
 					}THREAD_END(true)
 				});

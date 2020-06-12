@@ -9,7 +9,7 @@ namespace app {
 
 	std::atomic<bool> isRunning = true;
 	bool IsRunning() {return isRunning;}
-	std::mutex inputMutex;
+	std::recursive_mutex inputMutex;
 
 	double primaryAvgFrameRate = 0;
 	double primaryFrameTime = 0;
