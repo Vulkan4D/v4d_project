@@ -5,11 +5,9 @@
 
 using namespace v4d::scene;
 
-ClientObjects* clientObjects = nullptr;
 v4d::graphics::Renderer* renderer = nullptr;
 v4d::graphics::Window* window = nullptr;
 Scene* scene = nullptr;
-V4D_Client* clientModule = nullptr;
 PlayerView* player = nullptr;
 
 V4D_MODULE_CLASS(V4D_Input) {
@@ -18,8 +16,6 @@ V4D_MODULE_CLASS(V4D_Input) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		clientModule = V4D_Client::LoadModule(THIS_MODULE);
-		clientObjects = (ClientObjects*)clientModule->ModuleGetCustomPtr(0);
 		player = (PlayerView*)V4D_Game::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(0);
 	}
 	
@@ -37,19 +33,12 @@ V4D_MODULE_CLASS(V4D_Input) {
 		) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					
 					if (v4d::scene::Scene::RayCastHit hit; scene->RayCastClosest(&hit)) {
 						if (hit.obj->GetGeometries().size()) {
 							LOG("RayCastClosest Hit = " << hit.obj->GetGeometries()[0].type)
 							hit.obj->AddImpulse(scene->camera.lookDirection*100.0);
 						}
 					}
-					break;
-				case GLFW_MOUSE_BUTTON_2:
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 					break;
 				case GLFW_MOUSE_BUTTON_3:
 					if (std::vector<v4d::scene::Scene::RayCastHit> hits{}; scene->RayCastAll(&hits)) {
@@ -73,16 +62,6 @@ V4D_MODULE_CLASS(V4D_Input) {
 			
 			switch (key) {
 				
-				// Quit
-				case GLFW_KEY_ESCAPE:
-					glfwSetWindowShouldClose(window->GetHandle(), 1);
-					break;
-					
-				// Reload Renderer
-				case GLFW_KEY_R:
-					::renderer->ReloadRenderer();
-					break;
-				
 				// Increase speed
 				case GLFW_KEY_PAGE_UP:
 					player->camSpeed *= 10;
@@ -93,34 +72,6 @@ V4D_MODULE_CLASS(V4D_Input) {
 					player->camSpeed *= 0.1;
 					break;
 				
-				// Throw stuff
-				case GLFW_KEY_B:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << app::networking::action::CUSTOM;
-						stream << std::string("ball");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
-					clientModule->EnqueueAction(stream);
-				}break;
-				case GLFW_KEY_N:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << app::networking::action::CUSTOM;
-						stream << std::string("balls");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
-					clientModule->EnqueueAction(stream);
-				}break;
-				case GLFW_KEY_L:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << app::networking::action::CUSTOM;
-						stream << std::string("light");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
-					clientModule->EnqueueAction(stream);
-				}break;
-				case GLFW_KEY_C:{
-					v4d::data::WriteOnlyStream stream(8);
-						stream << app::networking::action::CUSTOM;
-						stream << std::string("clear");
-					clientModule->EnqueueAction(stream);
-				}break;
 			}
 		}
 	}

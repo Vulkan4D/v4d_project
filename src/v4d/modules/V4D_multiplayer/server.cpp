@@ -31,17 +31,6 @@ V4D_MODULE_CLASS(V4D_Server) {
 	V4D_MODULE_FUNC(void, Init, std::shared_ptr<ListeningServer> _srv, Scene* _s) {
 		server = _srv;
 		scene = _s;
-		
-		// Cornell boxes
-		AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-			->SetTransform({0,250,-30}, 180.0);
-		AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-			->SetTransform({200,250,-30}, 120.0);
-		AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-			->SetTransform({-200,250,-30}, -120.0);
-		for (int i = 0; i < 100; ++i)
-			AddNewObject(THIS_MODULE, OBJECT_TYPE::CornellBox)
-				->SetTransform({0,500,-30 + (i*90)}, 180.0);
 	}
 	
 	V4D_MODULE_FUNC(void, SlowGameLoop) {

@@ -1,5 +1,5 @@
 #include "common.hh"
-#include "../sample/common.hpp"
+#include "../V4D_flycam/common.hh"
 
 using namespace v4d::graphics;
 using namespace v4d::scene;
@@ -161,7 +161,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
 		V4D_Renderer::LoadModule(THIS_MODULE);
-		((PlayerView*)V4D_Input::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(PLAYER))->camSpeed = 100000;
+		((PlayerView*)V4D_Game::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0))->camSpeed = 100000;
 	}
 	
 	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int what, void* ptr) {

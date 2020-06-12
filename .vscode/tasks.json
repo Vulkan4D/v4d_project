@@ -39,9 +39,9 @@
             "group": "test"
         },
         {
-            "label": "cmake reset",
+            "label": "cmake cleanup & reset debug",
             "type": "shell",
-            "command": "clear; cd build && rm -f CMakeCache.txt debug/tests debug/demo ../crosscompile/windows/build/CMakeCache.txt; cmake -DCMAKE_BUILD_TYPE=Debug ..; ../crosscompile/windows/cmake.sh",
+            "command": "clear; cd build && rm -rf * ../crosscompile/windows/build/*; cmake -DCMAKE_BUILD_TYPE=Debug .. ; ../crosscompile/windows/cmake.sh Debug",
             "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
             "group": "build"
         },

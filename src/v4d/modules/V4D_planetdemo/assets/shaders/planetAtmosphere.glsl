@@ -80,6 +80,7 @@ void main() {
 	float det = sqrt(b*b - dot(p,p) + r*r);
 	
 	float distStart = max(0.1, min(b - det, length(v2f.pos)));
+	if (depthDistance <= distStart) discard;
 	float distEnd = max(min(depthDistance, b + det), distStart + 0.01);
 	float lightRayTravelDepthMax = float(GetDepthBufferFromTrueDistance(b + det));
 	
