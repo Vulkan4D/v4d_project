@@ -4,14 +4,18 @@
 #include "btBulletDynamicsCommon.h"
 #include "../V4D_hybrid/camera_options.hh"
 
-v4d::graphics::Renderer* r = nullptr;
-v4d::scene::Scene* scene = nullptr;
+using namespace v4d::scene;
+using namespace v4d::graphics;
+using namespace v4d::graphics::vulkan;
+
+Renderer* r = nullptr;
+Scene* scene = nullptr;
 V4D_Renderer* primaryRenderModule = nullptr;
 
 btDynamicsWorld* world = nullptr;
 
 class DebugDrawer : public btIDebugDraw {
-	int mode = DBG_DrawWireframe;
+	int mode = DBG_DrawWireframe | DBG_DrawFeaturesText | DBG_DrawText | DBG_FastWireframe;
 	
 	void drawLine(const btVector3& from, const btVector3& to, const btVector3& color) override {
 		

@@ -1,6 +1,8 @@
 #include "common.hh"
 #include "../V4D_flycam/common.hh"
 
+// #define PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
+
 using namespace v4d::graphics;
 using namespace v4d::scene;
 
@@ -28,35 +30,6 @@ struct TerrainChunkPushConstant {
 	alignas(16) glm::ivec3 chunkPosition;
 	alignas(4) int face;
 } terrainChunkPushConstant;
-
-void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk, int& chunksToGeneratePerFrame) {
-	if (chunk->active) {
-		
-		// subChunks
-		{
-			std::scoped_lock lock(chunk->subChunksMutex);
-			for (auto* subChunk : chunk->subChunks) {
-				ComputeChunkVertices(device, commandBuffer, subChunk, chunksToGeneratePerFrame);
-			}
-		}
-		
-		if (chunk->obj && chunk->meshGenerated) {
-			if (chunk->computedLevel == 0) {
-				chunk->obj->SetGeometriesDirty();
-				chunk->obj->PushGeometries(device, commandBuffer);
-				chunk->computedLevel = 2;
-				chunk->obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-				if (chunk->geometry->blas) {
-					chunk->geometry->blas->built = false;
-					LOG_WARN("BLAS already created but should not be...")
-				}
-				chunk->geometry->active = true;
-				chunk->geometry->colliderDirty = true;
-				chunk->obj->SetGenerated();
-			}
-		}
-	}
-}
 
 class TerrainGenerator {
 	V4D_MODULE_CLASS_HEADER(TerrainGenerator
@@ -155,6 +128,66 @@ ObjectInstancePtr sun = nullptr;
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
+
+#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
+	std::vector<glm::dvec3> collidingObjectPositions {};
+#endif
+
+void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk, int& chunksToGeneratePerFrame) {
+	if (chunk->active) {
+		
+		// subChunks
+		{
+			std::scoped_lock lock(chunk->subChunksMutex);
+			for (auto* subChunk : chunk->subChunks) {
+				ComputeChunkVertices(device, commandBuffer, subChunk, chunksToGeneratePerFrame);
+			}
+		}
+		
+		if (chunk->obj && chunk->meshGenerated) {
+			if (chunk->computedLevel == 0) {
+				chunk->obj->Lock();
+					chunk->obj->physicsActive = false;
+					chunk->geometry->colliderType = v4d::scene::Geometry::ColliderType::TRIANGLE_MESH;
+					chunk->obj->SetGeometriesDirty();
+					chunk->obj->PushGeometries(device, commandBuffer);
+					chunk->computedLevel = 2;
+					chunk->obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+					if (chunk->geometry->blas) {
+						chunk->geometry->blas->built = false;
+						LOG_WARN("BLAS already created but should not be...")
+					}
+					chunk->geometry->active = true;
+					chunk->geometry->colliderDirty = true;
+					chunk->obj->SetGenerated();
+				chunk->obj->Unlock();
+			}
+			#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
+				else if (!chunk->obj->physicsActive) {
+					for (auto& pos : collidingObjectPositions) {
+						if (glm::distance(chunk->centerPos, pos) < chunk->obj->boundingDistance) {
+							chunk->obj->physicsActive = true;
+							chunk->obj->physicsDirty = true;
+							break;
+						}
+					}
+				}
+			#else
+				else if (!chunk->obj->physicsActive) {
+					if (chunk->distanceFromCamera < 1000.0) {
+						chunk->obj->physicsActive = true;
+						chunk->obj->physicsDirty = true;
+					}
+				} else if (chunk->obj->physicsActive) {
+					if (chunk->distanceFromCamera > 2000.0) {
+						chunk->obj->physicsActive = false;
+						chunk->obj->physicsDirty = true;
+					}
+				}
+			#endif
+		}
+	}
+}
 
 V4D_MODULE_CLASS(V4D_Game) {
 	
@@ -291,6 +324,26 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, RendererFrameCompute, VkCommandBuffer commandBuffer) {
 		// for each planet
 			if (terrain) {
+				scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
+				
+				#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
+					collidingObjectPositions.clear();
+					const double maxTerrainHeight = terrain->solidRadius + terrain->heightVariation;
+					scene->Lock();
+						for (auto obj : scene->objectInstances) {
+							if (obj && obj->IsPhysicsActive() && obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::DYNAMIC && obj->physicsObject) {
+								auto positionRelativeToPlanetCenter = obj->GetWorldPosition() - terrain->absolutePosition;
+								auto distanceFromPlanetCenter = positionRelativeToPlanetCenter.length() - obj->boundingDistance;
+								if (distanceFromPlanetCenter < maxTerrainHeight) {
+									if (distanceFromPlanetCenter < terrain->GetHeightMap(glm::normalize(positionRelativeToPlanetCenter), 0) + 5/* threshold of 5 meters above terrain */) {
+										collidingObjectPositions.push_back(positionRelativeToPlanetCenter);
+									}
+								}
+							}
+						}
+					scene->Unlock();
+				#endif
+				
 				// planet.GenerateMaps(renderingDevice, commandBuffer);
 				terrainChunkPushConstant.planetIndex = 0;
 				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);

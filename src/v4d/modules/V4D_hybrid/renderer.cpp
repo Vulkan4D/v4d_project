@@ -1274,9 +1274,8 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 #pragma region UI
 	float img_overlayScale = 1.0;
 	
-	// Overlay functions (Total of 2.0 mb allocated)
-	static const int MAX_OVERLAY_LINES = 32768;
-	static const int MAX_OVERLAY_TEXT_CHARS = 24576;
+	static const int MAX_OVERLAY_LINES = 4000000;
+	static const int MAX_OVERLAY_TEXT_CHARS = 32768;
 	static const int MAX_OVERLAY_CIRCLES = 4096;
 	static const int MAX_OVERLAY_SQUARES = 4096;
 	std::mutex overlayMutex;
@@ -1504,53 +1503,55 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 			std::scoped_lock lock(geometriesToRemoveFromRayTracingInstancesMutex, rayTracingInstanceMutex);
 			nbActiveLights = 0;
 			for (auto obj : scene->objectInstances) {
-				if (obj->IsActive()) {
-					if (!obj->IsGenerated()) obj->GenerateGeometries();
-					// Matrices
-					obj->WriteMatrices(scene->camera.viewMatrix);
-					// Light sources
-					for (auto* lightSource : obj->GetLightSources()) {
-						activeLights[nbActiveLights++] = lightSource->lightOffset;
-					}
-					// Geometries
-					if (r->rayTracingFeatures.rayTracing) {
-						for (auto& geom : obj->GetGeometries()) {
-							if (geom.geometry->active) {
-								if (!geom.geometry->blas) {
-									MakeRayTracingBlas(&geom);
-								}
-								if (geom.geometry->blas && !geom.geometry->blas->built) {
-									
-									// Global Scratch Buffer
-									if (AccelerationStructure::useGlobalScratchBuffer) {
-										VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
-										if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
-											continue;
+				obj->Lock();
+					if (obj->IsActive()) {
+						if (!obj->IsGenerated()) obj->GenerateGeometries();
+						// Matrices
+						obj->WriteMatrices(scene->camera.viewMatrix);
+						// Light sources
+						for (auto* lightSource : obj->GetLightSources()) {
+							activeLights[nbActiveLights++] = lightSource->lightOffset;
+						}
+						// Geometries
+						if (r->rayTracingFeatures.rayTracing) {
+							for (auto& geom : obj->GetGeometries()) {
+								if (geom.geometry->active) {
+									if (!geom.geometry->blas) {
+										MakeRayTracingBlas(&geom);
+									}
+									if (geom.geometry->blas && !geom.geometry->blas->built) {
+										
+										// Global Scratch Buffer
+										if (AccelerationStructure::useGlobalScratchBuffer) {
+											VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+											if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
+												continue;
+											}
+											geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
+											geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
+											globalScratchBufferSize += scratchSize;
+											if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
 										}
-										geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
-										geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
-										globalScratchBufferSize += scratchSize;
-										if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
+										
+										AddRayTracingBlasBuild(geom.geometry->blas);
 									}
-									
-									AddRayTracingBlasBuild(geom.geometry->blas);
-								}
-								if (geom.geometry->blas && geom.geometry->blas->built) {
-									if (geom.rayTracingInstanceIndex == -1) {
-										AddRayTracingInstance(obj, &geom);
+									if (geom.geometry->blas && geom.geometry->blas->built) {
+										if (geom.rayTracingInstanceIndex == -1) {
+											AddRayTracingInstance(obj, &geom);
+										}
+										SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 									}
-									SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
+								} else if (geom.rayTracingInstanceIndex != -1) {
+									RemoveRayTracingInstance(geom);
 								}
-							} else if (geom.rayTracingInstanceIndex != -1) {
-								RemoveRayTracingInstance(geom);
 							}
 						}
-					}
-				} else if (r->rayTracingFeatures.rayTracing) {
+					} else if (r->rayTracingFeatures.rayTracing) {
 					for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
 						RemoveRayTracingInstance(geom);
 					}
 				}
+				obj->Unlock();
 			}
 			if (r->rayTracingFeatures.rayTracing && geometriesToRemoveFromRayTracingInstances.size()) {
 				// Remove deleted geometries
@@ -1588,7 +1589,6 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 					}
 				#endif
 			}
-				
 		scene->Unlock();
 		
 		// Global Scratch Buffer
@@ -1642,9 +1642,11 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 			// Geometry::globalBuffers.PushGeometriesInfo(r->renderingDevice, commandBuffer);
 			scene->Lock();
 				for (auto obj : scene->objectInstances) if (obj && obj->IsActive()) {
-					for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
-						if (geom.geometry) geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
-					}
+					obj->Lock();
+						for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
+							if (geom.geometry) geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
+						}
+					obj->Unlock();
 				}
 			scene->Unlock();
 		}
@@ -2222,8 +2224,8 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			
 			r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
 			
-			//TODO find a better fix...
-			r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
+			// //TODO find a better fix...
+			// r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 		
 			r->renderingDevice->ResetFences(1, &fences["graphics"][r->currentFrameInFlight]);
 			
@@ -2299,6 +2301,9 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 
 		// Increment r->currentFrameInFlight
 		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
+	
+		//TODO find a better fix...
+		r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	V4D_MODULE_FUNC(void, Update2) {

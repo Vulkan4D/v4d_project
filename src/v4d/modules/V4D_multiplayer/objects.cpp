@@ -10,9 +10,8 @@ V4D_MODULE_CLASS(V4D_Objects) {
 			case OBJECT_TYPE::Player:{
 				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
 					auto cube = obj->AddProceduralGeometry("aabb", 1);
-						cube->SetProceduralVertex(0, glm::vec3(-0.5, -0.5, -1.0), glm::vec3(0.5, 0.5, 1.0), glm::vec4(0,1,0.5,1), 100000);
-						cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
-					obj->AddLightSource({0,1.0,0}, 100000, {0,1,0.5}, 1, 0);
+						cube->SetProceduralVertex(0, glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.5, 0.5, 0.5), glm::vec4(0,1,0.5,1), 0);
+						// cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
 				});
 				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
 			}break;

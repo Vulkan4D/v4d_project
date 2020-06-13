@@ -243,6 +243,7 @@ struct PlanetTerrain {
 					obj = planet->scene->AddObjectInstance();
 				}
 				obj->Disable();
+				obj->physicsActive = false;
 				if (!geometry || obj->CountGeometries() == 0) {
 					geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
 				}
@@ -324,6 +325,12 @@ struct PlanetTerrain {
 				genCol = 0;
 				++genRow;
 			}
+			
+			// Simplified mesh
+			geometry->simplifiedMeshIndices = {
+				0, (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+1)), (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+2)),
+				0, (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+2)), vertexSubdivisionsPerChunk,
+			};
 
 			if (!meshGenerating) return;
 			

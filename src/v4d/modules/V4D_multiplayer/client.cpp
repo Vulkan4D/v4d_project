@@ -98,11 +98,13 @@ V4D_MODULE_CLASS(V4D_Client) {
 					if (mod) {
 						if (mod->ReceiveStreamCustomObjectData) mod->ReceiveStreamCustomObjectData(obj, tmpStream1);
 						if (mod->ReceiveStreamCustomTransformData) mod->ReceiveStreamCustomTransformData(obj, tmpStream2);
-						if (mod->BuildObject) {
-							mod->BuildObject(obj, scene);
-							obj->UpdateObjectInstance();
-							obj->UpdateObjectInstanceTransform();
-						}
+						scene->Lock();
+							if (mod->BuildObject) {
+								mod->BuildObject(obj, scene);
+								obj->UpdateObjectInstance();
+								obj->UpdateObjectInstanceTransform();
+							}
+						scene->Unlock();
 					} else {
 						LOG_ERROR("Client ReceiveAction ADD_OBJECT : module " << moduleID.String() << " is not loaded")
 					}

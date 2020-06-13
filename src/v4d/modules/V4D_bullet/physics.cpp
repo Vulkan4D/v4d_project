@@ -120,11 +120,19 @@ struct PhysicsObject : btMotionState {
 						break;
 						case v4d::scene::Geometry::ColliderType::TRIANGLE_MESH:
 							{
+								int indexCount;
+								v4d::scene::Geometry::IndexBuffer_T* indices;
+								if (geom->simplifiedMeshIndices.size()) {
+									indexCount = geom->simplifiedMeshIndices.size();
+									indices = geom->simplifiedMeshIndices.data();
+								} else {
+									indexCount = geom->indexCount;
+									indices = geom->GetIndexPtr(0);
+								}
 								auto* mesh = new btTriangleMesh();
 								globalTriangleMeshes.push_back(mesh);
-								auto* indices = geom->GetIndexPtr(0);
 								auto* vertices = geom->GetVertexPtr(0);
-								for (int i = 0; i < geom->indexCount; i+=3) {
+								for (int i = 0; i < indexCount; i+=3) {
 									btVector3 v0(vertices[indices[i]].pos.x, vertices[indices[i]].pos.y, vertices[indices[i]].pos.z);
 									btVector3 v1(vertices[indices[i+1]].pos.x, vertices[indices[i+1]].pos.y, vertices[indices[i+1]].pos.z);
 									btVector3 v2(vertices[indices[i+2]].pos.x, vertices[indices[i+2]].pos.y, vertices[indices[i+2]].pos.z);
@@ -185,14 +193,14 @@ struct PhysicsObject : btMotionState {
 		btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, this, groupedCollisionShape, localInertia);
 		
 		//TODO set additional stuff in rbInfo
-		rbInfo.m_restitution = 0.8;
+		rbInfo.m_restitution = 0.7;
 		
 		rigidbody = new btRigidBody(rbInfo);
 		rigidbody->setUserPointer(this);
 		if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::KINEMATIC) {
 			rigidbody->setCollisionFlags(rigidbody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+			rigidbody->setActivationState(DISABLE_DEACTIVATION);
 		}
-		rigidbody->setActivationState(DISABLE_DEACTIVATION);
 		globalDynamicsWorld->addRigidBody(rigidbody);
 	}
 	
@@ -267,7 +275,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		globalConstraintSolver = new btSequentialImpulseConstraintSolver();
 		globalDynamicsWorld = new btDiscreteDynamicsWorld(globalPhysicsDispatcher, globalOverlappingPairCache, globalConstraintSolver, globalCollisionConfiguration);
 		
-		globalDynamicsWorld->setGravity(btVector3(0, 0, -10));
+		globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 		
 		// #ifdef _DEBUG
 			if (rendererModule) {
@@ -312,45 +320,52 @@ V4D_MODULE_CLASS(V4D_Physics) {
 	
 	V4D_MODULE_FUNC(void, StepSimulation, double deltaTime) {
 		// scene->Lock();
+			globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 			// Refresh info from scene objects
-			for (auto obj : scene->objectInstances) if (obj->IsActive() || obj->physicsDirty) {
-				if (obj->IsActive() && !obj->physicsObject && obj->rigidbodyType != v4d::scene::ObjectInstance::RigidBodyType::NONE) {
-					AddPhysicsObject(obj);
-				}
-				if (obj->physicsDirty) {
-					if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::NONE) {
-						if (obj->physicsObject) {
-							std::lock_guard lock(objectsToRemoveMutex);
-							objectsToRemove.emplace(obj);
+			bool tmpPhysicsActive;
+			for (auto obj : scene->objectInstances) {
+				obj->Lock();
+					if ((tmpPhysicsActive = obj->IsPhysicsActive()) || obj->physicsDirty) {
+						if (tmpPhysicsActive && !obj->physicsObject && obj->rigidbodyType != v4d::scene::ObjectInstance::RigidBodyType::NONE) {
+							AddPhysicsObject(obj);
+						}
+						if (obj->physicsDirty) {
+							if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::NONE) {
+								if (obj->physicsObject) {
+									std::lock_guard lock(objectsToRemoveMutex);
+									objectsToRemove.emplace(obj);
+									obj->physicsDirty = false;
+									obj->Unlock();
+									continue;
+								}
+							} else if (tmpPhysicsActive) {
+								objectsToRefresh.emplace(obj);
+							}
 							obj->physicsDirty = false;
-							continue;
 						}
-					} else if (obj->IsActive()) {
-						objectsToRefresh.emplace(obj);
-					}
-					obj->physicsDirty = false;
-				}
-				if (obj->IsActive() && (obj->addedForce || obj->physicsForceImpulses.size() > 0) && obj->physicsObject) {
-					auto* rb = ((PhysicsObject*)obj->physicsObject)->rigidbody;
-					if (rb) {
-						if (obj->addedForce) {
-							if (obj->forcePoint.length() == 0) {
-								rb->applyCentralForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z));
-							} else {
-								rb->applyForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z), btVector3(obj->forcePoint.x, obj->forcePoint.y, obj->forcePoint.z));
+						if (tmpPhysicsActive && (obj->addedForce || obj->physicsForceImpulses.size() > 0) && obj->physicsObject) {
+							auto* rb = ((PhysicsObject*)obj->physicsObject)->rigidbody;
+							if (rb) {
+								if (obj->addedForce) {
+									if (obj->forcePoint.length() == 0) {
+										rb->applyCentralForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z));
+									} else {
+										rb->applyForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z), btVector3(obj->forcePoint.x, obj->forcePoint.y, obj->forcePoint.z));
+									}
+								}
+								if (obj->physicsForceImpulses.size() > 0) {
+									auto&[impulseDir, atPoint] = obj->physicsForceImpulses.front();
+									if (atPoint.length() == 0) {
+										rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+									} else {
+										rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
+									}
+									obj->physicsForceImpulses.pop();
+								}
 							}
 						}
-						if (obj->physicsForceImpulses.size() > 0) {
-							auto&[impulseDir, atPoint] = obj->physicsForceImpulses.front();
-							if (atPoint.length() == 0) {
-								rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
-							} else {
-								rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
-							}
-							obj->physicsForceImpulses.pop();
-						}
 					}
-				}
+				obj->Unlock();
 			}
 		// scene->Unlock();
 		
