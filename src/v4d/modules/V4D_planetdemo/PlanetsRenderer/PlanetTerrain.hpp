@@ -226,7 +226,61 @@ struct PlanetTerrain {
 		// 	}
 		// }
 		
+		
 		void Generate() {
+			/* 
+					Example using vertexSubdivisionsPerChunk = 4 (sub)
+						[Vertex indices]
+						{skirt vertex indices}
+					
+						col 0		col 1		col 2		col 3
+						
+									{15}		{14}		{13}
+					{0}	 _______________________________________________	  {12}
+			row 0		|\[0]		|\[1]		|\[2]		|\[3]		|[4]
+						|  \		|  \		|  \		|  \		|
+						|	 \		|	 \		|	 \		|	 \		|
+						|	   \	|	   \	|	   \	|	   \	|
+						|		 \	|		 \	|		 \	|		 \	|
+						|__________\|__________\|__________\|__________\|
+			row 1	{1}	|\[5]		|\[6]		|\[7]		|\[8]		|[9]	{11}
+						|  \		|  \		|  \		|  \		|
+						|	 \		|	 \		|	 \		|	 \		|
+						|	   \	|	   \	|	   \	|	   \	|
+						|		 \	|		 \	|		 \	|		 \	|
+						|__________\|__________\|__________\|__________\|
+			row 2	{2}	|\[10]		|\[11]		|\[12]		|\[13]		|[14]	{10}
+						|  \		|  \		|  \		|  \		|
+						|	 \		|	 \		|	 \		|	 \		|
+						|	   \	|	   \	|	   \	|	   \	|
+						|		 \	|		 \	|		 \	|		 \	|
+						|__________\|__________\|__________\|__________\|
+			row 3	{3}	|\[15]		|\[16]		|\[17]		|\[18]		|[19]	{9}
+						|  \		|  \		|  \		|  \		|
+						|	 \		|	 \		|	 \		|	 \		|
+						|	   \	|	   \	|	   \	|	   \	|
+						|		 \	|		 \	|		 \	|		 \	|
+						|__________\|__________\|__________\|__________\|
+						[20]		[21]		[22]		[23]		[24]
+					{4}														  {8}
+									{5}			{6}			{7}
+				
+				
+			Vertex Index formulas :
+				Per Col & Row (in the generate loop)
+					VertexIndex = (sub + 1) * row + col
+					TopLeft = VertexIndex
+					TopRight = TopLeft + 1
+					BottomLeft = (sub + 1) * (row + 1) + col
+					BottomRight = BottomLeft + 1
+				
+				Per Chunk
+					TopLeftMost = 0
+					TopRightMost = sub
+					BottomLeftMost = sub * (sub + 1)
+					BottomRightMost = sub * (sub + 2)
+			*/
+		
 			// #ifdef _DEBUG
 				auto timer = v4d::Timer(true);
 			// #endif
