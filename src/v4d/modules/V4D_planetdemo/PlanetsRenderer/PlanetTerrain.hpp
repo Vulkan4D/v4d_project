@@ -381,9 +381,24 @@ struct PlanetTerrain {
 			}
 			
 			// Simplified mesh
+			const int sub = vertexSubdivisionsPerChunk;
+			const int tl = 0;
+			const int tr = sub;
+			const int bl = sub * (sub + 1);
+			const int br = sub * (sub + 2);
+			const int bm = (bl + br) / 2;
+			const int tm = (tl + tr) / 2;
+			const int lm = (tl + bl) / 2;
+			const int rm = (tr + br) / 2;
+			const int mm = (tl + br) / 2;
 			geometry->simplifiedMeshIndices = {
-				0, (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+1)), (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+2)),
-				0, (vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+2)), vertexSubdivisionsPerChunk,
+				// minimum (one quad, two triangles)
+					// tl,bl,br,  tl,br,tr,
+				// medium (4 quads, 8 triangles)
+					tl,lm,mm,  tl,mm,tm,
+					lm,bl,bm,  lm,bm,mm,
+					tm,mm,rm,  tm,rm,tr,
+					mm,bm,br,  mm,br,rm,
 			};
 
 			if (!meshGenerating) return;

@@ -6,6 +6,8 @@
 using namespace v4d::graphics;
 using namespace v4d::scene;
 
+const double distanceFromChunkToGenerateCollider = 2000;
+
 #pragma region Planet
 
 struct Planet {
@@ -174,12 +176,12 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 				}
 			#else
 				else if (!chunk->obj->physicsActive) {
-					if (chunk->distanceFromCamera < 1000.0) {
+					if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
 						chunk->obj->physicsActive = true;
 						chunk->obj->physicsDirty = true;
 					}
 				} else if (chunk->obj->physicsActive) {
-					if (chunk->distanceFromCamera > 2000.0) {
+					if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*1.5) {
 						chunk->obj->physicsActive = false;
 						chunk->obj->physicsDirty = true;
 					}
