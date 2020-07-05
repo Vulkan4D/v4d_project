@@ -1,24 +1,45 @@
 #include <v4d.h>
 
-enum class SHAPE {
-	CUBE,
-	SLOPE,
-	PYRAMID,
+enum class SHAPE : int {
+	CUBE = 0,
+	WEDGE,
 	CORNER,
-	INVERTED_CORNER,
+	TETRA,
+	HEPTA,
+	_EXTRA1,
+	_EXTRA2,
+	_EXTRA3,
+};
+
+enum class RESIZEDIR {
+	NONE = 0,
+	PLUS_X,
+	MINUS_X,
+	PLUS_Y,
+	MINUS_Y,
+	PLUS_Z,
+	MINUS_Z,
+};
+
+struct BlockFace {
+	std::vector<uint8_t> triangles {};
+	RESIZEDIR resizedir = RESIZEDIR::NONE;
+	std::vector<uint8_t> resizePoints {};
 };
 
 class Block {
 protected:
-	static const int MAX_VERTICES = 8;
+	static const int MAX_POINTS = 8;
 	static const int MAX_FACES = 7;
 	static const int MAX_LINES = 12;
 	
 	// 32 Bytes
 	struct BlockData {
+		BlockData() = default;
+		BlockData(SHAPE t) : shape((int)t) {}
 		
 		// 4 bytes ident
-			uint32_t type : 3; // 8 possible shapes, only 5 used
+			uint32_t shape : 3; // 8 possible shapes, only 5 used
 			uint32_t orientation : 5; // 32 possible orientations, only 24 used
 			uint32_t index : 24; // shall reset to 0 upon game load
 		
@@ -35,7 +56,7 @@ protected:
 			int16_t posY;
 			int16_t posZ;
 		
-		// 8 bytes colors (128 color palette, different color for each face or each vertex)
+		// 8 bytes colors (128 color palette, different color for each face or each point)
 			uint8_t color0 : 7;
 			uint8_t face0 : 1;
 			uint8_t color1 : 7;
@@ -88,5 +109,85 @@ protected:
 	glm::i16vec3 GetPosition() const {
 		return glm::i16vec3(data.posX, data.posY, data.posZ);
 	};
+	
+	SHAPE const GetShape() const {
+		return (SHAPE)data.shape;
+	};
+	
+	Block() = default;
+	Block(SHAPE t) : data(t) {}
+	
+	std::vector<glm::vec3> const GetPoints() const {
+		switch (GetShape()) {
+			case SHAPE::CUBE: return {
+				// top
+				/*0*/{ 1, 1, 1}, // front right
+				/*1*/{-1, 1, 1}, // front left
+				/*2*/{-1, 1,-1}, // back left
+				/*3*/{ 1, 1,-1}, // back right
+				// bottom
+				/*4*/{ 1,-1, 1}, // front right
+				/*5*/{-1,-1, 1}, // front left
+				/*6*/{-1,-1,-1}, // back left
+				/*7*/{ 1,-1,-1}, // back right
+			};
+			case SHAPE::WEDGE: return {};
+			case SHAPE::CORNER: return {};
+			case SHAPE::TETRA: return {};
+			case SHAPE::HEPTA: return {};
+			case SHAPE::_EXTRA1: return {};
+			case SHAPE::_EXTRA2: return {};
+			case SHAPE::_EXTRA3: return {};
+		}
+		return {};
+	};
+	
+	std::vector<BlockFace> const GetFaces() const {
+		switch (GetShape()) {
+			case SHAPE::CUBE: return {
+				{ // top
+					{0,1,2, 2,3,0},
+					RESIZEDIR::PLUS_Y,
+					{0,1,2,3}
+				},
+				{ // bottom
+					{7,6,5, 5,4,7},
+					RESIZEDIR::MINUS_Y,
+					{4,5,6,7}
+				},
+				{ // right
+					{0,3,7, 7,4,0},
+					RESIZEDIR::PLUS_X,
+					{0,3,4,7}
+				},
+				{ // left
+					{2,1,5, 5,6,2},
+					RESIZEDIR::MINUS_X,
+					{1,2,5,6}
+				},
+				{ // front
+					{0,4,5, 5,1,0},
+					RESIZEDIR::PLUS_Z,
+					{0,1,4,5}
+				},
+				{ // back
+					{2,6,7, 7,3,2},
+					RESIZEDIR::MINUS_Z,
+					{2,3,6,7}
+				},
+			};
+			case SHAPE::WEDGE: return {};
+			case SHAPE::CORNER: return {};
+			case SHAPE::TETRA: return {};
+			case SHAPE::HEPTA: return {};
+			case SHAPE::_EXTRA1: return {};
+			case SHAPE::_EXTRA2: return {};
+			case SHAPE::_EXTRA3: return {};
+		}
+		return {};
+	};
+	
+	
+	
 	
 };
