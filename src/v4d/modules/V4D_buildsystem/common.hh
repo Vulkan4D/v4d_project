@@ -2,11 +2,11 @@
 
 enum class SHAPE : int {
 	CUBE = 0,
-	WEDGE,
+	SLOPE,
 	CORNER,
-	TETRA,
-	HEPTA,
-	_EXTRA1,
+	PYRAMID,
+	INVCORNER,
+	_EXTRA1, // inverted pyramid ?
 	_EXTRA2,
 	_EXTRA3,
 };
@@ -131,10 +131,10 @@ protected:
 				/*6*/{-1,-1,-1}, // back left
 				/*7*/{ 1,-1,-1}, // back right
 			};
-			case SHAPE::WEDGE: return {};
+			case SHAPE::SLOPE: return {};
 			case SHAPE::CORNER: return {};
-			case SHAPE::TETRA: return {};
-			case SHAPE::HEPTA: return {};
+			case SHAPE::PYRAMID: return {};
+			case SHAPE::INVCORNER: return {};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
 			case SHAPE::_EXTRA3: return {};
@@ -176,10 +176,10 @@ protected:
 					{2,3,6,7}
 				},
 			};
-			case SHAPE::WEDGE: return {};
+			case SHAPE::SLOPE: return {};
 			case SHAPE::CORNER: return {};
-			case SHAPE::TETRA: return {};
-			case SHAPE::HEPTA: return {};
+			case SHAPE::PYRAMID: return {};
+			case SHAPE::INVCORNER: return {};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
 			case SHAPE::_EXTRA3: return {};
