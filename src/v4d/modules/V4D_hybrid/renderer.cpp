@@ -19,7 +19,7 @@ Renderer* r = nullptr;
 Scene* scene = nullptr;
 
 // Textures
-Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_font_atlas.png", STBI_grey_alpha};
+Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/monospace_font_atlas.png"), STBI_grey_alpha};
 
 #pragma region Descriptor Sets
 	DescriptorSet set0_base;
@@ -63,110 +63,110 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 
 #pragma region Shaders
 
-	const std::string rasterTrianglesDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.vert";
-	const std::string rasterAabbDefaultVertexShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.vert";
-	const std::string rasterAabbDefaultGeometryShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.geom";
-	const std::string rasterAabbSphereDefaultGeometryShader = "modules/V4D_hybrid/assets/shaders/raster_visibility.sphere.geom";
+	const std::string rasterTrianglesDefaultVertexShader = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.vert");
+	const std::string rasterAabbDefaultVertexShader = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.aabb.vert");
+	const std::string rasterAabbDefaultGeometryShader = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.aabb.geom");
+	const std::string rasterAabbSphereDefaultGeometryShader = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.sphere.geom");
 
 	// Visibility
 	RasterShaderPipeline shader_visibility_basic {pl_visibility_raster, {
 		rasterTrianglesDefaultVertexShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.basic.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.basic.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_standard {pl_visibility_raster, {
 		rasterTrianglesDefaultVertexShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.standard.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.standard.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_terrain {pl_visibility_raster, {
 		rasterTrianglesDefaultVertexShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.terrain.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.terrain.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_aabb {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
 		rasterAabbDefaultGeometryShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.aabb.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.aabb.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_sphere {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
 		rasterAabbSphereDefaultGeometryShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.sphere.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.sphere.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_light {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
 		rasterAabbSphereDefaultGeometryShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.light.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.light.frag"),
 	}};
 	RasterShaderPipeline shader_visibility_sun {pl_visibility_raster, {
 		rasterAabbDefaultVertexShader,
 		rasterAabbSphereDefaultGeometryShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.sun.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.sun.frag"),
 	}};
 	// #ifdef _DEBUG
 		RasterShaderPipeline shader_debug_wireframe {pl_visibility_raster, {
 			rasterTrianglesDefaultVertexShader,
-			"modules/V4D_hybrid/assets/shaders/raster_visibility.basic.frag",
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.basic.frag"),
 		}};
 	// #endif
 	RasterShaderPipeline shader_glass {pl_visibility_raster, {
 		rasterTrianglesDefaultVertexShader,
-		"modules/V4D_hybrid/assets/shaders/raster_visibility.glass.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.glass.frag"),
 	}};
 	
 	// Overlay
 	RasterShaderPipeline shader_overlay_circles {pl_overlay, {
-		"modules/V4D_hybrid/assets/shaders/overlay_shapes.vert",
-		"modules/V4D_hybrid/assets/shaders/overlay_shapes.circle.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_shapes.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_shapes.circle.frag"),
 	}, -4};
 	RasterShaderPipeline shader_overlay_squares {pl_overlay, {
-		"modules/V4D_hybrid/assets/shaders/overlay_shapes.vert",
-		"modules/V4D_hybrid/assets/shaders/overlay_shapes.square.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_shapes.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_shapes.square.frag"),
 	}, -3};
 	RasterShaderPipeline shader_overlay_lines {pl_overlay, {
-		"modules/V4D_hybrid/assets/shaders/overlay_lines.vert",
-		"modules/V4D_hybrid/assets/shaders/overlay_lines.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_lines.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_lines.frag"),
 	}, -2};
 	RasterShaderPipeline shader_overlay_text {pl_overlay, {
-		"modules/V4D_hybrid/assets/shaders/overlay_text.vert",
-		"modules/V4D_hybrid/assets/shaders/overlay_text.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_text.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_text.frag"),
 	}, -1};
 	
 	// Main Rendering
 	RasterShaderPipeline shader_lighting {pl_lighting_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_lighting.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_lighting.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_lighting.frag"),
 	}};
 	RasterShaderPipeline shader_lighting_rtx {pl_lighting_raster, {
-		"modules/V4D_hybrid/assets/shaders/raster_lighting.vert",
-		"modules/V4D_hybrid/assets/shaders/raster_lighting.rtx.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_lighting.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_lighting.rtx.frag"),
 	}};
 	
 	// Ray Tracing
-	ShaderBindingTable sbt_visibility {pl_visibility_rays, "modules/V4D_hybrid/assets/shaders/rtx_visibility.rgen"};
-	ShaderBindingTable sbt_lighting {pl_lighting_rays, "modules/V4D_hybrid/assets/shaders/rtx_lighting.rgen"};
+	ShaderBindingTable sbt_visibility {pl_visibility_rays, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.rgen")};
+	ShaderBindingTable sbt_lighting {pl_lighting_rays, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_lighting.rgen")};
 	
 	// Post Processing
 	RasterShaderPipeline shader_thumbnail {pl_thumbnail, {
-		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.vert",
-		"modules/V4D_hybrid/assets/shaders/v4d_thumbnail.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_thumbnail.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_thumbnail.frag"),
 	}};
 	RasterShaderPipeline shader_fx_txaa {pl_post, {
-		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
-		"modules/V4D_hybrid/assets/shaders/v4d_post.txaa.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.txaa.frag"),
 	}, 100};
 	RasterShaderPipeline shader_history_write {pl_post, {
-		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
-		"modules/V4D_hybrid/assets/shaders/v4d_post.history_write.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.history_write.frag"),
 	}};
 	RasterShaderPipeline shader_present_hdr {pl_post, {
-		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
-		"modules/V4D_hybrid/assets/shaders/v4d_post.hdr.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.hdr.frag"),
 	}, -100};
 	RasterShaderPipeline shader_present_overlay_apply {pl_post, {
-		"modules/V4D_hybrid/assets/shaders/v4d_post.vert",
-		"modules/V4D_hybrid/assets/shaders/v4d_post.overlay_apply.frag",
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.overlay_apply.frag"),
 	}, 100};
 	ComputeShaderPipeline shader_histogram_compute {pl_histogram, 
-		"modules/V4D_hybrid/assets/shaders/v4d_histogram.comp"
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_histogram.comp")
 	};
 	
 #pragma endregion
@@ -733,45 +733,45 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 	
 	void ConfigureRayTracingShaders() {
 		// Visibility Miss
-		shaderBindingTables["sbt_visibility"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.rmiss");
+		shaderBindingTables["sbt_visibility"]->AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.rmiss"));
 		
 		// Lighting Miss (Shadow)
-		shaderBindingTables["sbt_lighting"]->AddMissShader("modules/V4D_hybrid/assets/shaders/rtx_lighting.shadow.rmiss");
+		shaderBindingTables["sbt_lighting"]->AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_lighting.shadow.rmiss"));
 		
 		// Basic
 		Geometry::geometryRenderTypes["basic"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.basic.rchit");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.basic.rchit");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.basic.rchit"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.basic.rchit"));
 		
 		// Standard
 		Geometry::geometryRenderTypes["standard"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.standard.rchit");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.standard.rchit");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.standard.rchit"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.standard.rchit"));
 		
 		// Terrain
 		Geometry::geometryRenderTypes["terrain"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.terrain.rchit");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.terrain.rchit"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.terrain.rchit"));
 		
 		// Sphere
 		Geometry::geometryRenderTypes["aabb"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rint");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.aabb.rint");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.aabb.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.aabb.rint"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.aabb.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.aabb.rint"));
 		
 		// Sphere
 		Geometry::geometryRenderTypes["sphere"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
 		
 		// Light
 		Geometry::geometryRenderTypes["light"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.light.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
 	
 		// Sun
 		Geometry::geometryRenderTypes["sun"].sbtOffset = 
-			shaderBindingTables["sbt_visibility"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sun.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
-			shaderBindingTables["sbt_lighting"]->AddHitShader("modules/V4D_hybrid/assets/shaders/rtx_visibility.sun.rchit", "", "modules/V4D_hybrid/assets/shaders/rtx_visibility.sphere.rint");
+			shaderBindingTables["sbt_visibility"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sun.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
+			shaderBindingTables["sbt_lighting"]->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sun.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_visibility.sphere.rint"));
 	}
 	
 	void RunRayTracingVisibilityCommands(VkCommandBuffer commandBuffer) {
@@ -1443,7 +1443,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 	
 	#ifdef _ENABLE_IMGUI
 		void LoadImGui() {
-			ImGui_ImplVulkan_InitInfo init_info {};
+			static ImGui_ImplVulkan_InitInfo init_info {};
 				init_info.Instance = r->GetHandle();
 				init_info.PhysicalDevice = r->renderingDevice->GetPhysicalDevice()->GetHandle();
 				init_info.Device = r->renderingDevice->GetHandle();
@@ -1453,6 +1453,7 @@ Texture2D tex_img_font_atlas {"modules/V4D_hybrid/assets/resources/monospace_fon
 				init_info.MinImageCount = r->swapChain->images.size();
 				init_info.ImageCount = r->swapChain->images.size();
 				init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+				init_info.CheckVkResultFn = [](VkResult err){if (err) LOG_ERROR("ImGui Vk Error " << (int)err)};
 			ImGui_ImplVulkan_Init(&init_info, uiRenderPass.handle);
 			// Font Upload
 			auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
