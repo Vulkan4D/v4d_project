@@ -143,7 +143,9 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	V4D_MODULE_FUNC(void, RendererRunUiDebug) {
-		ImGui::Text("%d objects", Geometry::globalBuffers.nbAllocatedObjects);
+		#ifdef _ENABLE_IMGUI
+			ImGui::Text("%d objects", Geometry::globalBuffers.nbAllocatedObjects);
+		#endif
 	}
 	
 };

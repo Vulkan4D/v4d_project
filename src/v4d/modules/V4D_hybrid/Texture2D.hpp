@@ -194,7 +194,7 @@ public:
 			region.imageOffset = {0, 0, 0};
 			region.imageExtent = {(uint32_t)width, (uint32_t)height, 1};
 
-		vkCmdCopyBufferToImage(
+		device->CmdCopyBufferToImage(
 			commandBuffer,
 			stagingBuffer.buffer,
 			image.image,
@@ -223,7 +223,7 @@ public:
 	
 	void GenerateMipmaps(Device* device, VkCommandBuffer commandBuffer, uint32_t mipLevels) {
 		VkFormatProperties formatProperties;
-		vkGetPhysicalDeviceFormatProperties(device->GetPhysicalDevice()->GetHandle(), GetFormatFromReqComponentCount(), &formatProperties);
+		device->GetPhysicalDevice()->GetPhysicalDeviceFormatProperties(GetFormatFromReqComponentCount(), &formatProperties);
 		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
 			throw std::runtime_error("Texture image format does not support linear blitting");
 		}
@@ -270,7 +270,7 @@ public:
 				blit.dstSubresource.baseArrayLayer = 0;
 				blit.dstSubresource.layerCount = 1;
 
-			vkCmdBlitImage(
+			device->CmdBlitImage(
 				commandBuffer,
 				image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
