@@ -16,10 +16,12 @@ std::array<ImTextureID, NB_BLOCKS> blocks_imGuiImg {};
 
 int selectedBlockType = -1;
 
+v4d::scene::Scene* scene = nullptr;
+
 V4D_MODULE_CLASS(V4D_Game) {
 	
-	V4D_MODULE_FUNC(void, Init, v4d::scene::Scene*) {
-		
+	V4D_MODULE_FUNC(void, Init, v4d::scene::Scene* _s) {
+		scene = _s;
 	}
 	
 	V4D_MODULE_FUNC(void, RendererCreateResources, v4d::graphics::vulkan::Device* device) {
@@ -53,4 +55,21 @@ V4D_MODULE_CLASS(V4D_Game) {
 		}
 		ImGui::End();
 	}
+	
+	
+	
+	V4D_MODULE_FUNC(void, LoadScene) {
+		scene->Lock();
+			scene->AddObjectInstance()->Configure([](v4d::scene::ObjectInstance* obj){
+				obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;
+				auto geom1 = obj->AddGeometry(Block::MAX_VERTICES, Block::MAX_INDICES);
+				Block block(SHAPE::CUBE);
+				block.GenerateGeometry(geom1->GetVertexPtr(), geom1->GetIndexPtr());
+				geom1->isDirty = true;
+			}, {0,10,-10}, 0.0);
+		scene->Unlock();
+	}
+	
+	
+	
 };
