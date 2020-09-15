@@ -34,7 +34,10 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	V4D_MODULE_FUNC(void, RendererDestroyResources, v4d::graphics::vulkan::Device* device) {
 		for (int i = 0; i < NB_BLOCKS; ++i) {
-			blocks_imGuiImg[i] = nullptr;
+			if (blocks_imGuiImg[i]) {
+				// ImGui_ImplVulkan_RemoveTexture(blocks_imGuiImg[i]); // Descriptor pool is already destroyed here, thus this line does not work... maybe find another way, or is it even necessary to free old descriptor sets?...
+				blocks_imGuiImg[i] = nullptr;
+			}
 			blocks_tex[i].DestroyImage(device);
 		}
 	}

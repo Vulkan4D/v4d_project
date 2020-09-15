@@ -1496,6 +1496,9 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 				init_info.CheckVkResultFn = [](VkResult err){if (err) LOG_ERROR("ImGui Vk Error " << (int)err)};
 			ImGui_ImplVulkan_Init(&init_info, uiRenderPass.handle);
+			// Clear any existing draw data
+			auto* drawData = ImGui::GetDrawData();
+			if (drawData) drawData->Clear();
 			// Font Upload
 			auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
 				ImGui_ImplVulkan_CreateFontsTexture(cmdBuffer);
@@ -1503,10 +1506,17 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			ImGui_ImplVulkan_DestroyFontUploadObjects();
 		}
 		void UnloadImGui() {
+			// Clear any existing draw data
+			auto* drawData = ImGui::GetDrawData();
+			if (drawData) drawData->Clear();
+			// Shutdown ImGui
 			ImGui_ImplVulkan_Shutdown();
 		}
 		void DrawImGui(VkCommandBuffer commandBuffer) {
-			ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+			auto* drawData = ImGui::GetDrawData();
+			if (drawData) {
+				ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
+			}
 		}
 	#endif
 
