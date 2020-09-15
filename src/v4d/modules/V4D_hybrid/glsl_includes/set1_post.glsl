@@ -1,9 +1,11 @@
 layout(set = 1, binding = 0) uniform sampler2D tex_img_lit;
 layout(set = 1, binding = 1) uniform sampler2D tex_img_overlay;
-layout(set = 1, binding = 2, input_attachment_index = 0) uniform highp subpassInput in_img_pp;
-layout(set = 1, binding = 3) uniform sampler2D tex_img_history; // previous frame
-layout(set = 1, binding = 4) uniform sampler2D tex_img_depth;
-layout(set = 1, binding = 5) uniform sampler2D tex_img_rasterDepth;
+layout(set = 1, binding = 2) uniform sampler2D tex_img_history; // previous frame
+layout(set = 1, binding = 3) uniform sampler2D tex_img_depth;
+layout(set = 1, binding = 4) uniform sampler2D tex_img_rasterDepth;
+#ifndef SHADER_SUBPASS_3
+	layout(set = 1, binding = 5, input_attachment_index = 0) uniform highp subpassInput in_img_pp;
+#endif
 
 	// This is there mostly for debugging them.... may remove if it affects performance
 	layout(set = 1, binding = 6) uniform sampler2D img_gBuffer_0; // R=snorm8(metallic), G=snorm8(roughness)

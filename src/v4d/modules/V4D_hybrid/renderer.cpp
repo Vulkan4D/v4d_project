@@ -27,6 +27,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	DescriptorSet set1_visibility_rays;
 	DescriptorSet set1_lighting_raster;
 	DescriptorSet set1_lighting_rays;
+	DescriptorSet set1_fog_raster;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
 	DescriptorSet set1_histogram;
@@ -218,7 +219,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"sg_thumbnail", {&shader_thumbnail}},
 		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
-		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
+		{"sg_present", {&shader_present_hdr}},
+		{"sg_present_overlay", {&shader_present_overlay_apply}},
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
@@ -381,6 +383,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		std::vector<Image*> attachmentImages(nbColorAttachments + nbInputAttachments);
 		std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs0 {};
 		std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs0 {};
+		std::array<VkAttachmentReference, 1> inputAttachmentRefs1;
 		
 		int i = 0;
 		
@@ -409,15 +412,21 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+			uint32_t inputAttachmentIndex = lightingRenderPass.AddAttachment(attachments[i]);
 			inputAttachmentRefs0[i-nbColorAttachments] = {
-				lightingRenderPass.AddAttachment(attachments[i]),
+				inputAttachmentIndex,
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			};
+			if (img == &img_gBuffer_2) {
+				inputAttachmentRefs1[0] = {
+					inputAttachmentIndex,
+					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				};
+			}
 			++i;
 		}
 		
 		std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs1 = colorAttachmentRefs0;
-		std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs1 = inputAttachmentRefs0;
 	
 		// SubPasses
 		std::array<VkSubpassDependency, 2> subpassDependencies {
@@ -1084,8 +1093,19 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				subpass.pInputAttachments = &inputAtt_2;
 				postProcessingRenderPass.AddSubpass(subpass);
 			}
+			{
+				VkSubpassDescription subpass {};
+				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				subpass.colorAttachmentCount = 1;
+				subpass.pColorAttachments = &colorAttRef_2;
+				subpass.preserveAttachmentCount = 1;
+				subpass.pPreserveAttachments = &preserverAtt_2;
+				subpass.inputAttachmentCount = 0;
+				subpass.pInputAttachments = nullptr;
+				postProcessingRenderPass.AddSubpass(subpass);
+			}
 			
-			std::array<VkSubpassDependency, 3> subPassDependencies {
+			std::array<VkSubpassDependency, 4> subPassDependencies {
 				VkSubpassDependency{
 					VK_SUBPASS_EXTERNAL,// srcSubpass;
 					0,// dstSubpass;
@@ -1112,6 +1132,15 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
 					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
 					0// dependencyFlags;
+				},
+				VkSubpassDependency{
+					2,// srcSubpass;
+					3,// dstSubpass;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+					0// dependencyFlags;
 				}
 			};
 			postProcessingRenderPass.renderPassInfo.dependencyCount = subPassDependencies.size();
@@ -1122,7 +1151,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			postProcessingRenderPass.CreateFrameBuffers(r->renderingDevice, r->swapChain, {
 				img_pp.view, 
 				img_history.view, 
-				VK_NULL_HANDLE
+				VK_NULL_HANDLE,
 			});
 			
 			// Shaders
@@ -1138,6 +1167,11 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			}
 			for (auto* shader : shaderGroups["sg_present"]) {
 				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 2);
+				shader->AddColorBlendAttachmentState();
+				shader->CreatePipeline(r->renderingDevice);
+			}
+			for (auto* shader : shaderGroups["sg_present_overlay"]) {
+				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 3);
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(r->renderingDevice);
 			}
@@ -1164,6 +1198,9 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		for (auto* s : shaderGroups["sg_present"]) {
 			s->DestroyPipeline(r->renderingDevice);
 		}
+		for (auto* s : shaderGroups["sg_present_overlay"]) {
+			s->DestroyPipeline(r->renderingDevice);
+		}
 		postProcessingRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		postProcessingRenderPass.Destroy(r->renderingDevice);
 		
@@ -1180,7 +1217,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		shader_thumbnail.SetData(3);
 		
 		// Post-Processing
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_postfx" || rp == "sg_history_write" || rp == "sg_present") {
+		for (auto[rp, ss] : shaderGroups) if (rp == "sg_postfx" || rp == "sg_history_write" || rp == "sg_present" || rp == "sg_present_overlay") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -1223,6 +1260,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 			for (auto* shader : shaderGroups["sg_present"]) {
+				shader->Execute(r->renderingDevice, commandBuffer);
+			}
+			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+			for (auto* shader : shaderGroups["sg_present_overlay"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
@@ -1840,14 +1881,21 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			set1_lighting_raster.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
+		{r->descriptorSets["set1_fog_raster"] = &set1_fog_raster;
+			int i = 0;
+			set1_fog_raster.AddBinding_inputAttachment(i++, &img_gBuffer_2, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_fog_raster.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_fog_raster.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+		
 		{r->descriptorSets["set1_post"] = &set1_post;
 			int i = 0;
 			set1_post.AddBinding_combinedImageSampler(i++, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_inputAttachment(i++, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_inputAttachment(i++, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
 			
 				// This is there mostly for debugging them.... may remove if it affects performance
 				for (auto* img : gBuffers) set1_post.AddBinding_combinedImageSampler(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1875,7 +1923,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			pipelineLayouts["pl_visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
 			pipelineLayouts["pl_visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
 			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_raster);
-			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_lighting_raster);
+			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_fog_raster);
 			pipelineLayouts["pl_lighting_rays"]->AddDescriptorSet(&set1_lighting_rays);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
