@@ -99,7 +99,11 @@
         "__functional_base_03": "cpp",
         "*.inc": "cpp",
         "parentbad": "cpp",
-        "xvkinterface.c": "cpp"
+        "xvkinterface.c": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "ranges": "cpp",
+        "stop_token": "cpp"
     },
     "files.exclude": {
         "**/.git": true,
