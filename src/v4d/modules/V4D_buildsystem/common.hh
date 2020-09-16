@@ -51,12 +51,12 @@ protected:
 			,shape((int)t)
 			,orientation(0)
 			
-			,sizePlusX(size*3)
-			,sizePlusY(size*3)
-			,sizePlusZ(size*3)
-			,sizeMinusX(size*3)
-			,sizeMinusY(size*3)
-			,sizeMinusZ(size*3)
+			,sizePlusX(size*4 - 1)
+			,sizePlusY(size*4 - 1)
+			,sizePlusZ(size*4 - 1)
+			,sizeMinusX(size*4 - 1)
+			,sizeMinusY(size*4 - 1)
+			,sizeMinusZ(size*4 - 1)
 			
 			,posX(0)
 			,posY(0)
@@ -198,9 +198,15 @@ protected:
 		return false;
 	}
 	
-	glm::i16vec3 GetPosition() const {
+	glm::i16vec3 GetRawPosition() const {
 		return glm::i16vec3(data.posX, data.posY, data.posZ);
 	};
+	
+	void SetRawPosition(glm::i16vec3 pos) {
+		data.posX = pos.x;
+		data.posY = pos.y;
+		data.posZ = pos.z;
+	}
 	
 	SHAPE const GetShapeType() const {
 		return (SHAPE)data.shape;
@@ -209,6 +215,16 @@ protected:
 public:
 	Block() = default;
 	Block(SHAPE t) : data(t) {}
+	
+	// Grid size of 1/4 meters for block positions
+	void SetPosition(glm::vec3 pos) {
+		data.posX = pos.x * 4.0f;
+		data.posY = pos.y * 4.0f;
+		data.posZ = pos.z * 4.0f;
+	}
+	glm::vec3 GetPosition() const {
+		return glm::vec3(data.posX, data.posY, data.posZ) / 4.0f;
+	};
 	
 	std::vector<glm::vec3> const GetPoints() const {
 		switch (GetShapeType()) {
@@ -224,10 +240,38 @@ public:
 				/*6*/{-1,-1,-1}, // back left
 				/*7*/{ 1,-1,-1}, // back right
 			};
-			case SHAPE::SLOPE: return {};
-			case SHAPE::CORNER: return {};
-			case SHAPE::PYRAMID: return {};
-			case SHAPE::INVCORNER: return {};
+			case SHAPE::SLOPE: return {
+				/*0*/{ 1, 1, 1}, // front right top
+				/*1*/{-1, 1, 1}, // front left top
+				/*2*/{-1,-1,-1}, // back left bottom
+				/*3*/{ 1,-1,-1}, // back right bottom
+				/*4*/{ 1,-1, 1}, // front right bottom
+				/*5*/{-1,-1, 1}, // front left bottom
+			};
+			case SHAPE::CORNER: return {
+				/*0*/{ 1, 1, 1}, // front right top
+				/*1*/{-1,-1, 1}, // front left bottom
+				/*2*/{ 1,-1,-1}, // back right bottom
+				/*3*/{ 1,-1, 1}, // front right bottom
+			};
+			case SHAPE::PYRAMID: return {
+				/*0*/{ 1, 1, 1}, // front right top
+				/*1*/{-1,-1,-1}, // back left bottom
+				/*2*/{ 1,-1,-1}, // back right bottom
+				/*3*/{ 1,-1, 1}, // front right bottom
+				/*4*/{-1,-1, 1}, // front left bottom
+			};
+			case SHAPE::INVCORNER: return {
+				// top
+				/*0*/{ 1, 1, 1}, // front right
+				/*1*/{-1, 1, 1}, // front left
+				/*2*/{-1, 1,-1}, // back left
+				// bottom
+				/*3*/{ 1,-1, 1}, // front right
+				/*4*/{-1,-1, 1}, // front left
+				/*5*/{-1,-1,-1}, // back left
+				/*6*/{ 1,-1,-1}, // back right
+			};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
 			case SHAPE::_EXTRA3: return {};
@@ -269,10 +313,119 @@ public:
 					{2,3,6,7}
 				},
 			};
-			case SHAPE::SLOPE: return {};
-			case SHAPE::CORNER: return {};
-			case SHAPE::PYRAMID: return {};
-			case SHAPE::INVCORNER: return {};
+			case SHAPE::SLOPE: return {
+				{ // slope
+					{0,1,2, 2,3,0},
+					RESIZEDIR::NONE,
+					{}
+				},
+				{ // right
+					{0,3,4},
+					RESIZEDIR::PLUS_X,
+					{0,3,4}
+				},
+				{ // left
+					{1,5,2},
+					RESIZEDIR::MINUS_X,
+					{1,5,2}
+				},
+				{ // front
+					{0,4,1, 1,4,5},
+					RESIZEDIR::PLUS_Z,
+					{0,1,4,5}
+				},
+				{ // bottom
+					{4,3,5, 5,3,2},
+					RESIZEDIR::MINUS_Y,
+					{2,3,4,5}
+				},
+			};
+			case SHAPE::CORNER: return {
+				{ // slope
+					{0,1,2},
+					RESIZEDIR::NONE,
+					{}
+				},
+				{ // right
+					{0,2,3},
+					RESIZEDIR::PLUS_X,
+					{0,2,3}
+				},
+				{ // front
+					{0,3,1},
+					RESIZEDIR::PLUS_Z,
+					{0,1,3}
+				},
+				{ // bottom
+					{2,1,3},
+					RESIZEDIR::MINUS_Y,
+					{2,1,3}
+				},
+			};
+			case SHAPE::PYRAMID: return {
+				{ // back slope
+					{0,1,2},
+					RESIZEDIR::NONE,
+					{}
+				},
+				{ // left slope
+					{0,4,1},
+					RESIZEDIR::NONE,
+					{}
+				},
+				{ // right
+					{0,2,3},
+					RESIZEDIR::PLUS_X,
+					{0,2,3}
+				},
+				{ // front
+					{0,3,4},
+					RESIZEDIR::PLUS_Z,
+					{0,3,4}
+				},
+				{ // bottom
+					{1,4,2, 2,4,3},
+					RESIZEDIR::MINUS_Y,
+					{1,2,3,4}
+				},
+			};
+			case SHAPE::INVCORNER: return {
+				{ // top
+					{0,1,2},
+					RESIZEDIR::PLUS_Y,
+					{0,1,2}
+				},
+				{ // bottom
+					{6,5,4, 4,3,6},
+					RESIZEDIR::MINUS_Y,
+					{3,4,5,6}
+				},
+				{ // right
+					{0,6,3},
+					RESIZEDIR::PLUS_X,
+					{0,6,3}
+				},
+				{ // left
+					{2,1,5, 5,1,4},
+					RESIZEDIR::MINUS_X,
+					{1,2,4,5}
+				},
+				{ // front
+					{0,3,1, 1,3,4},
+					RESIZEDIR::PLUS_Z,
+					{0,1,3,4}
+				},
+				{ // back
+					{2,5,6},
+					RESIZEDIR::MINUS_Z,
+					{2,5,6}
+				},
+				{ // slope
+					{0,2,6},
+					RESIZEDIR::NONE,
+					{}
+				},
+			};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
 			case SHAPE::_EXTRA3: return {};
@@ -296,10 +449,49 @@ public:
 				{0,4}, // front right
 				{3,7}, // back right
 			};
-			case SHAPE::SLOPE: return {};
-			case SHAPE::CORNER: return {};
-			case SHAPE::PYRAMID: return {};
-			case SHAPE::INVCORNER: return {};
+			case SHAPE::SLOPE: return {
+				{0,1}, // top
+				{1,2}, // left slope
+				{0,3}, // right slope
+				{2,3}, // back
+				{4,5}, // front bottom
+				{0,4}, // front right
+				{3,4}, // bottom right
+				{1,5}, // front left
+				{2,5}, // bottom left
+			};
+			case SHAPE::CORNER: return {
+				{0,1},
+				{1,2},
+				{0,2},
+				{0,3},
+				{1,3},
+				{2,3},
+			};
+			case SHAPE::PYRAMID: return {
+				{0,1},
+				{0,4},
+				{0,2},
+				{0,3},
+				{1,2},
+				{2,3},
+				{1,4},
+				{3,4},
+			};
+			case SHAPE::INVCORNER: return {
+				{0,1}, // top front
+				{1,2}, // top left
+				{0,2}, // top slope
+				{2,6}, // back slope
+				{0,6}, // right slope
+				{2,5}, // back left
+				{5,6}, // back bottom
+				{0,3}, // front right
+				{3,6}, // bottom right
+				{4,5}, // bottom left
+				{3,4}, // bottom front
+				{1,4}, // front left
+			};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
 			case SHAPE::_EXTRA3: return {};
@@ -315,41 +507,51 @@ public:
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateGeometry(
 		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
-		v4d::scene::Geometry::IndexBuffer_T* outputIndices
+		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
+		uint vertexIndexOffset = 0
 	) {
 		uint vertexCount = 0, indexCount = 0;
 		auto points = GetPoints();
-		// Resize shape
-		for (const auto& face : GetFaces()) {
-			for (const auto& p : face.resizePoints) {
-				switch (face.resizedir) {
-					case RESIZEDIR::PLUS_X:
-						points[p] *= data.sizePlusX + 1; // +1 so that the range 0-255 becomes 1-256, then we divide by 8 below to get a range between 0.125 and 32.0 so that we end up with block sizes between 0.25 and 64.0
-						break;
-					case RESIZEDIR::MINUS_X:
-						points[p] *= data.sizeMinusX + 1;
-						break;
-					case RESIZEDIR::PLUS_Y:
-						points[p] *= data.sizePlusY + 1;
-						break;
-					case RESIZEDIR::MINUS_Y:
-						points[p] *= data.sizeMinusY + 1;
-						break;
-					case RESIZEDIR::PLUS_Z:
-						points[p] *= data.sizePlusZ + 1;
-						break;
-					case RESIZEDIR::MINUS_Z:
-						points[p] *= data.sizeMinusZ + 1;
-						break;
-					default:break;
-				}
-			}
-		}
+		
+		
+		
+		//TODO This is broken
+				// // Resize shape
+				// for (const auto& face : GetFaces()) {
+				// 	for (const auto& p : face.resizePoints) {
+				// 		switch (face.resizedir) {
+				// 			case RESIZEDIR::PLUS_X:
+				// 				points[p] *= (data.sizePlusX + 1) / 4.0;
+				// 				break;
+				// 			case RESIZEDIR::MINUS_X:
+				// 				points[p] *= (data.sizeMinusX + 1) / 4.0;
+				// 				break;
+				// 			case RESIZEDIR::PLUS_Y:
+				// 				points[p] *= (data.sizePlusY + 1) / 4.0;
+				// 				break;
+				// 			case RESIZEDIR::MINUS_Y:
+				// 				points[p] *= (data.sizeMinusY + 1) / 4.0;
+				// 				break;
+				// 			case RESIZEDIR::PLUS_Z:
+				// 				points[p] *= (data.sizePlusZ + 1) / 4.0;
+				// 				break;
+				// 			case RESIZEDIR::MINUS_Z:
+				// 				points[p] *= (data.sizeMinusZ + 1) / 4.0;
+				// 				break;
+				// 			default:break;
+				// 		}
+				// 	}
+				// }
+		
+		
+		
+		
 		// Generate vertices and indices
 		std::map<uint8_t/*faceAndPointIndex*/, FaceVertex> faceVertices {};
 		int faceIndex = 0;
 		for (const auto& face : GetFaces()) {
 			assert(faceIndex < MAX_FACES);
+			assert(face.triangles.size() >= 3 && (face.triangles.size() % 3) == 0);
 			// Normal
 			glm::vec3 faceNormal;
 			switch (face.resizedir) {
@@ -371,6 +573,10 @@ public:
 				case RESIZEDIR::MINUS_Z:
 					faceNormal = {0,0,-1};
 					break;
+				case RESIZEDIR::NONE: // In this case we calculate the normal based on the actual position of the points because it is on a slope
+					// we only need the first triangle of the face for calculating the normal
+					faceNormal = glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]]));
+					break;
 			}
 			// Vertices
 			for (const auto& pointIndex : face.triangles) {
@@ -383,16 +589,16 @@ public:
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
-					faceVertex->vertexData->pos = points[pointIndex] / 8.0f; // Grid size of 1/8 meters
-					faceVertex->vertexData->normal = faceNormal;
 					//TODO faceVertex->vertexData->SetUV()
+					faceVertex->vertexData->pos = points[pointIndex] / 2.0f;
+					faceVertex->vertexData->normal = faceNormal;
 					//TODO adjust block orientation (affects pos and normal)
-					//TODO offset block position (affects pos)
+					faceVertex->vertexData->pos += GetPosition();
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
 					float alpha = 1.0; //TODO get alpha from material
 					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
 				}
-				outputIndices[indexCount++] = faceVertex->vertexIndex;
+				outputIndices[indexCount++] = faceVertex->vertexIndex + vertexIndexOffset;
 			}
 			++faceIndex;
 		}

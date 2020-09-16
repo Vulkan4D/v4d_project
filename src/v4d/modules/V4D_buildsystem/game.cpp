@@ -63,18 +63,38 @@ V4D_MODULE_CLASS(V4D_Game) {
 			scene->AddObjectInstance()->Configure([](v4d::scene::ObjectInstance* obj){
 				obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;
 				
-				auto geom1 = obj->AddGeometry(Block::MAX_VERTICES, Block::MAX_INDICES);
-				Block block(SHAPE::CUBE);
-				auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(), geom1->GetIndexPtr());
+				std::vector<SHAPE> shapes = {
+					SHAPE::CUBE,
+					SHAPE::INVCORNER,
+					SHAPE::SLOPE,
+					SHAPE::CORNER,
+					SHAPE::PYRAMID,
+				};
 				
-				for (int i = 0; i < vertexCount; ++i) {
+				auto geom1 = obj->AddGeometry(Block::MAX_VERTICES*shapes.size(), Block::MAX_INDICES*shapes.size());
+				
+				uint nextVertex = 0;
+				uint nextIndex = 0;
+				for (int i = 0; i < shapes.size(); ++i) {
+					Block block(shapes[i]);
+					block.SetPosition({2.0f * i, 0.0f, 0.0f});
+					auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex);
+					nextVertex += vertexCount;
+					nextIndex += indexCount;
+				}
+				
+				// This is temporary for testing purposes. We need a geom1->Shrink() function to deallocate the unused end of the buffer.
+				geom1->vertexCount = nextVertex;
+				geom1->indexCount = nextIndex;
+				
+				for (int i = 0; i < geom1->vertexCount; ++i) {
 					auto* vert = geom1->GetVertexPtr(i);
 					geom1->boundingDistance = glm::max(geom1->boundingDistance, glm::length(vert->pos));
 					geom1->boundingBoxSize = glm::max(glm::abs(vert->pos), geom1->boundingBoxSize);
 				}
 				geom1->isDirty = true;
 				
-			}, {0,10,-10}, 0.0);
+			}, {-6,2,-2}, 180.0, {1,0,0});
 		scene->Unlock();
 	}
 	
