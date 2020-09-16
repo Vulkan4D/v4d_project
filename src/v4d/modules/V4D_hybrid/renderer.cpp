@@ -527,6 +527,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			// #endif
 			if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
 				s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 				#else
@@ -535,7 +536,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
 				s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-				s->rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 				s->depthStencilState.depthTestEnable = true;
 				s->depthStencilState.depthWriteEnable = true;
 				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
@@ -553,7 +554,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
 				s->depthStencilState.depthWriteEnable = VK_FALSE;
-				s->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 				s->SetData(3);
 			}
 		}

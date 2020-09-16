@@ -62,10 +62,18 @@ V4D_MODULE_CLASS(V4D_Game) {
 		scene->Lock();
 			scene->AddObjectInstance()->Configure([](v4d::scene::ObjectInstance* obj){
 				obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;
+				
 				auto geom1 = obj->AddGeometry(Block::MAX_VERTICES, Block::MAX_INDICES);
 				Block block(SHAPE::CUBE);
-				block.GenerateGeometry(geom1->GetVertexPtr(), geom1->GetIndexPtr());
+				auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(), geom1->GetIndexPtr());
+				
+				for (int i = 0; i < vertexCount; ++i) {
+					auto* vert = geom1->GetVertexPtr(i);
+					geom1->boundingDistance = glm::max(geom1->boundingDistance, glm::length(vert->pos));
+					geom1->boundingBoxSize = glm::max(glm::abs(vert->pos), geom1->boundingBoxSize);
+				}
 				geom1->isDirty = true;
+				
 			}, {0,10,-10}, 0.0);
 		scene->Unlock();
 	}
