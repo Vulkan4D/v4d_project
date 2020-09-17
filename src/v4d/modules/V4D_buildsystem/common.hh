@@ -12,13 +12,13 @@ enum class SHAPE : int {
 };
 
 enum class RESIZEDIR {
-	NONE = 0,
-	PLUS_X,
-	MINUS_X,
-	PLUS_Y,
-	MINUS_Y,
-	PLUS_Z,
-	MINUS_Z,
+	NONE = -1,
+	PLUS_X = 0,
+	MINUS_X = 1,
+	PLUS_Y = 2,
+	MINUS_Y = 3,
+	PLUS_Z = 4,
+	MINUS_Z = 5,
 };
 
 const glm::vec3 COLORS[128] = {
@@ -499,10 +499,116 @@ public:
 		return {};
 	};
 	
+	std::map<RESIZEDIR, std::vector<uint8_t>> const GetResizePoints() const {
+		switch (GetShapeType()) {
+			case SHAPE::CUBE: return {
+				{RESIZEDIR::PLUS_X, {0,3,4,7}},
+				{RESIZEDIR::MINUS_X, {1,2,5,6}},
+				{RESIZEDIR::PLUS_Y, {0,1,2,3}},
+				{RESIZEDIR::MINUS_Y, {4,5,6,7}},
+				{RESIZEDIR::PLUS_Z, {0,1,4,5}},
+				{RESIZEDIR::MINUS_Z, {2,3,6,7}},
+			};
+			case SHAPE::SLOPE: return {
+				{RESIZEDIR::PLUS_X, {0,3,4}},
+				{RESIZEDIR::MINUS_X, {1,5,2}},
+				{RESIZEDIR::PLUS_Y, {0,1}},
+				{RESIZEDIR::MINUS_Y, {2,3,4,5}},
+				{RESIZEDIR::PLUS_Z, {0,1,4,5}},
+				{RESIZEDIR::MINUS_Z, {2,3}},
+			};
+			case SHAPE::CORNER: return {
+				{RESIZEDIR::PLUS_X, {0,2,3}},
+				{RESIZEDIR::MINUS_X, {1}},
+				{RESIZEDIR::PLUS_Y, {0}},
+				{RESIZEDIR::MINUS_Y, {1,2,3}},
+				{RESIZEDIR::PLUS_Z, {0,1,3}},
+				{RESIZEDIR::MINUS_Z, {2}},
+			};
+			case SHAPE::PYRAMID: return {
+				{RESIZEDIR::PLUS_X, {0,2,3}},
+				{RESIZEDIR::MINUS_X, {1,4}},
+				{RESIZEDIR::PLUS_Y, {0}},
+				{RESIZEDIR::MINUS_Y, {1,2,3,4}},
+				{RESIZEDIR::PLUS_Z, {0,3,4}},
+				{RESIZEDIR::MINUS_Z, {1,2}},
+			};
+			case SHAPE::INVCORNER: return {
+				{RESIZEDIR::PLUS_X, {0,3,6}},
+				{RESIZEDIR::MINUS_X, {1,2,4,5}},
+				{RESIZEDIR::PLUS_Y, {0,1,2}},
+				{RESIZEDIR::MINUS_Y, {3,4,5,6}},
+				{RESIZEDIR::PLUS_Z, {0,1,3,4}},
+				{RESIZEDIR::MINUS_Z, {2,5,6}},
+			};
+			case SHAPE::_EXTRA1: return {
+				{RESIZEDIR::PLUS_X, {}},
+				{RESIZEDIR::MINUS_X, {}},
+				{RESIZEDIR::PLUS_Y, {}},
+				{RESIZEDIR::MINUS_Y, {}},
+				{RESIZEDIR::PLUS_Z, {}},
+				{RESIZEDIR::MINUS_Z, {}},
+			};
+			case SHAPE::_EXTRA2: return {
+				{RESIZEDIR::PLUS_X, {}},
+				{RESIZEDIR::MINUS_X, {}},
+				{RESIZEDIR::PLUS_Y, {}},
+				{RESIZEDIR::MINUS_Y, {}},
+				{RESIZEDIR::PLUS_Z, {}},
+				{RESIZEDIR::MINUS_Z, {}},
+			};
+			case SHAPE::_EXTRA3: return {
+				{RESIZEDIR::PLUS_X, {}},
+				{RESIZEDIR::MINUS_X, {}},
+				{RESIZEDIR::PLUS_Y, {}},
+				{RESIZEDIR::MINUS_Y, {}},
+				{RESIZEDIR::PLUS_Z, {}},
+				{RESIZEDIR::MINUS_Z, {}},
+			};
+		}
+		return {};
+	}
+	
 	struct FaceVertex {
 		uint8_t vertexIndex;
 		v4d::scene::Geometry::VertexBuffer_T* vertexData;
 	};
+	
+	glm::vec3 GetFaceResizeDirNormal(RESIZEDIR dir) {
+		switch (dir) {
+			case RESIZEDIR::PLUS_X:
+				return {1,0,0};
+			case RESIZEDIR::MINUS_X:
+				return {-1,0,0};
+			case RESIZEDIR::PLUS_Y:
+				return {0,1,0};
+			case RESIZEDIR::MINUS_Y:
+				return {0,-1,0};
+			case RESIZEDIR::PLUS_Z:
+				return {0,0,1};
+			case RESIZEDIR::MINUS_Z:
+				return {0,0,-1};
+		}
+		return {0,0,0};
+	}
+	
+	float GetFaceSize(RESIZEDIR dir) {
+		switch (dir) {
+			case RESIZEDIR::PLUS_X:
+				return data.sizePlusX;
+			case RESIZEDIR::MINUS_X:
+				return data.sizeMinusX;
+			case RESIZEDIR::PLUS_Y:
+				return data.sizePlusY;
+			case RESIZEDIR::MINUS_Y:
+				return data.sizeMinusY;
+			case RESIZEDIR::PLUS_Z:
+				return data.sizePlusZ;
+			case RESIZEDIR::MINUS_Z:
+				return data.sizeMinusZ;
+		}
+		return 0;
+	}
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateGeometry(
@@ -513,38 +619,17 @@ public:
 		uint vertexCount = 0, indexCount = 0;
 		auto points = GetPoints();
 		
+		// 1/8 meters grid for block sizes
+		for (auto& p : points) {
+			p /= 8.0f;
+		}
 		
-		
-		//TODO This is broken
-				// // Resize shape
-				// for (const auto& face : GetFaces()) {
-				// 	for (const auto& p : face.resizePoints) {
-				// 		switch (face.resizedir) {
-				// 			case RESIZEDIR::PLUS_X:
-				// 				points[p] *= (data.sizePlusX + 1) / 4.0;
-				// 				break;
-				// 			case RESIZEDIR::MINUS_X:
-				// 				points[p] *= (data.sizeMinusX + 1) / 4.0;
-				// 				break;
-				// 			case RESIZEDIR::PLUS_Y:
-				// 				points[p] *= (data.sizePlusY + 1) / 4.0;
-				// 				break;
-				// 			case RESIZEDIR::MINUS_Y:
-				// 				points[p] *= (data.sizeMinusY + 1) / 4.0;
-				// 				break;
-				// 			case RESIZEDIR::PLUS_Z:
-				// 				points[p] *= (data.sizePlusZ + 1) / 4.0;
-				// 				break;
-				// 			case RESIZEDIR::MINUS_Z:
-				// 				points[p] *= (data.sizeMinusZ + 1) / 4.0;
-				// 				break;
-				// 			default:break;
-				// 		}
-				// 	}
-				// }
-		
-		
-		
+		// Resize points
+		for (const auto&[dir, pts] : GetResizePoints()) {
+			for (const auto& p : pts) {
+				points[p] += GetFaceResizeDirNormal(dir) * GetFaceSize(dir) / 8.0f;
+			}
+		}
 		
 		// Generate vertices and indices
 		std::map<uint8_t/*faceAndPointIndex*/, FaceVertex> faceVertices {};
@@ -553,31 +638,9 @@ public:
 			assert(faceIndex < MAX_FACES);
 			assert(face.triangles.size() >= 3 && (face.triangles.size() % 3) == 0);
 			// Normal
-			glm::vec3 faceNormal;
-			switch (face.resizedir) {
-				case RESIZEDIR::PLUS_X:
-					faceNormal = {1,0,0};
-					break;
-				case RESIZEDIR::MINUS_X:
-					faceNormal = {-1,0,0};
-					break;
-				case RESIZEDIR::PLUS_Y:
-					faceNormal = {0,1,0};
-					break;
-				case RESIZEDIR::MINUS_Y:
-					faceNormal = {0,-1,0};
-					break;
-				case RESIZEDIR::PLUS_Z:
-					faceNormal = {0,0,1};
-					break;
-				case RESIZEDIR::MINUS_Z:
-					faceNormal = {0,0,-1};
-					break;
-				case RESIZEDIR::NONE: // In this case we calculate the normal based on the actual position of the points because it is on a slope
-					// we only need the first triangle of the face for calculating the normal
-					faceNormal = glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]]));
-					break;
-			}
+			//		In the case where resizedir is NONE, we calculate the normal based on the actual position of the points because it is on a slope, we only need the first triangle of the face for calculating the normal
+			//		Otherwise, we can directly take the resizedir
+			glm::vec3 faceNormal = face.resizedir == RESIZEDIR::NONE ? glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]])) : GetFaceResizeDirNormal(face.resizedir);
 			// Vertices
 			for (const auto& pointIndex : face.triangles) {
 				assert(pointIndex < MAX_POINTS);
@@ -590,7 +653,7 @@ public:
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
 					//TODO faceVertex->vertexData->SetUV()
-					faceVertex->vertexData->pos = points[pointIndex] / 2.0f;
+					faceVertex->vertexData->pos = points[pointIndex];
 					faceVertex->vertexData->normal = faceNormal;
 					//TODO adjust block orientation (affects pos and normal)
 					faceVertex->vertexData->pos += GetPosition();
