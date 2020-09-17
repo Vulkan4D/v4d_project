@@ -22,9 +22,13 @@ enum class RESIZEDIR {
 };
 
 const glm::vec3 COLORS[128] = {
+	{0.0, 0.0, 0.0}, // black
 	{1.0, 0.0, 0.0}, // red
 	{0.0, 1.0, 0.0}, // green
 	{0.0, 0.0, 1.0}, // blue
+	{0.0, 1.0, 1.0}, // yellow
+	{1.0, 0.0, 1.0}, // pink
+	{1.0, 1.0, 1.0}, // white
 	// ...
 };
 
@@ -170,6 +174,11 @@ protected:
 			uint64_t _extra_attributes : 4;
 	} data;
 	
+	struct FaceVertex {
+		uint8_t vertexIndex;
+		v4d::scene::Geometry::VertexBuffer_T* vertexData;
+	};
+	
 	uint8_t GetColorIndex(uint8_t i) const {
 		switch (i) {
 			case 0: return data.color0;
@@ -209,20 +218,6 @@ protected:
 	
 	SHAPE const GetShapeType() const {
 		return (SHAPE)data.shape;
-	};
-	
-public:
-	Block() = default;
-	Block(SHAPE t) : data(t) {}
-	
-	// Grid size of 1/4 meters for block positions
-	void SetPosition(glm::vec3 pos) {
-		data.posX = pos.x * 4.0f;
-		data.posY = pos.y * 4.0f;
-		data.posZ = pos.z * 4.0f;
-	}
-	glm::vec3 GetPosition() const {
-		return glm::vec3(data.posX, data.posY, data.posZ) / 4.0f;
 	};
 	
 	std::vector<glm::vec3> const GetPoints() const {
@@ -541,11 +536,6 @@ public:
 		return {};
 	}
 	
-	struct FaceVertex {
-		uint8_t vertexIndex;
-		v4d::scene::Geometry::VertexBuffer_T* vertexData;
-	};
-	
 	glm::vec3 GetFaceResizeDirNormal(RESIZEDIR dir) {
 		switch (dir) {
 			case RESIZEDIR::PLUS_X:
@@ -580,6 +570,41 @@ public:
 				return data.sizeMinusZ;
 		}
 		return 0;
+	}
+	
+public:
+	Block() = default;
+	Block(SHAPE t) : data(t) {}
+	
+	// Grid size of 1/4 meters for block positions
+	void SetPosition(glm::vec3 pos) {
+		data.posX = pos.x * 4.0f;
+		data.posY = pos.y * 4.0f;
+		data.posZ = pos.z * 4.0f;
+	}
+	glm::vec3 GetPosition() const {
+		return glm::vec3(data.posX, data.posY, data.posZ) / 4.0f;
+	};
+	
+	void SetColors(bool useVertexColorGradients
+		,uint8_t color0 = 0
+		,uint8_t color1 = 0
+		,uint8_t color2 = 0
+		,uint8_t color3 = 0
+		,uint8_t color4 = 0
+		,uint8_t color5 = 0
+		,uint8_t color6 = 0
+		,uint8_t color7 = 0
+		) {
+		data.useVertexColorGradients = useVertexColorGradients?1:0;
+		data.color0 = color0;
+		data.color1 = color1;
+		data.color2 = color2;
+		data.color3 = color3;
+		data.color4 = color4;
+		data.color5 = color5;
+		data.color6 = color6;
+		data.color7 = color7;
 	}
 	
 	std::vector<glm::vec3> GetPointsPositions() {

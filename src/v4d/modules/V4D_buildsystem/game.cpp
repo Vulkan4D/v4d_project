@@ -78,6 +78,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 				for (int i = 0; i < shapes.size(); ++i) {
 					Block block(shapes[i]);
 					block.SetPosition({2.0f * i, 0.0f, 0.0f});
+					block.SetColors(false, 1, 2, 3, 4, 5, 6);
 					auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex);
 					nextVertex += vertexCount;
 					nextIndex += indexCount;
