@@ -192,7 +192,7 @@ void app::Stop() {
 void app::Run() {
 	
 	// set main thread & input to run only on a specific core
-	SET_CPU_AFFINITY(APP_CPU_AFFINITY_MAIN)
+	if (APP_CPU_AFFINITY_MAIN >= 0) SET_CPU_AFFINITY(APP_CPU_AFFINITY_MAIN)
 	
 	// Client
 	if (app::isClient) {// client connects to server

@@ -11,11 +11,12 @@ namespace app {
 		bool (*loopCheckRunning)() = nullptr;
 			
 		std::function<void()> RunSecondaryRendering = [](){
+			std::scoped_lock lock(app::renderer->renderMutex2);
+			
 			// ImGui
 			static bool showOtherUI = true;
 			#ifdef _ENABLE_IMGUI
 				if (imGuiIO->Fonts->IsBuilt()) {
-					std::lock_guard inputLock(app::inputMutex);
 					
 					ImGui_ImplVulkan_NewFrame();
 					
@@ -80,15 +81,15 @@ namespace app {
 					ImGui::SetNextWindowPos({425,0});
 			#endif
 					
-					if (showOtherUI) {
-						// Modules
-						V4D_Renderer::ForEachSortedModule([](auto* mod){
-							if (mod->RunUi) mod->RunUi();
-						});
-						V4D_Physics::ForEachSortedModule([](auto* mod){
-							if (mod->RunUi) mod->RunUi();
-						});
-					}
+			if (showOtherUI) {
+				// Modules
+				V4D_Renderer::ForEachSortedModule([](auto* mod){
+					if (mod->RunUi) mod->RunUi();
+				});
+				V4D_Physics::ForEachSortedModule([](auto* mod){
+					if (mod->RunUi) mod->RunUi();
+				});
+			}
 					
 			#ifdef _ENABLE_IMGUI
 					ImGui::Render();

@@ -2499,15 +2499,15 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 			}
 		#endif
-			// Modules
-			V4D_Game::ForEachSortedModule([](auto* mod){
-				if (mod->RendererRunUi) {
-					#ifdef _ENABLE_IMGUI
-						ImGui::Separator();
-					#endif
-					mod->RendererRunUi();
-				}
-			});
+		// Modules
+		V4D_Game::ForEachSortedModule([](auto* mod){
+			if (mod->RendererRunUi) {
+				#ifdef _ENABLE_IMGUI
+					ImGui::Separator();
+				#endif
+				mod->RendererRunUi();
+			}
+		});
 		#ifdef _ENABLE_IMGUI
 			ImGui::End();
 		#endif

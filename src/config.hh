@@ -2,8 +2,8 @@
 
 // Modules
 	#define APP_DEFAULT_RENDERER_MODULE "V4D_hybrid"
-	#define APP_DEFAULT_MODULES "V4D_sample","V4D_hybrid","V4D_flycam","V4D_basicscene","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
-	// #define APP_DEFAULT_MODULES "V4D_sample","V4D_hybrid","V4D_flycam","V4D_planetdemo","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
+	#define APP_DEFAULT_MODULES "V4D_sample",APP_DEFAULT_RENDERER_MODULE,"V4D_flycam","V4D_basicscene","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
+	// #define APP_DEFAULT_MODULES "V4D_sample",APP_DEFAULT_RENDERER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
 
 // Logger
 	#define LOGGER_INSTANCE v4d::io::Logger::ConsoleInstance()
@@ -20,12 +20,12 @@
 	#define APP_NETWORKING_ACTION_BUFFER_SIZE 1024
 	#define APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE 508
 
-// Threads
+// Threads CPU affinity (-1 for no affinity)
 	#define APP_CPU_AFFINITY_MAIN 0
 	#define APP_CPU_AFFINITY_GAME 1
 	#define APP_CPU_AFFINITY_RENDER_PRIMARY 2
 	#define APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
-	#define APP_CPU_AFFINITY_RENDER_SECONDARY -1
+	#define APP_CPU_AFFINITY_RENDER_SECONDARY 0
 
 // Renderer
 	// #define RENDERER_RAY_TRACING_INSTANCES_DEFRAG_MODE_INDIVIDUAL_DELETE
