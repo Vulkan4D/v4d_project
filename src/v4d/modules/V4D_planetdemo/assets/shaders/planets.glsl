@@ -138,13 +138,7 @@ void main() {
 #shader terrain.frag
 
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_raster.glsl"
-
-struct V2F {
-	vec4 color;
-	vec4 pos;
-	vec3 normal;
-	vec2 uv;
-};
+#include "v4d/modules/V4D_hybrid/glsl_includes/V2F.glsl"
 
 layout(location = 0) in V2F v2f;
 

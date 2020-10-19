@@ -12,7 +12,4 @@
 	#ifdef SHADER_SUBPASS_2
 		layout(location = 0) out vec4 out_swapchain;
 	#endif
-	#ifdef SHADER_SUBPASS_3
-		layout(location = 0) out vec4 out_swapchain;
-	#endif
 #endif

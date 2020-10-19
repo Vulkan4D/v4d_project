@@ -27,6 +27,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	DescriptorSet set1_visibility_rays;
 	DescriptorSet set1_lighting_raster;
 	DescriptorSet set1_lighting_rays;
+	DescriptorSet set1_transparent;
 	DescriptorSet set1_fog_raster;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
@@ -36,7 +37,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 
 #pragma region Images
 	DepthImage img_rasterDepth { VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT };
-	Image img_tmpBuffer { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
 	Image img_gBuffer_0 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R8G8_SNORM }};
 	Image img_gBuffer_1 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
@@ -47,7 +47,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_thumbnail { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
-
 #pragma endregion
 
 #pragma region Pipeline Layouts
@@ -55,6 +54,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	PipelineLayout pl_visibility_rays;
 	PipelineLayout pl_lighting_raster;
 	PipelineLayout pl_lighting_rays;
+	PipelineLayout pl_transparent;
 	PipelineLayout pl_fog_raster;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
@@ -108,9 +108,11 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.basic.frag"),
 		}};
 	// #endif
-	RasterShaderPipeline shader_glass {pl_visibility_raster, {
+	
+	// Fog
+	RasterShaderPipeline shader_transparent {pl_transparent, {
 		rasterTrianglesDefaultVertexShader,
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster_visibility.glass.frag"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/transparent.frag"),
 	}};
 	
 	// Overlay
@@ -176,7 +178,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	// Pipelines
 	std::unordered_map<std::string, Image*> images {
 		{"img_rasterDepth", &img_rasterDepth},
-		{"img_tmpBuffer", &img_tmpBuffer},
 		{"img_depth", &img_depth},
 		{"img_gBuffer_0", &img_gBuffer_0},
 		{"img_gBuffer_1", &img_gBuffer_1},
@@ -193,6 +194,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"pl_visibility_rays", &pl_visibility_rays},
 		{"pl_lighting_raster", &pl_lighting_raster},
 		{"pl_lighting_rays", &pl_lighting_rays},
+		{"pl_transparent", &pl_transparent},
 		{"pl_fog_raster", &pl_fog_raster},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
@@ -214,13 +216,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}},
 		{"sg_lighting", {&shader_lighting}},
 		{"sg_lighting_rtx", {&shader_lighting_rtx}},
+		{"sg_transparent", {&shader_transparent}},
 		{"sg_fog", {}},
-		{"sg_glass", {&shader_glass}},
 		{"sg_thumbnail", {&shader_thumbnail}},
 		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
-		{"sg_present", {&shader_present_hdr}},
-		{"sg_present_overlay", {&shader_present_overlay_apply}},
+		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
@@ -279,16 +280,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			img_rasterDepth.Create(r->renderingDevice, rasterWidth, rasterHeight);
 			r->TransitionImageLayout(commandBuffer, img_rasterDepth, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			
-			img_tmpBuffer.Create(r->renderingDevice, rasterWidth, rasterHeight);
-			r->TransitionImageLayout(commandBuffer, img_tmpBuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
-			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
 	void DestroyRasterVisibilityResources() {
 		for (auto* img : gBuffers)
 			img->Destroy(r->renderingDevice);
 		img_rasterDepth.Destroy(r->renderingDevice);
-		img_tmpBuffer.Destroy(r->renderingDevice);
 	}
 	
 	void CreateRenderingResources() {
@@ -383,7 +380,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		std::vector<Image*> attachmentImages(nbColorAttachments + nbInputAttachments);
 		std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs0 {};
 		std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs0 {};
-		std::array<VkAttachmentReference, 1> inputAttachmentRefs1;
 		
 		int i = 0;
 		
@@ -412,21 +408,15 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			attachments[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			attachments[i].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 			attachments[i].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			uint32_t inputAttachmentIndex = lightingRenderPass.AddAttachment(attachments[i]);
 			inputAttachmentRefs0[i-nbColorAttachments] = {
-				inputAttachmentIndex,
+				lightingRenderPass.AddAttachment(attachments[i]),
 				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 			};
-			if (img == &img_gBuffer_2) {
-				inputAttachmentRefs1[0] = {
-					inputAttachmentIndex,
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				};
-			}
 			++i;
 		}
 		
 		std::array<VkAttachmentReference, nbColorAttachments> colorAttachmentRefs1 = colorAttachmentRefs0;
+		std::array<VkAttachmentReference, nbInputAttachments> inputAttachmentRefs1 = inputAttachmentRefs0;
 	
 		// SubPasses
 		std::array<VkSubpassDependency, 2> subpassDependencies {
@@ -485,10 +475,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				s->CreatePipeline(r->renderingDevice);
 			}
 		}
-		for (auto* s : shaderGroups["sg_fog"]) {
-			s->SetRenderPass(&img_lit, lightingRenderPass.handle, 1);
-			s->AddColorBlendAttachmentState();
-			s->CreatePipeline(r->renderingDevice);
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"]}) {
+			for (auto* s : sg) {
+				s->SetRenderPass(&img_lit, lightingRenderPass.handle, 1);
+				s->AddColorBlendAttachmentState();
+				s->CreatePipeline(r->renderingDevice);
+			}
 		}
 	}
 	void DestroyLightingPipeline() {
@@ -501,8 +493,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				s->DestroyPipeline(r->renderingDevice);
 			}
 		}
-		for (auto* s : shaderGroups["sg_fog"]) {
-			s->DestroyPipeline(r->renderingDevice);
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"]}) {
+			for (auto* s : sg) {
+				s->DestroyPipeline(r->renderingDevice);
+			}
 		}
 		lightingRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		lightingRenderPass.Destroy(r->renderingDevice);
@@ -510,46 +504,49 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void ConfigureRasterVisibilityShaders() {
 		pl_visibility_raster.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		pl_transparent.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		
-		for (auto* s : shaderGroups["sg_visibility"]) {
-			// #ifdef _DEBUG
-				if (s == &shader_debug_wireframe) {
+		for (auto& sg : {shaderGroups["sg_visibility"], shaderGroups["sg_transparent"]}) {
+			for (auto* s : sg) {
+				// #ifdef _DEBUG
+					if (s == &shader_debug_wireframe) {
+						s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+						s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+						s->rasterizer.lineWidth = 1;
+						s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+						#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+							s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
+						#else
+							s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
+						#endif
+					} else 
+				// #endif
+				if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
 					s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-					s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-					s->rasterizer.lineWidth = 1;
 					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 					#else
 						s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
 					#endif
-				} else 
-			// #endif
-			if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
-				s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
-				#else
-					s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
-				#endif
-			} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
-				s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
-				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-				s->depthStencilState.depthTestEnable = true;
-				s->depthStencilState.depthWriteEnable = true;
-				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, 1);
-				#else
-					s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
-				#endif
+				} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
+					s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
+					s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+					s->depthStencilState.depthTestEnable = true;
+					s->depthStencilState.depthWriteEnable = true;
+					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, 1);
+					#else
+						s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
+					#endif
+				}
 			}
 		}
 	}
 	
 	void ConfigureLightingShaders() {
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_lighting_rtx" || rp == "sg_fog") {
+		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_lighting_rtx" || rp == "sg_fog" || rp == "sg_transparent") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -649,6 +646,38 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				for (auto* s : shaderGroups["sg_fog"]) {
 					s->Execute(device, commandBuffer);
 				}
+				for (auto* s : shaderGroups["sg_transparent"]) {
+					// Transparent
+					if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
+						scene->Lock();
+							for (auto obj : scene->objectInstances) {
+								if (obj) {
+									// obj->Lock();
+									if (obj->IsActive() && (obj->rayTracingMaskRemoved & GEOMETRY_ATTR_PRIMARY_VISIBLE)==0) {
+										// Geometries
+										for (auto& geom : obj->GetGeometries()) {
+											if (geom.geometry->active && (s == Geometry::geometryRenderTypes[geom.type].rasterShader)) {
+												// Frustum culling
+												if (scene->camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
+													s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::VertexBuffer_T);
+													s->indexOffset = geom.geometry->indexOffset * sizeof(Geometry::IndexBuffer_T);
+													s->indexCount = geom.geometry->indexCount;
+													GeometryPushConstant geometryPushConstant {};
+														geometryPushConstant.objectIndex = obj->GetObjectOffset();
+														geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
+													s->Execute(device, commandBuffer, 1, &geometryPushConstant);
+												}
+											}
+										}
+									}
+									// obj->Unlock();
+								}
+							}
+						scene->Unlock();
+					} else {
+						s->Execute(device, commandBuffer);
+					}
+				}
 			}
 		lightingRenderPass.End(device, commandBuffer);
 	}
@@ -663,7 +692,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 	std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 	std::vector<VkAccelerationStructureBuildOffsetInfoKHR*> blasQueueBuildOffsetInfos {};
-	Buffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
+	StagedBuffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
 	RayTracingBLASInstance* rayTracingInstances = nullptr;
 	uint32_t nbRayTracingInstances = 0;
 	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
@@ -685,7 +714,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		topLevelAccelerationStructure.AssignTopLevel();
 		topLevelAccelerationStructure.Create(r->renderingDevice, true);
 		topLevelAccelerationStructure.Allocate(r->renderingDevice);
-		topLevelAccelerationStructure.SetInstanceBuffer(r->renderingDevice, rayTracingInstanceBuffer.buffer);
+		topLevelAccelerationStructure.SetInstanceBuffer(r->renderingDevice, rayTracingInstanceBuffer.deviceLocalBuffer.buffer);
 	}
 	void DestroyRayTracingResources() {
 		topLevelAccelerationStructure.Free(r->renderingDevice);
@@ -698,9 +727,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	}
 	
 	void AllocateRayTracingBuffers() {
-		rayTracingInstanceBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
-		rayTracingInstanceBuffer.MapMemory(r->renderingDevice);
-		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.data;
+		rayTracingInstanceBuffer.Allocate(r->renderingDevice);
+		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.stagingBuffer.data;
 		
 		if (AccelerationStructure::useGlobalScratchBuffer) {
 			globalScratchBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
@@ -710,7 +738,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	void FreeRayTracingBuffers() {
 		rayTracingInstances = nullptr;
 		nbRayTracingInstances = 0;
-		rayTracingInstanceBuffer.UnmapMemory(r->renderingDevice);
 		rayTracingInstanceBuffer.Free(r->renderingDevice);
 		
 		if (AccelerationStructure::useGlobalScratchBuffer) {
@@ -800,9 +827,46 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			sbt->GetRayCallableBufferRegion(),
 			width, height, 1
 		);
+	
+		// Finish visibility before running lighting
+		VkMemoryBarrier memoryBarrier {
+			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+			nullptr,// pNext
+			VK_ACCESS_MEMORY_WRITE_BIT,// VkAccessFlags srcAccessMask
+			VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
+		};
+		r->renderingDevice->CmdPipelineBarrier(
+			commandBuffer, 
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+			RENDER_OPTIONS::RAY_TRACED_LIGHTING? VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR : VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+			0, 
+			1, &memoryBarrier, 
+			0, 0, 
+			0, 0
+		);
 	}
 	
 	void RunRayTracingLightingCommands(VkCommandBuffer commandBuffer) {
+		
+		// Finish visibility before running lighting
+		if (!RENDER_OPTIONS::RAY_TRACED_VISIBILITY) {
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_MEMORY_WRITE_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
 		auto* sbt = shaderBindingTables["sbt_lighting"];
 		
 		int width = (int)((float)r->swapChain->extent.width);
@@ -824,40 +888,66 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		// Build all new/updated bottom levels
 		std::lock_guard lock(blasBuildQueueMutex);
 		if (blasQueueBuildGeometryInfos.size() > 0) {
-			// #ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-			// 	VkBufferMemoryBarrier bufferBarriers[2];
-			// 	bufferBarriers[0] = {};
-			// 		bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			// 		bufferBarriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-			// 		bufferBarriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-			// 		bufferBarriers[0].offset = 0;
-			// 		bufferBarriers[0].size = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.size;
-			// 		bufferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			// 		bufferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			// 		bufferBarriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
-			// 	bufferBarriers[1] = {};
-			// 		bufferBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			// 		bufferBarriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-			// 		bufferBarriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-			// 		bufferBarriers[1].offset = 0;
-			// 		bufferBarriers[1].size = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.size;
-			// 		bufferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			// 		bufferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			// 		bufferBarriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
-			// 	device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 2, bufferBarriers, 0, nullptr);
-			// #endif
+			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+				VkBufferMemoryBarrier bufferBarriers[2];
+				bufferBarriers[0] = {};
+					bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					bufferBarriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+					bufferBarriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					bufferBarriers[0].offset = 0;
+					bufferBarriers[0].size = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.size;
+					bufferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					bufferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					bufferBarriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
+				bufferBarriers[1] = {};
+					bufferBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+					bufferBarriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+					bufferBarriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+					bufferBarriers[1].offset = 0;
+					bufferBarriers[1].size = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.size;
+					bufferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					bufferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					bufferBarriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
+				device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 2, bufferBarriers, 0, nullptr);
+			#endif
 			
 			device->CmdBuildAccelerationStructureKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildOffsetInfos.data());
 			
+			{// Wait for BLAS to finish before building TLAS
+				VkMemoryBarrier memoryBarrier {
+					VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+					nullptr,// pNext
+					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
+					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+				};
+				device->CmdPipelineBarrier(
+					commandBuffer, 
+					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+					0, 
+					1, &memoryBarrier, 
+					0, 0, 
+					0, 0
+				);
+			}
+		}
+	}
+	
+	void BuildTopLevelRayTracingAccelerationStructure(Device* device, VkCommandBuffer commandBuffer) {
+		
+		// Push new instance buffer
+		rayTracingInstanceBuffer.Update(device, commandBuffer);
+		
+		{// Wait for buffer transfer to finish before (re)building TLAS
 			VkMemoryBarrier memoryBarrier {
 				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 				nullptr,// pNext
-				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
-				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
+				VK_ACCESS_TRANSFER_READ_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
 			};
 			device->CmdPipelineBarrier(
 				commandBuffer, 
-				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
 				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
 				0, 
 				1, &memoryBarrier, 
@@ -865,14 +955,13 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				0, 0
 			);
 		}
-	}
-	
-	void BuildTopLevelRayTracingAccelerationStructure(Device* device, VkCommandBuffer commandBuffer) {
+		
 		std::lock_guard lock(rayTracingInstanceMutex);
 		static const VkAccelerationStructureBuildOffsetInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildOffsetInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
 		device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
 	
+		// Wait for TLAS to finish before calling any ray tracing shader
 		VkMemoryBarrier memoryBarrier {
 			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 			nullptr,// pNext
@@ -922,7 +1011,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		int index = nbRayTracingInstances++;
 		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
-		rayTracingInstances[index].shaderInstanceOffset = Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
+		rayTracingInstances[index].shaderInstanceOffset = (uint32_t)Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
 		geometryInstance->rayTracingInstanceIndex = index;
 		activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
 	}
@@ -1094,19 +1183,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				subpass.pInputAttachments = &inputAtt_2;
 				postProcessingRenderPass.AddSubpass(subpass);
 			}
-			{
-				VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttRef_2;
-				subpass.preserveAttachmentCount = 1;
-				subpass.pPreserveAttachments = &preserverAtt_2;
-				subpass.inputAttachmentCount = 0;
-				subpass.pInputAttachments = nullptr;
-				postProcessingRenderPass.AddSubpass(subpass);
-			}
 			
-			std::array<VkSubpassDependency, 4> subPassDependencies {
+			std::array<VkSubpassDependency, 3> subPassDependencies {
 				VkSubpassDependency{
 					VK_SUBPASS_EXTERNAL,// srcSubpass;
 					0,// dstSubpass;
@@ -1134,15 +1212,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
 					0// dependencyFlags;
 				},
-				VkSubpassDependency{
-					2,// srcSubpass;
-					3,// dstSubpass;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
-					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
-					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
-					0// dependencyFlags;
-				}
 			};
 			postProcessingRenderPass.renderPassInfo.dependencyCount = subPassDependencies.size();
 			postProcessingRenderPass.renderPassInfo.pDependencies = subPassDependencies.data();
@@ -1171,11 +1240,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(r->renderingDevice);
 			}
-			for (auto* shader : shaderGroups["sg_present_overlay"]) {
-				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 3);
-				shader->AddColorBlendAttachmentState();
-				shader->CreatePipeline(r->renderingDevice);
-			}
 		}
 		
 		// Compute
@@ -1199,9 +1263,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		for (auto* s : shaderGroups["sg_present"]) {
 			s->DestroyPipeline(r->renderingDevice);
 		}
-		for (auto* s : shaderGroups["sg_present_overlay"]) {
-			s->DestroyPipeline(r->renderingDevice);
-		}
 		postProcessingRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		postProcessingRenderPass.Destroy(r->renderingDevice);
 		
@@ -1218,7 +1279,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		shader_thumbnail.SetData(3);
 		
 		// Post-Processing
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_postfx" || rp == "sg_history_write" || rp == "sg_present" || rp == "sg_present_overlay") {
+		for (auto[rp, ss] : shaderGroups) if (rp == "sg_postfx" || rp == "sg_history_write" || rp == "sg_present") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -1261,10 +1322,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			}
 			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 			for (auto* shader : shaderGroups["sg_present"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
-			}
-			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			for (auto* shader : shaderGroups["sg_present_overlay"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
@@ -1568,7 +1625,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 						// Geometries
 						if (r->rayTracingFeatures.rayTracing) {
 							for (auto& geom : obj->GetGeometries()) {
-								if (geom.geometry->active) {
+								if (geom.geometry->active && Geometry::geometryRenderTypes[geom.type].sbtOffset != -1) {
 									if (!geom.geometry->blas) {
 										MakeRayTracingBlas(&geom);
 									}
@@ -1600,10 +1657,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 							}
 						}
 					} else if (r->rayTracingFeatures.rayTracing) {
-					for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
-						RemoveRayTracingInstance(geom);
+						for (auto& geom : obj->GetGeometries()) if (geom.rayTracingInstanceIndex != -1) {
+							RemoveRayTracingInstance(geom);
+						}
 					}
-				}
 				obj->Unlock();
 			}
 			if (r->rayTracingFeatures.rayTracing && geometriesToRemoveFromRayTracingInstances.size()) {
@@ -1892,9 +1949,16 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			set1_lighting_raster.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
+		{r->descriptorSets["set1_transparent"] = &set1_transparent;
+			int i = 0;
+			for (auto* img : gBuffers) set1_transparent.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_transparent.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_transparent.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+		
 		{r->descriptorSets["set1_fog_raster"] = &set1_fog_raster;
 			int i = 0;
-			set1_fog_raster.AddBinding_inputAttachment(i++, &img_gBuffer_2, VK_SHADER_STAGE_FRAGMENT_BIT);
+			for (auto* img : gBuffers) set1_fog_raster.AddBinding_inputAttachment(i++, img, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_fog_raster.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_fog_raster.AddBinding_combinedImageSampler(i++, &img_rasterDepth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
@@ -1934,6 +1998,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			pipelineLayouts["pl_visibility_raster"]->AddDescriptorSet(&set1_visibility_raster);
 			pipelineLayouts["pl_visibility_rays"]->AddDescriptorSet(&set1_visibility_rays);
 			pipelineLayouts["pl_lighting_raster"]->AddDescriptorSet(&set1_lighting_raster);
+			pipelineLayouts["pl_transparent"]->AddDescriptorSet(&set1_transparent);
 			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_fog_raster);
 			pipelineLayouts["pl_lighting_rays"]->AddDescriptorSet(&set1_lighting_rays);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
@@ -1950,6 +2015,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		Geometry::geometryRenderTypes["sphere"].rasterShader = &shader_visibility_sphere;
 		Geometry::geometryRenderTypes["light"].rasterShader = &shader_visibility_light;
 		Geometry::geometryRenderTypes["sun"].rasterShader = &shader_visibility_sun;
+		Geometry::geometryRenderTypes["transparent"].rasterShader = &shader_transparent;
 	}
 	
 	#pragma region Load/Upload Renderer
@@ -2282,13 +2348,6 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 			
-			r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
-			
-			// //TODO find a better fix...
-			// r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
-		
-			r->renderingDevice->ResetFences(1, &fences["graphics"][r->currentFrameInFlight]);
-			
 			r->renderingDevice->ResetCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex], 0);
 			if (r->renderingDevice->BeginCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex], &beginInfo) != VK_SUCCESS) {
 				throw std::runtime_error("Faild to begin recording command buffer");
@@ -2314,8 +2373,14 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			graphicsSubmitInfo[1].signalSemaphoreCount = 1;
 			graphicsSubmitInfo[1].pSignalSemaphores = &semaphores["staticRenderFinished"][r->currentFrameInFlight];
 		}
+		
+		// Next Frame In Flight
+		size_t nextFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
+		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
+		r->renderingDevice->ResetFences(1, &fences["graphics"][nextFrameInFlight]);
+		
 		// Submit Graphics
-		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][r->currentFrameInFlight]);
+		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][nextFrameInFlight]);
 		if (result != VK_SUCCESS) {
 			if (result == VK_ERROR_DEVICE_LOST) {
 				LOG_ERROR("Render() Failed to submit graphics command buffer : VK_ERROR_DEVICE_LOST")
@@ -2360,9 +2425,9 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		}
 
 		// Increment r->currentFrameInFlight
-		r->currentFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
+		r->currentFrameInFlight = nextFrameInFlight;
 	
-		//TODO find a better fix...
+		// //TODO find a better fix...
 		r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	

@@ -1,21 +1,6 @@
 #include "core.glsl"
-
-// For standard geometry
-struct V2F {
-	vec4 color;
-	vec4 pos;
-	vec3 normal;
-	vec2 uv;
-};
-
-// For AABBs
-struct V2G {
-	vec3 aabbMin;
-	vec3 aabbMax;
-	vec4 color;
-	float custom1;
-	vec4 pos;
-};
+#include "v4d/modules/V4D_hybrid/glsl_includes/V2F.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/V2G.glsl"
 
 #common .*frag
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_raster.glsl"
@@ -372,25 +357,5 @@ void main() {
 		return;
 	}
 	discard;
-}
-
-
-###########################################
-#shader glass.frag
-
-layout(location = 0) in V2F v2f;
-
-void main() {
-	// Passthrough Material
-	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
-	pbrGBuffers.viewSpaceNormal = v2f.normal;
-	pbrGBuffers.uv = v2f.uv;
-	pbrGBuffers.albedo = v2f.color.rgb;
-	pbrGBuffers.emit = 0;
-	pbrGBuffers.metallic = 0.0;
-	pbrGBuffers.roughness = 0.0;
-	
-	pbrGBuffers.distance = v2f.pos.w;
-	WritePbrGBuffers();
 }
 
