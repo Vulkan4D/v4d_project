@@ -8,14 +8,7 @@
 layout(location = 0) in V2F v2f;
 
 void main() {
-	// float depthBuffer;
-	// if (RayTracedVisibility) {
-	// 	depthBuffer = texture(tex_img_depth, v2f.uv).r;
-	// } else {
-	// 	depthBuffer = texture(tex_img_rasterDepth, v2f.uv).r;
-	// }
-	
-	vec4 color = subpassLoad(in_img_gBuffer_3);
-	
-	out_img_lit = color;
+	float distance = subpassLoad(in_img_gBuffer_2).w;
+	if (distance != 0 && v2f.pos.w > distance) discard;
+	out_img_lit = v2f.color;
 }

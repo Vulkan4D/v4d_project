@@ -650,7 +650,8 @@ public:
 	GenerateGeometry(
 		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
 		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
-		uint vertexIndexOffset = 0
+		uint vertexIndexOffset = 0,
+		float alpha = 1.0
 	) {
 		uint vertexCount = 0, indexCount = 0;
 		auto points = GetPointsPositions();
@@ -679,7 +680,6 @@ public:
 					faceVertex->vertexData->normal = faceNormal;
 					//TODO adjust block orientation (affects normal)
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
-					float alpha = 1.0; //TODO get alpha from material
 					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
 				}
 				outputIndices[indexCount++] = faceVertex->vertexIndex + vertexIndexOffset;

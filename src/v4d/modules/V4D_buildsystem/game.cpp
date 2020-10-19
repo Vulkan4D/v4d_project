@@ -71,7 +71,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 					SHAPE::PYRAMID,
 				};
 				
-				auto geom1 = obj->AddGeometry(Block::MAX_VERTICES*shapes.size(), Block::MAX_INDICES*shapes.size());
+				auto geom1 = obj->AddGeometry("transparent", Block::MAX_VERTICES*shapes.size(), Block::MAX_INDICES*shapes.size());
 				
 				uint nextVertex = 0;
 				uint nextIndex = 0;
@@ -79,7 +79,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 					Block block(shapes[i]);
 					block.SetPosition({2.0f * i, 0.0f, 0.0f});
 					block.SetColors(false, 1, 2, 3, 4, 5, 6);
-					auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex);
+					auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex, 0.6);
 					nextVertex += vertexCount;
 					nextIndex += indexCount;
 				}
@@ -95,7 +95,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 				}
 				geom1->isDirty = true;
 				
-			}, {-6,2,-2}, 180.0, {1,0,0});
+			}, {-4,4,-1}, 180.0, {1,0,0});
 		scene->Unlock();
 	}
 	

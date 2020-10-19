@@ -504,49 +504,63 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void ConfigureRasterVisibilityShaders() {
 		pl_visibility_raster.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
-		pl_transparent.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
-		
-		for (auto& sg : {shaderGroups["sg_visibility"], shaderGroups["sg_transparent"]}) {
-			for (auto* s : sg) {
-				// #ifdef _DEBUG
-					if (s == &shader_debug_wireframe) {
-						s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-						s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
-						s->rasterizer.lineWidth = 1;
-						s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-						#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-							s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
-						#else
-							s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
-						#endif
-					} else 
-				// #endif
-				if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
+	
+		for (auto* s : shaderGroups["sg_visibility"]) {
+			// #ifdef _DEBUG
+				if (s == &shader_debug_wireframe) {
 					s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+					s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+					s->rasterizer.lineWidth = 1;
 					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 					#else
 						s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
 					#endif
-				} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
-					s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
-					s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
-					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-					s->depthStencilState.depthTestEnable = true;
-					s->depthStencilState.depthWriteEnable = true;
-					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, 1);
-					#else
-						s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
-					#endif
-				}
+				} else 
+			// #endif
+			if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
+				s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
+				#else
+					s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
+				#endif
+			} else if (s->GetShaderPath("vert") == rasterAabbDefaultVertexShader) {
+				s->AddVertexInputBinding(sizeof(Geometry::ProceduralVertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::ProceduralVertexBuffer_T::GetInputAttributes());
+				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+				s->depthStencilState.depthTestEnable = true;
+				s->depthStencilState.depthWriteEnable = true;
+				#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+					s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, 1);
+				#else
+					s->SetData(&Geometry::globalBuffers.vertexBuffer, 1);
+				#endif
 			}
 		}
 	}
 	
+	void ConfigureTransparentShaders() {
+		pl_transparent.AddPushConstant<GeometryPushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		
+		for (auto* s : shaderGroups["sg_transparent"]) {
+			s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+			s->depthStencilState.depthTestEnable = VK_FALSE;
+			s->depthStencilState.depthWriteEnable = VK_FALSE;
+			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+				s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
+			#else
+				s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
+			#endif
+		}
+	}
+	
 	void ConfigureLightingShaders() {
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_lighting_rtx" || rp == "sg_fog" || rp == "sg_transparent") {
+		for (auto[rp, ss] : shaderGroups) if (rp == "sg_lighting" || rp == "sg_lighting_rtx" || rp == "sg_fog") {
 			for (auto* s : ss) {
 				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 				s->depthStencilState.depthTestEnable = VK_FALSE;
@@ -653,7 +667,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 							for (auto obj : scene->objectInstances) {
 								if (obj) {
 									// obj->Lock();
-									if (obj->IsActive() && (obj->rayTracingMaskRemoved & GEOMETRY_ATTR_PRIMARY_VISIBLE)==0) {
+									if (obj->IsActive()) {
 										// Geometries
 										for (auto& geom : obj->GetGeometries()) {
 											if (geom.geometry->active && (s == Geometry::geometryRenderTypes[geom.type].rasterShader)) {
@@ -1625,34 +1639,36 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 						// Geometries
 						if (r->rayTracingFeatures.rayTracing) {
 							for (auto& geom : obj->GetGeometries()) {
-								if (geom.geometry->active && Geometry::geometryRenderTypes[geom.type].sbtOffset != -1) {
-									if (!geom.geometry->blas) {
-										MakeRayTracingBlas(&geom);
-									}
-									if (geom.geometry->blas && !geom.geometry->blas->built) {
-										
-										// Global Scratch Buffer
-										if (AccelerationStructure::useGlobalScratchBuffer) {
-											VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
-											if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
-												continue;
+								if (Geometry::geometryRenderTypes[geom.type].sbtOffset != -1) {
+									if (geom.geometry->active) {
+										if (!geom.geometry->blas) {
+											MakeRayTracingBlas(&geom);
+										}
+										if (geom.geometry->blas && !geom.geometry->blas->built) {
+											
+											// Global Scratch Buffer
+											if (AccelerationStructure::useGlobalScratchBuffer) {
+												VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+												if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
+													continue;
+												}
+												geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
+												geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
+												globalScratchBufferSize += scratchSize;
+												if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
 											}
-											geom.geometry->blas->globalScratchBufferOffset = globalScratchBufferSize;
-											geom.geometry->blas->SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
-											globalScratchBufferSize += scratchSize;
-											if (globalScratchDynamicSize) blasBuildsForGlobalScratchBufferReallocation.push_back(geom.geometry->blas);
+											
+											AddRayTracingBlasBuild(geom.geometry->blas);
 										}
-										
-										AddRayTracingBlasBuild(geom.geometry->blas);
-									}
-									if (geom.geometry->blas && geom.geometry->blas->built) {
-										if (geom.rayTracingInstanceIndex == -1) {
-											AddRayTracingInstance(obj, &geom);
+										if (geom.geometry->blas && geom.geometry->blas->built) {
+											if (geom.rayTracingInstanceIndex == -1) {
+												AddRayTracingInstance(obj, &geom);
+											}
+											SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 										}
-										SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
+									} else if (geom.rayTracingInstanceIndex != -1) {
+										RemoveRayTracingInstance(geom);
 									}
-								} else if (geom.rayTracingInstanceIndex != -1) {
-									RemoveRayTracingInstance(geom);
 								}
 							}
 						}
@@ -1748,18 +1764,17 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			for (auto[i,geometry] : activeRayTracedGeometries) {
 				if (geometry) geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 			}
-		} else {
-			// Geometry::globalBuffers.PushGeometriesInfo(r->renderingDevice, commandBuffer);
-			scene->Lock();
-				for (auto obj : scene->objectInstances) if (obj && obj->IsActive()) {
-					obj->Lock();
-						for (auto& geom : obj->GetGeometries()) if (geom.geometry->active) {
-							if (geom.geometry) geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
-						}
-					obj->Unlock();
-				}
-			scene->Unlock();
 		}
+		// Geometry::globalBuffers.PushGeometriesInfo(r->renderingDevice, commandBuffer);
+		scene->Lock();
+			for (auto obj : scene->objectInstances) if (obj && obj->IsActive()) {
+				obj->Lock();
+					for (auto& geom : obj->GetGeometries()) if (geom.geometry && geom.geometry->active && (!r->rayTracingFeatures.rayTracing || Geometry::geometryRenderTypes[geom.type].sbtOffset == -1)) {
+						geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
+					}
+				obj->Unlock();
+			}
+		scene->Unlock();
 		
 		// Build Acceleration Structures
 		if (r->rayTracingFeatures.rayTracing) {
@@ -2022,6 +2037,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		
 		V4D_MODULE_FUNC(void, ConfigureShaders) {
 			ConfigureRasterVisibilityShaders();
+			ConfigureTransparentShaders();
 			ConfigureRayTracingShaders();
 			ConfigureLightingShaders();
 			ConfigurePostProcessingShaders();
