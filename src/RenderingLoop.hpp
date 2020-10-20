@@ -17,9 +17,9 @@ namespace app {
 			static bool showOtherUI = true;
 			#ifdef _ENABLE_IMGUI
 				if (imGuiIO->Fonts->IsBuilt()) {
+					std::lock_guard inputLock(app::inputMutex);
 					
 					ImGui_ImplVulkan_NewFrame();
-					
 					
 					ImGui_ImplGlfw_NewFrame();// this function calls glfwGetWindowAttrib() to check for focus before fetching mouse pos and always returns false if called on a secondary thread... 
 					// The quick fix is simply to always fetch the mouse position right here...
@@ -99,7 +99,6 @@ namespace app {
 			if (!app::renderer->graphicsLoadedToDevice || app::renderer->mustReload) return;
 			
 			{
-				std::scoped_lock lock(app::renderer->renderMutex2);
 				V4D_Renderer::ForEachSortedModule([](auto* mod){
 					if (mod->Update2) mod->Update2();
 				});

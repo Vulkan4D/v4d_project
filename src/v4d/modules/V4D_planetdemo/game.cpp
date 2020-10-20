@@ -210,11 +210,11 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, Init, Scene* _s) {
 		scene = _s;
 		
-		// v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(16384);
-		// v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(16384);
-		// v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(65536);
-		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(16777216); // 16 million @ 32 bytes each = 512 mb
-		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(16777216*6); // 100 million @ 4 bytes each = 384 mb
+		static const int maxTerrainChunksInMemory = 1800; // 1.0 Gb (577 kb per chunk)
+		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(maxTerrainChunksInMemory);
+		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(maxTerrainChunksInMemory);
+		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbVerticesPerChunk);
+		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbIndicesPerChunk);
 	}
 	
 	V4D_MODULE_FUNC(void, LoadScene) {

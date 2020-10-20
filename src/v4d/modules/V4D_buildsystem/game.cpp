@@ -22,6 +22,13 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	V4D_MODULE_FUNC(void, Init, v4d::scene::Scene* _s) {
 		scene = _s;
+		
+		static const int maxObjectsInMemory = 10; // 256 objects = 229 Mb
+		static const int maxBlocksInMemory = maxObjectsInMemory * 1024;
+		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(maxObjectsInMemory);
+		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(maxObjectsInMemory);
+		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(maxBlocksInMemory * Block::MAX_VERTICES);
+		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(maxBlocksInMemory * Block::MAX_INDICES);
 	}
 	
 	V4D_MODULE_FUNC(void, RendererCreateResources, v4d::graphics::vulkan::Device* device) {
