@@ -66,6 +66,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	
 	V4D_MODULE_FUNC(void, LoadScene) {
+		LOG("Block Data Size: " << sizeof(Block) << " bytes");
 		scene->Lock();
 			scene->AddObjectInstance()->Configure([](v4d::scene::ObjectInstance* obj){
 				obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;

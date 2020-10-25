@@ -54,16 +54,17 @@ protected:
 			,shape((int)t)
 			,orientation(0)
 			
-			,sizePlusX(size*4 - 1)
-			,sizePlusY(size*4 - 1)
-			,sizePlusZ(size*4 - 1)
-			,sizeMinusX(size*4 - 1)
-			,sizeMinusY(size*4 - 1)
-			,sizeMinusZ(size*4 - 1)
+			,sizeX(size*10 - 1)
+			,sizeY(size*10 - 1)
+			,sizeZ(size*10 - 1)
+			
+			,_extra_attributes_1(0)
 			
 			,posX(0)
 			,posY(0)
 			,posZ(0)
+			
+			,_extra_attributes_2(0)
 			
 			,color0(0)
 			,face0(true)
@@ -107,7 +108,7 @@ protected:
 			,line10(0)
 			,line11(0)
 			
-			,_extra_attributes(0)
+			,_extra_attributes_3(0)
 		{}
 		
 		// 4 bytes ident
@@ -115,18 +116,22 @@ protected:
 			uint32_t shape : 3; // 8 possible shapes, only 5 used
 			uint32_t orientation : 5; // 32 possible orientations, only 24 used
 		
-		// 6 bytes size		2x uvec3 (0 = 0.25  to  255 = 64.0)
-			uint8_t sizePlusX;
-			uint8_t sizePlusY;
-			uint8_t sizePlusZ;
-			uint8_t sizeMinusX;
-			uint8_t sizeMinusY;
-			uint8_t sizeMinusZ;
+		// 4 bytes size+extra
+			// 3x10 bits size	uvec3(0.1 to 102.4 meters +- 10 cm)
+				uint32_t sizeX : 10;
+				uint32_t sizeY : 10;
+				uint32_t sizeZ : 10;
+			
+			// extra per-block attributes for future use
+				uint32_t _extra_attributes_1 : 2;
 		
-		// 6 bytes position		ivec3(-8km to +8km, +- 25cm)
-			int16_t posX;
-			int16_t posY;
-			int16_t posZ;
+		// 8 bytes position+extra
+			// 3x20 bits position		ivec3(-52.4288 km to +52.4287 km, +- 10cm) (max hull length of > 100 km)
+				int64_t posX : 20;
+				int64_t posY : 20;
+				int64_t posZ : 20;
+			// extra per-block attributes for future use
+				int64_t _extra_attributes_2 : 4;
 		
 		// 8 bytes colors and face visibility (128 color palette, different color for each face or for each point depending on the value of useVertexColorGradients)
 			uint8_t color0 : 7;
@@ -171,7 +176,7 @@ protected:
 			uint64_t line10 : 1;
 			uint64_t line11 : 1;
 			// extra per-block attributes for future use
-			uint64_t _extra_attributes : 4;
+			uint64_t _extra_attributes_3 : 4;
 	} data;
 	
 	struct FaceVertex {
@@ -206,11 +211,11 @@ protected:
 		return false;
 	}
 	
-	glm::i16vec3 GetRawPosition() const {
-		return glm::i16vec3(data.posX, data.posY, data.posZ);
+	glm::ivec3 GetRawPosition() const {
+		return glm::ivec3(data.posX, data.posY, data.posZ);
 	};
 	
-	void SetRawPosition(glm::i16vec3 pos) {
+	void SetRawPosition(glm::ivec3 pos) {
 		data.posX = pos.x;
 		data.posY = pos.y;
 		data.posZ = pos.z;
@@ -557,17 +562,14 @@ protected:
 	float GetFaceSize(RESIZEDIR dir) {
 		switch (dir) {
 			case RESIZEDIR::PLUS_X:
-				return data.sizePlusX;
 			case RESIZEDIR::MINUS_X:
-				return data.sizeMinusX;
+				return data.sizeX;
 			case RESIZEDIR::PLUS_Y:
-				return data.sizePlusY;
 			case RESIZEDIR::MINUS_Y:
-				return data.sizeMinusY;
+				return data.sizeY;
 			case RESIZEDIR::PLUS_Z:
-				return data.sizePlusZ;
 			case RESIZEDIR::MINUS_Z:
-				return data.sizeMinusZ;
+				return data.sizeZ;
 		}
 		return 0;
 	}
@@ -576,14 +578,14 @@ public:
 	Block() = default;
 	Block(SHAPE t) : data(t) {}
 	
-	// Grid size of 1/4 meters for block positions
+	// Grid size of 10 cm for block positions
 	void SetPosition(glm::vec3 pos) {
-		data.posX = pos.x * 4.0f;
-		data.posY = pos.y * 4.0f;
-		data.posZ = pos.z * 4.0f;
+		data.posX = pos.x * 10.0f;
+		data.posY = pos.y * 10.0f;
+		data.posZ = pos.z * 10.0f;
 	}
 	glm::vec3 GetPosition() const {
-		return glm::vec3(data.posX, data.posY, data.posZ) / 4.0f;
+		return glm::vec3(data.posX, data.posY, data.posZ) / 10.0f;
 	};
 	
 	void SetColors(bool useVertexColorGradients
@@ -609,14 +611,14 @@ public:
 	
 	std::vector<glm::vec3> GetPointsPositions() {
 		auto points = GetPoints();
-		// 1/8 meters grid for block sizes
+		// 10 cm grid for block sizes
 		for (auto& p : points) {
-			p /= 8.0f;
+			p /= 20.0f;
 		}
 		// Resize points
 		for (const auto&[dir, pts] : GetResizePoints()) {
 			for (const auto& p : pts) {
-				points[p] += GetFaceResizeDirNormal(dir) * GetFaceSize(dir) / 8.0f;
+				points[p] += GetFaceResizeDirNormal(dir) * GetFaceSize(dir) / 20.0f;
 			}
 		}
 		//TODO adjust block orientation
