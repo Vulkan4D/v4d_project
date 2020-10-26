@@ -121,17 +121,16 @@ protected:
 				uint32_t sizeX : 10;
 				uint32_t sizeY : 10;
 				uint32_t sizeZ : 10;
-			
 			// extra per-block attributes for future use
 				uint32_t _extra_attributes_1 : 2;
 		
 		// 8 bytes position+extra
-			// 3x20 bits position		ivec3(-52.4288 km to +52.4287 km, +- 10cm) (max hull length of > 100 km)
-				int64_t posX : 20;
-				int64_t posY : 20;
-				int64_t posZ : 20;
+			// 3x20 bits position	ivec3(-104.8576 km to +104.8575 km, +- 10cm) (max hull length of > 200 km)
+				int64_t posX : 21;
+				int64_t posY : 21;
+				int64_t posZ : 21;
 			// extra per-block attributes for future use
-				int64_t _extra_attributes_2 : 4;
+				int64_t _extra_attributes_2 : 1;
 		
 		// 8 bytes colors and face visibility (128 color palette, different color for each face or for each point depending on the value of useVertexColorGradients)
 			uint8_t color0 : 7;
