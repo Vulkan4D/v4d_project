@@ -28,6 +28,11 @@ V4D_MODULE_CLASS(V4D_Client) {
 		scene = _s;
 	}
 	
+	V4D_MODULE_FUNC(void, UnloadScene) {
+		std::lock_guard lock(objectsMutex);
+		objects.clear();
+	}
+	
 	V4D_MODULE_FUNC(void, EnqueueAction, v4d::data::WriteOnlyStream& stream) {
 		std::lock_guard lock(actionQueueMutex);
 		actionQueue.emplace(stream);

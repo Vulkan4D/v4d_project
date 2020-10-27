@@ -107,8 +107,20 @@ namespace app::modules {
 		V4D_Game::ForEachSortedModule([](auto* mod){
 			if (mod->LoadScene) mod->LoadScene();
 		});
+		V4D_Server::ForEachSortedModule([](auto* mod){
+			if (mod->LoadScene) mod->LoadScene();
+		});
+		V4D_Client::ForEachSortedModule([](auto* mod){
+			if (mod->LoadScene) mod->LoadScene();
+		});
 	}
 	void UnloadScene() {
+		V4D_Client::ForEachSortedModule([](auto* mod){
+			if (mod->UnloadScene) mod->UnloadScene();
+		});
+		V4D_Server::ForEachSortedModule([](auto* mod){
+			if (mod->UnloadScene) mod->UnloadScene();
+		});
 		V4D_Game::ForEachSortedModule([](auto* mod){
 			if (mod->UnloadScene) mod->UnloadScene();
 		});

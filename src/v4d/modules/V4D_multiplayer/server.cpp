@@ -33,6 +33,12 @@ V4D_MODULE_CLASS(V4D_Server) {
 		scene = _s;
 	}
 	
+	V4D_MODULE_FUNC(void, UnloadScene) {
+		std::lock_guard lock(objectsMutex);
+		players.clear();
+		objects.clear();
+	}
+	
 	V4D_MODULE_FUNC(void, SlowGameLoop) {
 		// Erase inactive objects
 		std::lock_guard lock(objectsMutex);

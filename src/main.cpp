@@ -165,8 +165,7 @@ void app::Stop() {
 	
 	// Unload scene
 	app::modules::UnloadScene();
-	app::modules::Unload();
-	app::scene->ClearAllRemainingObjects();
+	app::scene->ClearAllRemainingObjects(); 
 	delete app::scene;
 	
 	// Unload Graphics
@@ -181,6 +180,9 @@ void app::Stop() {
 		app::vulkan::Unload();
 	}
 
+	// Unload Modules
+	app::modules::Unload();
+	
 	// ThreadWatcher
 	#ifdef _DEBUG
 		app::threads::EndThreadWatcher();

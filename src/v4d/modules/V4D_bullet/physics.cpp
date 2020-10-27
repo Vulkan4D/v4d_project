@@ -251,6 +251,14 @@ void UpdatePhysicsObject(v4d::scene::ObjectInstancePtr obj) {
 	physicsObjects[obj.get()].Refresh();
 }
 
+void CleanupObjects() {
+	std::lock_guard lock(objectsToRemoveMutex);
+	while (!objectsToRemove.empty()) {
+		RemovePhysicsObject(objectsToRemove.front().get());
+		objectsToRemove.pop();
+	}
+}
+
 V4D_MODULE_CLASS(V4D_Physics) {
 	
 	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {
@@ -291,6 +299,10 @@ V4D_MODULE_CLASS(V4D_Physics) {
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
+		while (!objectsToRefresh.empty()) {
+			objectsToRefresh.pop();
+		}
+		CleanupObjects();
 		scene->objectInstanceRemovedCallbacks.erase(THIS_MODULE);
 		
 		for (int i = 0; i < globalCollisionShapes.size(); i++) {
@@ -374,13 +386,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 			UpdatePhysicsObject(objectsToRefresh.front());
 			objectsToRefresh.pop();
 		}
-		{
-			std::lock_guard lock(objectsToRemoveMutex);
-			while (!objectsToRemove.empty()) {
-				RemovePhysicsObject(objectsToRemove.front().get());
-				objectsToRemove.pop();
-			}
-		}
+		CleanupObjects();
 		
 		// Physics Simulation
 		globalDynamicsWorld->stepSimulation(deltaTime);
