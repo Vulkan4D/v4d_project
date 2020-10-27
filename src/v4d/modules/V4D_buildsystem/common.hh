@@ -1,5 +1,7 @@
 #include <v4d.h>
 
+const int NB_BLOCKS = 5;
+
 enum class SHAPE : int {
 	CUBE = 0,
 	SLOPE,
@@ -109,7 +111,9 @@ protected:
 			,line11(0)
 			
 			,_extra_attributes_3(0)
-		{}
+		{
+			static_assert(sizeof(Block) == 32);
+		}
 		
 		// 4 bytes ident
 			uint32_t index : 24; // shall reset to 0 upon game load
@@ -693,4 +697,80 @@ public:
 	}
 	
 	
+};
+
+void DemoShapesGenerator (v4d::scene::ObjectInstance* obj) {
+	obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;
+	
+	std::vector<SHAPE> shapes = {
+		SHAPE::CUBE,
+		SHAPE::INVCORNER,
+		SHAPE::SLOPE,
+		SHAPE::CORNER,
+		SHAPE::PYRAMID,
+	};
+	
+	auto geom1 = obj->AddGeometry("transparent", Block::MAX_VERTICES*shapes.size(), Block::MAX_INDICES*shapes.size());
+	
+	uint nextVertex = 0;
+	uint nextIndex = 0;
+	for (int i = 0; i < shapes.size(); ++i) {
+		Block block(shapes[i]);
+		block.SetPosition({2.0f * i, 0.0f, 0.0f});
+		block.SetColors(false, 1, 2, 3, 4, 5, 6);
+		auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex, 0.6);
+		nextVertex += vertexCount;
+		nextIndex += indexCount;
+	}
+	geom1->Shrink(nextVertex, nextIndex);
+	
+	for (int i = 0; i < geom1->vertexCount; ++i) {
+		auto* vert = geom1->GetVertexPtr(i);
+		geom1->boundingDistance = glm::max(geom1->boundingDistance, glm::length(vert->pos));
+		geom1->boundingBoxSize = glm::max(glm::abs(vert->pos), geom1->boundingBoxSize);
+	}
+	geom1->isDirty = true;
+}
+
+class Build {
+	v4d::scene::Scene* scene;
+	
+	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
+	std::vector<Block> blocks {};
+	
+public:
+
+	Build(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
+		scene->Lock();
+			sceneObject = scene->AddObjectInstance();
+			sceneObject->Configure(DemoShapesGenerator, position, angle, axis);
+		scene->Unlock();
+	}
+	
+	~Build() {
+		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+	}
+	
+	void ResetGeometry() {
+		sceneObject->ClearGeometries();
+	}
+	
+	void ClearBlocks() {
+		blocks.clear();
+		ResetGeometry();
+	}
+	
+};
+
+struct BuildInterface {
+	int selectedBlockType = -1;
+	float blockSize[NB_BLOCKS][3] = {
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+	};
+	int selectedEditValue = 0;
+	Build* tmpBuild = nullptr;
 };

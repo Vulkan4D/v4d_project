@@ -76,12 +76,12 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, LoadScene) {
 		scene->Lock();
 		
-		// Cornell boxes
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {0,250,-30}, 180.0);
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {200,250,-30}, 120.0);
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
-		for (int i = 0; i < 100; ++i)
-			scene->AddObjectInstance()->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
+		// // Cornell boxes
+		// scene->AddObjectInstance()->Configure(CreateCornellBox, {0,250,-30}, 180.0);
+		// scene->AddObjectInstance()->Configure(CreateCornellBox, {200,250,-30}, 120.0);
+		// scene->AddObjectInstance()->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
+		// for (int i = 0; i < 100; ++i)
+		// 	scene->AddObjectInstance()->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
 			
 		// Ground (static)
 		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
@@ -103,33 +103,33 @@ V4D_MODULE_CLASS(V4D_Game) {
 			obj->mass = 10;
 			obj->SetSphereLightSource("light", 20, 100000000);
 		}, {10,-2000,10});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 200, 1000000000);
-		}, {10,-500,1000});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 2, 10000);
-		}, {10,270,10});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 1, 10000);
-		}, {210,270,-20});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 1, 10000);
-		}, {-190,270,-15});
+		// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+		// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+		// 	obj->mass = 10;
+		// 	obj->SetSphereLightSource("light", 200, 1000000000);
+		// }, {10,-500,1000});
+		// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+		// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+		// 	obj->mass = 10;
+		// 	obj->SetSphereLightSource("light", 2, 10000);
+		// }, {10,270,10});
+		// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+		// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+		// 	obj->mass = 10;
+		// 	obj->SetSphereLightSource("light", 1, 10000);
+		// }, {210,270,-20});
+		// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+		// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+		// 	obj->mass = 10;
+		// 	obj->SetSphereLightSource("light", 1, 10000);
+		// }, {-190,270,-15});
 		
-		// Red Sphere (static)
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
-		}, {60,300,500});
+		// // Red Sphere (static)
+		// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+		// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+		// 	obj->mass = 10;
+		// 	obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
+		// }, {60,300,500});
 		
 		scene->Unlock();
 	}
