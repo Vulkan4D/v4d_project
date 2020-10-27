@@ -97,7 +97,21 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	V4D_MODULE_FUNC(void, LoadScene) {
-		buildInterface.tmpBuild = new Build(scene, {-4,4,-1}, 180.0, {1,0,0});
+		buildInterface.tmpBuild = new Build(scene, {0,4,0});
+		
+		std::vector<SHAPE> shapes = {
+			SHAPE::CUBE,
+			SHAPE::INVCORNER,
+			SHAPE::SLOPE,
+			SHAPE::CORNER,
+			SHAPE::PYRAMID,
+		};
+		for (int i = 0; i < shapes.size(); ++i) {
+			Block& block = buildInterface.tmpBuild->AddBlock(shapes[i]);
+			block.SetPosition({2.0f * i, 0.0f, 0.0f});
+			block.SetColors(false, 1, 2, 3, 4, 5, 6);
+		}
+		buildInterface.tmpBuild->ResetGeometry();
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {

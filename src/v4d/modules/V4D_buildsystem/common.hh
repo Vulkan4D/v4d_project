@@ -699,39 +699,6 @@ public:
 	
 };
 
-void DemoShapesGenerator (v4d::scene::ObjectInstance* obj) {
-	obj->rigidbodyType = v4d::scene::ObjectInstance::RigidBodyType::STATIC;
-	
-	std::vector<SHAPE> shapes = {
-		SHAPE::CUBE,
-		SHAPE::INVCORNER,
-		SHAPE::SLOPE,
-		SHAPE::CORNER,
-		SHAPE::PYRAMID,
-	};
-	
-	auto geom1 = obj->AddGeometry("transparent", Block::MAX_VERTICES*shapes.size(), Block::MAX_INDICES*shapes.size());
-	
-	uint nextVertex = 0;
-	uint nextIndex = 0;
-	for (int i = 0; i < shapes.size(); ++i) {
-		Block block(shapes[i]);
-		block.SetPosition({2.0f * i, 0.0f, 0.0f});
-		block.SetColors(false, 1, 2, 3, 4, 5, 6);
-		auto[vertexCount, indexCount] = block.GenerateGeometry(geom1->GetVertexPtr(nextVertex), geom1->GetIndexPtr(nextIndex), nextVertex, 0.6);
-		nextVertex += vertexCount;
-		nextIndex += indexCount;
-	}
-	geom1->Shrink(nextVertex, nextIndex);
-	
-	for (int i = 0; i < geom1->vertexCount; ++i) {
-		auto* vert = geom1->GetVertexPtr(i);
-		geom1->boundingDistance = glm::max(geom1->boundingDistance, glm::length(vert->pos));
-		geom1->boundingBoxSize = glm::max(glm::abs(vert->pos), geom1->boundingBoxSize);
-	}
-	geom1->isDirty = true;
-}
-
 class Build {
 	v4d::scene::Scene* scene;
 	
@@ -743,12 +710,34 @@ public:
 	Build(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
 		scene->Lock();
 			sceneObject = scene->AddObjectInstance();
-			sceneObject->Configure(DemoShapesGenerator, position, angle, axis);
+			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
+				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+				
+				uint nextVertex = 0;
+				uint nextIndex = 0;
+				for (int i = 0; i < blocks.size(); ++i) {
+					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
+					nextVertex += vertexCount;
+					nextIndex += indexCount;
+				}
+				geom->Shrink(nextVertex, nextIndex);
+				
+				for (int i = 0; i < geom->vertexCount; ++i) {
+					auto* vert = geom->GetVertexPtr(i);
+					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
+					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
+				}
+				geom->isDirty = true;
+			}, position, angle, axis);
 		scene->Unlock();
 	}
 	
 	~Build() {
 		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+	}
+	
+	Block& AddBlock(SHAPE shape) {
+		return blocks.emplace_back(shape);
 	}
 	
 	void ResetGeometry() {
