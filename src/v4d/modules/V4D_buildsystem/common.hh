@@ -717,23 +717,25 @@ public:
 		scene->Lock();
 			sceneObject = scene->AddObjectInstance();
 			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-				auto geom = obj->AddGeometry(/*"transparent", */Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
-				
-				uint nextVertex = 0;
-				uint nextIndex = 0;
-				for (int i = 0; i < blocks.size(); ++i) {
-					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
-					nextVertex += vertexCount;
-					nextIndex += indexCount;
+				if (blocks.size() > 0) {
+					auto geom = obj->AddGeometry(/*"transparent", */Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+					
+					uint nextVertex = 0;
+					uint nextIndex = 0;
+					for (int i = 0; i < blocks.size(); ++i) {
+						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
+						nextVertex += vertexCount;
+						nextIndex += indexCount;
+					}
+					geom->Shrink(nextVertex, nextIndex);
+					
+					for (int i = 0; i < geom->vertexCount; ++i) {
+						auto* vert = geom->GetVertexPtr(i);
+						geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
+						geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
+					}
+					geom->isDirty = true;
 				}
-				geom->Shrink(nextVertex, nextIndex);
-				
-				for (int i = 0; i < geom->vertexCount; ++i) {
-					auto* vert = geom->GetVertexPtr(i);
-					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
-					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
-				}
-				geom->isDirty = true;
 			}, position, angle, axis);
 		scene->Unlock();
 	}
@@ -775,6 +777,7 @@ struct BuildInterface {
 	};
 	int selectedEditValue = 0;
 	Build* tmpBuild = nullptr;
+	int blockRotation = 0;
 	
 	void UpdateTmpBlock() {
 		if (scene && scene->cameraParent) {
@@ -800,5 +803,16 @@ struct BuildInterface {
 				UpdateTmpBlock();
 			}
 		scene->Unlock();
+	}
+	
+	void NextBlockRotation() {
+		blockRotation++;
+		if (blockRotation == 24) blockRotation = 0;
+		//TODO constraints or skip
+	}
+	void PreviousBlockRotation() {
+		blockRotation--;
+		if (blockRotation == -1) blockRotation = 23;
+		//TODO constraints or skip
 	}
 };

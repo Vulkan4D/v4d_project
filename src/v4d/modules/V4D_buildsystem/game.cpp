@@ -55,14 +55,15 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	V4D_MODULE_FUNC(void, RendererRunUi) {
-		ImGui::SetNextWindowPos({20, 150}, ImGuiCond_Once);
-		ImGui::SetNextWindowSize({380, 160}, ImGuiCond_Once /*ImGuiCond_FirstUseEver*/);
+		ImGui::SetNextWindowPos({20, 150}, ImGuiCond_FirstUseEver); // or ImGuiCond_Once
+		ImGui::SetNextWindowSize({380, 160}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Build System");
 		for (int i = 0; i < NB_BLOCKS; ++i) {
 			if (!blocks_imGuiImg[i]) blocks_imGuiImg[i] = (ImTextureID)ImGui_ImplVulkan_AddTexture(blocks_tex[i].GetImage()->sampler, blocks_tex[i].GetImage()->view, VK_IMAGE_LAYOUT_GENERAL);
 			ImGui::SetCursorPos({float(i) * 74 + 2, 24});
 			if (ImGui::ImageButton(blocks_imGuiImg[i], {64, 64}, {0,0}, {1,1}, -1, buildInterface.selectedBlockType==i?ImVec4{0,0.5,0,1}:ImVec4{0,0,0,1}, buildInterface.selectedBlockType==-1?ImVec4{1,1,1,1}:ImVec4{1,1,1,0.8})) {
 				buildInterface.selectedBlockType = i;
+				buildInterface.RemakeTmpBlock();
 			}
 		}
 		if (buildInterface.selectedBlockType != -1) {
@@ -72,25 +73,32 @@ V4D_MODULE_CLASS(V4D_Game) {
 			ImGui::SetCursorPos({5, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
-			ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None);
+			if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				buildInterface.RemakeTmpBlock();
+			}
 			ImGui::PopStyleColor();
 			
 			ImGui::SetCursorPos({135, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
-			ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None);
+			if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				buildInterface.RemakeTmpBlock();
+			}
 			ImGui::PopStyleColor();
 			
 			ImGui::SetCursorPos({260, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
-			ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None);
+			if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				buildInterface.RemakeTmpBlock();
+			}
 			ImGui::PopStyleColor();
 			
 			ImGui::SetCursorPos({5, 125});
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==3? activeColor : inactiveColor);
 			if (ImGui::Button("Rotate")) {
-				//TODO click event
+				buildInterface.NextBlockRotation();
+				buildInterface.RemakeTmpBlock();
 			}
 			ImGui::PopStyleColor();
 		}

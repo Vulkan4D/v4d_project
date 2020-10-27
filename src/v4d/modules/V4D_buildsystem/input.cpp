@@ -93,7 +93,9 @@ V4D_MODULE_CLASS(V4D_Input) {
 					if (val < 0.1f) val = 0.1f;
 					if (val > 102.4f) val = 102.4f;
 				} else {
-					//TODO Rotate
+					// Rotate
+					if (y > 0) buildInterface->NextBlockRotation();
+					else buildInterface->PreviousBlockRotation();
 				}
 			} else if (x != 0) {
 				buildInterface->selectedEditValue += x;
