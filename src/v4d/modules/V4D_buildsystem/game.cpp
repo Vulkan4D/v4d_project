@@ -12,9 +12,9 @@ std::array<Texture2D, NB_BLOCKS> blocks_tex {
 };
 std::array<ImTextureID, NB_BLOCKS> blocks_imGuiImg {};
 
-BuildInterface buildInterface {};
-
 v4d::scene::Scene* scene = nullptr;
+
+BuildInterface buildInterface {};
 
 V4D_MODULE_CLASS(V4D_Game) {
 	
@@ -24,6 +24,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	V4D_MODULE_FUNC(void, Init, v4d::scene::Scene* _s) {
 		scene = _s;
+		buildInterface.scene = scene;
 		
 		static const int maxObjectsInMemory = 10; // 256 objects = 229 Mb
 		static const int maxBlocksInMemory = maxObjectsInMemory * 1024;
@@ -96,26 +97,14 @@ V4D_MODULE_CLASS(V4D_Game) {
 		ImGui::End();
 	}
 	
-	V4D_MODULE_FUNC(void, LoadScene) {
-		buildInterface.tmpBuild = new Build(scene, {0,4,0});
-		
-		std::vector<SHAPE> shapes = {
-			SHAPE::CUBE,
-			SHAPE::INVCORNER,
-			SHAPE::SLOPE,
-			SHAPE::CORNER,
-			SHAPE::PYRAMID,
-		};
-		for (int i = 0; i < shapes.size(); ++i) {
-			Block& block = buildInterface.tmpBuild->AddBlock(shapes[i]);
-			block.SetPosition({2.0f * i, 0.0f, 0.0f});
-			block.SetColors(false, 1, 2, 3, 4, 5, 6);
-		}
-		buildInterface.tmpBuild->ResetGeometry();
-	}
+	V4D_MODULE_FUNC(void, LoadScene) {}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
 		if (buildInterface.tmpBuild) delete buildInterface.tmpBuild;
+	}
+	
+	V4D_MODULE_FUNC(void, Update, double deltaTime) {
+		buildInterface.UpdateTmpBlock();
 	}
 	
 };

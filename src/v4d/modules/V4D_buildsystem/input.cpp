@@ -53,6 +53,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 					break;
 					
 			}
+			buildInterface->RemakeTmpBlock();
 		}
 		
 		if (key == GLFW_KEY_LEFT_SHIFT) {
@@ -78,6 +79,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 					// Middle Click
 				break;
 			}
+			buildInterface->RemakeTmpBlock();
 		}
 	}
 	
@@ -99,6 +101,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 				if (buildInterface->selectedEditValue < 0) buildInterface->selectedEditValue = 3;
 			}
 		}
+		buildInterface->RemakeTmpBlock();
 	}
 	
 };

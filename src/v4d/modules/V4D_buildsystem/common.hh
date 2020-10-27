@@ -24,7 +24,7 @@ enum class RESIZEDIR {
 };
 
 const glm::vec3 COLORS[128] = {
-	{0.0, 0.0, 0.0}, // black
+	{0.5, 0.5, 0.5}, // grey
 	{1.0, 0.0, 0.0}, // red
 	{0.0, 1.0, 0.0}, // green
 	{0.0, 0.0, 1.0}, // blue
@@ -56,9 +56,9 @@ protected:
 			,shape((int)t)
 			,orientation(0)
 			
-			,sizeX(size*10 - 1)
-			,sizeY(size*10 - 1)
-			,sizeZ(size*10 - 1)
+			,sizeX(size*10.0f - 1)
+			,sizeY(size*10.0f - 1)
+			,sizeZ(size*10.0f - 1)
 			
 			,_extra_attributes_1(0)
 			
@@ -591,6 +591,12 @@ public:
 		return glm::vec3(data.posX, data.posY, data.posZ) / 10.0f;
 	};
 	
+	void SetSize(glm::vec3 size) {
+		data.sizeX = size.x * 10.0f - 1;
+		data.sizeY = size.y * 10.0f - 1;
+		data.sizeZ = size.z * 10.0f - 1;
+	}
+	
 	void SetColors(bool useVertexColorGradients
 		,uint8_t color0 = 0
 		,uint8_t color1 = 0
@@ -711,7 +717,7 @@ public:
 		scene->Lock();
 			sceneObject = scene->AddObjectInstance();
 			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+				auto geom = obj->AddGeometry(/*"transparent", */Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
 				
 				uint nextVertex = 0;
 				uint nextIndex = 0;
@@ -733,6 +739,7 @@ public:
 	}
 	
 	~Build() {
+		ClearBlocks();
 		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
 	}
 	
@@ -746,12 +753,18 @@ public:
 	
 	void ClearBlocks() {
 		blocks.clear();
-		ResetGeometry();
+	}
+
+	void SetWorldTransform(glm::dmat4 t) {
+		if (sceneObject) {
+			sceneObject->SetWorldTransform(t);
+		}
 	}
 	
 };
 
 struct BuildInterface {
+	v4d::scene::Scene* scene = nullptr;
 	int selectedBlockType = -1;
 	float blockSize[NB_BLOCKS][3] = {
 		{1.0f, 1.0f, 1.0f},
@@ -762,4 +775,30 @@ struct BuildInterface {
 	};
 	int selectedEditValue = 0;
 	Build* tmpBuild = nullptr;
+	
+	void UpdateTmpBlock() {
+		if (scene && scene->cameraParent) {
+			if (tmpBuild) {
+				scene->Lock();
+					double angle = 20;
+					glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
+					glm::dvec3 position = {0.0, 0.0, -4.0};
+					tmpBuild->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
+				scene->Unlock();
+			}
+		}
+	}
+	
+	void RemakeTmpBlock() {
+		scene->Lock();
+			if (tmpBuild) delete tmpBuild;
+			tmpBuild = new Build(scene);
+			if (selectedBlockType != -1) {
+				Block& block = tmpBuild->AddBlock((SHAPE)selectedBlockType);
+				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
+				tmpBuild->ResetGeometry();
+				UpdateTmpBlock();
+			}
+		scene->Unlock();
+	}
 };
