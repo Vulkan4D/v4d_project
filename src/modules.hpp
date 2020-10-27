@@ -16,9 +16,15 @@ namespace app::modules {
 			// Default Modules when modules.txt is empty
 			if (app::modulesList.size() == 0) {
 				app::modulesList = {APP_DEFAULT_MODULES};
+				#ifdef APP_DEFAULT_MODULES_SAVE_TO_MODULES_TXT_WHEN_EMPTY
+					auto file = v4d::io::StringListFile::Instance(app::settings->modules_list_file);
+					file->lines = app::modulesList;
+					file->WriteToFile();
+				#endif
 			}
 		}
-		for (auto module : app::modulesList) {
+		for (auto module : app::modulesList) if (module[0] != '#') {
+			LOG("Loading module " << module)
 			V4D_Objects::LoadModule(module);
 			V4D_Game::LoadModule(module);
 			V4D_Input::LoadModule(module);

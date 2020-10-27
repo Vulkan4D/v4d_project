@@ -84,15 +84,19 @@ int main(const int argc, const char** argv) {
 }
 
 void app::Start() {
-	// Bind Events
-	app::events::Bind();
-	v4d::event::APP_KILLED << [](int){app::Stop();};
-	v4d::event::APP_ERROR << [](int){app::Stop();};
+	LOG("\n\nApplication started\n");
 	
-	// ThreadWatcher
-	#ifdef _DEBUG
-		app::threads::StartThreadWatcher();
-	#endif
+	{// Bind Events
+		app::events::Bind();
+		v4d::event::APP_KILLED << [](int){app::Stop();};
+		v4d::event::APP_ERROR << [](int){app::Stop();};
+	}
+	
+	{// ThreadWatcher
+		#ifdef _DEBUG
+			app::threads::StartThreadWatcher();
+		#endif
+	}
 	
 	// Load Modules
 	app::modules::Load();
@@ -109,10 +113,11 @@ void app::Start() {
 		app::graphics::CreateRenderer();
 	}
 	
-	// Load scene
-	app::scene = new v4d::scene::Scene;
-	app::modules::Init();
-	app::modules::LoadScene();
+	{// Load scene
+		app::scene = new v4d::scene::Scene;
+		app::modules::Init();
+		app::modules::LoadScene();
+	}
 	
 	// Load Inputs
 	if (app::window) {
@@ -124,7 +129,7 @@ void app::Start() {
 		app::graphics::LoadRenderer();
 	}
 	
-	// Server
+	// Start Server
 	if (app::isServer) {// server starts listening
 		app::networking::server = std::make_shared<app::Server>(v4d::io::TCP, app::networking::serverRsaKey.get());
 		app::modules::InitServer(app::networking::server);
@@ -140,17 +145,19 @@ void app::Start() {
 void app::Stop() {
 	app::isRunning = false;
 
-	#ifdef APP_ENABLE_BURST_STREAMS
-		if (app::networking::burstServer) {
-			app::networking::burstServer->Stop();
-			app::networking::burstServer = nullptr;
+	{// Stop Server
+		#ifdef APP_ENABLE_BURST_STREAMS
+			if (app::networking::burstServer) {
+				app::networking::burstServer->Stop();
+				app::networking::burstServer = nullptr;
+			}
+		#endif
+		if (app::networking::server) {
+			app::networking::server->Stop();
+			app::networking::server = nullptr;
+			if (!app::isClient) LOG("Server has stopped listening")
+			if (app::networking::serverRsaKey) app::networking::serverRsaKey.reset();
 		}
-	#endif
-	if (app::networking::server) {
-		app::networking::server->Stop();
-		app::networking::server = nullptr;
-		if (!app::isClient) LOG("Server has stopped listening")
-		if (app::networking::serverRsaKey) app::networking::serverRsaKey.reset();
 	}
 	
 	// Unload Renderer
@@ -158,15 +165,16 @@ void app::Stop() {
 		app::renderer->UnloadRenderer();
 	}
 	
-	// // Unload Inputs
+	// Unload Inputs
 	if (app::window) {
 		app::input::RemoveCallbacks();
 	}
 	
-	// Unload scene
-	app::modules::UnloadScene();
-	app::scene->ClearAllRemainingObjects(); 
-	delete app::scene;
+	{// Unload scene
+		app::modules::UnloadScene();
+		app::scene->ClearAllRemainingObjects(); 
+		delete app::scene;
+	}
 	
 	// Unload Graphics
 	if (app::renderer) {
@@ -183,12 +191,13 @@ void app::Stop() {
 	// Unload Modules
 	app::modules::Unload();
 	
-	// ThreadWatcher
-	#ifdef _DEBUG
-		app::threads::EndThreadWatcher();
-	#endif
+	{// ThreadWatcher
+		#ifdef _DEBUG
+			app::threads::EndThreadWatcher();
+		#endif
+	}
 	
-	LOG("\nApplication terminated\n");
+	LOG("\nApplication terminated\n\n");
 }
 
 void app::Run() {
@@ -247,4 +256,6 @@ void app::Run() {
 			}
 		}
 	}
+	
+	// App will be terminated
 }
