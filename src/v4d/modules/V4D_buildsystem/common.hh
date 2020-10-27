@@ -23,6 +23,15 @@ enum class RESIZEDIR {
 	MINUS_Z,
 };
 
+glm::vec4 ORIENTATIONS[24] = /*{Axis, Angle}*/ { // https://www.euclideanspace.com/maths/geometry/rotations/axisAngle/examples/index.htm
+	{1,0,0,  0},   {0,1,0,  90},   {0,1,0,  180},   {0,1,0,  -90},
+	{0,0,1,  90},   {0.5774,0.5774,0.5774,  120},   {0.7071,0.7071,0,  180},   {-0.5774,-0.5774,0.5774,  120},
+	{0,0,-1,  90},   {-0.5774,0.5774,-0.5774,  120},   {-0.7071,0.7071,0,  180},   {0.5774,-0.5774,-0.5774,  120},
+	{1,0,0,  90},   {0.5774,0.5774,-0.5774,  120},   {0,0.7071,-0.7071,  180},   {0.5774,-0.5774,0.5774,  120},
+	{1,0,0,  180},   {0.7071,0,-0.7071,  180},   {0,0,1,  180},   {0.7071,0,0.7071,  180},
+	{-1,0,0,  90},   {-0.5774,0.5774,0.5774,  120},   {0,0.7071,0.7071,  180},   {-0.5774,-0.5774,-0.5774,  120},
+};
+
 const glm::vec3 COLORS[128] = {
 	{0.5, 0.5, 0.5}, // grey
 	{1.0, 0.0, 0.0}, // red
@@ -544,7 +553,7 @@ protected:
 		return {};
 	}
 	
-	glm::vec3 GetFaceResizeDirNormal(RESIZEDIR dir) {
+	const glm::vec3 GetFaceResizeDirNormal(RESIZEDIR dir) const {
 		switch (dir) {
 			case RESIZEDIR::PLUS_X:
 				return {1,0,0};
@@ -562,7 +571,7 @@ protected:
 		return {0,0,0};
 	}
 	
-	float GetFaceSize(RESIZEDIR dir) {
+	const float GetFaceSize(RESIZEDIR dir) const {
 		switch (dir) {
 			case RESIZEDIR::PLUS_X:
 			case RESIZEDIR::MINUS_X:
@@ -575,6 +584,11 @@ protected:
 				return data.sizeZ;
 		}
 		return 0;
+	}
+	
+	glm::mat4 GetRotationMatrix() const {
+		auto& rotation = ORIENTATIONS[data.orientation];
+		return glm::rotate(glm::mat4(1), glm::radians(rotation.w), glm::vec3(rotation));
 	}
 	
 public:
@@ -595,6 +609,10 @@ public:
 		data.sizeX = size.x * 10.0f - 1;
 		data.sizeY = size.y * 10.0f - 1;
 		data.sizeZ = size.z * 10.0f - 1;
+	}
+	
+	void SetOrientation(uint8_t rot) {
+		data.orientation = rot;
 	}
 	
 	void SetColors(bool useVertexColorGradients
@@ -630,7 +648,10 @@ public:
 				points[p] += GetFaceResizeDirNormal(dir) * GetFaceSize(dir) / 20.0f;
 			}
 		}
-		//TODO adjust block orientation
+		// adjust block orientation
+		for (auto& p : points) {
+			p = glm::translate(GetRotationMatrix(), p)[3];
+		}
 		return points;
 	}
 	
@@ -673,8 +694,8 @@ public:
 		for (const auto& face : GetFaces()) {
 			assert(faceIndex < MAX_FACES);
 			assert(face.triangles.size() >= 3 && (face.triangles.size() % 3) == 0);
-			// Normal (in the case where we have exactly one resizedir for this face we can directly take the normal from it, otherwise we calculate the normal based on the actual position of the points because it is on a slope, we only need the first triangle of the face for calculating the normal)
-			glm::vec3 faceNormal = face.resizedirs.size() == 1 ? GetFaceResizeDirNormal(face.resizedirs[0]) : glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]]));
+			// Normal
+			glm::vec3 faceNormal = glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]]));
 			// Vertices
 			for (const auto& pointIndex : face.triangles) {
 				assert(pointIndex < MAX_POINTS);
@@ -689,7 +710,6 @@ public:
 					//TODO faceVertex->vertexData->SetUV()
 					faceVertex->vertexData->pos = points[pointIndex] + GetPosition();
 					faceVertex->vertexData->normal = faceNormal;
-					//TODO adjust block orientation (affects normal)
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
 					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
 				}
@@ -799,6 +819,7 @@ struct BuildInterface {
 			if (selectedBlockType != -1) {
 				Block& block = tmpBuild->AddBlock((SHAPE)selectedBlockType);
 				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
+				block.SetOrientation(blockRotation);
 				tmpBuild->ResetGeometry();
 				UpdateTmpBlock();
 			}
