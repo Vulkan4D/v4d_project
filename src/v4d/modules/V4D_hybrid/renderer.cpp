@@ -32,6 +32,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
 	DescriptorSet set1_histogram;
+	DescriptorSet set1_raycast;
 	DescriptorSet set1_overlay;
 #pragma endregion
 
@@ -61,6 +62,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	PipelineLayout pl_post;
 	PipelineLayout pl_thumbnail;
 	PipelineLayout pl_histogram;
+	PipelineLayout pl_raycast;
 #pragma endregion
 
 #pragma region Shaders
@@ -172,6 +174,9 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	ComputeShaderPipeline shader_histogram_compute {pl_histogram, 
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_histogram.comp")
 	};
+	ComputeShaderPipeline shader_raycast_compute {pl_raycast, 
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_raycast.comp")
+	};
 	
 #pragma endregion
 
@@ -202,6 +207,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"pl_post", &pl_post},
 		{"pl_thumbnail", &pl_thumbnail},
 		{"pl_histogram", &pl_histogram},
+		{"pl_raycast", &pl_raycast},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
 		{"sg_visibility", {
@@ -259,6 +265,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		uint32_t nbActiveLights = 0;
 		uint32_t activeLights[MAX_ACTIVE_LIGHTS];
 	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
+	Buffer raycastBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(RayCast)};
 #pragma endregion
 
 #pragma region Rasterization Pipelines & Resources
@@ -1261,6 +1268,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		
 		// Compute
 		shader_histogram_compute.CreatePipeline(r->renderingDevice);
+		shader_raycast_compute.CreatePipeline(r->renderingDevice);
 	}
 	void DestroyPostProcessingPipeline() {
 		// Thumbnail Gen
@@ -1285,6 +1293,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		
 		// Compute
 		shader_histogram_compute.DestroyPipeline(r->renderingDevice);
+		shader_raycast_compute.DestroyPipeline(r->renderingDevice);
 	}
 	
 	void ConfigurePostProcessingShaders() {
@@ -1307,17 +1316,26 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}
 	}
 	
-	void AllocatePostProcessingBuffers() {
-		// Compute histogram
+	void AllocateComputeBuffers() {
+		// histogram
 		totalLuminance.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 		totalLuminance.MapMemory(r->renderingDevice);
 		glm::vec4 luminance {0,0,0,1};
 		totalLuminance.WriteToMappedData(&luminance);
+		// raycast
+		raycastBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		raycastBuffer.MapMemory(r->renderingDevice);
+		r->currentRayCast = {};
+		raycastBuffer.WriteToMappedData(&r->currentRayCast);
 	}
-	void FreePostProcessingBuffers() {
-		// Compute histogram
+	void FreeComputeBuffers() {
+		// histogram
 		totalLuminance.UnmapMemory(r->renderingDevice);
 		totalLuminance.Free(r->renderingDevice);
+		// raycast
+		r->currentRayCast = {};
+		raycastBuffer.UnmapMemory(r->renderingDevice);
+		raycastBuffer.Free(r->renderingDevice);
 	}
 	
 	void RecordPostProcessingCommands(VkCommandBuffer commandBuffer, int imageIndex) {
@@ -1344,7 +1362,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
 	}
 	void RunDynamicPostProcessingCompute(VkCommandBuffer commandBuffer) {
-		// Compute
+		// histogram
 		shader_histogram_compute.SetGroupCounts(1, 1, 1);
 		shader_histogram_compute.Execute(r->renderingDevice, commandBuffer);
 	}
@@ -1756,6 +1774,9 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		ClearLitImage(commandBuffer);
 		
+		// Handle RayCast from previous frame
+		r->currentRayCast = *((RayCast*)raycastBuffer.data);
+		
 		// Transfer data to rendering device
 		scene->camera.renderOptions = RENDER_OPTIONS::Get();
 		scene->camera.debugOptions = DEBUG_OPTIONS::Get();
@@ -1791,6 +1812,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
+		// raycast compute
+		shader_raycast_compute.SetGroupCounts(1, 1, 1);
+		shader_raycast_compute.Execute(r->renderingDevice, commandBuffer);
+		
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
 	}
 
@@ -2007,6 +2032,12 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			set1_histogram.AddBinding_storageBuffer(1, &totalLuminance, VK_SHADER_STAGE_COMPUTE_BIT);
 		}
 		
+		{r->descriptorSets["set1_raycast"] = &set1_raycast;
+			int i = 0;
+			for (auto* img : gBuffers) set1_raycast.AddBinding_imageView(i++, img, VK_SHADER_STAGE_COMPUTE_BIT);
+			set1_raycast.AddBinding_storageBuffer(i++, &raycastBuffer, VK_SHADER_STAGE_COMPUTE_BIT);
+		}
+		
 		{ // Assign descriptor sets to layouts
 			// Add the same set 0 to all pipeline layouts
 			for (auto[name, layout] : pipelineLayouts) {
@@ -2023,6 +2054,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
 			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
+			pipelineLayouts["pl_raycast"]->AddDescriptorSet(&set1_raycast);
 		}
 		
 		// Assign raster shader to render types
@@ -2059,6 +2091,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 			
 			shader_histogram_compute.ReadShaders();
+			shader_raycast_compute.ReadShaders();
 		}
 		
 		V4D_MODULE_FUNC(void, CreateSyncObjects) {
@@ -2154,7 +2187,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			overlaySquaresBuffer.MapMemory(r->renderingDevice);
 			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
 			
-			AllocatePostProcessingBuffers();
+			AllocateComputeBuffers();
 			if (r->rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
 			
 			Geometry::globalBuffers.DefragmentMemory();
@@ -2184,7 +2217,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			cameraUniformBuffer.Free(r->renderingDevice);
 			activeLightsUniformBuffer.Free(r->renderingDevice);
 			
-			FreePostProcessingBuffers();
+			FreeComputeBuffers();
 			if (r->rayTracingFeatures.rayTracing) FreeRayTracingBuffers();
 			
 			Geometry::globalBuffers.Free(r->renderingDevice);
@@ -2519,6 +2552,9 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				ImGui::SetNextWindowPos({425+345,0});
 				ImGui::SetNextWindowSize({250, 100});
 				ImGui::Begin("Debug");
+				// RayCast
+				if (r->currentRayCast.hit) ImGui::Text((std::string("RayCast Hit object ") + std::to_string(r->currentRayCast.objectIndex) + ", data: " + std::to_string(r->currentRayCast.customData0)).c_str());
+				else ImGui::Text("RayCast no hit");
 			#endif
 				// Modules
 				V4D_Game::ForEachSortedModule([](auto* mod){

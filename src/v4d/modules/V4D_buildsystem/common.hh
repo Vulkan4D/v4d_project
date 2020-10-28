@@ -707,7 +707,7 @@ public:
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
-					//TODO faceVertex->vertexData->SetUV()
+					faceVertex->vertexData->customData = faceIndex; //TODO add more stuff in custom data (block index, face index, material id)
 					faceVertex->vertexData->pos = points[pointIndex] + GetPosition();
 					faceVertex->vertexData->normal = faceNormal;
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
@@ -738,7 +738,7 @@ public:
 			sceneObject = scene->AddObjectInstance();
 			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
 				if (blocks.size() > 0) {
-					auto geom = obj->AddGeometry(/*"transparent", */Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+					auto geom = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
 					
 					uint nextVertex = 0;
 					uint nextIndex = 0;

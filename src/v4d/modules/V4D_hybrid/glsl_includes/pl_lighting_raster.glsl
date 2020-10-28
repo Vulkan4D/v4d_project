@@ -8,8 +8,8 @@
 	struct GBuffersPbr {
 		vec3 viewSpacePosition;
 		vec3 viewSpaceNormal;
-		vec2 uv;
 		vec3 albedo;
+		float uv;
 		float emit;
 		float metallic;
 		float roughness;
@@ -24,7 +24,7 @@
 		
 		pbrGBuffers.viewSpacePosition = position_dist.xyz;
 		pbrGBuffers.viewSpaceNormal = normal_uv.xyz;
-		pbrGBuffers.uv = UnpackUVfromFloat(normal_uv.w);
+		pbrGBuffers.uv = normal_uv.w;
 		pbrGBuffers.albedo = albedo_emit.rgb;
 		pbrGBuffers.emit = albedo_emit.a;
 		pbrGBuffers.metallic = pbr.r;

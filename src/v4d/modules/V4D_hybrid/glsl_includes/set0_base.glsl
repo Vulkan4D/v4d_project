@@ -174,6 +174,7 @@ struct Vertex {
 	vec4 color;
 	vec3 normal;
 	vec2 uv;
+	uint customData;
 };
 
 struct LightSource {
@@ -200,5 +201,5 @@ LightSource GetLight (uint i) {
 };
 
 uvec4 GenerateCustomData(uint objectIndex, uint customType8, uint flags32, uint customData32_1, uint customData32_2) {
-	return uvec4(((objectIndex+1)<<24) | customType8, flags32, customData32_1, customData32_2);
+	return uvec4((customType8 << 24) | (objectIndex << 1) | 1, flags32, customData32_1, customData32_2);
 }

@@ -179,7 +179,7 @@ void main() {
 	// Passthrough Material
 	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
 	pbrGBuffers.viewSpaceNormal = v2f.normal;
-	pbrGBuffers.uv = v2f.uv;
+	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.metallic = 0.0;
@@ -200,7 +200,7 @@ void main() {
 	// Passthrough Material
 	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
 	pbrGBuffers.viewSpaceNormal = v2f.normal;
-	pbrGBuffers.uv = v2f.uv;
+	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.metallic = 0.0;
@@ -221,7 +221,7 @@ void main() {
 	// Passthrough Material
 	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
 	pbrGBuffers.viewSpaceNormal = v2f.normal;
-	pbrGBuffers.uv = v2f.uv;
+	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.metallic = 0.0;
@@ -248,7 +248,7 @@ void main() {
 	pbrGBuffers.metallic = 0.0;
 	pbrGBuffers.roughness = 0.0;
 	pbrGBuffers.emit = in_custom1;
-	pbrGBuffers.uv = vec2(0);
+	pbrGBuffers.uv = 0;
 	pbrGBuffers.distance = in_pos.w;
 	
 	gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
@@ -273,7 +273,7 @@ void main() {
 	pbrGBuffers.metallic = 0.0;
 	pbrGBuffers.roughness = 0.0;
 	pbrGBuffers.emit = 0;
-	pbrGBuffers.uv = vec2(0);
+	pbrGBuffers.uv = 0;
 	pbrGBuffers.distance = float(camera.znear);
 	if (ProceduralSphereIntersection(in_centerPos, in_radius, pbrGBuffers.viewSpacePosition, pbrGBuffers.viewSpaceNormal, pbrGBuffers.distance)) {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
@@ -313,7 +313,7 @@ void main() {
 	pbrGBuffers.metallic = 0;
 	pbrGBuffers.roughness = 0;
 	pbrGBuffers.emit = emission;
-	pbrGBuffers.uv = vec2(0);
+	pbrGBuffers.uv = 0;
 	pbrGBuffers.distance = float(camera.znear);
 	if (ProceduralSphereIntersection(in_centerPos, in_radius, pbrGBuffers.viewSpacePosition, pbrGBuffers.viewSpaceNormal, pbrGBuffers.distance)) {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
@@ -354,7 +354,7 @@ void main() {
 	pbrGBuffers.metallic = 0;
 	pbrGBuffers.roughness = 0;
 	pbrGBuffers.emit = emission;
-	pbrGBuffers.uv = vec2(0);
+	pbrGBuffers.uv = 0;
 	pbrGBuffers.distance = float(camera.znear);
 	if (ProceduralSphereIntersection(in_centerPos, in_radius, pbrGBuffers.viewSpacePosition, pbrGBuffers.viewSpaceNormal, pbrGBuffers.distance)) {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);

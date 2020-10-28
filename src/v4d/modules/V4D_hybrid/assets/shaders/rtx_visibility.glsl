@@ -63,7 +63,7 @@ void main() {
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
-	ray.uv = fragment.uv;
+	ray.uv = PackUVasFloat(fragment.uv);
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
@@ -87,7 +87,7 @@ void main() {
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
-	ray.uv = fragment.uv;
+	ray.uv = PackUVasFloat(fragment.uv);
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
@@ -111,7 +111,7 @@ void main() {
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
-	ray.uv = fragment.uv;
+	ray.uv = PackUVasFloat(fragment.uv);
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
@@ -175,7 +175,7 @@ void main() {
 	ray.viewSpaceNormal = normal;
 	ray.albedo = color.rgb;
 	ray.emit = aabbGeomAttr.custom1;
-	ray.uv = vec2(0);
+	ray.uv = 0;
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
@@ -235,7 +235,7 @@ void main() {
 	ray.viewSpaceNormal = normal;
 	ray.albedo = color.rgb;
 	ray.emit = 0;
-	ray.uv = vec2(0);
+	ray.uv = 0;
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
@@ -269,7 +269,7 @@ void main() {
 	ray.viewSpaceNormal = vec3(0);
 	ray.albedo = lightColor;
 	ray.emit = emission;
-	ray.uv = vec2(0);
+	ray.uv = 0;
 	ray.metallic = 0;
 	ray.roughness = 0;
 	ray.distance = gl_HitTEXT;
@@ -303,7 +303,7 @@ void main() {
 	ray.viewSpaceNormal = vec3(0);
 	ray.albedo = lightColor;
 	ray.emit = emission;
-	ray.uv = vec2(0);
+	ray.uv = 0;
 	ray.metallic = 0;
 	ray.roughness = 0;
 	ray.distance = gl_HitTEXT;

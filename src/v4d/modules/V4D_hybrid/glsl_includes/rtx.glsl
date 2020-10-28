@@ -9,7 +9,7 @@
 		vec3 viewSpaceNormal;
 		vec3 albedo;
 		float emit;
-		vec2 uv;
+		float uv;
 		float metallic;
 		float roughness;
 		float distance;
