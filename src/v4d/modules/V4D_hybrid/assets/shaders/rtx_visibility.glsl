@@ -1,5 +1,5 @@
 #include "core.glsl"
-#include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
 
 #############################################################
@@ -27,9 +27,11 @@ void main() {
 		pbrGBuffers.roughness = ray.roughness;
 		pbrGBuffers.distance = ray.distance;
 		WritePbrGBuffers();
+		WriteCustomBuffer(ray.customData);
 	} else {
 		// miss
 		WriteEmptyPbrGBuffers();
+		WriteEmptyCustomBuffer();
 	}
 }
 
@@ -56,6 +58,7 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	
+	ray.customData = GenerateCustomData(fragment.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = fragment.hitPoint;
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
@@ -79,6 +82,7 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	
+	ray.customData = GenerateCustomData(fragment.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = fragment.hitPoint;
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
@@ -102,6 +106,7 @@ layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
 void main() {
 	Fragment fragment = GetHitFragment(true);
 	
+	ray.customData = GenerateCustomData(fragment.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = fragment.hitPoint;
 	ray.viewSpaceNormal = fragment.viewSpaceNormal;
 	ray.albedo = fragment.color.rgb;
@@ -165,6 +170,7 @@ void main() {
 			)
 	);
 	
+	ray.customData = GenerateCustomData(aabbGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = normal;
 	ray.albedo = color.rgb;
@@ -224,6 +230,7 @@ void main() {
 	// Calculate normal for a sphere
 	const vec3 normal = normalize(hitPoint - sphereGeomAttr.geometryInstance.viewPosition);
 	
+	ray.customData = GenerateCustomData(sphereGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = normal;
 	ray.albedo = color.rgb;
@@ -257,6 +264,7 @@ void main() {
 		emission = light.intensity/gl_HitTEXT;
 	}
 	
+	ray.customData = GenerateCustomData(sphereGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = vec3(0);
 	ray.albedo = lightColor;
@@ -290,6 +298,7 @@ void main() {
 		emission = light.intensity/gl_HitTEXT;
 	}
 	
+	ray.customData = GenerateCustomData(sphereGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = hitPoint;
 	ray.viewSpaceNormal = vec3(0);
 	ray.albedo = lightColor;

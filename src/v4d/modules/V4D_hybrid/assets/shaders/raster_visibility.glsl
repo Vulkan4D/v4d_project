@@ -187,6 +187,7 @@ void main() {
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
+	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 
 
@@ -207,6 +208,7 @@ void main() {
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
+	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 
 
@@ -227,6 +229,7 @@ void main() {
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
+	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 
 
@@ -251,6 +254,7 @@ void main() {
 	gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
 	
 	WritePbrGBuffers();
+	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 
 
@@ -274,6 +278,7 @@ void main() {
 	if (ProceduralSphereIntersection(in_centerPos, in_radius, pbrGBuffers.viewSpacePosition, pbrGBuffers.viewSpaceNormal, pbrGBuffers.distance)) {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
 		WritePbrGBuffers();
+		WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 		return;
 	}
 	discard;
@@ -314,6 +319,7 @@ void main() {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
 		pbrGBuffers.viewSpaceNormal = vec3(0);
 		WritePbrGBuffers();
+		WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 		return;
 	}
 	discard;
@@ -354,6 +360,7 @@ void main() {
 		gl_FragDepth = GetFragDepthFromViewSpacePosition(pbrGBuffers.viewSpacePosition);
 		pbrGBuffers.viewSpaceNormal = vec3(0);
 		WritePbrGBuffers();
+		WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 		return;
 	}
 	discard;

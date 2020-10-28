@@ -1,7 +1,7 @@
 #include "core.glsl"
 
 #common rtx.*
-#include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
 
 #common .*frag
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_lighting_raster.glsl"

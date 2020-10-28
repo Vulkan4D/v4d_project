@@ -42,6 +42,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	Image img_gBuffer_1 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image img_gBuffer_2 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
 	Image img_gBuffer_3 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_gBuffer_4 { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32B32A32_UINT }};
 	Image img_lit { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_pp { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
@@ -183,6 +184,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"img_gBuffer_1", &img_gBuffer_1},
 		{"img_gBuffer_2", &img_gBuffer_2},
 		{"img_gBuffer_3", &img_gBuffer_3},
+		{"img_gBuffer_4", &img_gBuffer_4},
 		{"img_lit", &img_lit},
 		{"img_pp", &img_pp},
 		{"img_history", &img_history},
@@ -229,12 +231,13 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"sbt_lighting", &sbt_lighting},
 	};
 	// G-Buffers
-	static const int NB_G_BUFFERS = 4;
+	static const int NB_G_BUFFERS = 5;
 	std::array<Image*, NB_G_BUFFERS> gBuffers {
 		&img_gBuffer_0, // R=snorm8(metallic), G=snorm8(roughness)
 		&img_gBuffer_1, // RGB=sfloat32(normal.xyz), A=sfloat32(packed(uv))
 		&img_gBuffer_2, // RGB=sfloat32(viewPosition.xyz), A=sfloat32(distance)
 		&img_gBuffer_3, // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
+		&img_gBuffer_4, // R=objectIndex24+customType8, G=flags32, B=customData32, A=customData32
 	};
 	// FrameBuffers
 	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
@@ -261,7 +264,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 #pragma region Rasterization Pipelines & Resources
 
 	struct GeometryPushConstant {
-		uint objectIndex;
+		uint objectIndex; //TODO could limit to 24 bits
 		uint geometryIndex;
 	};
 

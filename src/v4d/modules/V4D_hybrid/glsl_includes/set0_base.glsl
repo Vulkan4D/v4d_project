@@ -198,3 +198,7 @@ LightSource GetLight (uint i) {
 	light.custom1 = lightSources[i*8 + 7];
 	return light;
 };
+
+uvec4 GenerateCustomData(uint objectIndex, uint customType8, uint flags32, uint customData32_1, uint customData32_2) {
+	return uvec4(((objectIndex+1)<<24) | customType8, flags32, customData32_1, customData32_2);
+}

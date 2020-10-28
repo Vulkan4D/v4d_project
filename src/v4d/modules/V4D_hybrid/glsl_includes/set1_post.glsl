@@ -10,3 +10,4 @@ layout(set = 1, binding = 5, input_attachment_index = 0) uniform highp subpassIn
 	layout(set = 1, binding = 7) uniform sampler2D img_gBuffer_1; // RGB=sfloat32(normal.xyz), A=sfloat32(packed(uv))
 	layout(set = 1, binding = 8) uniform sampler2D img_gBuffer_2; // RGB=sfloat32(viewPosition.xyz), A=sfloat32(distance)
 	layout(set = 1, binding = 9) uniform sampler2D img_gBuffer_3; // RGB=snorm16(albedo.rgb), A=snorm16(emit?)
+	layout(set = 1, binding = 10) uniform sampler2D img_gBuffer_4; // R=objectIndex24+customType8, G=flags32, B=customData32, A=customData32

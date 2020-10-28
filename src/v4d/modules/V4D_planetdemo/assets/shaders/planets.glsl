@@ -6,7 +6,7 @@
 
 #common .*rchit
 
-#include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
 
 #common .*comp
@@ -123,6 +123,7 @@ void main() {
 	vec4 bump = GetBumpMap(uv, fragment.uv);
 	vec3 normal = normalize(TBN * bump.xyz);
 	
+	ray.customData = GenerateCustomData(fragment.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 	ray.viewSpacePosition = fragment.hitPoint;
 	ray.viewSpaceNormal = normal;
 	ray.albedo = fragment.color.rgb;
@@ -164,5 +165,6 @@ void main() {
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
+	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 

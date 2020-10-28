@@ -42,4 +42,14 @@ Vertex GetVertex(uint index) {
 		imageStore(img_gBuffer_3, coords, vec4(0));
 	}
 	
+	void WriteCustomBuffer(uvec4 customData) {
+		const ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
+		imageStore(img_gBuffer_4, coords, customData);
+	}
+	
+	void WriteEmptyCustomBuffer() {
+		const ivec2 coords = ivec2(gl_LaunchIDEXT.xy);
+		imageStore(img_gBuffer_4, coords, uvec4(0));
+	}
+	
 #endif

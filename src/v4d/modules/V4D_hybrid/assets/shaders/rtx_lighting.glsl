@@ -1,5 +1,5 @@
 #include "core.glsl"
-#include "rtx_base.glsl"
+#include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_lighting_rays.glsl"
 
 #############################################################

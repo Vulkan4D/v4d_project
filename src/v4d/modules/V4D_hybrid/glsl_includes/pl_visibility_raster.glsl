@@ -41,6 +41,7 @@ layout(std430, push_constant) uniform GeometryPushConstant{
 	layout(location = 1) out vec4 out_img_gBuffer_1; // RGB=sfloat32(normal.xyz32), A=sfloat32(packed(uv16))
 	layout(location = 2) out vec4 out_img_gBuffer_2; // RGB=sfloat32(viewPosition.xyz), A=sfloat32(distance)
 	layout(location = 3) out vec4 out_img_gBuffer_3; // RGB=snorm8(albedo.rgb), A=snorm8(emit?)
+	layout(location = 4) out uvec4 out_img_gBuffer_4; // R=objectIndex24+customType8, G=flags32, B=customData32, A=customData32
 	
 	struct GBuffersPbr {
 		vec3 viewSpacePosition;
@@ -58,6 +59,10 @@ layout(std430, push_constant) uniform GeometryPushConstant{
 		out_img_gBuffer_1 = vec4(pbrGBuffers.viewSpaceNormal, PackUVasFloat(pbrGBuffers.uv));
 		out_img_gBuffer_2 = vec4(pbrGBuffers.viewSpacePosition, pbrGBuffers.distance);
 		out_img_gBuffer_3 = vec4(pbrGBuffers.albedo, pbrGBuffers.emit);
+	}
+	
+	void WriteCustomBuffer(uint objectIndex, uint customType8, uint flags32, uint customData32_1, uint customData32_2) {
+		out_img_gBuffer_4 = GenerateCustomData(objectIndex, customType8, flags32, customData32_1, customData32_2);
 	}
 	
 #endif
