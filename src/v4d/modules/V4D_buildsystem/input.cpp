@@ -1,10 +1,10 @@
 #define _V4D_MODULE
 #include <v4d.h>
-#include "networkActions.hh"
+#include "actions.hh"
 #include "common.hh"
-#include "../V4D_flycam/common.hh"
 
 using namespace v4d::scene;
+using namespace networking::actions;
 
 v4d::graphics::Window* window = nullptr;
 
@@ -85,10 +85,10 @@ V4D_MODULE_CLASS(V4D_Input) {
 						buildInterface->RemakeTmpBlock();
 						buildInterface->UpdateTmpBlock();
 						
-						// v4d::data::WriteOnlyStream stream(32);
-						// 	stream << app::networking::action::CUSTOM;
-						// 	stream << std::string("newbuild");
-						// clientModule->EnqueueAction(stream);
+						v4d::data::WriteOnlyStream stream(256);
+							stream << CREATE_NEW_BUILD;
+							//...
+						clientModule->EnqueueAction(stream);
 						
 						buildInterface->selectedBlockType = -1;
 						buildInterface->RemakeTmpBlock();

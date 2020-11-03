@@ -1,6 +1,5 @@
 #pragma once
 #include <v4d.h>
-#include "networkActions.hh"
 
 #define APP_NETWORKING_APPNAME "V4D_TESTING" // maximum of 11 characters including UPPERCASE(A-Z), numbers(0-9), underscores(_), dash(-), dot(.), space( )
 #define APP_NETWORKING_VERSION 0 // short unsigned int (0 - 65535)

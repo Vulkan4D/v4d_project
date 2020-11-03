@@ -1,7 +1,6 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "common.hh"
-#include "networkActions.hh"
 
 using namespace v4d::scene;
 

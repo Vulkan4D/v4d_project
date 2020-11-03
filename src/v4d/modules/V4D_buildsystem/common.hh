@@ -799,6 +799,7 @@ class TmpBlock {
 	Block* block = nullptr;
 	
 public:
+	float boundingDistance = 1.0;
 
 	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
 		sceneObject = scene->AddObjectInstance();
@@ -818,6 +819,7 @@ public:
 					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
 					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
 				}
+				boundingDistance = geom->boundingDistance;
 				geom->isDirty = true;
 			}
 		}, position, angle, axis);
@@ -826,6 +828,12 @@ public:
 	~TmpBlock() {
 		ClearBlock();
 		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+	}
+	
+	void GenerateGeometryNow() {
+		if (block && sceneObject) {
+			sceneObject->GenerateGeometries();
+		}
 	}
 	
 	Block& SetBlock(SHAPE shape) {
@@ -870,7 +878,7 @@ struct BuildInterface {
 				scene->Lock();
 					double angle = 20;
 					glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
-					glm::dvec3 position = {0.0, 0.0, -4.0};
+					glm::dvec3 position = {0.0, 0.0, tmpBlock->boundingDistance*-3.0f};
 					tmpBlock->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
 				scene->Unlock();
 			}
@@ -886,6 +894,7 @@ struct BuildInterface {
 				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
 				block.SetOrientation(blockRotation);
 				tmpBlock->ResetGeometry();
+				tmpBlock->GenerateGeometryNow();
 				UpdateTmpBlock();
 			}
 		scene->Unlock();

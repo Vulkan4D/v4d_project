@@ -1,12 +1,12 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "common.hh"
-#include "networkActions.hh"
+#include "actions.hh"
 #include "ServerSideObjects.hh"
 
 using namespace v4d::scene;
 using namespace v4d::networking;
-using namespace app::networking::action;
+using namespace networking::action;
 using namespace v4d::modular;
 
 std::shared_ptr<ListeningServer> server = nullptr;
@@ -164,7 +164,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 	}
 	
 	V4D_MODULE_FUNC(void, ReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		auto action = stream->Read<app::networking::Action>();
+		auto action = stream->Read<Action>();
 		switch (action) {
 			
 			case CUSTOM:{
@@ -218,7 +218,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 	}
 	
 	V4D_MODULE_FUNC(void, ReceiveBurst, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		auto action = stream->Read<app::networking::Action>();
+		auto action = stream->Read<Action>();
 		switch (action) {
 			case SYNC_OBJECT_TRANSFORM:{
 				auto id = stream->Read<uint32_t>();

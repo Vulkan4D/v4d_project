@@ -1,11 +1,10 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "common.hh"
-#include "networkActions.hh"
+#include "actions.hh"
 
 using namespace v4d::scene;
 using namespace v4d::networking;
-using namespace app::networking::action;
 using namespace v4d::modular;
 
 std::shared_ptr<OutgoingConnection> client = nullptr;

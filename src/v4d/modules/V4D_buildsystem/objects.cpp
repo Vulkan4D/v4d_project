@@ -16,6 +16,7 @@ std::unordered_map<NetworkGameObject::Id, std::vector<Block>> buildBlocks {};
 
 V4D_MODULE_CLASS(V4D_Objects) {
 	
+	// Client-Only
 	V4D_MODULE_FUNC(void, CreateObject, v4d::scene::NetworkGameObjectPtr obj) {
 		std::lock_guard lock1(objectMapsMutex);
 		std::lock_guard lock2(objectMutexes[obj->id]);
@@ -39,7 +40,19 @@ V4D_MODULE_CLASS(V4D_Objects) {
 		}
 		try {objectMutexes.erase(obj->id);} catch(...){}
 	}
+	V4D_MODULE_FUNC(void, AddToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
+		std::lock_guard lock1(objectMapsMutex);
+		std::lock_guard lock2(objectMutexes[obj->id]);
+		switch (obj->type) {
+			case OBJECT_TYPE::Build:{
+				obj->objectInstance = builds[obj->id]->AddToScene(scene);
+				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+			}break;
+		}
+	}
 	
+	
+	// Server-Only
 	V4D_MODULE_FUNC(void, SendStreamCustomObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {
 		std::lock_guard lock1(objectMapsMutex);
 		std::lock_guard lock2(objectMutexes[obj->id]);
@@ -47,6 +60,8 @@ V4D_MODULE_CLASS(V4D_Objects) {
 			stream.Write(buildBlocks[obj->id]);
 		}
 	}
+	
+	// Client-Only
 	V4D_MODULE_FUNC(void, ReceiveStreamCustomObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {
 		std::lock_guard lock1(objectMapsMutex);
 		std::lock_guard lock2(objectMutexes[obj->id]);
@@ -60,17 +75,6 @@ V4D_MODULE_CLASS(V4D_Objects) {
 				build->SwapBlocksVector(blocks);
 			}
 		} catch(...){}
-	}
-	
-	V4D_MODULE_FUNC(void, AddToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
-		std::lock_guard lock1(objectMapsMutex);
-		std::lock_guard lock2(objectMutexes[obj->id]);
-		switch (obj->type) {
-			case OBJECT_TYPE::Build:{
-				obj->objectInstance = builds[obj->id]->AddToScene(scene);
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-			}break;
-		}
 	}
 	
 };
