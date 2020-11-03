@@ -1,11 +1,7 @@
 #define GEOMETRY_BUFFERS_ACCESS readonly
 #include "set0_base.glsl"
 #include "set1_visibility_raster.glsl"
-
-layout(std430, push_constant) uniform GeometryPushConstant{
-	uint objectIndex;
-	uint geometryIndex;
-};
+#include "GeometryPushConstant.glsl"
 
 #ifdef SHADER_VERT
 	#ifdef PROCEDURAL_GEOMETRY

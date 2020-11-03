@@ -112,10 +112,14 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}};
 	// #endif
 	
-	// Fog
+	// Transparent/Fog
 	RasterShaderPipeline shader_transparent {pl_transparent, {
 		rasterTrianglesDefaultVertexShader,
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/transparent.frag"),
+	}};
+	RasterShaderPipeline shader_transparent_wireframe {pl_transparent, {
+		rasterTrianglesDefaultVertexShader,
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/transparent.wireframe.frag"),
 	}};
 	
 	// Overlay
@@ -225,6 +229,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{"sg_lighting", {&shader_lighting}},
 		{"sg_lighting_rtx", {&shader_lighting_rtx}},
 		{"sg_transparent", {&shader_transparent}},
+		{"sg_wireframe", {&shader_transparent_wireframe}},
 		{"sg_fog", {}},
 		{"sg_thumbnail", {&shader_thumbnail}},
 		{"sg_postfx", {&shader_fx_txaa}},
@@ -271,6 +276,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 #pragma region Rasterization Pipelines & Resources
 
 	struct GeometryPushConstant {
+		glm::vec4 wireframeColor = {1,1,1,1};
 		uint objectIndex; //TODO could limit to 24 bits
 		uint geometryIndex;
 	};
@@ -485,10 +491,18 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				s->CreatePipeline(r->renderingDevice);
 			}
 		}
-		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"]}) {
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
 			for (auto* s : sg) {
 				s->SetRenderPass(&img_lit, lightingRenderPass.handle, 1);
-				s->AddColorBlendAttachmentState();
+				s->AddColorBlendAttachmentState(
+					VK_TRUE,
+					VK_BLEND_FACTOR_SRC_ALPHA,
+					VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+					VK_BLEND_OP_ADD,
+					VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+					VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+					VK_BLEND_OP_ADD
+				);
 				s->CreatePipeline(r->renderingDevice);
 			}
 		}
@@ -503,7 +517,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				s->DestroyPipeline(r->renderingDevice);
 			}
 		}
-		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"]}) {
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
 			for (auto* s : sg) {
 				s->DestroyPipeline(r->renderingDevice);
 			}
@@ -522,6 +536,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 					s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
 					s->rasterizer.lineWidth = 1;
 					s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+					s->dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 					#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 						s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 					#else
@@ -561,6 +576,21 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			s->rasterizer.cullMode = VK_CULL_MODE_NONE;
 			s->depthStencilState.depthTestEnable = VK_FALSE;
 			s->depthStencilState.depthWriteEnable = VK_FALSE;
+			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
+				s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
+			#else
+				s->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
+			#endif
+		}
+		
+		for (auto* s : shaderGroups["sg_wireframe"]) {
+			s->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
+			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+			s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+			s->depthStencilState.depthTestEnable = VK_FALSE;
+			s->depthStencilState.depthWriteEnable = VK_FALSE;
+			s->dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
 				s->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
 			#else
@@ -690,6 +720,42 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 														geometryPushConstant.objectIndex = obj->GetObjectOffset();
 														geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
 													s->Execute(device, commandBuffer, 1, &geometryPushConstant);
+												}
+											}
+										}
+									}
+									// obj->Unlock();
+								}
+							}
+						scene->Unlock();
+					} else {
+						s->Execute(device, commandBuffer);
+					}
+				}
+				for (auto* s : shaderGroups["sg_wireframe"]) {
+					// Wireframe
+					if (s->GetShaderPath("vert") == rasterTrianglesDefaultVertexShader) {
+						scene->Lock();
+							for (auto obj : scene->objectInstances) {
+								if (obj) {
+									// obj->Lock();
+									if (obj->IsActive()) {
+										// Geometries
+										for (auto& geom : obj->GetGeometries()) {
+											if (geom.geometry->active && geom.geometry->renderWireframe) {
+												// Frustum culling
+												if (scene->camera.IsVisibleInScreen((obj->GetWorldTransform() * glm::dmat4(geom.transform))[3], geom.geometry->boundingDistance)) {
+													s->vertexOffset = geom.geometry->vertexOffset * sizeof(Geometry::VertexBuffer_T);
+													s->indexOffset = geom.geometry->indexOffset * sizeof(Geometry::IndexBuffer_T);
+													s->indexCount = geom.geometry->indexCount;
+													GeometryPushConstant geometryPushConstant {};
+														geometryPushConstant.objectIndex = obj->GetObjectOffset();
+														geometryPushConstant.geometryIndex = geom.geometry->geometryOffset;
+														geometryPushConstant.wireframeColor = geom.geometry->wireframeColor;
+													s->Bind(device, commandBuffer);
+													s->PushConstant(device, commandBuffer, &geometryPushConstant, 0);
+													device->CmdSetLineWidth(commandBuffer, geom.geometry->wireframeThickness);
+													s->Render(device, commandBuffer, 1);
 												}
 											}
 										}
@@ -1418,18 +1484,17 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		float x;
 		float y;
 		float color;
-		float _unused_ = 0;
+		float width;
 	};
 	Buffer overlayLinesBuffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(OverlayLine) * MAX_OVERLAY_LINES*2};
 	OverlayLine* overlayLines = nullptr;
 	size_t overlayLinesCount = 0;
-	std::queue<float> overlayLineWidths {};
 	void AddOverlayLine(float x1, float y1, float x2, float y2, glm::vec4 color = {1,1,1,1}, float lineWidth = 1) {
 		std::lock_guard lock(overlayMutex);
-		if (overlayLinesCount+2 > MAX_OVERLAY_LINES) {LOG_WARN("Overlay Line buffer overlow") overlayLinesCount=0;overlayLineWidths={};return;}
-		overlayLineWidths.emplace(lineWidth);
-		overlayLines[overlayLinesCount++] = {x1, y1, PackColorAsFloat(color), 0};
-		overlayLines[overlayLinesCount++] = {x2, y2, PackColorAsFloat(color), 0};
+		if (overlayLinesCount+2 > MAX_OVERLAY_LINES) {LOG_WARN("Overlay Line buffer overlow") overlayLinesCount=0;return;}
+		auto floatColor = PackColorAsFloat(color);
+		overlayLines[overlayLinesCount++] = {x1, y1, floatColor, lineWidth};
+		overlayLines[overlayLinesCount++] = {x2, y2, floatColor, lineWidth};
 	}
 	// Overlay Text
 	struct OverlayText {
@@ -1548,6 +1613,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		shader_overlay_lines.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_lines.depthStencilState.depthTestEnable = false;
 		shader_overlay_lines.depthStencilState.depthWriteEnable = false;
+		shader_overlay_lines.dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 		shader_overlay_lines.SetData(&overlayLinesBuffer, 0);
 		
 		// Text
@@ -2586,24 +2652,26 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				for (auto* shader : shaderGroups["sg_overlay"]) {
 					if (shader == &shader_overlay_lines) {
 						if (overlayLinesCount == 0) continue;
-						float lineWidth = 0;
-						int index = 0;
-						while (!overlayLineWidths.empty()) {
-							lineWidth = overlayLineWidths.front();
-							overlayLineWidths.pop();
-							if (shader->rasterizer.lineWidth != lineWidth) {
-								shader_overlay_lines.vertexCount = index - (shader_overlay_lines.vertexOffset-tmpCurrentLinesVertexBufferOffset)/sizeof(OverlayLine);
-								shader->Execute(r->renderingDevice, commandBuffer); // execute with potentially vertexCount=0, but we still need this because it binds the pipeline so that we can run CmdSetLineWidth()
-								r->renderingDevice->CmdSetLineWidth(commandBuffer, lineWidth);
-								shader->rasterizer.lineWidth = lineWidth;
-								shader_overlay_lines.vertexOffset = index*sizeof(OverlayLine) + tmpCurrentLinesVertexBufferOffset;
-								shader_overlay_lines.vertexCount = overlayLinesCount - index;
+						shader->Bind(r->renderingDevice, commandBuffer);
+						float lineWidth = 1.0f;
+						uint32_t linesRendered = 0;
+						do {
+							shader_overlay_lines.vertexCount = 0;
+							while (shader_overlay_lines.vertexCount < overlayLinesCount && overlayLines[linesRendered + shader_overlay_lines.vertexCount].width == lineWidth) {
+								shader_overlay_lines.vertexCount += 2;
 							}
-							index += 2;
-						}
-						if (shader_overlay_lines.vertexCount > 0) {
-							shader->Execute(r->renderingDevice, commandBuffer);
-						}
+							if (shader_overlay_lines.vertexCount > 0) {
+								shader_overlay_lines.vertexOffset = sizeof(OverlayLine)*linesRendered + tmpCurrentLinesVertexBufferOffset;
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, lineWidth);
+								shader->Render(r->renderingDevice, commandBuffer, 1);
+								linesRendered += shader_overlay_lines.vertexCount;
+							}
+							if (linesRendered < overlayLinesCount) {
+								lineWidth = overlayLines[linesRendered].width;
+							} else {
+								break;
+							}
+						} while (true);
 					} else {
 						if (shader == &shader_overlay_text && overlayTextSize == 0) continue;
 						if (shader == &shader_overlay_circles && overlayCirclesCount == 0) continue;

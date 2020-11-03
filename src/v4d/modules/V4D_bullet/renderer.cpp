@@ -18,7 +18,6 @@ class DebugDrawer : public btIDebugDraw {
 	int mode = DBG_DrawWireframe | DBG_DrawFeaturesText | DBG_DrawText | DBG_FastWireframe;
 	
 	void drawLine(const btVector3& from, const btVector3& to, const btVector3& color) override {
-		
 		glm::vec4 clipSpace1 = scene->camera.projectionMatrix * scene->camera.viewMatrix * glm::dvec4(from.x(), from.y(), from.z(), 1);
 		glm::vec4 clipSpace2 = scene->camera.projectionMatrix * scene->camera.viewMatrix * glm::dvec4(to.x(), to.y(), to.z(), 1);
 		clipSpace1 /= clipSpace1.w;
