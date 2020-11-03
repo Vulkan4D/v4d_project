@@ -1,17 +1,27 @@
 #define _V4D_MODULE
 #include <v4d.h>
+#include "networkActions.hh"
 #include "common.hh"
+#include "../V4D_flycam/common.hh"
+
+using namespace v4d::scene;
 
 v4d::graphics::Window* window = nullptr;
 
 V4D_Game* game = nullptr;
 BuildInterface* buildInterface = nullptr;
 
+V4D_Client* clientModule = nullptr;
+
 bool shiftPressed = false;
 
 V4D_MODULE_CLASS(V4D_Input) {
 	
 	V4D_MODULE_FUNC(std::string, CallbackName) {return THIS_MODULE;}
+	
+	V4D_MODULE_FUNC(void, ModuleLoad) {
+		clientModule = V4D_Client::LoadModule(THIS_MODULE);
+	}
 	
 	V4D_MODULE_FUNC(void, Init, v4d::graphics::Window* w, v4d::graphics::Renderer*, v4d::scene::Scene*) {
 		window = w;
@@ -71,6 +81,18 @@ V4D_MODULE_CLASS(V4D_Input) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
 					// Left Click
+					if (buildInterface->selectedBlockType != -1) {
+						buildInterface->RemakeTmpBlock();
+						buildInterface->UpdateTmpBlock();
+						
+						// v4d::data::WriteOnlyStream stream(32);
+						// 	stream << app::networking::action::CUSTOM;
+						// 	stream << std::string("newbuild");
+						// clientModule->EnqueueAction(stream);
+						
+						buildInterface->selectedBlockType = -1;
+						buildInterface->RemakeTmpBlock();
+					}
 				break;
 				case GLFW_MOUSE_BUTTON_2:
 					// Right Click
@@ -79,7 +101,6 @@ V4D_MODULE_CLASS(V4D_Input) {
 					// Middle Click
 				break;
 			}
-			buildInterface->RemakeTmpBlock();
 		}
 	}
 	

@@ -2,6 +2,7 @@
 #include <v4d.h>
 #include "common.hh"
 #include "networkActions.hh"
+#include "ServerSideObjects.hh"
 
 using namespace v4d::scene;
 using namespace v4d::networking;
@@ -10,46 +11,41 @@ using namespace v4d::modular;
 
 std::shared_ptr<ListeningServer> server = nullptr;
 Scene* scene = nullptr;
-std::recursive_mutex objectsMutex;
-std::unordered_map<uint32_t /* objectID */, NetworkGameObjectPtr> objects {}; // also includes all players
-std::unordered_map<uint64_t /* clientID */, NetworkGameObjectPtr> players {};
 
 std::recursive_mutex actionQueueMutex;
 std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> actionQueuePerClient {};
 
-NetworkGameObjectPtr AddNewObject(ModuleID moduleID, NetworkGameObject::Type type, NetworkGameObject::Parent parent = 0) {
-	std::lock_guard lock(objectsMutex);
-	NetworkGameObjectPtr obj = std::make_shared<NetworkGameObject>(moduleID, type, parent);
-	objects[obj->id] = obj;
-	obj->active = true;
-	// LOG_DEBUG("Server AddNewObject " << obj->id)
-	return obj;
-}
+ServerSideObjects serverSideObjects {};
 
 V4D_MODULE_CLASS(V4D_Server) {
+	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {return true;}
 	
 	V4D_MODULE_FUNC(void, Init, std::shared_ptr<ListeningServer> _srv, Scene* _s) {
 		server = _srv;
 		scene = _s;
 	}
 	
+	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
+		return &serverSideObjects;
+	}
+	
 	V4D_MODULE_FUNC(void, UnloadScene) {
-		std::lock_guard lock(objectsMutex);
-		players.clear();
-		objects.clear();
+		std::lock_guard lock(serverSideObjects.mutex);
+		serverSideObjects.players.clear();
+		serverSideObjects.objects.clear();
 	}
 	
 	V4D_MODULE_FUNC(void, SlowGameLoop) {
-		// Erase inactive objects
-		std::lock_guard lock(objectsMutex);
+		// Erase inactive gameObjects
+		std::lock_guard lock(serverSideObjects.mutex);
 		std::vector<uint32_t> objectsToRemove {};
-		for (auto& [objID, obj] : objects) {
+		for (auto& [objID, obj] : serverSideObjects.objects) {
 			if (obj->clientIterations.size() == 0) {
 				objectsToRemove.push_back(objID);
 			}
 		}
 		for (auto id : objectsToRemove) {
-			objects.erase(id);
+			serverSideObjects.objects.erase(id);
 		}
 	}
 	
@@ -60,11 +56,11 @@ V4D_MODULE_CLASS(V4D_Server) {
 	
 	V4D_MODULE_FUNC(void, IncomingClient, IncomingClientPtr client) {
 		LOG("Server: IncomingClient " << client->id)
-		std::scoped_lock lock(objectsMutex, actionQueueMutex);
-		auto obj = AddNewObject(THIS_MODULE, OBJECT_TYPE::Player);
+		std::scoped_lock lock(serverSideObjects.mutex, actionQueueMutex);
+		auto obj = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Player);
 		obj->physicsClientID = client->id;
 		obj->isDynamic = true;
-		players[client->id] = obj;
+		serverSideObjects.players[client->id] = obj;
 		// LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
 		v4d::data::WriteOnlyStream stream(sizeof(ASSIGN) + sizeof(obj->id));
 			stream << ASSIGN;
@@ -74,8 +70,8 @@ V4D_MODULE_CLASS(V4D_Server) {
 	
 	V4D_MODULE_FUNC(void, SendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_DATA_INITIAL_STREAM_SIZE);
-		{std::scoped_lock lock(objectsMutex, actionQueueMutex);
-			for (auto& [objID, obj] : objects) {
+		{std::scoped_lock lock(serverSideObjects.mutex, actionQueueMutex);
+			for (auto& [objID, obj] : serverSideObjects.objects) {
 				if (obj->active) {
 					
 					uint32_t clientIteration;
@@ -144,8 +140,8 @@ V4D_MODULE_CLASS(V4D_Server) {
 	
 	V4D_MODULE_FUNC(void, SendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		v4d::data::WriteOnlyStream tmpStream(CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE);
-		std::lock_guard lock(objectsMutex);
-		for (auto& [objID, obj] : objects) {
+		std::lock_guard lock(serverSideObjects.mutex);
+		for (auto& [objID, obj] : serverSideObjects.objects) {
 			if (obj->active && obj->isDynamic && obj->physicsClientID != client->id) {
 				if (obj->iteration == obj->clientIterations[client->id]) {
 					stream->Begin();
@@ -173,24 +169,24 @@ V4D_MODULE_CLASS(V4D_Server) {
 			
 			case CUSTOM:{
 				auto key = stream->Read<std::string>();
-				NetworkGameObjectPtr player = players.at(client->id);
+				NetworkGameObjectPtr player = serverSideObjects.players.at(client->id);
 				
 				if (key == "ball") {
 					auto dir = stream->Read<DVector3>();
-					std::lock_guard lock(objectsMutex);
+					std::lock_guard lock(serverSideObjects.mutex);
 					// Launch ball
-					auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Ball);
+					auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Ball);
 					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
 					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
 				else if (key == "balls") {
-					std::lock_guard lock(objectsMutex);
+					std::lock_guard lock(serverSideObjects.mutex);
 					auto dir = stream->Read<DVector3>();
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
-						auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Ball);
+						auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Ball);
 						ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
 						ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*100.0;
 						ball->isDynamic = true;
@@ -199,17 +195,17 @@ V4D_MODULE_CLASS(V4D_Server) {
 				}
 				else if (key == "light") {
 					auto dir = stream->Read<DVector3>();
-					std::lock_guard lock(objectsMutex);
+					std::lock_guard lock(serverSideObjects.mutex);
 					// Launch light
-					auto ball = AddNewObject(THIS_MODULE, OBJECT_TYPE::Light);
+					auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Light);
 					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
 					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
 				else if (key == "clear") {
-					std::lock_guard lock(objectsMutex);
-					for (auto& [objID, obj] : objects) if (obj->physicsClientID == client->id && obj->id != player->id) {
+					std::lock_guard lock(serverSideObjects.mutex);
+					for (auto& [objID, obj] : serverSideObjects.objects) if (obj->physicsClientID == client->id && obj->id != player->id) {
 						obj->active = false;
 					}
 				}
@@ -230,8 +226,8 @@ V4D_MODULE_CLASS(V4D_Server) {
 				auto transform = stream->Read<NetworkGameObjectTransform>();
 				auto tmpStream = stream->ReadStream();
 				try {
-					std::lock_guard lock(objectsMutex);
-					auto obj = objects.at(id);
+					std::lock_guard lock(serverSideObjects.mutex);
+					auto obj = serverSideObjects.objects.at(id);
 					if (obj->iteration == iteration) {
 						obj->SetTransformFromNetwork(transform);
 						

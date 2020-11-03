@@ -5,7 +5,7 @@
 using namespace v4d::scene;
 
 V4D_MODULE_CLASS(V4D_Objects) {
-	V4D_MODULE_FUNC(void, BuildObject, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
+	V4D_MODULE_FUNC(void, AddToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
 				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){

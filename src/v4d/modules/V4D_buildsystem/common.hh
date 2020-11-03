@@ -726,46 +726,46 @@ public:
 };
 
 class Build {
-	v4d::scene::Scene* scene;
-	
 	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
 	std::vector<Block> blocks {};
-	
+	std::mutex blocksMutex;
 public:
 
-	Build(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
-		scene->Lock();
-			sceneObject = scene->AddObjectInstance();
-			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-				if (blocks.size() > 0) {
-					auto geom = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
-					
-					uint nextVertex = 0;
-					uint nextIndex = 0;
-					for (int i = 0; i < blocks.size(); ++i) {
-						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
-						nextVertex += vertexCount;
-						nextIndex += indexCount;
-					}
-					geom->Shrink(nextVertex, nextIndex);
-					
-					for (int i = 0; i < geom->vertexCount; ++i) {
-						auto* vert = geom->GetVertexPtr(i);
-						geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
-						geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
-					}
-					geom->isDirty = true;
-				}
-			}, position, angle, axis);
-		scene->Unlock();
-	}
+	Build() {}
 	
 	~Build() {
 		ClearBlocks();
-		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+	}
+	
+	v4d::scene::ObjectInstancePtr AddToScene(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) {
+		sceneObject = scene->AddObjectInstance();
+		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
+			std::lock_guard lock(blocksMutex);
+			if (blocks.size() > 0) {
+				auto geom = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+				
+				uint nextVertex = 0;
+				uint nextIndex = 0;
+				for (int i = 0; i < blocks.size(); ++i) {
+					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
+					nextVertex += vertexCount;
+					nextIndex += indexCount;
+				}
+				geom->Shrink(nextVertex, nextIndex);
+				
+				for (int i = 0; i < geom->vertexCount; ++i) {
+					auto* vert = geom->GetVertexPtr(i);
+					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
+					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
+				}
+				geom->isDirty = true;
+			}
+		}, position, angle, axis);
+		return sceneObject;
 	}
 	
 	Block& AddBlock(SHAPE shape) {
+		std::lock_guard lock(blocksMutex);
 		return blocks.emplace_back(shape);
 	}
 	
@@ -773,7 +773,14 @@ public:
 		sceneObject->ClearGeometries();
 	}
 	
+	void SwapBlocksVector(std::vector<Block>& other) {
+		std::lock_guard lock(blocksMutex);
+		blocks.swap(other);
+		ResetGeometry();
+	}
+
 	void ClearBlocks() {
+		std::lock_guard lock(blocksMutex);
 		blocks.clear();
 	}
 
@@ -794,28 +801,26 @@ class TmpBlock {
 public:
 
 	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
-		scene->Lock();
-			sceneObject = scene->AddObjectInstance();
-			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-				if (block) {
-					auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES, Block::MAX_INDICES);
-					
-					geom->renderWireframe = true;
-					geom->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f}; // green
-					geom->wireframeThickness = 3.0f;
-					
-					auto[vertexCount, indexCount] = block->GenerateGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
-					geom->Shrink(vertexCount, indexCount);
-					
-					for (int i = 0; i < geom->vertexCount; ++i) {
-						auto* vert = geom->GetVertexPtr(i);
-						geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
-						geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
-					}
-					geom->isDirty = true;
+		sceneObject = scene->AddObjectInstance();
+		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
+			if (block) {
+				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES, Block::MAX_INDICES);
+				
+				geom->renderWireframe = true;
+				geom->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f}; // green
+				geom->wireframeThickness = 3.0f;
+				
+				auto[vertexCount, indexCount] = block->GenerateGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
+				geom->Shrink(vertexCount, indexCount);
+				
+				for (int i = 0; i < geom->vertexCount; ++i) {
+					auto* vert = geom->GetVertexPtr(i);
+					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
+					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
 				}
-			}, position, angle, axis);
-		scene->Unlock();
+				geom->isDirty = true;
+			}
+		}, position, angle, axis);
 	}
 	
 	~TmpBlock() {
