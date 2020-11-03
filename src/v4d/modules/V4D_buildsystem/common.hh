@@ -1,4 +1,9 @@
+#pragma once
 #include <v4d.h>
+
+namespace OBJECT_TYPE {
+	const uint32_t Build = 0;
+}
 
 const int NB_BLOCKS = 5;
 
@@ -50,11 +55,11 @@ struct BlockFace {
 
 class Block {
 public:
-	static const int MAX_POINTS = 8;
-	static const int MAX_FACES = 7;
-	static const int MAX_LINES = 12;
-	static const int MAX_VERTICES = 24;
-	static const int MAX_INDICES = 36;
+	static constexpr int MAX_POINTS = 8;
+	static constexpr int MAX_FACES = 7;
+	static constexpr int MAX_LINES = 12;
+	static constexpr int MAX_VERTICES = 24;
+	static constexpr int MAX_INDICES = 36;
 protected:
 	
 	// 32 Bytes
@@ -738,6 +743,7 @@ public:
 	}
 	
 	v4d::scene::ObjectInstancePtr AddToScene(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) {
+		std::lock_guard lock(blocksMutex);
 		sceneObject = scene->AddObjectInstance();
 		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
 			std::lock_guard lock(blocksMutex);
@@ -770,13 +776,12 @@ public:
 	}
 	
 	void ResetGeometry() {
-		sceneObject->ClearGeometries();
+		if (sceneObject) sceneObject->ClearGeometries();
 	}
 	
 	void SwapBlocksVector(std::vector<Block>& other) {
 		std::lock_guard lock(blocksMutex);
 		blocks.swap(other);
-		ResetGeometry();
 	}
 
 	void ClearBlocks() {
@@ -794,11 +799,10 @@ public:
 
 class TmpBlock {
 	v4d::scene::Scene* scene;
-	
 	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
-	Block* block = nullptr;
 	
 public:
+	Block* block = nullptr;
 	float boundingDistance = 1.0;
 
 	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
@@ -854,6 +858,10 @@ public:
 		if (sceneObject) {
 			sceneObject->SetWorldTransform(t);
 		}
+	}
+	
+	glm::dmat4 GetWorldTransform() const {
+		return sceneObject->GetWorldTransform();
 	}
 	
 };
@@ -914,4 +922,17 @@ struct BuildInterface {
 	void UnloadScene() {
 		if (tmpBlock) delete tmpBlock;
 	}
+};
+
+struct CachedData {
+	
+	// Client-Only
+	std::mutex objectMapsMutex;
+	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::vector<Block>> buildBlocks {};
+	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::shared_ptr<Build>> builds {};
+
+	// Server-Only
+	std::mutex serverObjectMapsMutex;
+	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::vector<Block>> serverBuildBlocks {};
+
 };

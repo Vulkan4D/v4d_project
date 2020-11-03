@@ -16,4 +16,5 @@ struct PlayerView {
 	bool useFreeFlyCam = true;
 	float flyCamSmoothness = 25.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
+	bool canChangeVelocity = true;
 };

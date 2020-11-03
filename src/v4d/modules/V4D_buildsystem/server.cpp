@@ -13,6 +13,7 @@ Scene* scene = nullptr;
 V4D_Server* mainModule = nullptr;
 
 ServerSideObjects* serverSideObjects = nullptr;
+CachedData* cachedData = nullptr;
 
 V4D_MODULE_CLASS(V4D_Server) {
 	
@@ -21,6 +22,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 		scene = _s;
 		mainModule = V4D_Server::GetPrimaryModule();
 		serverSideObjects = (ServerSideObjects*)mainModule->ModuleGetCustomPtr(0);
+		cachedData = (CachedData*)V4D_Objects::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(0);
 	}
 	
 	V4D_MODULE_FUNC(void, ReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
@@ -29,7 +31,15 @@ V4D_MODULE_CLASS(V4D_Server) {
 		switch (action) {
 			
 			case CREATE_NEW_BUILD:{
-				//...
+				// Network data
+				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto block = stream->Read<Block>();
+				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
+				auto obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Build);
+				obj->SetTransformFromNetwork(transform);
+				obj->isDynamic = true;
+				obj->physicsClientID = client->id;
+				cachedData->serverBuildBlocks[obj->id].push_back(block);
 			}break;
 		
 			default: 

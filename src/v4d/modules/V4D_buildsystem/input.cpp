@@ -2,6 +2,7 @@
 #include <v4d.h>
 #include "actions.hh"
 #include "common.hh"
+#include "../V4D_flycam/common.hh"
 
 using namespace v4d::scene;
 using namespace networking::actions;
@@ -10,8 +11,8 @@ v4d::graphics::Window* window = nullptr;
 
 V4D_Game* game = nullptr;
 BuildInterface* buildInterface = nullptr;
-
 V4D_Client* clientModule = nullptr;
+PlayerView* player = nullptr;
 
 bool shiftPressed = false;
 
@@ -21,6 +22,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		clientModule = V4D_Client::LoadModule(THIS_MODULE);
+		player = (PlayerView*)V4D_Game::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 	}
 	
 	V4D_MODULE_FUNC(void, Init, v4d::graphics::Window* w, v4d::graphics::Renderer*, v4d::scene::Scene*) {
@@ -70,6 +72,8 @@ V4D_MODULE_CLASS(V4D_Input) {
 			if (action == GLFW_PRESS) shiftPressed = true;
 			else shiftPressed = false;
 		}
+		
+		player->canChangeVelocity = buildInterface->selectedBlockType == -1;
 	}
 	
 	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
@@ -83,15 +87,22 @@ V4D_MODULE_CLASS(V4D_Input) {
 					// Left Click
 					if (buildInterface->selectedBlockType != -1) {
 						buildInterface->RemakeTmpBlock();
-						buildInterface->UpdateTmpBlock();
-						
-						v4d::data::WriteOnlyStream stream(256);
-							stream << CREATE_NEW_BUILD;
-							//...
-						clientModule->EnqueueAction(stream);
-						
-						buildInterface->selectedBlockType = -1;
-						buildInterface->RemakeTmpBlock();
+						if (buildInterface->tmpBlock && buildInterface->tmpBlock->block) {
+							buildInterface->UpdateTmpBlock();
+							NetworkGameObjectTransform transform {};
+							transform.SetFromTransformAndVelocity(buildInterface->tmpBlock->GetWorldTransform(), {0,0,0});
+							
+							v4d::data::WriteOnlyStream stream(256);
+								stream << CREATE_NEW_BUILD;
+								// Network data 
+								stream << transform;
+								stream << *buildInterface->tmpBlock->block;
+							clientModule->EnqueueAction(stream);
+							
+							// // deselect build tool
+							// buildInterface->selectedBlockType = -1;
+							// buildInterface->RemakeTmpBlock();
+						}
 					}
 				break;
 				case GLFW_MOUSE_BUTTON_2:
@@ -102,6 +113,8 @@ V4D_MODULE_CLASS(V4D_Input) {
 				break;
 			}
 		}
+		
+		player->canChangeVelocity = buildInterface->selectedBlockType == -1;
 	}
 	
 	V4D_MODULE_FUNC(void, ScrollCallback, double x, double y) {

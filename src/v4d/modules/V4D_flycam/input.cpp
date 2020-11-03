@@ -80,6 +80,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 			#ifdef _ENABLE_IMGUI
 				&& !ImGui::IsAnyWindowFocused()
 			#endif
+			&& player->canChangeVelocity
 		) {
 			std::lock_guard lock(player->mu);
 			player->camSpeed *= (1.0+y/10);
