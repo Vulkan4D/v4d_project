@@ -108,7 +108,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, LoadScene) {}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
-		if (buildInterface.tmpBuild) delete buildInterface.tmpBuild;
+		buildInterface.UnloadScene();
 	}
 	
 	V4D_MODULE_FUNC(void, Update, double deltaTime) {

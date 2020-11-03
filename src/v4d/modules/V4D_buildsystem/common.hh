@@ -785,6 +785,66 @@ public:
 	
 };
 
+class TmpBlock {
+	v4d::scene::Scene* scene;
+	
+	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
+	Block* block = nullptr;
+	
+public:
+
+	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
+		scene->Lock();
+			sceneObject = scene->AddObjectInstance();
+			sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
+				if (block) {
+					auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES, Block::MAX_INDICES);
+					
+					geom->renderWireframe = true;
+					geom->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f}; // green
+					geom->wireframeThickness = 3.0f;
+					
+					auto[vertexCount, indexCount] = block->GenerateGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
+					geom->Shrink(vertexCount, indexCount);
+					
+					for (int i = 0; i < geom->vertexCount; ++i) {
+						auto* vert = geom->GetVertexPtr(i);
+						geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
+						geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
+					}
+					geom->isDirty = true;
+				}
+			}, position, angle, axis);
+		scene->Unlock();
+	}
+	
+	~TmpBlock() {
+		ClearBlock();
+		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+	}
+	
+	Block& SetBlock(SHAPE shape) {
+		ClearBlock();
+		block = new Block(shape);
+		return *block;
+	}
+	
+	void ResetGeometry() {
+		sceneObject->ClearGeometries();
+	}
+	
+	void ClearBlock() {
+		if (block) delete block;
+	}
+
+	void SetWorldTransform(glm::dmat4 t) {
+		if (sceneObject) {
+			sceneObject->SetWorldTransform(t);
+		}
+	}
+	
+};
+
 struct BuildInterface {
 	v4d::scene::Scene* scene = nullptr;
 	int selectedBlockType = -1;
@@ -796,17 +856,17 @@ struct BuildInterface {
 		{1.0f, 1.0f, 1.0f},
 	};
 	int selectedEditValue = 0;
-	Build* tmpBuild = nullptr;
+	TmpBlock* tmpBlock = nullptr;
 	int blockRotation = 0;
 	
 	void UpdateTmpBlock() {
 		if (scene && scene->cameraParent) {
-			if (tmpBuild) {
+			if (tmpBlock) {
 				scene->Lock();
 					double angle = 20;
 					glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
 					glm::dvec3 position = {0.0, 0.0, -4.0};
-					tmpBuild->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
+					tmpBlock->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
 				scene->Unlock();
 			}
 		}
@@ -814,13 +874,13 @@ struct BuildInterface {
 	
 	void RemakeTmpBlock() {
 		scene->Lock();
-			if (tmpBuild) delete tmpBuild;
-			tmpBuild = new Build(scene);
+			if (tmpBlock) delete tmpBlock;
+			tmpBlock = new TmpBlock(scene);
 			if (selectedBlockType != -1) {
-				Block& block = tmpBuild->AddBlock((SHAPE)selectedBlockType);
+				Block& block = tmpBlock->SetBlock((SHAPE)selectedBlockType);
 				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
 				block.SetOrientation(blockRotation);
-				tmpBuild->ResetGeometry();
+				tmpBlock->ResetGeometry();
 				UpdateTmpBlock();
 			}
 		scene->Unlock();
@@ -835,5 +895,9 @@ struct BuildInterface {
 		blockRotation--;
 		if (blockRotation == -1) blockRotation = 23;
 		//TODO constraints or skip
+	}
+	
+	void UnloadScene() {
+		if (tmpBlock) delete tmpBlock;
 	}
 };
