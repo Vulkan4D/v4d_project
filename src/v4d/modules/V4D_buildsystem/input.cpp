@@ -9,6 +9,7 @@ using namespace networking::actions;
 
 v4d::graphics::Window* window = nullptr;
 
+v4d::scene::Scene* scene = nullptr;
 V4D_Game* game = nullptr;
 BuildInterface* buildInterface = nullptr;
 V4D_Client* clientModule = nullptr;
@@ -25,8 +26,9 @@ V4D_MODULE_CLASS(V4D_Input) {
 		player = (PlayerView*)V4D_Game::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 	}
 	
-	V4D_MODULE_FUNC(void, Init, v4d::graphics::Window* w, v4d::graphics::Renderer*, v4d::scene::Scene*) {
+	V4D_MODULE_FUNC(void, Init, v4d::graphics::Window* w, v4d::graphics::Renderer*, v4d::scene::Scene* s) {
 		window = w;
+		scene = s;
 		game = V4D_Game::GetModule(THIS_MODULE);
 		buildInterface = (BuildInterface*)game->ModuleGetCustomPtr(0);
 	}
@@ -86,22 +88,37 @@ V4D_MODULE_CLASS(V4D_Input) {
 				case GLFW_MOUSE_BUTTON_1:
 					// Left Click
 					if (buildInterface->selectedBlockType != -1) {
+						scene->Lock();
 						buildInterface->RemakeTmpBlock();
 						if (buildInterface->tmpBlock && buildInterface->tmpBlock->block) {
 							buildInterface->UpdateTmpBlock();
 							NetworkGameObjectTransform transform {};
 							transform.SetFromTransformAndVelocity(buildInterface->tmpBlock->GetWorldTransform(), {0,0,0});
+							auto block = *buildInterface->tmpBlock->block;
+							auto parent = buildInterface->tmpBuildParent;
+							scene->Unlock();
 							
-							v4d::data::WriteOnlyStream stream(256);
-								stream << CREATE_NEW_BUILD;
-								// Network data 
-								stream << transform;
-								stream << *buildInterface->tmpBlock->block;
-							clientModule->EnqueueAction(stream);
+							if (parent) {
+								v4d::data::WriteOnlyStream stream(256);
+									stream << ADD_BLOCK_TO_BUILD;
+									// Network data 
+									stream << parent->networkId;
+									stream << block;
+								clientModule->EnqueueAction(stream);
+							} else {
+								v4d::data::WriteOnlyStream stream(256);
+									stream << CREATE_NEW_BUILD;
+									// Network data 
+									stream << transform;
+									stream << block;
+								clientModule->EnqueueAction(stream);
+							}
 							
 							// // deselect build tool
 							// buildInterface->selectedBlockType = -1;
 							// buildInterface->RemakeTmpBlock();
+						} else {
+							scene->Unlock();
 						}
 					}
 				break;

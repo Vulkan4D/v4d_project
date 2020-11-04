@@ -59,7 +59,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 				stream->Begin();
 					*stream << SYNC_OBJECT_TRANSFORM;
 					*stream << obj->id;
-					*stream << obj->iteration;
+					*stream << obj->GetIteration();
 					*stream << obj->GetNetworkTransform();
 					
 					auto mod = V4D_Objects::GetModule(obj->moduleID.String());
@@ -130,7 +130,7 @@ V4D_MODULE_CLASS(V4D_Client) {
 				auto tmpStream2 = stream->ReadStream();
 				try {
 					std::lock_guard lock(clientSideObjects.mutex);
-					LOG_DEBUG("Client ReceiveAction UPDATE_OBJECT for obj id " << id)
+					// LOG_DEBUG("Client ReceiveAction UPDATE_OBJECT for obj id " << id)
 					
 					auto obj = clientSideObjects.objects.at(id);
 					obj->parent = parent;

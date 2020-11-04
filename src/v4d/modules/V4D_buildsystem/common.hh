@@ -600,6 +600,14 @@ public:
 	Block() = default;
 	Block(SHAPE t) : data(t) {}
 	
+	uint32_t GetIndex() const {
+		return data.index;
+	}
+	
+	void SetIndex(uint32_t index) {
+		data.index = index;
+	}
+	
 	// Grid size of 10 cm for block positions
 	void SetPosition(glm::vec3 pos) {
 		data.posX = pos.x * 10.0f;
@@ -712,7 +720,27 @@ public:
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
-					faceVertex->vertexData->customData = faceIndex; //TODO add more stuff in custom data (block index, face index, material id)
+					union {
+						struct {
+							uint32_t blockIndex : 24;
+							uint32_t faceIndex : 3;
+							uint32_t materialId : 5;
+						};
+						uint32_t packed;
+					} customData;
+					customData.blockIndex = data.index;
+					customData.faceIndex = faceIndex;
+					switch (faceIndex) {
+						case 0: customData.materialId = data.face0Material;break;
+						case 1: customData.materialId = data.face1Material;break;
+						case 2: customData.materialId = data.face2Material;break;
+						case 3: customData.materialId = data.face3Material;break;
+						case 4: customData.materialId = data.face4Material;break;
+						case 5: customData.materialId = data.face5Material;break;
+						case 6: customData.materialId = data.face6Material;break;
+						// case 7: customData.materialId = data.structureMaterial;break; //TODO
+					}
+					faceVertex->vertexData->customData = customData.packed;
 					faceVertex->vertexData->pos = points[pointIndex] + GetPosition();
 					faceVertex->vertexData->normal = faceNormal;
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
@@ -734,9 +762,11 @@ class Build {
 	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
 	std::vector<Block> blocks {};
 	std::mutex blocksMutex;
+	std::weak_ptr<v4d::scene::Geometry> geometryWeakPtr;
 public:
+	v4d::scene::NetworkGameObject::Id networkId;
 
-	Build() {}
+	Build(v4d::scene::NetworkGameObject::Id networkId) : networkId(networkId) {}
 	
 	~Build() {
 		ClearBlocks();
@@ -748,40 +778,51 @@ public:
 		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
 			std::lock_guard lock(blocksMutex);
 			if (blocks.size() > 0) {
-				auto geom = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
-				
-				uint nextVertex = 0;
-				uint nextIndex = 0;
-				for (int i = 0; i < blocks.size(); ++i) {
-					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geom->GetVertexPtr(nextVertex), geom->GetIndexPtr(nextIndex), nextVertex, 0.6);
-					nextVertex += vertexCount;
-					nextIndex += indexCount;
+				obj->Lock();
+				{
+					auto geometry = geometryWeakPtr.lock();
+					if (!geometry) {
+						geometryWeakPtr = geometry = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+					} else {
+						geometry->Reset(Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
+					}
+					
+					uint nextVertex = 0;
+					uint nextIndex = 0;
+					for (int i = 0; i < blocks.size(); ++i) {
+						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geometry->GetVertexPtr(nextVertex), geometry->GetIndexPtr(nextIndex), nextVertex, 0.6);
+						nextVertex += vertexCount;
+						nextIndex += indexCount;
+					}
+					geometry->Shrink(nextVertex, nextIndex);
+					
+					for (int i = 0; i < geometry->vertexCount; ++i) {
+						auto* vert = geometry->GetVertexPtr(i);
+						geometry->boundingDistance = glm::max(geometry->boundingDistance, glm::length(vert->pos));
+						geometry->boundingBoxSize = glm::max(glm::abs(vert->pos), geometry->boundingBoxSize);
+					}
+					geometry->isDirty = true;
 				}
-				geom->Shrink(nextVertex, nextIndex);
-				
-				for (int i = 0; i < geom->vertexCount; ++i) {
-					auto* vert = geom->GetVertexPtr(i);
-					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
-					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
-				}
-				geom->isDirty = true;
+				obj->Unlock();
 			}
 		}, position, angle, axis);
 		return sceneObject;
 	}
 	
-	Block& AddBlock(SHAPE shape) {
-		std::lock_guard lock(blocksMutex);
-		return blocks.emplace_back(shape);
+	static bool IsBlockAdditionValid(const std::vector<Block>& existingBlocks, const Block& newBlock) {
+		return true; //TODO
 	}
 	
 	void ResetGeometry() {
-		if (sceneObject) sceneObject->ClearGeometries();
+		if (sceneObject) {
+			sceneObject->ResetGeometries();
+		}
 	}
 	
 	void SwapBlocksVector(std::vector<Block>& other) {
 		std::lock_guard lock(blocksMutex);
 		blocks.swap(other);
+		ResetGeometry();
 	}
 
 	void ClearBlocks() {
@@ -793,6 +834,10 @@ public:
 		if (sceneObject) {
 			sceneObject->SetWorldTransform(t);
 		}
+	}
+	
+	glm::dmat4 GetWorldTransform() const {
+		return sceneObject->GetWorldTransform();
 	}
 	
 };
@@ -832,12 +877,6 @@ public:
 	~TmpBlock() {
 		ClearBlock();
 		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
-	}
-	
-	void GenerateGeometryNow() {
-		if (block && sceneObject) {
-			sceneObject->GenerateGeometries();
-		}
 	}
 	
 	Block& SetBlock(SHAPE shape) {
@@ -880,29 +919,90 @@ struct BuildInterface {
 	TmpBlock* tmpBlock = nullptr;
 	int blockRotation = 0;
 	
+	// RayCast hit block
+	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
+	std::shared_ptr<Build> hitBuild = nullptr;
+	std::shared_ptr<Build> tmpBuildParent = nullptr;
+	struct {
+		bool hasHit = false;
+		uint32_t objId = 0;
+		uint32_t customData0 = 0;
+		
+		bool Invalidated(const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock) {
+			if (hasHit != (hitBlock.has_value())) return true;
+			if (hasHit) {
+				if (objId != hitBlock->objId) return true;
+				if (customData0 != hitBlock->customData0) return true;
+			}
+			return false;
+		}
+		void operator= (const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock) {
+			hasHit = hitBlock.has_value();
+			if (hasHit) {
+				objId = hitBlock->objId;
+				customData0 = hitBlock->customData0;
+			} else {
+				objId = 0;
+				customData0 = 0;
+			}
+		}
+	} cachedHitBlock;
+	
 	void UpdateTmpBlock() {
-		if (scene && scene->cameraParent) {
-			if (tmpBlock) {
+		if (cachedHitBlock.Invalidated(hitBlock)) {
+			RemakeTmpBlock();
+		} else {
+			if (scene && scene->cameraParent && tmpBlock) {
 				scene->Lock();
-					double angle = 20;
-					glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
-					glm::dvec3 position = {0.0, 0.0, tmpBlock->boundingDistance*-3.0f};
-					tmpBlock->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
+					if (tmpBuildParent) {
+						tmpBlock->SetWorldTransform(tmpBuildParent->GetWorldTransform());
+					} else {
+						double angle = 20;
+						glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
+						glm::dvec3 position = {0.0, 0.0, tmpBlock->boundingDistance*-3.0f};
+						tmpBlock->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
+					}
 				scene->Unlock();
 			}
 		}
 	}
 	
 	void RemakeTmpBlock() {
+		float tmpBlockBoundingDistance = 1.0;
 		scene->Lock();
-			if (tmpBlock) delete tmpBlock;
-			tmpBlock = new TmpBlock(scene);
+			cachedHitBlock = hitBlock;
+			if (tmpBlock) {
+				tmpBlockBoundingDistance = tmpBlock->boundingDistance;
+				delete tmpBlock;
+				tmpBlock = nullptr;
+			}
+			tmpBuildParent = nullptr;
 			if (selectedBlockType != -1) {
+				tmpBlock = new TmpBlock(scene);
+				tmpBlock->boundingDistance = tmpBlockBoundingDistance;
+				tmpBuildParent = (hitBlock.has_value() && hitBuild)? hitBuild : nullptr;
 				Block& block = tmpBlock->SetBlock((SHAPE)selectedBlockType);
-				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
-				block.SetOrientation(blockRotation);
+				glm::vec3 currentBlockPosition = {0,0,0};
+				auto currentBlockRotation = blockRotation;
+				auto currentBlockSize = blockSize[selectedBlockType];
+				if (tmpBuildParent) {
+					union {
+						struct {
+							uint32_t blockIndex : 24;
+							uint32_t faceIndex : 3;
+							uint32_t materialId : 5;
+						};
+						uint32_t packed;
+					} customData;
+					customData.packed = cachedHitBlock.customData0;
+					//TODO constraint currentBlockRotation
+					//TODO constraint currentBlockSize
+					//TODO set currentBlockPosition relative to hitBlock face and offset by currentBlockSize*currentBlockRotation
+				}
+				block.SetPosition(currentBlockPosition);
+				block.SetOrientation(currentBlockRotation);
+				block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
 				tmpBlock->ResetGeometry();
-				tmpBlock->GenerateGeometryNow();
 				UpdateTmpBlock();
 			}
 		scene->Unlock();
@@ -921,6 +1021,8 @@ struct BuildInterface {
 	
 	void UnloadScene() {
 		if (tmpBlock) delete tmpBlock;
+		tmpBuildParent = nullptr;
+		hitBuild = nullptr;
 	}
 };
 

@@ -3,6 +3,7 @@
 
 #include <v4d.h>
 #include "Texture2D.hpp"
+#include "RayCast.hh"
 #include "camera_options.hh"
 
 using namespace v4d::scene;
@@ -17,6 +18,8 @@ using namespace v4d::graphics::vulkan::rtx;
 // Application
 Renderer* r = nullptr;
 Scene* scene = nullptr;
+
+RayCast currentRayCast {};
 
 // Textures
 Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/monospace_font_atlas.png"), STBI_grey_alpha};
@@ -277,7 +280,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 
 	struct GeometryPushConstant {
 		glm::vec4 wireframeColor = {1,1,1,1};
-		uint objectIndex; //TODO could limit to 24 bits
+		uint objectIndex; // limited to 23 bits (8 million objects)
 		uint geometryIndex;
 	};
 
@@ -1096,14 +1099,17 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void AddRayTracingInstance(ObjectInstancePtr obj, GeometryInstance* geometryInstance) {
 		std::lock_guard lock(rayTracingInstanceMutex);
-		if (geometryInstance->rayTracingInstanceIndex != -1) return;
 		if (!geometryInstance->geometry->blas || !geometryInstance->geometry->blas->handle) return;
-		int index = nbRayTracingInstances++;
-		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
-		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
-		rayTracingInstances[index].shaderInstanceOffset = (uint32_t)Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
-		geometryInstance->rayTracingInstanceIndex = index;
-		activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
+		if (geometryInstance->rayTracingInstanceIndex == -1) {
+			// create new instance
+			int index = nbRayTracingInstances++;
+			rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
+			rayTracingInstances[index].shaderInstanceOffset = (uint32_t)Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
+			geometryInstance->rayTracingInstanceIndex = index;
+			activeRayTracedGeometries[geometryInstance->rayTracingInstanceIndex] = geometryInstance->geometry;
+		}
+		// assign blas handle
+		rayTracingInstances[geometryInstance->rayTracingInstanceIndex].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
 	}
 	
 	void RemoveRayTracingInstance(GeometryInstance& geometryInstance) {
@@ -1391,15 +1397,15 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		// raycast
 		raycastBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
 		raycastBuffer.MapMemory(r->renderingDevice);
-		r->currentRayCast = {};
-		raycastBuffer.WriteToMappedData(&r->currentRayCast);
+		currentRayCast = {};
+		raycastBuffer.WriteToMappedData(&currentRayCast);
 	}
 	void FreeComputeBuffers() {
 		// histogram
 		totalLuminance.UnmapMemory(r->renderingDevice);
 		totalLuminance.Free(r->renderingDevice);
 		// raycast
-		r->currentRayCast = {};
+		currentRayCast = {};
 		raycastBuffer.UnmapMemory(r->renderingDevice);
 		raycastBuffer.Free(r->renderingDevice);
 	}
@@ -1686,11 +1692,33 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 
 	void FrameUpdate(uint imageIndex) {
 		
-		// Reset camera information
-		scene->camera.width = r->swapChain->extent.width;
-		scene->camera.height = r->swapChain->extent.height;
-		scene->camera.RefreshProjectionMatrix();
-		scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
+		{// Handle RayCast from previous frame here before reassigning anything in the geometry buffers
+			currentRayCast = *((RayCast*)raycastBuffer.data);
+			if (currentRayCast.hit) {
+				auto objData = ((Geometry::ObjectBuffer_T*)(Geometry::globalBuffers.objectBuffer.stagingBuffer.data))[currentRayCast.objectBufferOffset];
+				if (objData.moduleVen != 0 && objData.moduleId != 0) {
+					auto mod = V4D_Game::LoadModule(v4d::modular::ModuleID(objData.moduleVen, objData.moduleId));
+					if (mod && mod->RendererRayCast) {
+						RenderRayCastHit hit;
+							hit.distance = currentRayCast.distance;
+							hit.objId = objData.objId;
+							hit.flags = currentRayCast.flags;
+							hit.customType = currentRayCast.customType;
+							hit.customData0 = currentRayCast.customData0;
+							hit.customData1 = currentRayCast.customData1;
+							hit.customData2 = currentRayCast.customData2;
+						mod->RendererRayCast(hit);
+					}
+				}
+			}
+		}
+		
+		{// Reset camera information
+			scene->camera.width = r->swapChain->extent.width;
+			scene->camera.height = r->swapChain->extent.height;
+			scene->camera.RefreshProjectionMatrix();
+			scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
+		}
 		
 		RunTXAA();
 		
@@ -1701,15 +1729,17 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		
 		// Ray Tracing
 		size_t globalScratchBufferSize = 0;
-		if (r->rayTracingFeatures.rayTracing) {
-			topLevelAccelerationStructure.GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
-		}
-		if (r->rayTracingFeatures.rayTracing) {
-			ResetRayTracingBlasBuilds();
-			// inactiveBlas.clear();
+		{
+			if (r->rayTracingFeatures.rayTracing) {
+				topLevelAccelerationStructure.GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+			}
+			if (r->rayTracingFeatures.rayTracing) {
+				ResetRayTracingBlasBuilds();
+				// inactiveBlas.clear();
+			}
 		}
 		
-		// Update object transforms and light sources (Use all lights for now)
+		{// Update object transforms and light sources (Use all lights for now)
 		scene->Lock();
 			std::scoped_lock lock(geometriesToRemoveFromRayTracingInstancesMutex, rayTracingInstanceMutex);
 			nbActiveLights = 0;
@@ -1748,9 +1778,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 											AddRayTracingBlasBuild(geom.geometry->blas);
 										}
 										if (geom.geometry->blas && geom.geometry->blas->built) {
-											if (geom.rayTracingInstanceIndex == -1) {
-												AddRayTracingInstance(obj, &geom);
-											}
+											AddRayTracingInstance(obj, &geom);
 											SetRayTracingInstanceTransform(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 										}
 									} else if (geom.rayTracingInstanceIndex != -1) {
@@ -1803,6 +1831,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				#endif
 			}
 		scene->Unlock();
+		}
 		
 		// Global Scratch Buffer
 		if (r->rayTracingFeatures.rayTracing && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
@@ -1839,9 +1868,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		ClearLitImage(commandBuffer);
-		
-		// Handle RayCast from previous frame
-		r->currentRayCast = *((RayCast*)raycastBuffer.data);
 		
 		// Transfer data to rendering device
 		scene->camera.renderOptions = RENDER_OPTIONS::Get();
@@ -2402,18 +2428,22 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 	
 	#pragma endregion
 	
-	V4D_MODULE_FUNC(void, DrawOverlayLine, float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
-		AddOverlayLine(x1, y1, x2, y2, color, lineWidth);
-	}
-	V4D_MODULE_FUNC(void, DrawOverlayText, const char* text, float x, float y, glm::vec4 color, float size) {
-		AddOverlayText(std::string(text), x, y, color, uint16_t(size));
-	}
-	V4D_MODULE_FUNC(void, DrawOverlayCircle, float x, float y, glm::vec4 color, float size, float borderSize) {
-		AddOverlayCircle(x, y, color, uint16_t(size), uint8_t(borderSize));
-	}
-	V4D_MODULE_FUNC(void, DrawOverlaySquare, float x, float y, glm::vec4 color, glm::vec2 size, float borderSize) {
-		AddOverlaySquare(x, y, color, size, uint8_t(borderSize));
-	}
+	#pragma region Overlay
+		
+		V4D_MODULE_FUNC(void, DrawOverlayLine, float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
+			AddOverlayLine(x1, y1, x2, y2, color, lineWidth);
+		}
+		V4D_MODULE_FUNC(void, DrawOverlayText, const char* text, float x, float y, glm::vec4 color, float size) {
+			AddOverlayText(std::string(text), x, y, color, uint16_t(size));
+		}
+		V4D_MODULE_FUNC(void, DrawOverlayCircle, float x, float y, glm::vec4 color, float size, float borderSize) {
+			AddOverlayCircle(x, y, color, uint16_t(size), uint8_t(borderSize));
+		}
+		V4D_MODULE_FUNC(void, DrawOverlaySquare, float x, float y, glm::vec4 color, glm::vec2 size, float borderSize) {
+			AddOverlaySquare(x, y, color, size, uint8_t(borderSize));
+		}
+		
+	#pragma endregion
 
 	V4D_MODULE_FUNC(void, Update) {
 		
@@ -2619,7 +2649,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				ImGui::SetNextWindowSize({250, 100});
 				ImGui::Begin("Debug");
 				// RayCast
-				if (r->currentRayCast.hit) ImGui::Text((std::string("RayCast Hit object ") + std::to_string(r->currentRayCast.objectIndex) + ", data: " + std::to_string(r->currentRayCast.customData0)).c_str());
+				if (currentRayCast.hit) ImGui::Text((std::string("RayCast Hit object ") + std::to_string(currentRayCast.objectBufferOffset) + ", data: " + std::to_string(currentRayCast.customData0)).c_str());
 				else ImGui::Text("RayCast no hit");
 			#endif
 				// Modules

@@ -13,6 +13,7 @@ std::array<Texture2D, NB_BLOCKS> blocks_tex {
 std::array<ImTextureID, NB_BLOCKS> blocks_imGuiImg {};
 
 v4d::scene::Scene* scene = nullptr;
+CachedData* cachedData = nullptr;
 
 BuildInterface buildInterface {};
 
@@ -25,6 +26,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 	V4D_MODULE_FUNC(void, Init, v4d::scene::Scene* _s) {
 		scene = _s;
 		buildInterface.scene = scene;
+		cachedData = (CachedData*)V4D_Objects::LoadModule(THIS_MODULE)->ModuleGetCustomPtr(0);
 		
 		static const int maxObjectsInMemory = 10; // 256 objects = 229 Mb
 		static const int maxBlocksInMemory = maxObjectsInMemory * 1024;
@@ -113,6 +115,16 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	V4D_MODULE_FUNC(void, Update, double deltaTime) {
 		buildInterface.UpdateTmpBlock();
+		buildInterface.hitBlock = std::nullopt;
+		buildInterface.hitBuild = nullptr;
+	}
+	
+	V4D_MODULE_FUNC(void, RendererRayCast, v4d::graphics::RenderRayCastHit hit) {
+		try {
+			auto build = cachedData->builds.at(hit.objId);
+			buildInterface.hitBuild = build;
+			buildInterface.hitBlock = hit;
+		} catch(...){}
 	}
 	
 };

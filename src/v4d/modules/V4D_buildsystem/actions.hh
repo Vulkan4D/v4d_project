@@ -5,5 +5,6 @@ namespace networking::actions {
 	
 	// Client -> Server
 	const Action CREATE_NEW_BUILD = 1;
+	const Action ADD_BLOCK_TO_BUILD = 2;
 	
 }

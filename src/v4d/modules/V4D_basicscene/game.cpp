@@ -68,8 +68,8 @@ V4D_MODULE_CLASS(V4D_Game) {
 	
 	V4D_MODULE_FUNC(void, Init, Scene* _s) {
 		scene = _s;
-		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(100000);
-		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(100000);
+		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(10000);
+		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(10000);
 		v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(1024);
 	}
 	

@@ -30,12 +30,12 @@ layout(set = 0, binding = 0) uniform Camera {
 	float time;
 	
 } camera;
-layout(set = 0, binding = 1) GEOMETRY_BUFFERS_ACCESS buffer ObjectBuffer {dmat4 objectInstances[];};
-layout(set = 0, binding = 2) GEOMETRY_BUFFERS_ACCESS buffer LightBuffer {float lightSources[];};
+layout(set = 0, binding = 1) GEOMETRY_BUFFERS_ACCESS buffer ObjectBuffer {dmat4 objectInstances[/* stride of 2 dmat4 */];};
+layout(set = 0, binding = 2) GEOMETRY_BUFFERS_ACCESS buffer LightBuffer {float lightSources[/* stride of 8 float */];};
 layout(set = 0, binding = 3) GEOMETRY_BUFFERS_ACCESS buffer ActiveLights {uint activeLights; uint lightIndices[];};
-layout(set = 0, binding = 4) GEOMETRY_BUFFERS_ACCESS buffer GeometryBuffer {float geometries[];};
+layout(set = 0, binding = 4) GEOMETRY_BUFFERS_ACCESS buffer GeometryBuffer {float geometries[/* stride of 64 float */];};
 layout(set = 0, binding = 5) GEOMETRY_BUFFERS_ACCESS buffer IndexBuffer {uint indices[];};
-layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 vertices[];};
+layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 vertices[/* stride of 2 vec4 */];};
 
 #if defined(RAY_TRACING) || defined(RAY_QUERY)
 	layout(set = 0, binding = 7) uniform accelerationStructureEXT topLevelAS;

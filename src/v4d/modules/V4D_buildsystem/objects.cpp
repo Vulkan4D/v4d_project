@@ -17,7 +17,7 @@ V4D_MODULE_CLASS(V4D_Objects) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
 		switch (obj->type) {
 			case OBJECT_TYPE::Build:{
-				cachedData.builds[obj->id] = std::make_shared<Build>();
+				cachedData.builds[obj->id] = std::make_shared<Build>(obj->id);
 				cachedData.buildBlocks[obj->id] = {};
 			}break;
 		}
@@ -36,6 +36,7 @@ V4D_MODULE_CLASS(V4D_Objects) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Build:{
 				obj->objectInstance = cachedData.builds[obj->id]->AddToScene(scene);
+				obj->objectInstance->AssignToModule(THIS_MODULE, obj->id);
 				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
 			}break;
 		}

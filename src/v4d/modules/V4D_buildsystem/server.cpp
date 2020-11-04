@@ -34,12 +34,33 @@ V4D_MODULE_CLASS(V4D_Server) {
 				// Network data
 				auto transform = stream->Read<NetworkGameObjectTransform>();
 				auto block = stream->Read<Block>();
+				//
 				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
 				auto obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Build);
 				obj->SetTransformFromNetwork(transform);
 				obj->isDynamic = true;
 				obj->physicsClientID = client->id;
 				cachedData->serverBuildBlocks[obj->id].push_back(block);
+			}break;
+		
+			case ADD_BLOCK_TO_BUILD:{
+				// Network data
+				auto parentId = stream->Read<NetworkGameObject::Id>();
+				auto block = stream->Read<Block>();
+				//
+				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
+				try {
+					auto& buildBlocks = cachedData->serverBuildBlocks.at(parentId);
+					uint32_t maxIndex = 0;
+					for (auto& b : buildBlocks) {maxIndex = glm::max(maxIndex, b.GetIndex());}
+					block.SetIndex(maxIndex+1);
+					if (!Build::IsBlockAdditionValid(buildBlocks, block)) break;
+					buildBlocks.push_back(block);
+				}catch(...){break;}
+				try {
+					auto obj = serverSideObjects->objects.at(parentId);
+					obj->Iterate();
+				}catch(...){break;}
 			}break;
 		
 			default: 

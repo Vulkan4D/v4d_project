@@ -32,16 +32,16 @@ V4D_MODULE_CLASS(V4D_Input) {
 		) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
-					if (v4d::scene::Scene::RayCastHit hit; scene->RayCastClosest(&hit)) {
+					if (v4d::scene::Scene::RayCastHit hit; scene->PhysicsRayCastClosest(&hit)) {
 						if (hit.obj->GetGeometries().size()) {
-							LOG("RayCastClosest Hit = " << hit.obj->GetGeometries()[0].type)
+							LOG("PhysicsRayCastClosest Hit = " << hit.obj->GetGeometries()[0].type)
 							hit.obj->AddImpulse(scene->camera.lookDirection*100.0);
 						}
 					}
 					break;
 				case GLFW_MOUSE_BUTTON_3:
-					if (std::vector<v4d::scene::Scene::RayCastHit> hits{}; scene->RayCastAll(&hits)) {
-						LOG("RayCastAll Hits = ")
+					if (std::vector<v4d::scene::Scene::RayCastHit> hits{}; scene->PhysicsRayCastAll(&hits)) {
+						LOG("PhysicsRayCastAll Hits = ")
 						for (auto hit : hits) if (hit.obj->GetGeometries().size()) {
 							LOG("    " << hit.obj->GetGeometries()[0].type)
 						}

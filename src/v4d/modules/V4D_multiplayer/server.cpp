@@ -74,14 +74,14 @@ V4D_MODULE_CLASS(V4D_Server) {
 			for (auto& [objID, obj] : serverSideObjects.objects) {
 				if (obj->active) {
 					
-					uint32_t clientIteration;
+					NetworkGameObject::Iteration clientIteration;
 					try {
 						clientIteration = obj->clientIterations.at(client->id);
 					} catch (...) {
 						clientIteration = obj->clientIterations[client->id] = 0;
 					}
 					
-					if (obj->iteration > clientIteration) {
+					if (obj->GetIteration() > clientIteration) {
 						stream->Begin();
 							if (clientIteration == 0) {
 								// LOG_DEBUG("Server SendAction ADD_OBJECT for obj id " << obj->id << ", client " << client->id)
@@ -91,7 +91,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 								*stream << obj->moduleID.module;
 								*stream << obj->type;
 							} else {
-								LOG_DEBUG("Server SendAction UPDATE_OBJECT for obj id " << obj->id << ", client " << client->id)
+								// LOG_DEBUG("Server SendAction UPDATE_OBJECT for obj id " << obj->id << ", client " << client->id)
 								// Update
 								*stream << UPDATE_OBJECT;
 							}
@@ -99,7 +99,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 							*stream << obj->id;
 							*stream << (obj->physicsClientID == client->id);
 							*stream << obj->GetAttributes();
-							*stream << obj->iteration;
+							*stream << obj->GetIteration();
 							*stream << obj->GetNetworkTransform();
 							
 							auto mod = V4D_Objects::GetModule(obj->moduleID.String());
@@ -113,7 +113,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 							stream->WriteStream(tmpStream);
 							
 						stream->End();
-						obj->clientIterations[client->id] = obj->iteration;
+						obj->clientIterations[client->id] = obj->GetIteration();
 					}
 				} else /* obj is not active */ {
 					try {
@@ -147,7 +147,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 					stream->Begin();
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
-						*stream << obj->iteration;
+						*stream << obj->GetIteration();
 						*stream << obj->GetNetworkTransform();
 						
 						auto mod = V4D_Objects::GetModule(obj->moduleID.String());
@@ -222,7 +222,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 		switch (action) {
 			case SYNC_OBJECT_TRANSFORM:{
 				auto id = stream->Read<uint32_t>();
-				auto iteration = stream->Read<uint32_t>();
+				auto iteration = stream->Read<NetworkGameObject::Iteration>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
 				auto tmpStream = stream->ReadStream();
 				try {
