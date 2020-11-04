@@ -628,6 +628,10 @@ public:
 		data.orientation = rot;
 	}
 	
+	BlockFace GetFace(uint32_t faceIndex) const {
+		return GetFaces()[faceIndex];
+	}
+	
 	void SetColors(bool useVertexColorGradients
 		,uint8_t color0 = 0
 		,uint8_t color1 = 0
@@ -813,6 +817,12 @@ public:
 		return true; //TODO
 	}
 	
+	Block GetBlock(uint32_t index) {
+		std::lock_guard lock(blocksMutex);
+		assert(index < blocks.size());
+		return blocks[index];
+	}
+	
 	void ResetGeometry() {
 		if (sceneObject) {
 			sceneObject->ResetGeometries();
@@ -979,10 +989,8 @@ struct BuildInterface {
 			tmpBuildParent = nullptr;
 			if (selectedBlockType != -1) {
 				tmpBlock = new TmpBlock(scene);
-				tmpBlock->boundingDistance = tmpBlockBoundingDistance;
 				tmpBuildParent = (hitBlock.has_value() && hitBuild)? hitBuild : nullptr;
 				Block& block = tmpBlock->SetBlock((SHAPE)selectedBlockType);
-				glm::vec3 currentBlockPosition = {0,0,0};
 				auto currentBlockRotation = blockRotation;
 				auto currentBlockSize = blockSize[selectedBlockType];
 				if (tmpBuildParent) {
@@ -995,16 +1003,41 @@ struct BuildInterface {
 						uint32_t packed;
 					} customData;
 					customData.packed = cachedHitBlock.customData0;
+					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
+					auto parentFace = parentBlock.GetFace(customData.faceIndex);
+					if (parentFace.resizedirs.size() == 0) {
+						// Can't put a block on this face
+						delete tmpBlock;
+						tmpBlock = nullptr;
+						goto Unlock;
+					}
+					auto parentPoints = parentBlock.GetPointsPositions();
+					glm::vec3 parentFaceNormal = glm::normalize(glm::cross(parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[0]], parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[2]]));
+					glm::vec3 parentFacePosition = {0,0,0};
+					for (auto& p : parentFace.triangles) {
+						parentFacePosition += parentPoints[p];
+					}
+					parentFacePosition /= parentFace.triangles.size();
+					
 					//TODO constraint currentBlockRotation
+					block.SetOrientation(currentBlockRotation);
+					
 					//TODO constraint currentBlockSize
-					//TODO set currentBlockPosition relative to hitBlock face and offset by currentBlockSize*currentBlockRotation
+					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
+					
+					// auto points = block.GetPointsPositions();
+					
+					
+					block.SetPosition(parentBlock.GetPosition() + parentFacePosition + parentFaceNormal/2.0f);
+				} else {
+					block.SetOrientation(currentBlockRotation);
+					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
 				}
-				block.SetPosition(currentBlockPosition);
-				block.SetOrientation(currentBlockRotation);
-				block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
+				tmpBlock->boundingDistance = tmpBlockBoundingDistance;
 				tmpBlock->ResetGeometry();
 				UpdateTmpBlock();
 			}
+			Unlock:
 		scene->Unlock();
 	}
 	

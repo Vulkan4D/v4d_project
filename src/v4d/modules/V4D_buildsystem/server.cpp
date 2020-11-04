@@ -51,9 +51,7 @@ V4D_MODULE_CLASS(V4D_Server) {
 				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
 				try {
 					auto& buildBlocks = cachedData->serverBuildBlocks.at(parentId);
-					uint32_t maxIndex = 0;
-					for (auto& b : buildBlocks) {maxIndex = glm::max(maxIndex, b.GetIndex());}
-					block.SetIndex(maxIndex+1);
+					block.SetIndex(buildBlocks.size());
 					if (!Build::IsBlockAdditionValid(buildBlocks, block)) break;
 					buildBlocks.push_back(block);
 				}catch(...){break;}
