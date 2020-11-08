@@ -18,11 +18,12 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 - [x] Hybrid Ray-Tracing Renderer module
 - [x] Physics Module (Bullet3)
 - [x] Multiplayer/Networking utilities
+- ▶️ Demo game (Galaxy4D)
 - [ ] In-game coding framework (XenonCode)
-- [ ] Audio utilities
-- [ ] Demo game (Galaxy4D)
+- [ ] Audio system
 - [ ] Launcher template
 - [ ] Build system for Visual Studio on Windows host
+- [ ] LTBL (Let-There-Be-Light) Fully path-traced renderer
 - [ ] Complete Engine documentation
 - [ ] Editor Tools
 - [ ] Licensing
