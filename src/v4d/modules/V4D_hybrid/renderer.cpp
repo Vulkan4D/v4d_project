@@ -1700,6 +1700,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 					auto mod = V4D_Game::LoadModule(v4d::modular::ModuleID(objData.moduleVen, objData.moduleId));
 					if (mod && mod->RendererRayCast) {
 						RenderRayCastHit hit;
+							hit.position = glm::inverse(objData.modelTransform) * glm::inverse(scene->camera.viewMatrix) * glm::dvec4(currentRayCast.position, 1);
 							hit.distance = currentRayCast.distance;
 							hit.objId = objData.objId;
 							hit.flags = currentRayCast.flags;

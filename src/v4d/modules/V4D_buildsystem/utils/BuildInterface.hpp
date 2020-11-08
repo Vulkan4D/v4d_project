@@ -15,6 +15,7 @@ struct BuildInterface {
 	int selectedEditValue = 0;
 	TmpBlock* tmpBlock = nullptr;
 	int blockRotation = 0;
+	bool highPrecisionGrid = false;
 	
 	// RayCast hit block
 	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
@@ -24,12 +25,20 @@ struct BuildInterface {
 		bool hasHit = false;
 		uint32_t objId = 0;
 		uint32_t customData0 = 0;
+		glm::vec3 gridPos = {0,0,0};
+		bool highPrecisionGrid = false;
 		
-		bool Invalidated(const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock) {
+		bool Invalidated(const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock, bool highPrecisionGrid) {
 			if (hasHit != (hitBlock.has_value())) return true;
 			if (hasHit) {
+				if (this->highPrecisionGrid != highPrecisionGrid) return true;
 				if (objId != hitBlock->objId) return true;
 				if (customData0 != hitBlock->customData0) return true;
+				if (highPrecisionGrid) {
+					if (gridPos != glm::round(hitBlock->position*10.0f)/10.0f) return true;
+				} else {
+					if (gridPos != glm::round(hitBlock->position)) return true;
+				}
 			}
 			return false;
 		}
@@ -38,6 +47,11 @@ struct BuildInterface {
 			if (hasHit) {
 				objId = hitBlock->objId;
 				customData0 = hitBlock->customData0;
+				if (highPrecisionGrid) {
+					gridPos = glm::round(hitBlock->position*10.0f)/10.0f;
+				} else {
+					gridPos = glm::round(hitBlock->position);
+				}
 			} else {
 				objId = 0;
 				customData0 = 0;
@@ -46,7 +60,7 @@ struct BuildInterface {
 	} cachedHitBlock;
 	
 	void UpdateTmpBlock() {
-		if (cachedHitBlock.Invalidated(hitBlock)) {
+		if (cachedHitBlock.Invalidated(hitBlock, highPrecisionGrid)) {
 			RemakeTmpBlock();
 		} else {
 			if (scene && scene->cameraParent && tmpBlock) {
@@ -67,6 +81,7 @@ struct BuildInterface {
 	void RemakeTmpBlock() {
 		float tmpBlockBoundingDistance = 1.0;
 		scene->Lock();
+			cachedHitBlock.highPrecisionGrid = highPrecisionGrid;
 			cachedHitBlock = hitBlock;
 			if (tmpBlock) {
 				tmpBlockBoundingDistance = tmpBlock->boundingDistance;
@@ -92,30 +107,49 @@ struct BuildInterface {
 					customData.packed = cachedHitBlock.customData0;
 					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
 					auto parentFace = parentBlock.GetFace(customData.faceIndex);
-					if (parentFace.resizedirs.size() == 0) {
-						// Can't put a block on this face
-						delete tmpBlock;
-						tmpBlock = nullptr;
-						goto Unlock;
-					}
-					auto parentPoints = parentBlock.GetPointsPositions();
-					glm::vec3 parentFaceNormal = glm::normalize(glm::cross(parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[0]], parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[2]]));
-					glm::vec3 parentFacePosition = {0,0,0};
-					for (auto& p : parentFace.triangles) {
-						parentFacePosition += parentPoints[p];
-					}
-					parentFacePosition /= parentFace.triangles.size();
 					
-					//TODO constraint currentBlockRotation
+					
+					
+					
+					LOG(cachedHitBlock.gridPos.x << ", " << cachedHitBlock.gridPos.y << ", " << cachedHitBlock.gridPos.z)
+					
+					
+					
+					
+					
+					
+					
+					// if (parentFace.resizedirs.size() == 0) {
+					// 	// Can't put a block on this face
+					// 	delete tmpBlock;
+					// 	tmpBlock = nullptr;
+					// 	goto Unlock;
+					// }
+					// auto parentPoints = parentBlock.GetPointsPositions();
+					// glm::vec3 parentFaceNormal = glm::normalize(glm::cross(parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[0]], parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[2]]));
+					// glm::vec3 parentFacePosition = {0,0,0};
+					// for (auto& p : parentFace.triangles) {
+					// 	parentFacePosition += parentPoints[p];
+					// }
+					// parentFacePosition /= parentFace.triangles.size();
+					
+					// //TODO constraint currentBlockRotation
 					block.SetOrientation(currentBlockRotation);
 					
-					//TODO constraint currentBlockSize
+					// //TODO constraint currentBlockSize
 					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
 					
-					// auto points = block.GetPointsPositions();
+					// // auto points = block.GetPointsPositions();
+					
+					// block.SetPosition(parentBlock.GetPosition() + parentFacePosition + parentFaceNormal/2.0f);
+					
+					block.SetPosition(cachedHitBlock.gridPos);
 					
 					
-					block.SetPosition(parentBlock.GetPosition() + parentFacePosition + parentFaceNormal/2.0f);
+					
+					
+					
+					
 				} else {
 					block.SetOrientation(currentBlockRotation);
 					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
@@ -139,7 +173,7 @@ struct BuildInterface {
 			tmp.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
 			std::unordered_map<std::string, int> uniqueOrientationsMap {};
 			// for each orientations
-			for (int i = 0; i < 24; ++i) {
+			for (int i = 0; i < NB_ORIENTATIONS; ++i) {
 				// Set an orientation and get all raw vertex points
 				tmp.SetOrientation(i);
 				auto points = tmp.GetPointsPositions(false);
@@ -181,10 +215,6 @@ struct BuildInterface {
 			if (it == uniqueOrientations.begin()) it = uniqueOrientations.end();
 			blockRotation = *--it;
 		}
-	}
-	
-	void PreviousBlockRotation() {
-		NextBlockRotation(-1);
 	}
 	
 	void UnloadScene() {

@@ -15,8 +15,6 @@ BuildInterface* buildInterface = nullptr;
 V4D_Client* clientModule = nullptr;
 PlayerView* player = nullptr;
 
-bool shiftPressed = false;
-
 V4D_MODULE_CLASS(V4D_Input) {
 	
 	V4D_MODULE_FUNC(std::string, CallbackName) {return THIS_MODULE;}
@@ -70,9 +68,10 @@ V4D_MODULE_CLASS(V4D_Input) {
 			buildInterface->RemakeTmpBlock();
 		}
 		
+		// Shift key for higher precision grid
 		if (key == GLFW_KEY_LEFT_SHIFT) {
-			if (action == GLFW_PRESS) shiftPressed = true;
-			else shiftPressed = false;
+			if (action == GLFW_PRESS) buildInterface->highPrecisionGrid = true;
+			else buildInterface->highPrecisionGrid = false;
 		}
 		
 		player->canChangeVelocity = buildInterface->selectedBlockType == -1;
@@ -138,15 +137,25 @@ V4D_MODULE_CLASS(V4D_Input) {
 		if (buildInterface->selectedBlockType != -1) {
 			if (y != 0) {
 				if (buildInterface->selectedEditValue < 3) {
+					
 					// Resize
 					float& val = buildInterface->blockSize[buildInterface->selectedBlockType][buildInterface->selectedEditValue];
-					val += shiftPressed? y : (y/10.0f);
-					if (val < 0.1f) val = 0.1f;
-					if (val > 102.4f) val = 102.4f;
+					if (buildInterface->highPrecisionGrid) {
+						val += y / 10.0f;
+					} else {
+						val = glm::round(val) + glm::round(y);
+					}
+					
+					// Minimum size
+					if (val < 0.1f) val = buildInterface->highPrecisionGrid? 0.1f : 1.0f;
+					
+					// Maximum size
+					// if (val > 102.4f) val = 102.4f; // actual limit
+					if (val > 100.0f) val = 100.0f; // nicer limit
+					
 				} else {
 					// Rotate
-					if (y > 0) buildInterface->NextBlockRotation();
-					else buildInterface->PreviousBlockRotation();
+					buildInterface->NextBlockRotation(y);
 				}
 			} else if (x != 0) {
 				buildInterface->selectedEditValue += x;
