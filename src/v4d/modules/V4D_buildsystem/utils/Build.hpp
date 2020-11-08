@@ -3,7 +3,7 @@
 class Build {
 	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
 	std::vector<Block> blocks {};
-	std::mutex blocksMutex;
+	mutable std::mutex blocksMutex;
 	std::weak_ptr<v4d::scene::Geometry> geometryWeakPtr;
 public:
 	v4d::scene::NetworkGameObject::Id networkId;
@@ -55,10 +55,14 @@ public:
 		return true; //TODO
 	}
 	
-	Block GetBlock(uint32_t index) {
+	Block GetBlock(uint32_t index) const {
 		std::lock_guard lock(blocksMutex);
 		assert(index < blocks.size());
 		return blocks[index];
+	}
+	
+	const std::vector<Block>& GetBlocks() const {
+		return blocks;
 	}
 	
 	void ResetGeometry() {

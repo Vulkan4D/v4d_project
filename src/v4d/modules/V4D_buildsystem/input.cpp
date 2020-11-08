@@ -86,7 +86,7 @@ V4D_MODULE_CLASS(V4D_Input) {
 			switch (button) {
 				case GLFW_MOUSE_BUTTON_1:
 					// Left Click
-					if (buildInterface->selectedBlockType != -1) {
+					if (buildInterface->selectedBlockType != -1 && buildInterface->isValid) {
 						scene->Lock();
 						buildInterface->RemakeTmpBlock();
 						if (buildInterface->tmpBlock && buildInterface->tmpBlock->block) {

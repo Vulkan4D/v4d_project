@@ -16,6 +16,7 @@ struct BuildInterface {
 	TmpBlock* tmpBlock = nullptr;
 	int blockRotation = 0;
 	bool highPrecisionGrid = false;
+	bool isValid = false;
 	
 	// RayCast hit block
 	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
@@ -81,6 +82,7 @@ struct BuildInterface {
 	void RemakeTmpBlock() {
 		float tmpBlockBoundingDistance = 1.0;
 		scene->Lock();
+		{
 			cachedHitBlock.highPrecisionGrid = highPrecisionGrid;
 			cachedHitBlock = hitBlock;
 			if (tmpBlock) {
@@ -90,12 +92,22 @@ struct BuildInterface {
 			}
 			tmpBuildParent = nullptr;
 			if (selectedBlockType != -1) {
+				
+				// Create a tmp build
 				tmpBlock = new TmpBlock(scene);
+				
+				// Get parent hit build (if any)
 				tmpBuildParent = (hitBlock.has_value() && hitBuild)? hitBuild : nullptr;
+				
+				// Create a block in the tmp build and assign selected orientation and size
 				Block& block = tmpBlock->SetBlock((SHAPE)selectedBlockType);
-				auto currentBlockRotation = blockRotation;
-				auto currentBlockSize = blockSize[selectedBlockType];
+				block.SetOrientation(blockRotation);
+				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
+				
+				// If we are aiming at a parent build, we want to add the new block to that build
 				if (tmpBuildParent) {
+					
+					// Get hit face info from raycast's custom data
 					union {
 						struct {
 							uint32_t blockIndex : 24;
@@ -108,58 +120,42 @@ struct BuildInterface {
 					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
 					auto parentFace = parentBlock.GetFace(customData.faceIndex);
 					
-					
-					
-					
-					LOG("OriginalPosition: " << std::setprecision(3) << hitBlock->position.x << ", " << hitBlock->position.y << ", " << hitBlock->position.z)
-					LOG("Cached&Rounded: " << cachedHitBlock.gridPos.x << ", " << cachedHitBlock.gridPos.y << ", " << cachedHitBlock.gridPos.z)
-					
-					
-					
-					
-					
-					
-					
-					// if (parentFace.resizedirs.size() == 0) {
-					// 	// Can't put a block on this face
-					// 	delete tmpBlock;
-					// 	tmpBlock = nullptr;
-					// 	goto Unlock;
-					// }
-					// auto parentPoints = parentBlock.GetPointsPositions();
-					// glm::vec3 parentFaceNormal = glm::normalize(glm::cross(parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[0]], parentPoints[parentFace.triangles[1]] - parentPoints[parentFace.triangles[2]]));
-					// glm::vec3 parentFacePosition = {0,0,0};
-					// for (auto& p : parentFace.triangles) {
-					// 	parentFacePosition += parentPoints[p];
-					// }
-					// parentFacePosition /= parentFace.triangles.size();
-					
-					// //TODO constraint currentBlockRotation
-					block.SetOrientation(currentBlockRotation);
-					
-					// //TODO constraint currentBlockSize
-					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
-					
-					// // auto points = block.GetPointsPositions();
-					
-					// block.SetPosition(parentBlock.GetPosition() + parentFacePosition + parentFaceNormal/2.0f);
-					
+					// Set initial block position
 					block.SetPosition(cachedHitBlock.gridPos);
 					
+					// Make sure we can add a block on this face
+					if (!parentFace.canAddBlock)
+						goto INVALID;
+						
+					{// Find the correct position of our block based on where we are aiming on the surface of the parent build
+						//...
+					}
 					
+					// Make sure there is no conflict with other blocks if we place the new block here
+					if (!Build::IsBlockAdditionValid(tmpBuildParent->GetBlocks(), block))
+						goto INVALID;
 					
-					
-					
+					// All is good, block is positioned correctly and does not conflict, make it GREEN
+					block.SetColor(BLOCK_COLOR_GREEN);
 					
 				} else {
-					block.SetOrientation(currentBlockRotation);
-					block.SetSize({currentBlockSize[0], currentBlockSize[1], currentBlockSize[2]});
+					// We are not aiming at a parent build, create a new build
+					block.SetColor(BLOCK_COLOR_GREY);
 				}
-				tmpBlock->boundingDistance = tmpBlockBoundingDistance;
-				tmpBlock->ResetGeometry();
-				UpdateTmpBlock();
+				
+				isValid = true;
+				goto UPDATE;
+				
+				INVALID:
+					block.SetColor(BLOCK_COLOR_RED);
+					isValid = false;
+					
+				UPDATE:
+					tmpBlock->boundingDistance = tmpBlockBoundingDistance;
+					tmpBlock->ResetGeometry();
+					UpdateTmpBlock();
 			}
-			Unlock:
+		}
 		scene->Unlock();
 	}
 	

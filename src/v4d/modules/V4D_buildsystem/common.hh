@@ -29,7 +29,7 @@ enum class RESIZEDIR {
 };
 
 static constexpr int NB_ORIENTATIONS = 24;
-glm::vec4 ORIENTATIONS[NB_ORIENTATIONS] = /*{Axis, Angle}*/ { // https://www.euclideanspace.com/maths/geometry/rotations/axisAngle/examples/index.htm
+static const glm::vec4 ORIENTATIONS[NB_ORIENTATIONS] = /*{Axis, Angle}*/ { // https://www.euclideanspace.com/maths/geometry/rotations/axisAngle/examples/index.htm
 	{1,0,0,  0},   {0,1,0,  90},   {0,1,0,  180},   {0,1,0,  -90},
 	{0,0,1,  90},   {0.5774,0.5774,0.5774,  120},   {0.7071,0.7071,0,  180},   {-0.5774,-0.5774,0.5774,  120},
 	{0,0,-1,  90},   {-0.5774,0.5774,-0.5774,  120},   {-0.7071,0.7071,0,  180},   {0.5774,-0.5774,-0.5774,  120},
@@ -38,7 +38,7 @@ glm::vec4 ORIENTATIONS[NB_ORIENTATIONS] = /*{Axis, Angle}*/ { // https://www.euc
 	{-1,0,0,  90},   {-0.5774,0.5774,0.5774,  120},   {0,0.7071,0.7071,  180},   {-0.5774,-0.5774,-0.5774,  120},
 };
 
-const glm::vec3 COLORS[128] = {
+static const glm::vec3 COLORS[128] = {
 	{0.5, 0.5, 0.5}, // grey
 	{1.0, 0.0, 0.0}, // red
 	{0.0, 1.0, 0.0}, // green
@@ -48,10 +48,16 @@ const glm::vec3 COLORS[128] = {
 	{1.0, 1.0, 1.0}, // white
 	// ...
 };
+static constexpr int BLOCK_COLOR_GREY = 0;
+static constexpr int BLOCK_COLOR_RED = 1;
+static constexpr int BLOCK_COLOR_GREEN = 2;
+static constexpr int BLOCK_COLOR_BLUE = 3;
+static constexpr int BLOCK_COLOR_YELLOW = 4;
 
 struct BlockFace {
 	std::vector<uint8_t> triangles {};
-	std::vector<RESIZEDIR> resizedirs = {};
+	std::vector<RESIZEDIR> resizedirs {};
+	bool canAddBlock {};
 };
 
 #include "utils/Block.hpp"

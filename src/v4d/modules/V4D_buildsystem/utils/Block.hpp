@@ -247,119 +247,146 @@ protected:
 			case SHAPE::CUBE: return {
 				{ // top
 					{0,1,2, 2,3,0},
-					{RESIZEDIR::PLUS_Y}
+					{RESIZEDIR::PLUS_Y},
+					true
 				},
 				{ // bottom
 					{7,6,5, 5,4,7},
-					{RESIZEDIR::MINUS_Y}
+					{RESIZEDIR::MINUS_Y},
+					true
 				},
 				{ // right
 					{0,3,7, 7,4,0},
-					{RESIZEDIR::PLUS_X}
+					{RESIZEDIR::PLUS_X},
+					true
 				},
 				{ // left
 					{2,1,5, 5,6,2},
-					{RESIZEDIR::MINUS_X}
+					{RESIZEDIR::MINUS_X},
+					true
 				},
 				{ // front
 					{0,4,5, 5,1,0},
-					{RESIZEDIR::PLUS_Z}
+					{RESIZEDIR::PLUS_Z},
+					true
 				},
 				{ // back
 					{2,6,7, 7,3,2},
-					{RESIZEDIR::MINUS_Z}
+					{RESIZEDIR::MINUS_Z},
+					true
 				},
 			};
 			case SHAPE::SLOPE: return {
 				{ // slope
 					{0,1,2, 2,3,0},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z}
+					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z},
+					false
 				},
 				{ // right
 					{0,3,4},
-					{RESIZEDIR::PLUS_X}
+					{RESIZEDIR::PLUS_X},
+					true
 				},
 				{ // left
 					{1,5,2},
-					{RESIZEDIR::MINUS_X}
+					{RESIZEDIR::MINUS_X},
+					true
 				},
 				{ // front
 					{0,4,1, 1,4,5},
-					{RESIZEDIR::PLUS_Z}
+					{RESIZEDIR::PLUS_Z},
+					true
 				},
 				{ // bottom
 					{4,3,5, 5,3,2},
-					{RESIZEDIR::MINUS_Y}
+					{RESIZEDIR::MINUS_Y},
+					true
 				},
 			};
 			case SHAPE::CORNER: return {
 				{ // slope
 					{0,1,2},
-					{RESIZEDIR::MINUS_Z, RESIZEDIR::MINUS_X, RESIZEDIR::PLUS_Y}
+					{RESIZEDIR::MINUS_Z, RESIZEDIR::MINUS_X, RESIZEDIR::PLUS_Y},
+					false
 				},
 				{ // right
 					{0,2,3},
-					{RESIZEDIR::PLUS_X}
+					{RESIZEDIR::PLUS_X},
+					true
 				},
 				{ // front
 					{0,3,1},
-					{RESIZEDIR::PLUS_Z}
+					{RESIZEDIR::PLUS_Z},
+					true
 				},
 				{ // bottom
 					{2,1,3},
-					{RESIZEDIR::MINUS_Y}
+					{RESIZEDIR::MINUS_Y},
+					true
 				},
 			};
 			case SHAPE::PYRAMID: return {
 				{ // back slope
 					{0,1,2},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z}
+					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z},
+					false
 				},
 				{ // left slope
 					{0,4,1},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_X}
+					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_X},
+					false
 				},
 				{ // right
 					{0,2,3},
-					{RESIZEDIR::PLUS_X}
+					{RESIZEDIR::PLUS_X},
+					true
 				},
 				{ // front
 					{0,3,4},
-					{RESIZEDIR::PLUS_Z}
+					{RESIZEDIR::PLUS_Z},
+					true
 				},
 				{ // bottom
 					{1,4,2, 2,4,3},
-					{RESIZEDIR::MINUS_Y}
+					{RESIZEDIR::MINUS_Y},
+					true
 				},
 			};
 			case SHAPE::INVCORNER: return {
 				{ // top
 					{0,1,2},
-					{RESIZEDIR::PLUS_Y}
+					{RESIZEDIR::PLUS_Y},
+					true
 				},
 				{ // bottom
 					{6,5,4, 4,3,6},
-					{RESIZEDIR::MINUS_Y}
+					{RESIZEDIR::MINUS_Y},
+					true
 				},
 				{ // right
 					{0,6,3},
-					{RESIZEDIR::PLUS_X}
+					{RESIZEDIR::PLUS_X},
+					true
 				},
 				{ // left
 					{2,1,5, 5,1,4},
-					{RESIZEDIR::MINUS_X}
+					{RESIZEDIR::MINUS_X},
+					true
 				},
 				{ // front
 					{0,3,1, 1,3,4},
-					{RESIZEDIR::PLUS_Z}
+					{RESIZEDIR::PLUS_Z},
+					true
 				},
 				{ // back
 					{2,5,6},
-					{RESIZEDIR::MINUS_Z}
+					{RESIZEDIR::MINUS_Z},
+					true
 				},
 				{ // slope
 					{0,2,6},
-					{}
+					{},
+					false
 				},
 			};
 			case SHAPE::_EXTRA1: return {};
@@ -598,6 +625,18 @@ public:
 		data.color5 = color5;
 		data.color6 = color6;
 		data.color7 = color7;
+	}
+	
+	void SetColor(uint8_t color) {
+		data.useVertexColorGradients = 0;
+		data.color0 = color;
+		data.color1 = color;
+		data.color2 = color;
+		data.color3 = color;
+		data.color4 = color;
+		data.color5 = color;
+		data.color6 = color;
+		data.color7 = color;
 	}
 	
 	std::vector<glm::vec3> GetPointsPositions(bool realSize = true) {
