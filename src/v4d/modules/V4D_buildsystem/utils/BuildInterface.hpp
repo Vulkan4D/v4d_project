@@ -129,10 +129,32 @@ struct BuildInterface {
 						
 					{// Find the correct position of our block based on where we are aiming on the surface of the parent build and the selected size/orientation
 						
-						// Find the common axis on hit face
-						auto hitFaceNormal = Block::GetFaceDirNormal(parentFace.facedirs[0]);
+						// Find the corresponding (opposite) face on the new block
+						glm::vec3 hitFaceNormal = Block::GetFaceDirNormal(parentFace.facedirs[0]);
+						glm::vec3 hitBuildNormal = glm::round(glm::translate(parentBlock.GetRotationMatrix(), hitFaceNormal)[3]);
+						glm::vec3 faceNormal = glm::round(glm::translate(glm::inverse(block.GetRotationMatrix()), -hitBuildNormal)[3]);
+						auto blockFace = block.GetTheFaceWhichTheNormalIs(faceNormal);
 						
+						// Make sure that we have found a valid block face, facing the opposite direction
+						if (!blockFace.has_value())
+							goto INVALID;
 						
+						auto faceIndex = std::get<0>(*blockFace);
+						auto face = std::get<1>(*blockFace);
+						
+						{// Next, figure out the correct position for the new block, based on the idea that their respective opposing faces must touch perfectly, but using the hit grid for the other axis
+							// get the axis multiplier and its reverse
+							auto hitBuildAxis = glm::abs(hitBuildNormal);
+							auto hitBuildAxisReverse = glm::abs(hitBuildAxis - 1.0f);
+							// prepare a position on the grid that is aligned with the aimed position but at the center of the aimed block on the axis of the aimed face
+							auto gridPosition = cachedHitBlock.gridPos * hitBuildAxisReverse + parentBlock.GetPosition() * hitBuildAxis;
+							// offset the position using the sum of half the sizes of both the aimed block and the new block on their respective axis
+							float totalOffset = parentBlock.GetHalfSizeForFaceDir(parentFace.facedirs[0]) + block.GetHalfSizeForFaceDir(face.facedirs[0]);
+							totalOffset = glm::floor(totalOffset * 10.001f) / 10.0f; // align offset to grid
+							gridPosition += hitBuildNormal * totalOffset;
+							// Set the final position to the new block
+							block.SetPosition(gridPosition);
+						}
 					}
 					
 					// Make sure there is no conflict with other blocks if we place the new block here
@@ -147,16 +169,17 @@ struct BuildInterface {
 					block.SetColor(BLOCK_COLOR_GREY);
 				}
 				
-				isValid = true;
-				tmpBlock->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f};
-				goto UPDATE;
+				VALID:
+					isValid = true;
+					tmpBlock->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f};
+					goto FINALLY;
 				
 				INVALID:
 					block.SetColor(BLOCK_COLOR_RED);
 					tmpBlock->wireframeColor = {1.0f, 0.0f, 0.0f, 1.0f};
 					isValid = false;
 					
-				UPDATE:
+				FINALLY:
 					tmpBlock->boundingDistance = tmpBlockBoundingDistance;
 					tmpBlock->ResetGeometry();
 					UpdateTmpBlock();

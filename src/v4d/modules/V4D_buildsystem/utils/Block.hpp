@@ -547,11 +547,6 @@ protected:
 		return 0;
 	}
 	
-	glm::mat4 GetRotationMatrix() const {
-		auto& rotation = ORIENTATIONS[data.orientation];
-		return glm::rotate(glm::mat4(1), glm::radians(rotation.w), glm::vec3(rotation));
-	}
-	
 public:
 	Block() = default;
 	Block(SHAPE t) : data(t) {}
@@ -637,6 +632,30 @@ public:
 				return {0,0,-1};
 		}
 		return {0,0,0};
+	}
+	
+	float GetHalfSizeForFaceDir(FACEDIR dir) {
+		return (GetFaceSize(dir)+1) / 20.0f;
+	}
+	
+	std::optional<std::tuple<uint32_t, BlockFace>> GetTheFaceWhichTheNormalIs(const glm::vec3& faceNormal) const {
+		std::optional<std::tuple<uint32_t, BlockFace>> face = std::nullopt;
+		auto faces = GetFaces();
+		for (int i = 0; i < faces.size(); ++i) {
+			auto& f = faces[i];
+			if (f.canAddBlock && f.facedirs.size() == 1) {
+				if (GetFaceDirNormal(f.facedirs[0]) == faceNormal) {
+					face = {i, f};
+					break;
+				}
+			}
+		}
+		return face;
+	}
+	
+	glm::mat4 GetRotationMatrix() const {
+		auto& rotation = ORIENTATIONS[data.orientation];
+		return glm::rotate(glm::mat4(1), glm::radians(rotation.w), glm::vec3(rotation));
 	}
 	
 	std::vector<glm::vec3> GetPointsPositions(bool realSize = true) {
