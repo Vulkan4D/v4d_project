@@ -15,8 +15,8 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 - [x] Mudular structure
 - [x] Sample Module and documentation
 - [x] Core Graphics utilities (Vulkan API)
-- [x] Hybrid Ray-Tracing Renderer module
-- [x] Physics Module (Bullet3)
+- ⬜ Hybrid Ray-Tracing Renderer module
+- ◻️ Physics Module (Bullet3)
 - ☑️ Multiplayer/Networking utilities
 
 ▶️ Demo game (Galaxy4D)
