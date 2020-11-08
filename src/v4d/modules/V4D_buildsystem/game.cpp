@@ -113,7 +113,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		buildInterface.UnloadScene();
 	}
 	
-	V4D_MODULE_FUNC(void, Update, double deltaTime) {
+	V4D_MODULE_FUNC(void, RendererFrameUpdate) {
 		buildInterface.UpdateTmpBlock();
 		buildInterface.hitBlock = std::nullopt;
 		buildInterface.hitBuild = nullptr;

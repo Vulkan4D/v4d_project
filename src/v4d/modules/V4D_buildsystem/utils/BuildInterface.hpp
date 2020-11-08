@@ -35,9 +35,9 @@ struct BuildInterface {
 				if (objId != hitBlock->objId) return true;
 				if (customData0 != hitBlock->customData0) return true;
 				if (highPrecisionGrid) {
-					if (gridPos != glm::round(hitBlock->position*10.0f)/10.0f) return true;
+					if (gridPos != glm::round(hitBlock->position*10.01f)/10.0f) return true;
 				} else {
-					if (gridPos != glm::round(hitBlock->position)) return true;
+					if (gridPos != glm::round(hitBlock->position*1.01f)) return true;
 				}
 			}
 			return false;
@@ -48,9 +48,9 @@ struct BuildInterface {
 				objId = hitBlock->objId;
 				customData0 = hitBlock->customData0;
 				if (highPrecisionGrid) {
-					gridPos = glm::round(hitBlock->position*10.0f)/10.0f;
+					gridPos = glm::round(hitBlock->position*10.01f)/10.0f;
 				} else {
-					gridPos = glm::round(hitBlock->position);
+					gridPos = glm::round(hitBlock->position*1.01f);
 				}
 			} else {
 				objId = 0;
@@ -111,7 +111,8 @@ struct BuildInterface {
 					
 					
 					
-					LOG(cachedHitBlock.gridPos.x << ", " << cachedHitBlock.gridPos.y << ", " << cachedHitBlock.gridPos.z)
+					LOG("OriginalPosition: " << std::setprecision(3) << hitBlock->position.x << ", " << hitBlock->position.y << ", " << hitBlock->position.z)
+					LOG("Cached&Rounded: " << cachedHitBlock.gridPos.x << ", " << cachedHitBlock.gridPos.y << ", " << cachedHitBlock.gridPos.z)
 					
 					
 					
