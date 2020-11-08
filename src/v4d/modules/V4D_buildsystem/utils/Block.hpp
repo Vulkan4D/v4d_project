@@ -247,140 +247,140 @@ protected:
 			case SHAPE::CUBE: return {
 				{ // top
 					{0,1,2, 2,3,0},
-					{RESIZEDIR::PLUS_Y},
+					{FACEDIR::PLUS_Y},
 					true
 				},
 				{ // bottom
 					{7,6,5, 5,4,7},
-					{RESIZEDIR::MINUS_Y},
+					{FACEDIR::MINUS_Y},
 					true
 				},
 				{ // right
 					{0,3,7, 7,4,0},
-					{RESIZEDIR::PLUS_X},
+					{FACEDIR::PLUS_X},
 					true
 				},
 				{ // left
 					{2,1,5, 5,6,2},
-					{RESIZEDIR::MINUS_X},
+					{FACEDIR::MINUS_X},
 					true
 				},
 				{ // front
 					{0,4,5, 5,1,0},
-					{RESIZEDIR::PLUS_Z},
+					{FACEDIR::PLUS_Z},
 					true
 				},
 				{ // back
 					{2,6,7, 7,3,2},
-					{RESIZEDIR::MINUS_Z},
+					{FACEDIR::MINUS_Z},
 					true
 				},
 			};
 			case SHAPE::SLOPE: return {
 				{ // slope
 					{0,1,2, 2,3,0},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z},
+					{FACEDIR::PLUS_Y, FACEDIR::MINUS_Z},
 					false
 				},
 				{ // right
 					{0,3,4},
-					{RESIZEDIR::PLUS_X},
+					{FACEDIR::PLUS_X},
 					true
 				},
 				{ // left
 					{1,5,2},
-					{RESIZEDIR::MINUS_X},
+					{FACEDIR::MINUS_X},
 					true
 				},
 				{ // front
 					{0,4,1, 1,4,5},
-					{RESIZEDIR::PLUS_Z},
+					{FACEDIR::PLUS_Z},
 					true
 				},
 				{ // bottom
 					{4,3,5, 5,3,2},
-					{RESIZEDIR::MINUS_Y},
+					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::CORNER: return {
 				{ // slope
 					{0,1,2},
-					{RESIZEDIR::MINUS_Z, RESIZEDIR::MINUS_X, RESIZEDIR::PLUS_Y},
+					{FACEDIR::MINUS_Z, FACEDIR::MINUS_X, FACEDIR::PLUS_Y},
 					false
 				},
 				{ // right
 					{0,2,3},
-					{RESIZEDIR::PLUS_X},
+					{FACEDIR::PLUS_X},
 					true
 				},
 				{ // front
 					{0,3,1},
-					{RESIZEDIR::PLUS_Z},
+					{FACEDIR::PLUS_Z},
 					true
 				},
 				{ // bottom
 					{2,1,3},
-					{RESIZEDIR::MINUS_Y},
+					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::PYRAMID: return {
 				{ // back slope
 					{0,1,2},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_Z},
+					{FACEDIR::PLUS_Y, FACEDIR::MINUS_Z},
 					false
 				},
 				{ // left slope
 					{0,4,1},
-					{RESIZEDIR::PLUS_Y, RESIZEDIR::MINUS_X},
+					{FACEDIR::PLUS_Y, FACEDIR::MINUS_X},
 					false
 				},
 				{ // right
 					{0,2,3},
-					{RESIZEDIR::PLUS_X},
+					{FACEDIR::PLUS_X},
 					true
 				},
 				{ // front
 					{0,3,4},
-					{RESIZEDIR::PLUS_Z},
+					{FACEDIR::PLUS_Z},
 					true
 				},
 				{ // bottom
 					{1,4,2, 2,4,3},
-					{RESIZEDIR::MINUS_Y},
+					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::INVCORNER: return {
 				{ // top
 					{0,1,2},
-					{RESIZEDIR::PLUS_Y},
+					{FACEDIR::PLUS_Y},
 					true
 				},
 				{ // bottom
 					{6,5,4, 4,3,6},
-					{RESIZEDIR::MINUS_Y},
+					{FACEDIR::MINUS_Y},
 					true
 				},
 				{ // right
 					{0,6,3},
-					{RESIZEDIR::PLUS_X},
+					{FACEDIR::PLUS_X},
 					true
 				},
 				{ // left
 					{2,1,5, 5,1,4},
-					{RESIZEDIR::MINUS_X},
+					{FACEDIR::MINUS_X},
 					true
 				},
 				{ // front
 					{0,3,1, 1,3,4},
-					{RESIZEDIR::PLUS_Z},
+					{FACEDIR::PLUS_Z},
 					true
 				},
 				{ // back
 					{2,5,6},
-					{RESIZEDIR::MINUS_Z},
+					{FACEDIR::MINUS_Z},
 					true
 				},
 				{ // slope
@@ -462,104 +462,86 @@ protected:
 		return {};
 	};
 	
-	std::map<RESIZEDIR, std::vector<uint8_t>> const GetResizePoints() const {
+	std::map<FACEDIR, std::vector<uint8_t>> const GetResizePoints() const {
 		switch (GetShapeType()) {
 			case SHAPE::CUBE: return {
-				{RESIZEDIR::PLUS_X, {0,3,4,7}},
-				{RESIZEDIR::MINUS_X, {1,2,5,6}},
-				{RESIZEDIR::PLUS_Y, {0,1,2,3}},
-				{RESIZEDIR::MINUS_Y, {4,5,6,7}},
-				{RESIZEDIR::PLUS_Z, {0,1,4,5}},
-				{RESIZEDIR::MINUS_Z, {2,3,6,7}},
+				{FACEDIR::PLUS_X, {0,3,4,7}},
+				{FACEDIR::MINUS_X, {1,2,5,6}},
+				{FACEDIR::PLUS_Y, {0,1,2,3}},
+				{FACEDIR::MINUS_Y, {4,5,6,7}},
+				{FACEDIR::PLUS_Z, {0,1,4,5}},
+				{FACEDIR::MINUS_Z, {2,3,6,7}},
 			};
 			case SHAPE::SLOPE: return {
-				{RESIZEDIR::PLUS_X, {0,3,4}},
-				{RESIZEDIR::MINUS_X, {1,5,2}},
-				{RESIZEDIR::PLUS_Y, {0,1}},
-				{RESIZEDIR::MINUS_Y, {2,3,4,5}},
-				{RESIZEDIR::PLUS_Z, {0,1,4,5}},
-				{RESIZEDIR::MINUS_Z, {2,3}},
+				{FACEDIR::PLUS_X, {0,3,4}},
+				{FACEDIR::MINUS_X, {1,5,2}},
+				{FACEDIR::PLUS_Y, {0,1}},
+				{FACEDIR::MINUS_Y, {2,3,4,5}},
+				{FACEDIR::PLUS_Z, {0,1,4,5}},
+				{FACEDIR::MINUS_Z, {2,3}},
 			};
 			case SHAPE::CORNER: return {
-				{RESIZEDIR::PLUS_X, {0,2,3}},
-				{RESIZEDIR::MINUS_X, {1}},
-				{RESIZEDIR::PLUS_Y, {0}},
-				{RESIZEDIR::MINUS_Y, {1,2,3}},
-				{RESIZEDIR::PLUS_Z, {0,1,3}},
-				{RESIZEDIR::MINUS_Z, {2}},
+				{FACEDIR::PLUS_X, {0,2,3}},
+				{FACEDIR::MINUS_X, {1}},
+				{FACEDIR::PLUS_Y, {0}},
+				{FACEDIR::MINUS_Y, {1,2,3}},
+				{FACEDIR::PLUS_Z, {0,1,3}},
+				{FACEDIR::MINUS_Z, {2}},
 			};
 			case SHAPE::PYRAMID: return {
-				{RESIZEDIR::PLUS_X, {0,2,3}},
-				{RESIZEDIR::MINUS_X, {1,4}},
-				{RESIZEDIR::PLUS_Y, {0}},
-				{RESIZEDIR::MINUS_Y, {1,2,3,4}},
-				{RESIZEDIR::PLUS_Z, {0,3,4}},
-				{RESIZEDIR::MINUS_Z, {1,2}},
+				{FACEDIR::PLUS_X, {0,2,3}},
+				{FACEDIR::MINUS_X, {1,4}},
+				{FACEDIR::PLUS_Y, {0}},
+				{FACEDIR::MINUS_Y, {1,2,3,4}},
+				{FACEDIR::PLUS_Z, {0,3,4}},
+				{FACEDIR::MINUS_Z, {1,2}},
 			};
 			case SHAPE::INVCORNER: return {
-				{RESIZEDIR::PLUS_X, {0,3,6}},
-				{RESIZEDIR::MINUS_X, {1,2,4,5}},
-				{RESIZEDIR::PLUS_Y, {0,1,2}},
-				{RESIZEDIR::MINUS_Y, {3,4,5,6}},
-				{RESIZEDIR::PLUS_Z, {0,1,3,4}},
-				{RESIZEDIR::MINUS_Z, {2,5,6}},
+				{FACEDIR::PLUS_X, {0,3,6}},
+				{FACEDIR::MINUS_X, {1,2,4,5}},
+				{FACEDIR::PLUS_Y, {0,1,2}},
+				{FACEDIR::MINUS_Y, {3,4,5,6}},
+				{FACEDIR::PLUS_Z, {0,1,3,4}},
+				{FACEDIR::MINUS_Z, {2,5,6}},
 			};
 			case SHAPE::_EXTRA1: return {
-				{RESIZEDIR::PLUS_X, {}},
-				{RESIZEDIR::MINUS_X, {}},
-				{RESIZEDIR::PLUS_Y, {}},
-				{RESIZEDIR::MINUS_Y, {}},
-				{RESIZEDIR::PLUS_Z, {}},
-				{RESIZEDIR::MINUS_Z, {}},
+				{FACEDIR::PLUS_X, {}},
+				{FACEDIR::MINUS_X, {}},
+				{FACEDIR::PLUS_Y, {}},
+				{FACEDIR::MINUS_Y, {}},
+				{FACEDIR::PLUS_Z, {}},
+				{FACEDIR::MINUS_Z, {}},
 			};
 			case SHAPE::_EXTRA2: return {
-				{RESIZEDIR::PLUS_X, {}},
-				{RESIZEDIR::MINUS_X, {}},
-				{RESIZEDIR::PLUS_Y, {}},
-				{RESIZEDIR::MINUS_Y, {}},
-				{RESIZEDIR::PLUS_Z, {}},
-				{RESIZEDIR::MINUS_Z, {}},
+				{FACEDIR::PLUS_X, {}},
+				{FACEDIR::MINUS_X, {}},
+				{FACEDIR::PLUS_Y, {}},
+				{FACEDIR::MINUS_Y, {}},
+				{FACEDIR::PLUS_Z, {}},
+				{FACEDIR::MINUS_Z, {}},
 			};
 			case SHAPE::_EXTRA3: return {
-				{RESIZEDIR::PLUS_X, {}},
-				{RESIZEDIR::MINUS_X, {}},
-				{RESIZEDIR::PLUS_Y, {}},
-				{RESIZEDIR::MINUS_Y, {}},
-				{RESIZEDIR::PLUS_Z, {}},
-				{RESIZEDIR::MINUS_Z, {}},
+				{FACEDIR::PLUS_X, {}},
+				{FACEDIR::MINUS_X, {}},
+				{FACEDIR::PLUS_Y, {}},
+				{FACEDIR::MINUS_Y, {}},
+				{FACEDIR::PLUS_Z, {}},
+				{FACEDIR::MINUS_Z, {}},
 			};
 		}
 		return {};
 	}
 	
-	const glm::vec3 GetFaceResizeDirNormal(RESIZEDIR dir) const {
+	const float GetFaceSize(FACEDIR dir) const {
 		switch (dir) {
-			case RESIZEDIR::PLUS_X:
-				return {1,0,0};
-			case RESIZEDIR::MINUS_X:
-				return {-1,0,0};
-			case RESIZEDIR::PLUS_Y:
-				return {0,1,0};
-			case RESIZEDIR::MINUS_Y:
-				return {0,-1,0};
-			case RESIZEDIR::PLUS_Z:
-				return {0,0,1};
-			case RESIZEDIR::MINUS_Z:
-				return {0,0,-1};
-		}
-		return {0,0,0};
-	}
-	
-	const float GetFaceSize(RESIZEDIR dir) const {
-		switch (dir) {
-			case RESIZEDIR::PLUS_X:
-			case RESIZEDIR::MINUS_X:
+			case FACEDIR::PLUS_X:
+			case FACEDIR::MINUS_X:
 				return data.sizeX;
-			case RESIZEDIR::PLUS_Y:
-			case RESIZEDIR::MINUS_Y:
+			case FACEDIR::PLUS_Y:
+			case FACEDIR::MINUS_Y:
 				return data.sizeY;
-			case RESIZEDIR::PLUS_Z:
-			case RESIZEDIR::MINUS_Z:
+			case FACEDIR::PLUS_Z:
+			case FACEDIR::MINUS_Z:
 				return data.sizeZ;
 		}
 		return 0;
@@ -639,6 +621,24 @@ public:
 		data.color7 = color;
 	}
 	
+	static const glm::vec3 GetFaceDirNormal(FACEDIR dir) {
+		switch (dir) {
+			case FACEDIR::PLUS_X:
+				return {1,0,0};
+			case FACEDIR::MINUS_X:
+				return {-1,0,0};
+			case FACEDIR::PLUS_Y:
+				return {0,1,0};
+			case FACEDIR::MINUS_Y:
+				return {0,-1,0};
+			case FACEDIR::PLUS_Z:
+				return {0,0,1};
+			case FACEDIR::MINUS_Z:
+				return {0,0,-1};
+		}
+		return {0,0,0};
+	}
+	
 	std::vector<glm::vec3> GetPointsPositions(bool realSize = true) {
 		auto points = GetPoints();
 		if (realSize) {
@@ -650,7 +650,7 @@ public:
 		// Resize points
 		for (const auto&[dir, pts] : GetResizePoints()) {
 			for (const auto& p : pts) {
-				points[p] += GetFaceResizeDirNormal(dir) * GetFaceSize(dir) / (realSize? 20.0f : 1.0f);
+				points[p] += GetFaceDirNormal(dir) * GetFaceSize(dir) / (realSize? 20.0f : 1.0f);
 			}
 		}
 		// adjust block orientation
@@ -660,16 +660,16 @@ public:
 		return points;
 	}
 	
-	RESIZEDIR GetResizeDirFromFace(uint8_t faceIndex, const glm::vec3& position) {
+	FACEDIR GetResizeDirFromFace(uint8_t faceIndex, const glm::vec3& position) {
 		auto face = GetFaces()[faceIndex];
-		RESIZEDIR dir = RESIZEDIR::NONE;
-		if (face.resizedirs.size() == 1) {
-			dir = face.resizedirs[0];
-		} else if (face.resizedirs.size() > 1) {
+		FACEDIR dir = FACEDIR::NONE;
+		if (face.facedirs.size() == 1) {
+			dir = face.facedirs[0];
+		} else if (face.facedirs.size() > 1) {
 			const auto& points = GetPointsPositions();
 			const auto& dirs = GetResizePoints();
-			std::map<RESIZEDIR, float> closestPoints {};
-			for (RESIZEDIR d : face.resizedirs) {
+			std::map<FACEDIR, float> closestPoints {};
+			for (FACEDIR d : face.facedirs) {
 				glm::vec3 avgPosition {};
 				for (const auto& p : dirs.at(d)) {
 					avgPosition += points[p];

@@ -18,7 +18,7 @@ enum class SHAPE : int {
 	_EXTRA3, // cylinder ?
 };
 
-enum class RESIZEDIR {
+enum class FACEDIR {
 	NONE = 0,
 	PLUS_X,
 	MINUS_X,
@@ -56,7 +56,7 @@ static constexpr int BLOCK_COLOR_YELLOW = 4;
 
 struct BlockFace {
 	std::vector<uint8_t> triangles {};
-	std::vector<RESIZEDIR> resizedirs {};
+	std::vector<FACEDIR> facedirs {};
 	bool canAddBlock {};
 };
 

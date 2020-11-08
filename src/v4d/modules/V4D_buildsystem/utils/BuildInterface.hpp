@@ -107,7 +107,7 @@ struct BuildInterface {
 				// If we are aiming at a parent build, we want to add the new block to that build
 				if (tmpBuildParent) {
 					
-					// Get hit face info from raycast's custom data
+					// Get hit block&face info from raycast's custom data
 					union {
 						struct {
 							uint32_t blockIndex : 24;
@@ -120,15 +120,19 @@ struct BuildInterface {
 					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
 					auto parentFace = parentBlock.GetFace(customData.faceIndex);
 					
-					// Set initial block position
+					// Set initial block position to hit position on grid
 					block.SetPosition(cachedHitBlock.gridPos);
 					
 					// Make sure we can add a block on this face
 					if (!parentFace.canAddBlock)
 						goto INVALID;
 						
-					{// Find the correct position of our block based on where we are aiming on the surface of the parent build
-						//...
+					{// Find the correct position of our block based on where we are aiming on the surface of the parent build and the selected size/orientation
+						
+						// Find the common axis on hit face
+						auto hitFaceNormal = Block::GetFaceDirNormal(parentFace.facedirs[0]);
+						
+						
 					}
 					
 					// Make sure there is no conflict with other blocks if we place the new block here
@@ -144,10 +148,12 @@ struct BuildInterface {
 				}
 				
 				isValid = true;
+				tmpBlock->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f};
 				goto UPDATE;
 				
 				INVALID:
 					block.SetColor(BLOCK_COLOR_RED);
+					tmpBlock->wireframeColor = {1.0f, 0.0f, 0.0f, 1.0f};
 					isValid = false;
 					
 				UPDATE:

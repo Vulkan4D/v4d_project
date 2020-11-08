@@ -7,6 +7,7 @@ class TmpBlock {
 public:
 	Block* block = nullptr;
 	float boundingDistance = 1.0;
+	glm::vec4 wireframeColor {0.5f, 0.5f, 0.5f, 0.5f};
 
 	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
 		sceneObject = scene->AddObjectInstance();
@@ -15,8 +16,8 @@ public:
 				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES, Block::MAX_INDICES);
 				
 				geom->renderWireframe = true;
-				geom->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f}; // green
-				geom->wireframeThickness = 3.0f;
+				geom->wireframeColor = wireframeColor;
+				geom->wireframeThickness = 5.0f;
 				
 				auto[vertexCount, indexCount] = block->GenerateGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
 				geom->Shrink(vertexCount, indexCount);

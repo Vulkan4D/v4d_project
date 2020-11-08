@@ -88,14 +88,14 @@ V4D_MODULE_CLASS(V4D_Input) {
 					// Left Click
 					if (buildInterface->selectedBlockType != -1 && buildInterface->isValid) {
 						scene->Lock();
-						buildInterface->RemakeTmpBlock();
 						if (buildInterface->tmpBlock && buildInterface->tmpBlock->block) {
-							buildInterface->UpdateTmpBlock();
 							NetworkGameObjectTransform transform {};
 							transform.SetFromTransformAndVelocity(buildInterface->tmpBlock->GetWorldTransform(), {0,0,0});
 							auto block = *buildInterface->tmpBlock->block;
 							auto parent = buildInterface->tmpBuildParent;
 							scene->Unlock();
+							
+							block.SetColor(BLOCK_COLOR_GREY);
 							
 							if (parent) {
 								v4d::data::WriteOnlyStream stream(256);
