@@ -4,29 +4,29 @@
 
 Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use just yet)*
 
-- ☑️ CMAKE cross-platform build system from linux host
-- ☑️ Core helpers
-- ☑️ Core IO utilities
-- ☑️ Core Config utilities
-- ☑️ Core Multithreading utilities
-- ☑️ Core Cryptographic utilities
-- ☑️ Core Data Streaming utilities
-- ☑️ Core Networking utilities
-- ☑️ Mudular structure
-- ☑️ Sample Module and documentation
-- ☑️ Core Graphics utilities (Vulkan API)
-- ☑️ Hybrid Ray-Tracing Renderer module
-- ☑️ Physics Module (Bullet3)
-- ☑️ Multiplayer/Networking utilities
-- ⚙️ Demo game (Galaxy4D)
-- ⬜ In-game coding framework (XenonCode)
-- ⬜ Audio system
-- ⬜ Launcher template
-- ⬜ Build system for Visual Studio on Windows host
-- ⬜ LTBL (Let-There-Be-Light) Fully path-traced renderer
-- ⬜ Complete Engine documentation
-- ⬜ Editor Tools
-- ⬜ Licensing
+☑️ CMAKE cross-platform build system from linux host  
+☑️ Core helpers  
+☑️ Core IO utilities  
+☑️ Core Config utilities  
+☑️ Core Multithreading utilities  
+☑️ Core Cryptographic utilities  
+☑️ Core Data Streaming utilities  
+☑️ Core Networking utilities  
+☑️ Mudular structure  
+☑️ Sample Module and documentation  
+☑️ Core Graphics utilities (Vulkan API)  
+☑️ Hybrid Ray-Tracing Renderer module  
+☑️ Physics Module (Bullet3)  
+☑️ Multiplayer/Networking utilities  
+⚙️ Demo game (Galaxy4D)  
+⬜ In-game coding framework (XenonCode)  
+⬜ Audio system  
+⬜ Launcher template  
+⬜ Build system for Visual Studio on Windows host  
+⬜ LTBL (Let-There-Be-Light) Fully path-traced renderer  
+⬜ Complete Engine documentation  
+⬜ Editor Tools  
+⬜ Licensing  
 
 Here's the Discord Server for Vulkan4D related discussions : 
 https://discord.gg/5aY3ZBW
