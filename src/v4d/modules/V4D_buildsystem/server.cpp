@@ -51,9 +51,41 @@ V4D_MODULE_CLASS(V4D_Server) {
 				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
 				try {
 					auto& buildBlocks = cachedData->serverBuildBlocks.at(parentId);
-					block.SetIndex(buildBlocks.size());
-					if (!Build::IsBlockAdditionValid(buildBlocks, block)) break;
-					buildBlocks.push_back(block);
+					uint32_t nextIndex = 1;
+					for (auto& b : buildBlocks) {
+						nextIndex = std::max(nextIndex, b.GetIndex()+1);
+					}
+					block.SetIndex(nextIndex);
+					if (Build::IsBlockAdditionValid(buildBlocks, block)) {
+						buildBlocks.push_back(block);
+					}
+				}catch(...){break;}
+				try {
+					auto obj = serverSideObjects->objects.at(parentId);
+					obj->Iterate();
+				}catch(...){break;}
+			}break;
+		
+			case REMOVE_BLOCK_FROM_BUILD:{
+				// Network data
+				auto parentId = stream->Read<NetworkGameObject::Id>();
+				uint32_t blockIndex = stream->Read<uint32_t>();
+				//
+				std::scoped_lock lock(serverSideObjects->mutex, cachedData->serverObjectMapsMutex);
+				try {
+					auto& buildBlocks = cachedData->serverBuildBlocks.at(parentId);
+					for (auto&b : buildBlocks) {
+						if (b.GetIndex() == blockIndex) {
+							b = buildBlocks.back();
+							buildBlocks.pop_back();
+							break;
+						}
+					}
+					if (buildBlocks.size() == 0) {
+						auto obj = serverSideObjects->objects.at(parentId);
+						obj->active = false;
+						break;
+					}
 				}catch(...){break;}
 				try {
 					auto obj = serverSideObjects->objects.at(parentId);

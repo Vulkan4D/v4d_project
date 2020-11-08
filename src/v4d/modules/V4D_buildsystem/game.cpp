@@ -114,12 +114,14 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	V4D_MODULE_FUNC(void, RendererFrameUpdate) {
+		std::lock_guard lock(buildInterface.mu);
 		buildInterface.UpdateTmpBlock();
 		buildInterface.hitBlock = std::nullopt;
 		buildInterface.hitBuild = nullptr;
 	}
 	
 	V4D_MODULE_FUNC(void, RendererRayCast, v4d::graphics::RenderRayCastHit hit) {
+		std::scoped_lock lock(buildInterface.mu, cachedData->objectMapsMutex);
 		try {
 			auto build = cachedData->builds.at(hit.objId);
 			buildInterface.hitBuild = build;

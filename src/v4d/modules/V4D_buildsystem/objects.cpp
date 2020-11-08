@@ -59,6 +59,7 @@ V4D_MODULE_CLASS(V4D_Objects) {
 		}
 		try { // Update build in-game
 			auto& build = cachedData.builds.at(obj->id);
+			LOG("Client Reveived build")
 			if (build) {
 				auto& blocks = cachedData.buildBlocks.at(obj->id);
 				build->SwapBlocksVector(blocks);

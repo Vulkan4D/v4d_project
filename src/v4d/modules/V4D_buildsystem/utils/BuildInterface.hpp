@@ -17,6 +17,7 @@ struct BuildInterface {
 	int blockRotation = 0;
 	bool highPrecisionGrid = false;
 	bool isValid = false;
+	std::recursive_mutex mu;
 	
 	// RayCast hit block
 	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
@@ -28,6 +29,8 @@ struct BuildInterface {
 		uint32_t customData0 = 0;
 		glm::vec3 gridPos = {0,0,0};
 		bool highPrecisionGrid = false;
+		
+		std::weak_ptr<Build> build;
 		
 		bool Invalidated(const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock, bool highPrecisionGrid) {
 			if (hasHit != (hitBlock.has_value())) return true;
@@ -61,6 +64,7 @@ struct BuildInterface {
 	} cachedHitBlock;
 	
 	void UpdateTmpBlock() {
+		std::lock_guard lock(mu);
 		if (cachedHitBlock.Invalidated(hitBlock, highPrecisionGrid)) {
 			RemakeTmpBlock();
 		} else {
@@ -80,10 +84,16 @@ struct BuildInterface {
 	}
 	
 	void RemakeTmpBlock() {
+		std::lock_guard lock(mu);
 		float tmpBlockBoundingDistance = 1.0;
 		scene->Lock();
 		{
 			cachedHitBlock.highPrecisionGrid = highPrecisionGrid;
+			if (hitBlock.has_value() && hitBuild) {
+				cachedHitBlock.build = hitBuild;
+			} else {
+				cachedHitBlock.build.reset();
+			}
 			cachedHitBlock = hitBlock;
 			if (tmpBlock) {
 				tmpBlockBoundingDistance = tmpBlock->boundingDistance;
@@ -108,17 +118,13 @@ struct BuildInterface {
 				if (tmpBuildParent) {
 					
 					// Get hit block&face info from raycast's custom data
-					union {
-						struct {
-							uint32_t blockIndex : 24;
-							uint32_t faceIndex : 3;
-							uint32_t materialId : 5;
-						};
-						uint32_t packed;
-					} customData;
+					PackedBlockCustomData customData;
 					customData.packed = cachedHitBlock.customData0;
 					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
-					auto parentFace = parentBlock.GetFace(customData.faceIndex);
+					if (!parentBlock.has_value())
+						goto INVALID;
+					
+					auto parentFace = parentBlock->GetFace(customData.faceIndex);
 					
 					// Set initial block position to hit position on grid
 					block.SetPosition(cachedHitBlock.gridPos);
@@ -131,7 +137,7 @@ struct BuildInterface {
 						
 						// Find the corresponding (opposite) face on the new block
 						glm::vec3 hitFaceNormal = Block::GetFaceDirNormal(parentFace.facedirs[0]);
-						glm::vec3 hitBuildNormal = glm::round(glm::translate(parentBlock.GetRotationMatrix(), hitFaceNormal)[3]);
+						glm::vec3 hitBuildNormal = glm::round(glm::translate(parentBlock->GetRotationMatrix(), hitFaceNormal)[3]);
 						glm::vec3 faceNormal = glm::round(glm::translate(glm::inverse(block.GetRotationMatrix()), -hitBuildNormal)[3]);
 						auto blockFace = block.GetTheFaceWhichTheNormalIs(faceNormal);
 						
@@ -147,9 +153,9 @@ struct BuildInterface {
 							auto hitBuildAxis = glm::abs(hitBuildNormal);
 							auto hitBuildAxisReverse = glm::abs(hitBuildAxis - 1.0f);
 							// prepare a position on the grid that is aligned with the aimed position but at the center of the aimed block on the axis of the aimed face
-							auto gridPosition = cachedHitBlock.gridPos * hitBuildAxisReverse + parentBlock.GetPosition() * hitBuildAxis;
+							auto gridPosition = cachedHitBlock.gridPos * hitBuildAxisReverse + parentBlock->GetPosition() * hitBuildAxis;
 							// offset the position using the sum of half the sizes of both the aimed block and the new block on their respective axis
-							float totalOffset = parentBlock.GetHalfSizeForFaceDir(parentFace.facedirs[0]) + block.GetHalfSizeForFaceDir(face.facedirs[0]);
+							float totalOffset = parentBlock->GetHalfSizeForFaceDir(parentFace.facedirs[0]) + block.GetHalfSizeForFaceDir(face.facedirs[0]);
 							totalOffset = glm::floor(totalOffset * 10.001f) / 10.0f; // align offset to grid
 							gridPosition += hitBuildNormal * totalOffset;
 							// Set the final position to the new block
@@ -231,6 +237,8 @@ struct BuildInterface {
 			}
 		}
 		
+		std::lock_guard lock(mu);
+		
 		// Set next or previous point from the unique list
 		if (increment > 0) {
 			auto it = uniqueOrientations.upper_bound(blockRotation);
@@ -244,6 +252,7 @@ struct BuildInterface {
 	}
 	
 	void UnloadScene() {
+		std::lock_guard lock(mu);
 		if (tmpBlock) delete tmpBlock;
 		tmpBuildParent = nullptr;
 		hitBuild = nullptr;

@@ -60,6 +60,17 @@ struct BlockFace {
 	bool canAddBlock {};
 };
 
+struct PackedBlockCustomData {
+	union {
+		struct {
+			uint32_t blockIndex : 24;
+			uint32_t faceIndex : 3;
+			uint32_t materialId : 5;
+		};
+		uint32_t packed;
+	};
+};
+
 #include "utils/Block.hpp"
 #include "utils/Build.hpp"
 #include "utils/TmpBlock.hpp"

@@ -5,6 +5,7 @@ class Build {
 	std::vector<Block> blocks {};
 	mutable std::mutex blocksMutex;
 	std::weak_ptr<v4d::scene::Geometry> geometryWeakPtr;
+	
 public:
 	v4d::scene::NetworkGameObject::Id networkId;
 
@@ -55,10 +56,12 @@ public:
 		return true; //TODO
 	}
 	
-	Block GetBlock(uint32_t index) const {
+	std::optional<Block> GetBlock(uint32_t index) const {
 		std::lock_guard lock(blocksMutex);
-		assert(index < blocks.size());
-		return blocks[index];
+		for (auto& b : blocks) {
+			if (b.GetIndex() == index) return b;
+		}
+		return std::nullopt;
 	}
 	
 	const std::vector<Block>& GetBlocks() const {

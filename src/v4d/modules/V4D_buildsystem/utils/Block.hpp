@@ -731,14 +731,7 @@ public:
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
-					union {
-						struct {
-							uint32_t blockIndex : 24;
-							uint32_t faceIndex : 3;
-							uint32_t materialId : 5;
-						};
-						uint32_t packed;
-					} customData;
+					PackedBlockCustomData customData;
 					customData.blockIndex = data.index;
 					customData.faceIndex = faceIndex;
 					switch (faceIndex) {

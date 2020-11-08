@@ -32,6 +32,8 @@ V4D_MODULE_CLASS(V4D_Input) {
 	}
 	
 	V4D_MODULE_FUNC(void, KeyCallback, int key, int scancode, int action, int mods) {
+		std::lock_guard lock(buildInterface->mu);
+		
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
 				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
@@ -64,6 +66,24 @@ V4D_MODULE_CLASS(V4D_Input) {
 					buildInterface->selectedBlockType = 4;
 					break;
 					
+				case GLFW_KEY_X: // delete block
+					if (buildInterface->cachedHitBlock.hasHit) {
+						auto hitBuild = buildInterface->cachedHitBlock.build.lock();
+						if (hitBuild) {
+							PackedBlockCustomData customData;
+							customData.packed = buildInterface->cachedHitBlock.customData0;
+							auto parentBlock = hitBuild->GetBlock(customData.blockIndex);
+							if (parentBlock.has_value()) {
+								v4d::data::WriteOnlyStream stream(32);
+									stream << REMOVE_BLOCK_FROM_BUILD;
+									// Network data 
+									stream << hitBuild->networkId;
+									stream << parentBlock->GetIndex();
+								clientModule->EnqueueAction(stream);
+							}
+						}
+					}
+					break;
 			}
 			buildInterface->RemakeTmpBlock();
 		}
@@ -78,6 +98,8 @@ V4D_MODULE_CLASS(V4D_Input) {
 	}
 	
 	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
+		std::lock_guard lock(buildInterface->mu);
+		
 		if (action == GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
 				&& !ImGui::IsAnyWindowFocused()
@@ -134,6 +156,8 @@ V4D_MODULE_CLASS(V4D_Input) {
 	}
 	
 	V4D_MODULE_FUNC(void, ScrollCallback, double x, double y) {
+		std::lock_guard lock(buildInterface->mu);
+		
 		if (buildInterface->selectedBlockType != -1) {
 			if (y != 0) {
 				if (buildInterface->selectedEditValue < 3) {
