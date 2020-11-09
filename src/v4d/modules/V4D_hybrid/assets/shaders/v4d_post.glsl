@@ -131,8 +131,9 @@ void main() {
 	// } else {
 	// 	depth = texture(tex_img_rasterDepth, uv).r;
 	// }
-	// out_swapchain = vec4(vec3(depth*2e7),1);
+	// out_swapchain = vec4(vec3(depth*1e3),1);
 	
+	// out_swapchain = vec4(texture(img_gBuffer_2, uv).w)/12.0;
 }
 
 #shader overlay_apply.frag.2
