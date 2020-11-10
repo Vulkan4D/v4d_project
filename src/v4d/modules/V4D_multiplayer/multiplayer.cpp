@@ -87,8 +87,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto obj = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Player);
 		obj->physicsClientID = client->id;
 		obj->isDynamic = true;
+		obj->clientIterations[client->id] = 0;
 		serverSideObjects.players[client->id] = obj;
-		// LOG_DEBUG("Server EnqueueAction ASSIGN for obj id " << obj->id << ", client " << client->id)
 		v4d::data::WriteOnlyStream stream(sizeof(ASSIGN) + sizeof(obj->id));
 			stream << ASSIGN;
 			stream << obj->id;

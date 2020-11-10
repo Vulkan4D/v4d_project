@@ -11,6 +11,8 @@ using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
+// #define FORCE_DISABLE_RAY_TRACING
+
 #pragma region Limits
 	const uint32_t MAX_ACTIVE_LIGHTS = 256;
 #pragma endregion
@@ -1682,10 +1684,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{
 			if (r->rayTracingFeatures.rayTracing) {
 				topLevelAccelerationStructure.GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
-			}
-			if (r->rayTracingFeatures.rayTracing) {
 				ResetRayTracingBlasBuilds();
-				// inactiveBlas.clear();
 			}
 		}
 		
@@ -1913,6 +1912,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		V4D_MODULE_FUNC(void, ConfigureRenderer) {
+			#ifdef FORCE_DISABLE_RAY_TRACING
+				r->rayTracingFeatures.rayTracing = VK_FALSE;
+				r->rayTracingFeatures.rayQuery = VK_FALSE;
+			#endif
 			if (r->rayTracingFeatures.rayTracing) {
 				LOG_SUCCESS("Ray-Tracing Supported")
 				// Query the ray tracing properties of the current implementation
@@ -2455,7 +2458,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		r->currentFrameInFlight = nextFrameInFlight;
 	
 		// //TODO find a better fix...
-		r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
+		if (r->rayTracingFeatures.rayTracing) r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate) {
