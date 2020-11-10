@@ -26,25 +26,9 @@ namespace app {
 					CALCULATE_AVG_FRAMERATE(app::slowLoopAvgFrameRate)
 					CALCULATE_DELTATIME(deltaTime)
 					
-					V4D_Game::ForEachSortedModule([](auto* mod){
-						if (mod->SlowUpdate) mod->SlowUpdate(deltaTime);
+					V4D_Mod::ForEachSortedModule([](auto* mod){
+						if (mod->SlowLoopUpdate) mod->SlowLoopUpdate(deltaTime);
 					});
-					
-					V4D_Physics::ForEachSortedModule([](auto* mod){
-						if (mod->SlowStepSimulation) mod->SlowStepSimulation(deltaTime);
-					});
-					
-					if (app::isServer) {
-						V4D_Server::ForEachSortedModule([](auto* mod){
-							if (mod->SlowGameLoop) mod->SlowGameLoop();
-						});
-					}
-					
-					if (app::isClient) {
-						V4D_Client::ForEachSortedModule([](auto* mod){
-							if (mod->SlowGameLoop) mod->SlowGameLoop();
-						});
-					}
 					
 					// Auto-reload modified shaders
 					#if defined(_DEBUG)

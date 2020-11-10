@@ -4,13 +4,41 @@
 namespace app::input {
 
 	void AddCallbacks() {
-		V4D_Input::ForEachSortedModule([](auto* mod){
-			mod->AddCallbacks(app::window);
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->InputCallbackName) {
+				std::string callbackName = mod->InputCallbackName();
+				if (mod->InputKeyCallback) {
+					window->AddKeyCallback(callbackName, [mod](int key, int scancode, int action, int mods){
+						mod->InputKeyCallback(key, scancode, action, mods);
+					});
+				}
+				if (mod->MouseButtonCallback) {
+					window->AddMouseButtonCallback(callbackName, [mod](int button, int action, int mods){
+						mod->MouseButtonCallback(button, action, mods);
+					});
+				}
+				if (mod->InputScrollCallback) {
+					window->AddScrollCallback(callbackName, [mod](double x, double y){
+						mod->InputScrollCallback(x, y);
+					});
+				}
+				if (mod->InputCharCallback) {
+					window->AddCharCallback(callbackName, [mod](unsigned int c){
+						mod->InputCharCallback(c);
+					});
+				}
+			}
 		});
 	}
 	void RemoveCallbacks() {
-		V4D_Input::ForEachSortedModule([](auto* mod){
-			mod->RemoveCallbacks(app::window);
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->InputCallbackName) {
+				std::string callbackName = mod->InputCallbackName();
+				window->RemoveKeyCallback(callbackName);
+				window->RemoveMouseButtonCallback(callbackName);
+				window->RemoveScrollCallback(callbackName);
+				window->RemoveCharCallback(callbackName);
+			}
 		});
 	}
 
@@ -25,8 +53,8 @@ namespace app::input {
 			
 				glfwPollEvents();
 				
-				V4D_Input::ForEachSortedModule([](auto* mod){
-					if (mod->Update) mod->Update(deltaTime);
+				V4D_Mod::ForEachSortedModule([](auto* mod){
+					if (mod->InputUpdate) mod->InputUpdate(deltaTime);
 				});
 			}
 			

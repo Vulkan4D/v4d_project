@@ -25,117 +25,49 @@ namespace app::modules {
 		}
 		for (auto module : app::modulesList) if (module[0] != '#') {
 			LOG("Loading module " << module)
-			V4D_Objects::LoadModule(module);
-			V4D_Game::LoadModule(module);
-			V4D_Input::LoadModule(module);
-			V4D_Renderer::LoadModule(module);
-			V4D_Physics::LoadModule(module);
-			V4D_Server::LoadModule(module);
-			V4D_Client::LoadModule(module);
-		}
-		if (!V4D_Renderer::GetPrimaryModule()) { // We need at least one primary Renderer module
-			V4D_Renderer::LoadModule(APP_DEFAULT_RENDERER_MODULE);
+			V4D_Mod::LoadModule(module);
 		}
 		// Sort Modules
-		V4D_Objects::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Game::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Input::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Renderer::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Physics::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Server::SortModules([](auto* a, auto* b){
-			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
-		});
-		V4D_Client::SortModules([](auto* a, auto* b){
+		V4D_Mod::SortModules([](auto* a, auto* b){
 			return (a->OrderIndex? a->OrderIndex():0) < (b->OrderIndex? b->OrderIndex():0);
 		});
 	}
 	void Unload() {
-		V4D_Objects::UnloadModules();
-		V4D_Game::UnloadModules();
-		V4D_Input::UnloadModules();
-		V4D_Renderer::UnloadModules();
-		V4D_Physics::UnloadModules();
-		V4D_Server::UnloadModules();
-		V4D_Client::UnloadModules();
+		V4D_Mod::UnloadModules();
 	}
 
-	void Init() {
-		if (app::renderer) {
-			V4D_Renderer::ForEachSortedModule([](auto* mod){
-				if (mod->Init) mod->Init(app::renderer, app::scene);
+	void InitWindow() {
+		if (app::window) {
+			V4D_Mod::ForEachSortedModule([](auto* mod){
+				if (mod->InitWindow) mod->InitWindow(app::window);
 			});
 		}
-		V4D_Objects::ForEachSortedModule([](auto* mod){
-			if (mod->Init) mod->Init();
-		});
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->Init) mod->Init(app::scene);
-		});
-		V4D_Physics::ForEachSortedModule([](auto* mod){
-			if (mod->Init) mod->Init(app::renderer, app::scene);
-		});
-		if (app::window && app::renderer) {
-			V4D_Input::ForEachSortedModule([](auto* mod){
-				if (mod->Init) mod->Init(app::window, app::renderer, app::scene);
+	}
+	void InitRenderer() {
+		if (app::renderer) {
+			V4D_Mod::ForEachSortedModule([](auto* mod){
+				if (mod->InitRenderer) mod->InitRenderer(app::renderer);
 			});
 		}
 	}
 	void InitServer(std::shared_ptr<app::Server> server) {
-		V4D_Server::ForEachSortedModule([server](auto* mod){
-			if (mod->Init) mod->Init(server, app::scene);
+		V4D_Mod::ForEachSortedModule([server](auto* mod){
+			if (mod->InitServer) mod->InitServer(server);
 		});
 	}
 	void InitClient(std::shared_ptr<app::Client> client) {
-		V4D_Client::ForEachSortedModule([client](auto* mod){
-			if (mod->Init) mod->Init(client, app::scene);
+		V4D_Mod::ForEachSortedModule([client](auto* mod){
+			if (mod->InitClient) mod->InitClient(client);
 		});
 	}
 
 	void LoadScene() {
-		V4D_Physics::ForEachSortedModule([](auto* mod){
-			if (mod->LoadScene) mod->LoadScene();
-		});
-		if (app::renderer) {
-			V4D_Renderer::ForEachSortedModule([](auto* mod){
-				if (mod->LoadScene) mod->LoadScene();
-			});
-		}
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->LoadScene) mod->LoadScene();
-		});
-		V4D_Server::ForEachSortedModule([](auto* mod){
-			if (mod->LoadScene) mod->LoadScene();
-		});
-		V4D_Client::ForEachSortedModule([](auto* mod){
-			if (mod->LoadScene) mod->LoadScene();
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->LoadScene) mod->LoadScene(app::scene);
 		});
 	}
 	void UnloadScene() {
-		V4D_Client::ForEachSortedModule([](auto* mod){
-			if (mod->UnloadScene) mod->UnloadScene();
-		});
-		V4D_Server::ForEachSortedModule([](auto* mod){
-			if (mod->UnloadScene) mod->UnloadScene();
-		});
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->UnloadScene) mod->UnloadScene();
-		});
-		if (app::renderer) {
-			V4D_Renderer::ForEachSortedModule([](auto* mod){
-				if (mod->UnloadScene) mod->UnloadScene();
-			});
-		}
-		V4D_Physics::ForEachSortedModule([](auto* mod){
+		V4D_Mod::ForEachSortedModule([](auto* mod){
 			if (mod->UnloadScene) mod->UnloadScene();
 		});
 	}

@@ -77,7 +77,7 @@ namespace app {
 		}
 
 		#ifdef APP_ENABLE_BURST_STREAMS
-			static bool HandleIncomingBurst(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) {
+			static bool HandleIncomingBurst(v4d::io::SocketPtr socket, v4d::networking::IncomingClientPtr client, byte clientType) {
 				{std::lock_guard lock(BurstCache::burstMutex);
 					BurstCache::burstClientSocketTypes[client->id] = socket->GetSocketType();
 				}
@@ -95,10 +95,10 @@ namespace app {
 						auto _vendor = socket->Read<typeof ModuleID::vendor>();
 						auto _module = socket->Read<typeof ModuleID::module>();
 						ModuleID moduleID(_vendor, _module);
-						auto module = V4D_Server::GetModule(moduleID.String());
+						auto module = V4D_Mod::GetModule(moduleID.String());
 						DEBUG_ASSERT_ERROR(module, "Server::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
-						if (module && module->ReceiveBurst) {
-							module->ReceiveBurst(socket, client);
+						if (module && module->ServerReceiveBurst) {
+							module->ServerReceiveBurst(socket, client);
 						}
 					}break;
 					
@@ -114,7 +114,7 @@ namespace app {
 				return true;
 			}
 				
-			static void StartBurstSenderThread(v4d::io::SocketPtr socket, IncomingClientPtr client) {
+			static void StartBurstSenderThread(v4d::io::SocketPtr socket, v4d::networking::IncomingClientPtr client) {
 				try {
 					BurstCache::burstThreads.at(client->id);
 				} catch(...) {
@@ -144,9 +144,9 @@ namespace app {
 								{std::lock_guard lock(BurstCache::burstMutex);
 									currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
 								}
-								V4D_Server::ForEachSortedModule([client, currentBurstSocket](auto* mod){
+								V4D_Mod::ForEachSortedModule([client, currentBurstSocket](auto* mod){
 									ModuleID moduleID(mod->ModuleName());
-									if (mod->SendBursts) {
+									if (mod->ServerSendBursts) {
 										currentBurstSocket->LockWrite();
 										currentBurstSocket->Begin = [currentBurstSocket, mod, client](){
 											ModuleID moduleID(mod->ModuleName());
@@ -164,10 +164,10 @@ namespace app {
 											*currentBurstSocket << moduleID.module;
 										};
 										currentBurstSocket->End = [currentBurstSocket, mod, client](){
-											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Server::SendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
+											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Mod::ServerSendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 											currentBurstSocket->Flush();
 										};
-										mod->SendBursts(currentBurstSocket, client);
+										mod->ServerSendBursts(currentBurstSocket, client);
 										currentBurstSocket->UnlockWrite();
 									}
 								});
@@ -184,7 +184,7 @@ namespace app {
 			
 		#endif
 		
-		static bool HandleIncomingAction(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) {
+		static bool HandleIncomingAction(v4d::io::SocketPtr socket, v4d::networking::IncomingClientPtr client, byte clientType) {
 			ACTION action;
 			try {
 				action = socket->Read<ACTION>();
@@ -199,10 +199,10 @@ namespace app {
 					auto _vendor = socket->Read<typeof ModuleID::vendor>();
 					auto _module = socket->Read<typeof ModuleID::module>();
 					ModuleID moduleID(_vendor, _module);
-					auto module = V4D_Server::GetModule(moduleID.String());
+					auto module = V4D_Mod::GetModule(moduleID.String());
 					DEBUG_ASSERT_ERROR(module, "Server::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
-					if (module && module->ReceiveAction) {
-						module->ReceiveAction(socket, client);
+					if (module && module->ServerReceiveAction) {
+						module->ServerReceiveAction(socket, client);
 					}
 				}break;
 				
@@ -220,13 +220,13 @@ namespace app {
 			return true;
 		}
 		
-		virtual void RunClient(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) override {
+		virtual void RunClient(v4d::io::SocketPtr socket, v4d::networking::IncomingClientPtr client, byte clientType) override {
 			if (clientType == CLIENT_TYPE::INITIAL) {
 				
 				// IncomingClient
-				V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
-					if (mod->IncomingClient) {
-						mod->IncomingClient(client);
+				V4D_Mod::ForEachSortedModule([this, client, socket](auto* mod){
+					if (mod->ServerIncomingClient) {
+						mod->ServerIncomingClient(client);
 					}
 				});
 				
@@ -242,8 +242,8 @@ namespace app {
 								while(socket->IsConnected()) {
 									THREAD_TICK
 									
-									V4D_Server::ForEachSortedModule([this, client, socket](auto* mod){
-										if (mod->SendActions) {
+									V4D_Mod::ForEachSortedModule([this, client, socket](auto* mod){
+										if (mod->ServerSendActions) {
 											socket->LockWrite();
 											socket->Begin = [this, socket, mod](){
 												ModuleID moduleID(mod->ModuleName());
@@ -252,10 +252,10 @@ namespace app {
 												*socket << moduleID.module;
 											};
 											socket->End = [this, socket, mod](){
-												DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Server::SendActions for module '" << mod->ModuleName() << "' stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
+												DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Mod::ServerSendActions for module '" << mod->ModuleName() << "' stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
 												socket->Flush();
 											};
-											mod->SendActions(socket, client);
+											mod->ServerSendActions(socket, client);
 											socket->UnlockWrite();
 										}
 									});
@@ -320,7 +320,7 @@ namespace app {
 
 			virtual ulong Authenticate(v4d::data::ReadOnlyStream*) override {return 0;}
 			
-			virtual void RunClient(v4d::io::SocketPtr socket, IncomingClientPtr client, byte clientType) override {
+			virtual void RunClient(v4d::io::SocketPtr socket, v4d::networking::IncomingClientPtr client, byte clientType) override {
 				{std::scoped_lock lock(BurstCache::burstMutex);
 					BurstCache::burstClientSocketTypes[client->id] = v4d::io::UDP;
 					Server::StartBurstSenderThread(socket, client);

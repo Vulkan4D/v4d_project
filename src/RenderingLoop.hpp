@@ -83,14 +83,11 @@ namespace app {
 					
 			if (showOtherUI) {
 				// Modules
-				V4D_Renderer::ForEachSortedModule([](auto* mod){
-					if (mod->RunUi) mod->RunUi();
-				});
-				V4D_Physics::ForEachSortedModule([](auto* mod){
-					if (mod->RunUi) mod->RunUi();
+				V4D_Mod::ForEachSortedModule([](auto* mod){
+					if (mod->DrawUi) mod->DrawUi();
 				});
 			}
-					
+			
 			#ifdef _ENABLE_IMGUI
 					ImGui::Render();
 				}
@@ -99,8 +96,8 @@ namespace app {
 			if (!app::renderer->graphicsLoadedToDevice || app::renderer->mustReload) return;
 			
 			{
-				V4D_Renderer::ForEachSortedModule([](auto* mod){
-					if (mod->Update2) mod->Update2();
+				V4D_Mod::ForEachSortedModule([](auto* mod){
+					if (mod->SecondaryRenderUpdate) mod->SecondaryRenderUpdate();
 				});
 			}
 			

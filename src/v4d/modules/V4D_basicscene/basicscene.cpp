@@ -64,16 +64,14 @@ void CreateCornellBox(ObjectInstance* obj) {
 	
 }
 
-V4D_MODULE_CLASS(V4D_Game) {
+V4D_MODULE_CLASS(V4D_Mod) {
 	
-	V4D_MODULE_FUNC(void, Init, Scene* _s) {
+	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(10000);
 		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(10000);
 		v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(1024);
-	}
-	
-	V4D_MODULE_FUNC(void, LoadScene) {
+		
 		scene->Lock();
 		
 		// // Cornell boxes
@@ -142,7 +140,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		scene->ClenupObjectInstancesGeometries();
 	}
 	
-	V4D_MODULE_FUNC(void, RendererRunUiDebug) {
+	V4D_MODULE_FUNC(void, DrawUiDebug2) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::Text("%d objects", Geometry::globalBuffers.nbAllocatedObjects);
 		#endif

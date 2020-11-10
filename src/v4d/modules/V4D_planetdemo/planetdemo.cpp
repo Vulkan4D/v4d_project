@@ -5,6 +5,8 @@
 
 using namespace v4d::graphics;
 using namespace v4d::scene;
+using namespace v4d::graphics::vulkan;
+using namespace v4d::graphics::vulkan::rtx;
 
 const double distanceFromChunkToGenerateCollider = 2000;
 
@@ -130,10 +132,39 @@ ObjectInstancePtr sun = nullptr;
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
+Renderer* r = nullptr;
+V4D_Mod* mainRenderModule = nullptr;
 
 #ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
 	std::vector<glm::dvec3> collidingObjectPositions {};
 #endif
+
+#pragma region Graphics stuff
+
+PipelineLayout planetsMapGenLayout;
+
+ComputeShaderPipeline 
+	bumpMapsAltitudeGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.altitude.map.comp"},
+	bumpMapsNormalsGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.normals.map.comp"}
+;
+
+RasterShaderPipeline* planetTerrainRasterShader = nullptr;
+
+struct MapGenPushConstant {
+	int planetIndex;
+	float planetHeightVariation;
+} mapGenPushConstant;
+
+DescriptorSet mapsGenDescriptorSet, mapsSamplerDescriptorSet;
+
+#define MAX_PLANETS 1
+
+Image bumpMaps[1] {// xyz=normal, a=altitude
+	Image { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, 1, 1, {VK_FORMAT_R32G32B32A32_SFLOAT}},
+};
+bool bumpMapsGenerated = false;
+
+#pragma endregion
 
 void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk, int& chunksToGeneratePerFrame) {
 	if (chunk->active) {
@@ -191,23 +222,28 @@ void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetT
 	}
 }
 
-V4D_MODULE_CLASS(V4D_Game) {
+V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		V4D_Renderer::LoadModule(THIS_MODULE);
-		((PlayerView*)V4D_Game::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0))->camSpeed = 100000;
+		((PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0))->camSpeed = 100000;
+		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
 	}
 	
-	V4D_MODULE_FUNC(void, ModuleSetCustomPtr, int what, void* ptr) {
-		switch (what) {
-			case ATMOSPHERE_SHADER: 
-				planetAtmosphereShader = (PlanetAtmosphereShaderPipeline*) ptr;
-				break;
-		}
+	V4D_MODULE_FUNC(void, ModuleUnload) {
+		if (planetAtmosphereShader) delete planetAtmosphereShader;
+		if (planetTerrainRasterShader) delete planetTerrainRasterShader;
 	}
 	
-	V4D_MODULE_FUNC(void, Init, Scene* _s) {
+	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
+		r = _r;
+	}
+	
+	V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
+		r->deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
+	}
+	
+	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 		
 		static const int maxTerrainChunksInMemory = 1800; // 1.0 Gb (577 kb per chunk)
@@ -215,9 +251,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(maxTerrainChunksInMemory);
 		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbVerticesPerChunk);
 		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbIndicesPerChunk);
-	}
-	
-	V4D_MODULE_FUNC(void, LoadScene) {
+		
 		TerrainGeneratorLib::Start();
 		
 		// Light source
@@ -233,13 +267,13 @@ V4D_MODULE_CLASS(V4D_Game) {
 	}
 	
 	// Images / Buffers / Pipelines
-	V4D_MODULE_FUNC(void, RendererCreateResources, Device* device) {
+	V4D_MODULE_FUNC(void, CreateVulkanResources2, Device* device) {
 		renderingDevice = device;
 		// Chunk Generator
 		PlanetTerrain::StartChunkGenerator();
 	}
 	
-	V4D_MODULE_FUNC(void, RendererDestroyResources, Device* device) {
+	V4D_MODULE_FUNC(void, DestroyVulkanResources2, Device* device) {
 		// Chunk Generator
 		PlanetTerrain::EndChunkGenerator();
 		if (terrain) {
@@ -253,7 +287,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(void, RendererFrameUpdate) {
+	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
 			if (!terrain) {
@@ -310,7 +344,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		//
 	}
 	
-	V4D_MODULE_FUNC(void, RendererFrameUpdate2) {
+	V4D_MODULE_FUNC(void, BeginSecondaryFrameUpdate) {
 		// for each planet
 			if (terrain) {
 				std::lock_guard lock(terrain->chunksMutex);
@@ -323,7 +357,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		// PlanetTerrain::CollectGarbage(renderingDevice);
 	}
 	
-	V4D_MODULE_FUNC(void, RendererFrameCompute, VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, SecondaryFrameCompute, VkCommandBuffer commandBuffer) {
 		// for each planet
 			if (terrain) {
 				scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
@@ -359,7 +393,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 		//
 	}
 	
-	V4D_MODULE_FUNC(void, RendererRunUi) {
+	V4D_MODULE_FUNC(void, DrawUi2) {
 		#ifdef _ENABLE_IMGUI
 			// for each planet
 				ImGui::Separator();
@@ -386,7 +420,7 @@ V4D_MODULE_CLASS(V4D_Game) {
 			//
 		#endif
 	}
-	V4D_MODULE_FUNC(void, RendererRunUiDebug) {
+	V4D_MODULE_FUNC(void, DrawUiDebug2) {
 		// #ifdef _DEBUG
 			#ifdef _ENABLE_IMGUI
 				if (terrain) {
@@ -404,6 +438,133 @@ V4D_MODULE_CLASS(V4D_Game) {
 				}
 			#endif
 		// #endif
+	}
+	
+	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
+		auto* rasterVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_raster");
+		auto* rayTracingVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
+		auto* rayTracingLightingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_lighting_rays");
+		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
+		
+		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
+		r->descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;
+		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
+		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
+		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
+		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		
+		rayTracingVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		rayTracingLightingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		rasterVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		
+		// Atmosphere raster shader
+		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*fogPipelineLayout, {
+			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.vert",
+			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.frag",
+		}};
+		planetAtmosphereShader->camera = &scene->camera;
+		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
+		mainRenderModule->AddShader("sg_fog", planetAtmosphereShader);
+		
+		// Terrain raster shader
+		planetTerrainRasterShader = new RasterShaderPipeline(*rasterVisibilityPipelineLayout, {
+			Geometry::geometryRenderTypes["terrain"].rasterShader->GetShaderPath("vert"),
+			"modules/V4D_planetdemo/assets/shaders/planets.terrain.frag",
+		});
+		mainRenderModule->AddShader("sg_visibility", planetTerrainRasterShader);
+	}
+	
+	V4D_MODULE_FUNC(void, ConfigureShaders) {
+		auto* shaderBindingTableVisibility = mainRenderModule->GetShaderBindingTable("sbt_visibility");
+		auto* shaderBindingTableLighting = mainRenderModule->GetShaderBindingTable("sbt_lighting");
+		
+		Geometry::geometryRenderTypes["planet_terrain"].sbtOffset = 
+			shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+			shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Geometry::geometryRenderTypes["planet_terrain"].rasterShader = planetTerrainRasterShader;
+		
+		// Atmosphere
+		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
+		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
+			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
+		#else
+			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		#endif
+	}
+	
+	V4D_MODULE_FUNC(void, ReadShaders) {
+		bumpMapsAltitudeGen.ReadShaders();
+		bumpMapsNormalsGen.ReadShaders();
+	}
+	
+	// Images / Buffers / Pipelines
+	V4D_MODULE_FUNC(void, CreateVulkanResources) {
+		// Bump Maps
+		bumpMaps[0].samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		bumpMaps[0].samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		bumpMaps[0].samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		bumpMaps[0].Create(r->renderingDevice, 4096);
+		
+		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("transfer"));
+			r->TransitionImageLayout(cmdBuffer, bumpMaps[0], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("transfer"), cmdBuffer);
+	}
+	
+	V4D_MODULE_FUNC(void, DestroyVulkanResources) {
+		bumpMaps[0].Destroy(r->renderingDevice);
+		bumpMapsGenerated = false;
+	}
+	
+	V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
+		planetsMapGenLayout.Create(r->renderingDevice);
+		bumpMapsAltitudeGen.CreatePipeline(r->renderingDevice);
+		bumpMapsNormalsGen.CreatePipeline(r->renderingDevice);
+	}
+	
+	V4D_MODULE_FUNC(void, DestroyVulkanPipelines) {
+		bumpMapsAltitudeGen.DestroyPipeline(r->renderingDevice);
+		bumpMapsNormalsGen.DestroyPipeline(r->renderingDevice);
+		planetsMapGenLayout.Destroy(r->renderingDevice);
+	}
+	
+	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer cmdBuffer) {
+		if (!bumpMapsGenerated) {
+			
+			bumpMapsAltitudeGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
+			bumpMapsAltitudeGen.Execute(r->renderingDevice, cmdBuffer);
+			
+			VkImageMemoryBarrier barrier = {};
+				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+				barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier.image = bumpMaps[0].image;
+				barrier.subresourceRange.baseMipLevel = 0;
+				barrier.subresourceRange.levelCount = 1;
+				barrier.subresourceRange.baseArrayLayer = 0;
+				barrier.subresourceRange.layerCount = 1;
+				barrier.srcAccessMask = 0;
+				barrier.dstAccessMask = 0;
+				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			r->renderingDevice->CmdPipelineBarrier(
+				cmdBuffer,
+				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				0,
+				0, nullptr,
+				0, nullptr,
+				1, &barrier
+			);
+	
+			bumpMapsNormalsGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
+			bumpMapsNormalsGen.Execute(r->renderingDevice, cmdBuffer);
+				
+			bumpMapsGenerated = true;
+		}
 	}
 	
 };

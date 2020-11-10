@@ -1646,8 +1646,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			if (currentRayCast.hit) {
 				auto objData = ((Geometry::ObjectBuffer_T*)(Geometry::globalBuffers.objectBuffer.stagingBuffer.data))[currentRayCast.objectBufferOffset];
 				if (objData.moduleVen != 0 && objData.moduleId != 0) {
-					auto mod = V4D_Game::LoadModule(v4d::modular::ModuleID(objData.moduleVen, objData.moduleId));
-					if (mod && mod->RendererRayCast) {
+					auto mod = V4D_Mod::LoadModule(v4d::modular::ModuleID(objData.moduleVen, objData.moduleId));
+					if (mod && mod->OnRendererRayCastHit) {
 						RenderRayCastHit hit;
 							hit.position = glm::inverse(objData.modelTransform) * glm::inverse(scene->camera.viewMatrix) * glm::dvec4(currentRayCast.position, 1);
 							hit.distance = currentRayCast.distance;
@@ -1657,7 +1657,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 							hit.customData0 = currentRayCast.customData0;
 							hit.customData1 = currentRayCast.customData1;
 							hit.customData2 = currentRayCast.customData2;
-						mod->RendererRayCast(hit);
+						mod->OnRendererRayCastHit(hit);
 					}
 				}
 			}
@@ -1673,8 +1673,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		RunTXAA();
 		
 		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->RendererFrameUpdate) mod->RendererFrameUpdate();
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->BeginFrameUpdate) mod->BeginFrameUpdate();
 		});
 		
 		// Ray Tracing
@@ -1763,15 +1763,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		
 	}
 
-	void FrameUpdate2() {
-		PostProcessingUpdate2();
-		
-		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->RendererFrameUpdate2) mod->RendererFrameUpdate2();
-		});
-	}
-
 #pragma endregion
 
 #pragma region Graphics commands
@@ -1808,8 +1799,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 		}
 		
-		V4D_Renderer::ForEachSortedModule([&commandBuffer](auto* mod){
-			if (mod->Render) mod->Render(commandBuffer);
+		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
+			if (mod->RenderUpdate2) mod->RenderUpdate2(commandBuffer);
 		}, "render");
 	}
 	
@@ -1825,14 +1816,13 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 
 ///////////////////////////////////////////////////////////
 
-V4D_MODULE_CLASS(V4D_Renderer) {
+V4D_MODULE_CLASS(V4D_Mod) {
 	
-	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {return true;}
 	V4D_MODULE_FUNC(int, OrderIndex) {return -1000;}
 	
 	#pragma region Containers Access
 		
-		V4D_MODULE_FUNC(Image,* GetImage, const std::string& name) {
+		V4D_MODULE_FUNC(Image*, GetImage, const std::string& name) {
 			if (images.find(name) == images.end()) {
 				throw std::runtime_error(std::string("Image '") + name + "' does not exist");
 				return nullptr;
@@ -1878,11 +1868,14 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 		}
 		
-		V4D_MODULE_FUNC(void, Init, Renderer* _r, Scene* _s) {
-			r = _r;
+		V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 			scene = _s;
+		}
+		
+		V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
+			r = _r;
 			
-			V4D_Renderer::SortModules([](auto* a, auto* b){
+			V4D_Mod::SortModules([](auto* a, auto* b){
 				return (a->RenderOrderIndex? a->RenderOrderIndex():0) < (b->RenderOrderIndex? b->RenderOrderIndex():0);
 			}, "render");
 			
@@ -1904,7 +1897,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			AccelerationStructure::useGlobalScratchBuffer = true;
 		}
 		
-		V4D_MODULE_FUNC(void, InitDeviceFeatures) {
+		V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
 			r->deviceFeatures.shaderFloat64 = VK_TRUE;
 			r->deviceFeatures.depthClamp = VK_TRUE;
 			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
@@ -1939,7 +1932,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 	
 	#pragma endregion
 	
-	V4D_MODULE_FUNC(void, InitLayouts) {
+	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
 		{r->descriptorSets["set0_base"] = &set0_base;
 			set0_base.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			set0_base.AddBinding_storageBuffer(1, &Geometry::globalBuffers.objectBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR);
@@ -2083,7 +2076,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			shader_raycast_compute.ReadShaders();
 		}
 		
-		V4D_MODULE_FUNC(void, CreateSyncObjects) {
+		V4D_MODULE_FUNC(void, CreateVulkanSyncObjects) {
 			semaphores["imageAvailable"].resize(r->NB_FRAMES_IN_FLIGHT);
 			semaphores["staticRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
 			semaphores["dynamicRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
@@ -2111,14 +2104,14 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 		}
 
-		V4D_MODULE_FUNC(void, DestroySyncObjects) {
+		V4D_MODULE_FUNC(void, DestroyVulkanSyncObjects) {
 			for (int i = 0; i < r->NB_FRAMES_IN_FLIGHT; i++) {
 				for (auto&[name, s] : semaphores) r->renderingDevice->DestroySemaphore(s[i], nullptr);
 				for (auto&[name, f] : fences) r->renderingDevice->DestroyFence(f[i], nullptr);
 			}
 		}
 
-		V4D_MODULE_FUNC(void, CreateResources) {
+		V4D_MODULE_FUNC(void, CreateVulkanResources) {
 			CreateUiResources();
 			CreateRenderingResources();
 			CreatePostProcessingResources();
@@ -2134,14 +2127,9 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				tex_img_font_atlas.CopyStagingBufferToImage(r->renderingDevice, commandBuffer);
 			r->renderingDevice->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 			tex_img_font_atlas.FreeStagingMemory(r->renderingDevice);
-
-			// Modules
-			V4D_Game::ForEachSortedModule([](auto* mod){
-				if (mod->RendererCreateResources) mod->RendererCreateResources(r->renderingDevice);
-			});
 		}
 		
-		V4D_MODULE_FUNC(void, DestroyResources) {
+		V4D_MODULE_FUNC(void, DestroyVulkanResources) {
 			DestroyUiResources();
 			DestroyRenderingResources();
 			DestroyPostProcessingResources();
@@ -2150,14 +2138,9 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			
 			// Textures
 			tex_img_font_atlas.DestroyImage(r->renderingDevice);
-
-			// Modules
-			V4D_Game::ForEachSortedModule([](auto* mod){
-				if (mod->RendererDestroyResources) mod->RendererDestroyResources(r->renderingDevice);
-			});
 		}
 		
-		V4D_MODULE_FUNC(void, AllocateBuffers) {
+		V4D_MODULE_FUNC(void, AllocateVulkanBuffers) {
 			// Uniform Buffers
 			cameraUniformBuffer.Allocate(r->renderingDevice);
 			activeLightsUniformBuffer.Allocate(r->renderingDevice);
@@ -2183,7 +2166,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			Geometry::globalBuffers.Allocate(r->renderingDevice, {r->renderingDevice->GetQueue("compute").familyIndex, r->renderingDevice->GetQueue("graphics").familyIndex});
 		}
 		
-		V4D_MODULE_FUNC(void, FreeBuffers) {
+		V4D_MODULE_FUNC(void, FreeVulkanBuffers) {
 			scene->ClenupObjectInstancesGeometries();
 			activeRayTracedGeometries.clear();
 			
@@ -2211,7 +2194,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			Geometry::globalBuffers.Free(r->renderingDevice);
 		}
 
-		V4D_MODULE_FUNC(void, CreatePipelines) {
+		V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
 			// Sort shaders
 			for (auto&[rs, ss] : shaderGroups) {
 				std::sort(ss.begin(), ss.end(), [](auto* a, auto* b){
@@ -2243,7 +2226,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			CreatePostProcessingPipeline();
 		}
 		
-		V4D_MODULE_FUNC(void, DestroyPipelines) {
+		V4D_MODULE_FUNC(void, DestroyVulkanPipelines) {
 			// UI
 			#ifdef _ENABLE_IMGUI
 				UnloadImGui();
@@ -2268,7 +2251,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 		}
 		
-		V4D_MODULE_FUNC(void, CreateCommandBuffers) {
+		V4D_MODULE_FUNC(void, CreateVulkanCommandBuffers) {
 			VkCommandBufferAllocateInfo allocInfo = {};
 			allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 			allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -2317,7 +2300,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 		}
 
-		V4D_MODULE_FUNC(void, DestroyCommandBuffers) {
+		V4D_MODULE_FUNC(void, DestroyVulkanCommandBuffers) {
 			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphics"].size()), commandBuffers["graphics"].data());
 			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphicsDynamic"].size()), commandBuffers["graphicsDynamic"].data());
 		}
@@ -2341,7 +2324,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		
 	#pragma endregion
 
-	V4D_MODULE_FUNC(void, Update) {
+	V4D_MODULE_FUNC(void, RenderUpdate) {
 		
 		uint64_t timeout = 1000UL * 1000 * 1000 * 10; // 10 seconds
 
@@ -2475,8 +2458,13 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
-	V4D_MODULE_FUNC(void, Update2) {
-		FrameUpdate2();
+	V4D_MODULE_FUNC(void, SecondaryRenderUpdate) {
+		PostProcessingUpdate2();
+		
+		// Modules
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->BeginSecondaryFrameUpdate) mod->BeginSecondaryFrameUpdate();
+		});
 	
 		// Dynamic compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
@@ -2484,17 +2472,17 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			RunDynamicPostProcessingCompute(cmdBuffer);
 			
 			// Modules
-			V4D_Game::ForEachSortedModule([cmdBuffer](auto* mod){
-				if (mod->RendererFrameCompute) mod->RendererFrameCompute(cmdBuffer);
+			V4D_Mod::ForEachSortedModule([cmdBuffer](auto* mod){
+				if (mod->SecondaryFrameCompute) mod->SecondaryFrameCompute(cmdBuffer);
 			});
-			V4D_Renderer::ForEachSortedModule([cmdBuffer](auto* mod){
-				if (mod->Render2) mod->Render2(cmdBuffer);
+			V4D_Mod::ForEachSortedModule([cmdBuffer](auto* mod){
+				if (mod->SecondaryRenderUpdate2) mod->SecondaryRenderUpdate2(cmdBuffer);
 			}, "render");
 			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("secondary"), cmdBuffer);
 	}
 	
-	V4D_MODULE_FUNC(void, RunUi) {
+	V4D_MODULE_FUNC(void, DrawUi) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::SetNextWindowSize({340, 150});
 			ImGui::Begin("Settings and Modules");
@@ -2528,12 +2516,12 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 			}
 		#endif
 		// Modules
-		V4D_Game::ForEachSortedModule([](auto* mod){
-			if (mod->RendererRunUi) {
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->DrawUi2) {
 				#ifdef _ENABLE_IMGUI
 					ImGui::Separator();
 				#endif
-				mod->RendererRunUi();
+				mod->DrawUi2();
 			}
 		});
 		#ifdef _ENABLE_IMGUI
@@ -2549,11 +2537,11 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 				else ImGui::Text("RayCast no hit");
 			#endif
 				// Modules
-				V4D_Game::ForEachSortedModule([](auto* mod){
+				V4D_Mod::ForEachSortedModule([](auto* mod){
 					#ifdef _ENABLE_IMGUI
 						ImGui::Separator();
 					#endif
-					if (mod->RendererRunUiDebug) mod->RendererRunUiDebug();
+					if (mod->DrawUiDebug2) mod->DrawUiDebug2();
 				});
 			#ifdef _ENABLE_IMGUI
 				ImGui::End();
@@ -2563,7 +2551,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 	
 	// Render pipelines
 	
-	V4D_MODULE_FUNC(void, Render2, VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
 		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
 			{
@@ -2617,7 +2605,7 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		uiRenderPass.End(r->renderingDevice, commandBuffer);
 	}
 	
-	V4D_MODULE_FUNC(void, Render, VkCommandBuffer commandBuffer) {
+	V4D_MODULE_FUNC(void, RenderUpdate2, VkCommandBuffer commandBuffer) {
 		if (DEBUG_OPTIONS::WIREFRAME) {
 			RunRasterVisibility(r->renderingDevice, commandBuffer);
 			RunRasterLighting(r->renderingDevice, commandBuffer, true, false);
@@ -2637,4 +2625,28 @@ V4D_MODULE_CLASS(V4D_Renderer) {
 		}
 	}
 
+
+	#pragma region Input
+	
+	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
+	
+	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
+		if (action != GLFW_RELEASE
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
+			switch (key) {
+				
+				// Reload Renderer
+				case GLFW_KEY_R:
+					r->ReloadRenderer();
+					break;
+				
+			}
+		}
+	}
+	
+	#pragma endregion
+	
 };

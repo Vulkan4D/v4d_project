@@ -115,17 +115,18 @@ void app::Start() {
 	
 	{// Load scene
 		app::scene = new v4d::scene::Scene;
-		app::modules::Init();
 		app::modules::LoadScene();
 	}
 	
 	// Load Inputs
 	if (app::window) {
+		app::modules::InitWindow();
 		app::input::AddCallbacks();
 	}
 	
 	// Load Renderer
 	if (app::renderer) {
+		app::modules::InitRenderer();
 		app::graphics::LoadRenderer();
 	}
 	

@@ -53,10 +53,10 @@ namespace app {
 						auto _vendor = socket->Read<typeof ModuleID::vendor>();
 						auto _module = socket->Read<typeof ModuleID::module>();
 						ModuleID moduleID(_vendor, _module);
-						auto module = V4D_Client::GetModule(moduleID.String());
+						auto module = V4D_Mod::GetModule(moduleID.String());
 						DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
-						if (module && module->ReceiveBurst) {
-							module->ReceiveBurst(socket);
+						if (module && module->ClientReceiveBurst) {
+							module->ClientReceiveBurst(socket);
 						}
 					}break;
 					
@@ -88,10 +88,10 @@ namespace app {
 					auto _vendor = socket->Read<typeof ModuleID::vendor>();
 					auto _module = socket->Read<typeof ModuleID::module>();
 					ModuleID moduleID(_vendor, _module);
-					auto module = V4D_Client::GetModule(moduleID.String());
+					auto module = V4D_Mod::GetModule(moduleID.String());
 					DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
-					if (module && module->ReceiveAction) {
-						module->ReceiveAction(socket);
+					if (module && module->ClientReceiveAction) {
+						module->ClientReceiveAction(socket);
 					}
 				}break;
 				
@@ -117,8 +117,8 @@ namespace app {
 					while (socket->IsConnected()) {
 						THREAD_TICK
 						
-						V4D_Client::ForEachSortedModule([this, socket](auto* mod){
-							if (mod->SendActions) {
+						V4D_Mod::ForEachSortedModule([this, socket](auto* mod){
+							if (mod->ClientSendActions) {
 								socket->LockWrite();
 								socket->Begin = [this, socket, mod](){
 									ModuleID moduleID(mod->ModuleName());
@@ -126,10 +126,10 @@ namespace app {
 									*socket << moduleID.vendor << moduleID.module;
 								};
 								socket->End = [this, socket, mod](){
-									DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Client::SendActions for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
+									DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_ACTION_BUFFER_SIZE, "V4D_Mod::ClientSendActions for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_ACTION_BUFFER_SIZE << " bytes")
 									socket->Flush();
 								};
-								mod->SendActions(socket);
+								mod->ClientSendActions(socket);
 								socket->UnlockWrite();
 							}
 						});
@@ -203,8 +203,8 @@ namespace app {
 						while(socket->IsConnected()) {
 							THREAD_TICK
 							
-							V4D_Client::ForEachSortedModule([this, host, port, clientType](auto* mod){
-								if (mod->SendBursts) {
+							V4D_Mod::ForEachSortedModule([this, host, port, clientType](auto* mod){
+								if (mod->ClientSendBursts) {
 									socket->LockWrite();
 									socket->Begin = [this, host, port, clientType, mod](){
 										ModuleID moduleID(mod->ModuleName());
@@ -218,10 +218,10 @@ namespace app {
 										*socket << moduleID.module;
 									};
 									socket->End = [this, mod](){
-										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Client::SendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
+										DEBUG_ASSERT_WARN(socket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Mod::ClientSendBursts for module " << mod->ModuleName() << " stream size was " << socket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 										socket->Flush();
 									};
-									mod->SendBursts(socket);
+									mod->ClientSendBursts(socket);
 									socket->UnlockWrite();
 								}
 							});

@@ -1,6 +1,57 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "btBulletDynamicsCommon.h"
+#include "../V4D_hybrid/camera_options.hh"
+
+using namespace v4d::scene;
+using namespace v4d::graphics;
+using namespace v4d::graphics::vulkan;
+
+v4d::graphics::Renderer* r = nullptr;
+v4d::scene::Scene* scene = nullptr;
+
+// #ifdef _DEBUG
+	class DebugDrawer : public btIDebugDraw {
+		int mode = DBG_DrawWireframe | DBG_DrawFeaturesText | DBG_DrawText | DBG_FastWireframe;
+		
+		void drawLine(const btVector3& from, const btVector3& to, const btVector3& color) override {
+			glm::vec4 clipSpace1 = scene->camera.projectionMatrix * scene->camera.viewMatrix * glm::dvec4(from.x(), from.y(), from.z(), 1);
+			glm::vec4 clipSpace2 = scene->camera.projectionMatrix * scene->camera.viewMatrix * glm::dvec4(to.x(), to.y(), to.z(), 1);
+			clipSpace1 /= clipSpace1.w;
+			clipSpace2 /= clipSpace2.w;
+			if (clipSpace1.z < 0 || clipSpace2.z < 0) return;
+			V4D_Mod::ForEachSortedModule([&](auto mod){
+				if (mod->DrawOverlayLine) {
+					mod->DrawOverlayLine(clipSpace1.x, clipSpace1.y, clipSpace2.x, clipSpace2.y, {color.x(), color.y(), color.z(), 1}, 2);
+					mod = nullptr;
+				}
+			});
+		}
+		void drawContactPoint(const btVector3& PointOnB, const btVector3& normalOnB, btScalar distance, int lifeTime, const btVector3& color) override {
+			
+		}
+		void reportErrorWarning(const char* warningString) override {
+			
+		}
+		void draw3dText(const btVector3& location, const char* textString) override {
+			glm::vec4 screenSpace = scene->camera.projectionMatrix * scene->camera.viewMatrix * glm::dvec4(location.x(), location.y(), location.z(), 1);
+			screenSpace /= screenSpace.w;
+			if (screenSpace.z < 0) return;
+			V4D_Mod::ForEachSortedModule([&](auto mod){
+				if (mod->DrawOverlayText) {
+					mod->DrawOverlayText(textString, screenSpace.x, screenSpace.y, {1,1,1,1}, 20);
+					mod = nullptr;
+				}
+			});
+		}
+		void setDebugMode(int debugMode) override {
+			mode = debugMode;
+		}
+		int getDebugMode() const override {
+			return mode;
+		}
+	} debugDrawer;
+// #endif
 
 btCollisionConfiguration* globalCollisionConfiguration = nullptr;
 btDispatcher* globalPhysicsDispatcher = nullptr;
@@ -16,8 +67,8 @@ glm::dquat BulletToGlm(const btQuaternion& q) { return glm::dquat(q.getW(), q.ge
 btQuaternion GlmToBullet(const glm::dquat& q) { return btQuaternion(q.x, q.y, q.z, q.w); }
 btMatrix3x3 GlmToBullet(const glm::dmat3& m) { return btMatrix3x3(m[0][0], m[1][0], m[2][0], m[0][1], m[1][1], m[2][1], m[0][2], m[1][2], m[2][2]); }
 btTransform GlmToBullet(const glm::dmat4& m) {
-    glm::dmat3 m3(m);
-    return btTransform(GlmToBullet(m3), GlmToBullet(glm::dvec3(m[3][0], m[3][1], m[3][2])));
+	glm::dmat3 m3(m);
+	return btTransform(GlmToBullet(m3), GlmToBullet(glm::dvec3(m[3][0], m[3][1], m[3][2])));
 }
 glm::dmat4 BulletToGlm(const btTransform& t) {
 	glm::dmat4 m{};
@@ -220,10 +271,6 @@ struct PhysicsObject : btMotionState {
 	
 };
 
-v4d::graphics::Renderer* r = nullptr;
-v4d::scene::Scene* scene = nullptr;
-V4D_Renderer* rendererModule = nullptr;
-
 std::unordered_map<v4d::scene::ObjectInstance*, PhysicsObject> physicsObjects {};
 std::queue<v4d::scene::ObjectInstancePtr> objectsToRefresh {};
 std::queue<v4d::scene::ObjectInstancePtr> objectsToRemove {};
@@ -259,24 +306,15 @@ void CleanupObjects() {
 	}
 }
 
-V4D_MODULE_CLASS(V4D_Physics) {
+V4D_MODULE_CLASS(V4D_Mod) {
 	
-	V4D_MODULE_FUNC(bool, ModuleIsPrimary) {
-		return true;
-	}
-	
-	V4D_MODULE_FUNC(void, ModuleLoad) {
-		// #ifdef _DEBUG
-			rendererModule = V4D_Renderer::LoadModule(THIS_MODULE);
-		// #endif
-	}
-	
-	V4D_MODULE_FUNC(void, Init, v4d::graphics::Renderer* _r, v4d::scene::Scene* _s) {
+	V4D_MODULE_FUNC(void, InitRenderer, v4d::graphics::Renderer* _r) {
 		r = _r;
-		scene = _s;
 	}
 	
-	V4D_MODULE_FUNC(void, LoadScene) {
+	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* _s) {
+		scene = _s;
+		
 		globalCollisionConfiguration = new btDefaultCollisionConfiguration();
 		globalPhysicsDispatcher = new btCollisionDispatcher(globalCollisionConfiguration);
 		globalOverlappingPairCache = new btDbvtBroadphase();
@@ -286,10 +324,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 		
 		// #ifdef _DEBUG
-			if (rendererModule) {
-				globalDynamicsWorld->setDebugDrawer((btIDebugDraw*)rendererModule->ModuleGetCustomPtr(0));
-				rendererModule->ModuleSetCustomPtr(0, globalDynamicsWorld);
-			}
+			globalDynamicsWorld->setDebugDrawer(&debugDrawer);
 		// #endif
 		
 		scene->objectInstanceRemovedCallbacks[THIS_MODULE] = [](v4d::scene::ObjectInstancePtr obj) {
@@ -326,11 +361,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		delete globalCollisionConfiguration;
 	}
 	
-	V4D_MODULE_FUNC(void, RunUi) {
-		
-	}
-	
-	V4D_MODULE_FUNC(void, StepSimulation, double deltaTime) {
+	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
 		// scene->Lock();
 			globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 			// Refresh info from scene objects
@@ -392,7 +423,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		globalDynamicsWorld->stepSimulation(deltaTime);
 	}
 	
-	V4D_MODULE_FUNC(bool, RayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	V4D_MODULE_FUNC(bool, PhysicsRayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
 		if (!hit) {
 			LOG_ERROR("RayCastClosest: The given hit pointer is null")
 			return false;
@@ -421,7 +452,7 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		return false;
 	}
 	
-	V4D_MODULE_FUNC(int, RayCastAll, std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	V4D_MODULE_FUNC(int, PhysicsRayCastAll, std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
 		if (!hits) {
 			LOG_ERROR("RayCastAll: The given hits pointer is null")
 			return 0;
@@ -447,5 +478,13 @@ V4D_MODULE_CLASS(V4D_Physics) {
 		}
 		return 0;
 	}
+	
+	// #ifdef _DEBUG
+		V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
+			if (globalDynamicsWorld && (scene->camera.debugOptions & DEBUG_OPTION_PHYSICS)) {
+				globalDynamicsWorld->debugDrawWorld();
+			}
+		}
+	// #endif
 	
 };
