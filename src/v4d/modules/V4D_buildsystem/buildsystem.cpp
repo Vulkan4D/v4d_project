@@ -26,7 +26,7 @@ std::array<ImTextureID, NB_BLOCKS> blocks_imGuiImg {};
 
 Renderer* r = nullptr;
 v4d::scene::Scene* scene = nullptr;
-PlayerView* player = nullptr;
+PlayerView* playerView = nullptr;
 V4D_Mod* mainRenderModule = nullptr;
 
 BuildInterface buildInterface {};
@@ -43,7 +43,7 @@ std::queue<v4d::data::Stream> clientActionQueue {};
 V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
-		player = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
+		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
 		mainMultiplayerModule = V4D_Mod::LoadModule("V4D_multiplayer");
 	}
@@ -272,7 +272,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		NetworkGameObjectPtr player = serverSideObjects->players.at(client->id);
+		// NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 		auto action = stream->Read<Action>();
 		switch (action) {
 			
@@ -437,7 +437,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			else buildInterface.highPrecisionGrid = false;
 		}
 		
-		player->canChangeVelocity = buildInterface.selectedBlockType == -1;
+		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1;
 	}
 	
 	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
@@ -452,13 +452,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				case GLFW_MOUSE_BUTTON_1:
 					// Left Click
 					if (buildInterface.selectedBlockType != -1 && buildInterface.isValid) {
-						scene->Lock();
 						if (buildInterface.tmpBlock && buildInterface.tmpBlock->block) {
-							NetworkGameObjectTransform transform {};
-							transform.SetFromTransformAndVelocity(buildInterface.tmpBlock->GetWorldTransform(), {0,0,0});
 							auto block = *buildInterface.tmpBlock->block;
 							auto parent = buildInterface.tmpBuildParent;
-							scene->Unlock();
 							
 							block.SetColor(BLOCK_COLOR_GREY);
 							
@@ -470,6 +466,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 									stream << block;
 								ClientEnqueueAction(stream);
 							} else {
+								NetworkGameObjectTransform transform {};
+								transform.SetFromTransformAndVelocity(buildInterface.GetTmpBuildWorldTransform(), {0,0,0});
 								v4d::data::WriteOnlyStream stream(256);
 									stream << CREATE_NEW_BUILD;
 									// Network data 
@@ -481,8 +479,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							// // deselect build tool
 							// buildInterface.selectedBlockType = -1;
 							// buildInterface.RemakeTmpBlock();
-						} else {
-							scene->Unlock();
 						}
 					}
 				break;
@@ -495,7 +491,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 		}
 		
-		player->canChangeVelocity = buildInterface.selectedBlockType == -1;
+		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1;
 	}
 	
 	V4D_MODULE_FUNC(void, InputScrollCallback, double x, double y) {

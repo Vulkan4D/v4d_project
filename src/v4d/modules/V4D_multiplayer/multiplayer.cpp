@@ -20,7 +20,7 @@ std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serve
 
 std::recursive_mutex clientActionQueueMutex;
 std::queue<v4d::data::Stream> clientActionQueue {};
-PlayerView* player = nullptr;
+PlayerView* playerView = nullptr;
 
 ServerSideObjects serverSideObjects {};
 ClientSideObjects clientSideObjects {};
@@ -29,7 +29,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		player = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
+		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 	}
 	
 	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
@@ -67,7 +67,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		std::lock_guard lock(serverSideObjects.mutex);
 		std::vector<uint32_t> objectsToRemove {};
 		for (auto& [objID, obj] : serverSideObjects.objects) {
-			if (obj->clientIterations.size() == 0) {
+			if (!obj->active && obj->clientIterations.size() == 0) {
 				objectsToRemove.push_back(objID);
 			}
 		}
@@ -170,7 +170,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		std::lock_guard lock(serverSideObjects.mutex);
 		for (auto& [objID, obj] : serverSideObjects.objects) {
 			if (obj->active && obj->isDynamic && obj->physicsClientID != client->id) {
-				if (obj->iteration == obj->clientIterations[client->id]) {
+				if (obj->GetIteration() == obj->clientIterations[client->id]) {
 					stream->Begin();
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
@@ -196,15 +196,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			case CUSTOM:{
 				auto key = stream->Read<std::string>();
-				NetworkGameObjectPtr player = serverSideObjects.players.at(client->id);
+				NetworkGameObjectPtr playerObj = serverSideObjects.players.at(client->id);
 				
 				if (key == "ball") {
 					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(serverSideObjects.mutex);
 					// Launch ball
 					auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Ball);
-					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
-					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
+					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
@@ -214,8 +214,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Ball);
-						ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
-						ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*100.0;
+						ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
 						ball->physicsClientID = client->id;
 					}
@@ -225,14 +225,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects.mutex);
 					// Launch light
 					auto ball = serverSideObjects.Add(THIS_MODULE, OBJECT_TYPE::Light);
-					ball->SetTransform(player->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
-					ball->velocity = glm::dvec3{dir.x, dir.y, dir.z}*40.0;
+					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
 				else if (key == "clear") {
 					std::lock_guard lock(serverSideObjects.mutex);
-					for (auto& [objID, obj] : serverSideObjects.objects) if (obj->physicsClientID == client->id && obj->id != player->id) {
+					for (auto& [objID, obj] : serverSideObjects.objects) if (obj->physicsClientID == client->id && obj->id != playerObj->id) {
 						obj->active = false;
 					}
 				}
@@ -248,14 +248,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto action = stream->Read<Action>();
 		switch (action) {
 			case SYNC_OBJECT_TRANSFORM:{
-				auto id = stream->Read<uint32_t>();
+				auto id = stream->Read<NetworkGameObject::Id>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
 				auto transform = stream->Read<NetworkGameObjectTransform>();
 				auto tmpStream = stream->ReadStream();
 				try {
 					std::lock_guard lock(serverSideObjects.mutex);
 					auto obj = serverSideObjects.objects.at(id);
-					if (obj->iteration == iteration) {
+					if (obj->GetIteration() == iteration) {
 						obj->SetTransformFromNetwork(transform);
 						
 						auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
@@ -342,7 +342,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto obj = std::make_shared<NetworkGameObject>(moduleID, type, parent, id);
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
-					obj->iteration = iteration;
+					obj->SetIteration(iteration);
 					obj->SetTransformFromNetwork(transform);
 					
 					auto* mod = V4D_Mod::GetModule(moduleID.String());
@@ -381,7 +381,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					obj->parent = parent;
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
-					obj->iteration = iteration;
+					obj->SetIteration(iteration);
 					obj->SetTransformFromNetwork(transform);
 					
 					auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
@@ -447,7 +447,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(clientSideObjects.mutex);
 					// LOG_DEBUG("Client ReceiveBurst for obj id " << id)
 					auto obj = clientSideObjects.objects.at(id);
-					if (obj->iteration == iteration) {
+					if (obj->GetIteration() == iteration) {
 						obj->SetTransformFromNetwork(transform);
 						
 						auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
@@ -510,7 +510,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
-			std::lock_guard lock(player->mu);
+			std::lock_guard lock(playerView->mu);
 			
 			switch (key) {
 				// Throw stuff
@@ -518,21 +518,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::CUSTOM;
 						stream << std::string("ball");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_N:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::CUSTOM;
 						stream << std::string("balls");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::CUSTOM;
 						stream << std::string("light");
-						stream << DVector3{player->viewForward.x, player->viewForward.y, player->viewForward.z};
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_C:{

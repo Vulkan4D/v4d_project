@@ -17,7 +17,7 @@ struct BuildInterface {
 	int blockRotation = 0;
 	bool highPrecisionGrid = false;
 	bool isValid = false;
-	std::recursive_mutex mu;
+	mutable std::recursive_mutex mu;
 	
 	// RayCast hit block
 	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
@@ -194,6 +194,10 @@ struct BuildInterface {
 		scene->Unlock();
 	}
 	
+	glm::dmat4 GetTmpBuildWorldTransform() const {
+		std::lock_guard lock(mu);
+		return tmpBlock->GetWorldTransform();
+	}
 	
 	void NextBlockRotation(int increment = +1 /* or -1 */) {
 		
