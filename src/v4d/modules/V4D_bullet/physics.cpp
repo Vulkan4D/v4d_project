@@ -362,7 +362,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-		// scene->Lock();
+		scene->Lock();
 			globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 			// Refresh info from scene objects
 			bool tmpPhysicsActive;
@@ -410,7 +410,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				obj->Unlock();
 			}
-		// scene->Unlock();
+		scene->Unlock();
 		
 		// Generate/Update collision shapes
 		while (!objectsToRefresh.empty()) {

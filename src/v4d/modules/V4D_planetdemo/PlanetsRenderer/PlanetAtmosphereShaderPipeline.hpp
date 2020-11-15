@@ -26,7 +26,7 @@ public:
 	} planetAtmospherePushConstant {};
 	
 	static glm::vec4 CompactSunInfo(glm::vec3 sunDir, float sunIntensity, glm::vec3 sunColor) {
-		return glm::vec4(sunDir*sunIntensity, CompactVec3ToFloat(sunColor.r, sunColor.g, sunColor.b));
+		return glm::vec4(sunDir*sunIntensity, CompactVec3rgb10ToFloat(sunColor.r, sunColor.g, sunColor.b));
 	}
 	
 	using RasterShaderPipeline::Execute;

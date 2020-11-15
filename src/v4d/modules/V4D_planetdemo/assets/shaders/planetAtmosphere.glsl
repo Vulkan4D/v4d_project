@@ -21,7 +21,7 @@ struct Sun {
 Sun UnpackSunFromVec4(vec4 in_sun) {
 	Sun sun;
 	sun.dir = normalize(in_sun.xyz);
-	sun.intensity = UnpackVec3FromFloat(in_sun.w) * length(in_sun.xyz);
+	sun.intensity = UnpackVec3rgb10FromFloat(in_sun.w) * length(in_sun.xyz);
 	sun.valid = length(in_sun.xyz) > 0.001;
 	return sun;
 }

@@ -184,9 +184,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_E)) {
 					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, -player.tiltSpeed * deltaTime, player.viewForwardTarget);
 				}
-				player.viewUpTarget = glm::normalize(glm::dvec3(glm::inverse(player.freeFlyCamRotationMatrix) * glm::dvec4(0,0,1, 0)));
-				player.viewForwardTarget = glm::normalize(glm::dvec3(glm::inverse(player.freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
-				player.viewRightTarget = glm::cross(player.viewForwardTarget, player.viewUpTarget);
+				player.RefreshViewTarget();
 				if (player.flyCamSmoothness > 2.0) {
 					player.viewUp = glm::mix(player.viewUp, player.viewUpTarget, 300.0 / player.flyCamSmoothness * deltaTime);
 					player.viewForward = glm::mix(player.viewForward, player.viewForwardTarget, 300.0 / player.flyCamSmoothness * deltaTime);

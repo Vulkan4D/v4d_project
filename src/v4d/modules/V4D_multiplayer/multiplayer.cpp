@@ -535,7 +535,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_C:{
+				case GLFW_KEY_DELETE:{
 					v4d::data::WriteOnlyStream stream(8);
 						stream << networking::action::CUSTOM;
 						stream << std::string("clear");

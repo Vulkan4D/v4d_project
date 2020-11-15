@@ -17,4 +17,25 @@ struct PlayerView {
 	float flyCamSmoothness = 25.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
 	bool canChangeVelocity = true;
+	
+	void RefreshViewTarget() {
+		viewUpTarget = glm::normalize(glm::dvec3(glm::inverse(freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));
+		viewForwardTarget = glm::normalize(glm::dvec3(glm::inverse(freeFlyCamRotationMatrix) * glm::dvec4(0,0,-1, 0)));
+		viewRightTarget = glm::cross(viewForwardTarget, viewUpTarget);
+	}
+	
+	void SetInitialPositionAndView(glm::dvec3 worldPosition, glm::dvec3 forward, glm::dvec3 up, bool prioritizeUp = false/* otherwise prioritize forward */) {
+		this->worldPosition = worldPosition;
+		auto right = glm::cross(forward, up);
+		if (prioritizeUp) {
+			forward = glm::cross(-right, up);
+		} else {
+			up = glm::cross(forward, -right);
+		}
+		freeFlyCamRotationMatrix = glm::lookAt({0,0,0}, forward, up);
+		RefreshViewTarget();
+		viewUp = viewUpTarget;
+		viewForward = viewForwardTarget;
+		viewRight = viewRightTarget;
+	}
 };

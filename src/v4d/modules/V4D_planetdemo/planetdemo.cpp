@@ -20,6 +20,9 @@ struct Planet {
 
 #pragma endregion
 
+const glm::dvec3 sun1Position = {-1.496e+11,0, 0};
+const glm::dvec3 sun2Position = {1.296e+11,-6.496e+10, 0};
+
 #pragma region Terrain generator
 
 PlanetTerrain* terrain = nullptr;
@@ -129,11 +132,13 @@ namespace TerrainGeneratorLib {
 #pragma endregion
 
 ObjectInstancePtr sun = nullptr;
+ObjectInstancePtr sun2 = nullptr;
 PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
 Renderer* r = nullptr;
 V4D_Mod* mainRenderModule = nullptr;
+PlayerView* playerView = nullptr;
 
 #ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
 	std::vector<glm::dvec3> collidingObjectPositions {};
@@ -226,8 +231,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		((PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0))->camSpeed = 100000;
 		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
+		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
+		// playerView->camSpeed = 100000;
+		auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
+		playerView->SetInitialPositionAndView(worldPosition, glm::normalize(sun1Position), glm::normalize(worldPosition), true);
 	}
 	
 	V4D_MODULE_FUNC(void, ModuleUnload) {
@@ -258,7 +266,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		sun = scene->AddObjectInstance();
 		sun->Configure([](ObjectInstance* obj){
 			obj->SetSphereLightSource("light", 700000000, 1e24f);
-		}, {-1.496e+11,0, 0});
+		}, sun1Position);
+		
+		sun2 = scene->AddObjectInstance();
+		sun2->Configure([](ObjectInstance* obj){
+			obj->SetSphereLightSource("light", 700000000, 5e22f);
+		}, sun2Position);
 		
 	}
 	
@@ -288,17 +301,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
+		// LOG(playerView->worldPosition.x << ", " << playerView->worldPosition.y << ", " << playerView->worldPosition.z)
+		
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
 			if (!terrain) {
-				terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*1.5,0}};
+				// terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,planet.atmosphereRadius*1.5,0}};
+				terrain = new PlanetTerrain {planet.atmosphereRadius, planet.solidRadius, planet.heightVariation, {0,0,0}};
 				{
 					std::lock_guard lock(terrain->planetMutex);
 					terrain->scene = scene;
 					sun->GenerateGeometries();
+					sun2->GenerateGeometries();
 					if (planetAtmosphereShader) {
 						planetAtmosphereShader->planets.push_back(terrain);
 						planetAtmosphereShader->lightSources.push_back(sun->GetLightSources()[0]);
+						planetAtmosphereShader->lightSources.push_back(sun2->GetLightSources()[0]);
 					}
 					if (terrain->atmosphere.radius > 0) {
 						renderingDevice->RunSingleTimeCommands(renderingDevice->GetQueue("graphics"), [](auto cmdBuffer){
@@ -406,16 +424,31 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
 					}
+					
 					ImGui::Separator();
-					ImGui::Text("Sun");
+					ImGui::Text("Sun1");
 					static glm::vec3 sunPosition = glm::normalize(glm::dvec3(sun->GetWorldTransform()[3]));
 					static double sunDistance = glm::distance(glm::dvec3(sun->GetWorldTransform()[3]), terrain->absolutePosition);
 					static float intensity = std::log10(sun->GetLightSources()[0]->intensity);
-					ImGui::SliderFloat("Intensity", &intensity, 20, 27);
-					sun->GetLightSources()[0]->intensity = std::pow(10.0f, intensity);
 					float* pos = (float*)&sunPosition;
-					ImGui::SliderFloat3("Position", pos, -1, 1);
+					ImGui::SliderFloat("Intensity1", &intensity, 20, 27);
+					ImGui::SliderFloat3("Position1", pos, -1, 1);
+					ImGui::ColorEdit3("Color1", (float*)&sun->GetLightSources()[0]->color);
+					sun->GetLightSources()[0]->intensity = std::pow(10.0f, intensity);
 					sun->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance));
+					
+					ImGui::Separator();
+					ImGui::Text("Sun2");
+					static glm::vec3 sunPosition2 = glm::normalize(glm::dvec3(sun2->GetWorldTransform()[3]));
+					static double sunDistance2 = glm::distance(glm::dvec3(sun2->GetWorldTransform()[3]), terrain->absolutePosition);
+					static float intensity2 = std::log10(sun2->GetLightSources()[0]->intensity);
+					float* pos2 = (float*)&sunPosition2;
+					ImGui::SliderFloat("Intensity2", &intensity2, 20, 27);
+					ImGui::SliderFloat3("Position2", pos2, -1, 1);
+					ImGui::ColorEdit3("Color2", (float*)&sun2->GetLightSources()[0]->color);
+					sun2->GetLightSources()[0]->intensity = std::pow(10.0f, intensity2);
+					sun2->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2));
+					
 				}
 			//
 		#endif
