@@ -324,6 +324,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						});
 					}
 				}
+			} else {
+				playerView->camSpeed = glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain), 10.0)));
 			}
 		//
 		

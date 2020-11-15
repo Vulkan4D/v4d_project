@@ -137,6 +137,7 @@ struct PhysicsObject : btMotionState {
 		
 		// calculate geometries shapes
 		auto obj = objectInstance.lock();if(!obj)return;
+		obj->Lock();
 		for (auto& geometryInstance : obj->GetGeometries()) {
 			auto geom = geometryInstance.geometry;
 			btCollisionShape* collisionShape = (btCollisionShape*)geom->colliderShapeObject;
@@ -189,7 +190,11 @@ struct PhysicsObject : btMotionState {
 									btVector3 v2(vertices[indices[i+2]].pos.x, vertices[indices[i+2]].pos.y, vertices[indices[i+2]].pos.z);
 									mesh->addTriangle(v0, v1, v2, true);
 								}
-								collisionShape = new btBvhTriangleMeshShape(mesh, true);
+								try {
+									collisionShape = new btBvhTriangleMeshShape(mesh, true);
+								} catch(...){
+									LOG_ERROR("Exception occured in Bullet BVH generation from triangle mesh")
+								}
 							}
 						break;
 						case v4d::scene::Geometry::ColliderType::STATIC_PLANE:
@@ -214,6 +219,7 @@ struct PhysicsObject : btMotionState {
 				geom->colliderDirty = false;
 			}
 		}
+		obj->Unlock();
 		
 		if (localCollisionShapes.size() == 1) {
 			groupedCollisionShape = localCollisionShapes[0];
