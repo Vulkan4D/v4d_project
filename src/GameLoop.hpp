@@ -7,9 +7,9 @@ namespace app {
 		std::thread thread;
 		bool (*loopCheckRunning)() = nullptr;
 	public:
-		GameLoop(bool (*loopCheckRunningFunc)(), int cpuCoreIndex = -1) : loopCheckRunning(loopCheckRunningFunc) {
+		GameLoop(bool (*loopCheckRunningFunc)()) : loopCheckRunning(loopCheckRunningFunc) {
 			thread = std::thread{[&]{
-				if (cpuCoreIndex >= 0) SET_CPU_AFFINITY(cpuCoreIndex)
+				// SET_CPU_AFFINITY(...)
 				while (loopCheckRunning()) {
 					static double deltaTime = 0.01;
 					CALCULATE_AVG_FRAMERATE(app::gameLoopAvgFrameRate)

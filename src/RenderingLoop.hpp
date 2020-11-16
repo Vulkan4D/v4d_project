@@ -104,9 +104,14 @@ namespace app {
 		};
 
 	public:
-		RenderingLoop(bool (*loopCheckRunningFunc)(), int cpuCoreIndexPrimary = -1, int cpuCoreIndexSecondary = -1) : loopCheckRunning(loopCheckRunningFunc) {
+		RenderingLoop(bool (*loopCheckRunningFunc)()) : loopCheckRunning(loopCheckRunningFunc) {
 			thread = std::thread{[&]{
-				if (cpuCoreIndexPrimary >= 0) SET_CPU_AFFINITY(cpuCoreIndexPrimary)
+				
+				// CPU Affinity
+				if (std::thread::hardware_concurrency() > 4) SET_CPU_AFFINITY(std::thread::hardware_concurrency()/2+1)
+				else SET_CPU_AFFINITY(1)
+				
+				SET_THREAD_HIGHEST_PRIORITY()
 				while (loopCheckRunning()) {
 					CALCULATE_AVG_FRAMERATE(app::primaryAvgFrameRate)
 					
@@ -122,7 +127,6 @@ namespace app {
 			#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 				// Low-Priority Rendering Loop
 				thread2 = std::thread{[&]{
-					if (cpuCoreIndexSecondary >= 0) SET_CPU_AFFINITY(cpuCoreIndexSecondary)
 					while (loopCheckRunning()) {
 						CALCULATE_AVG_FRAMERATE(app::secondaryAvgFrameRate)
 						if (!loopCheckRunning()) break;

@@ -5,8 +5,6 @@
 #include "PlanetAtmosphere.hpp"
 #include "Noise.hpp"
 
-#define APP_CPU_AFFINITY_GENERATE 3
-
 using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
@@ -296,12 +294,14 @@ struct PlanetTerrain {
 				if (!obj) {
 					obj = planet->scene->AddObjectInstance();
 				}
-				obj->Disable();
-				obj->physicsActive = false;
-				if (!geometry || obj->CountGeometries() == 0) {
-					geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
-				}
-				geometry->active = false;
+				obj->Lock();
+					obj->Disable();
+					obj->physicsActive = false;
+					if (!geometry || obj->CountGeometries() == 0) {
+						geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
+					}
+					geometry->active = false;
+				obj->Unlock();
 			}
 			planet->scene->Unlock();
 			
@@ -787,13 +787,16 @@ struct PlanetTerrain {
 	static void StartChunkGenerator() {
 		if (chunkGeneratorActive) return;
 		chunkGeneratorActive = true;
-		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - APP_CPU_AFFINITY_GENERATE);
+		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - 3);
 		chunkGeneratorThreads.reserve(nbThreads);
 		LOG_VERBOSE("Using " << nbThreads << " threads to render planet terrain")
 		for (int i = 0; i < nbThreads; ++i) {
 			chunkGeneratorThreads.emplace_back([threadIndex=i](){
-				int cpuIndex = APP_CPU_AFFINITY_GENERATE + threadIndex;
-				if (cpuIndex < std::thread::hardware_concurrency()) SET_CPU_AFFINITY(cpuIndex)
+				
+				// CPU Affinity
+				if (std::thread::hardware_concurrency() > 4) UNSET_CPU_AFFINITY(0, 1, std::thread::hardware_concurrency()/2, std::thread::hardware_concurrency()/2+1)
+				else SET_CPU_AFFINITY(0)
+				
 				while (chunkGeneratorActive) {
 					Chunk* chunk = nullptr;
 					double closestChunkDistance = std::numeric_limits<double>::max();

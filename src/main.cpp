@@ -204,7 +204,7 @@ void app::Stop() {
 void app::Run() {
 	
 	// set main thread & input to run only on a specific core
-	if (APP_CPU_AFFINITY_MAIN >= 0) SET_CPU_AFFINITY(APP_CPU_AFFINITY_MAIN)
+	// SET_CPU_AFFINITY(...)
 	
 	// Client
 	if (app::isClient) {// client connects to server
@@ -224,9 +224,9 @@ void app::Run() {
 			
 			// Game Loops
 			if (app::renderer) {
-				app::SlowGameLoop slowGameLoop(app::IsRunning, APP_CPU_AFFINITY_MAIN);
-				app::GameLoop gameLoop(app::IsRunning, APP_CPU_AFFINITY_GAME);
-				app::RenderingLoop renderingLoop(app::IsRunning, APP_CPU_AFFINITY_RENDER_PRIMARY, APP_CPU_AFFINITY_RENDER_SECONDARY);
+				app::SlowGameLoop slowGameLoop(app::IsRunning);
+				app::GameLoop gameLoop(app::IsRunning);
+				app::RenderingLoop renderingLoop(app::IsRunning);
 				app::input::UpdateLoop([](){return app::IsRunning() && app::window->IsActive();});
 				app::isRunning = false;
 			} else {

@@ -8,7 +8,7 @@ namespace app {
 		std::thread thread;
 		bool (*loopCheckRunning)() = nullptr;
 	public:
-		SlowGameLoop(bool (*loopCheckRunningFunc)(), int cpuCoreIndex = -1) : loopCheckRunning(loopCheckRunningFunc) {
+		SlowGameLoop(bool (*loopCheckRunningFunc)()) : loopCheckRunning(loopCheckRunningFunc) {
 			
 			#ifdef _DEBUG
 				// Shaders to watch for modifications to automatically reload the app::renderer
@@ -20,7 +20,7 @@ namespace app {
 			
 			// Slow Loop (stuff unrelated to rendering that does not require any performance)
 			thread = std::thread{[&]{
-				if (cpuCoreIndex >= 0) SET_CPU_AFFINITY(cpuCoreIndex)
+				// SET_CPU_AFFINITY(...)
 				while (loopCheckRunning()) {
 					static double deltaTime = 0.01;
 					CALCULATE_AVG_FRAMERATE(app::slowLoopAvgFrameRate)

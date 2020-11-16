@@ -521,6 +521,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		// Atmosphere
 		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
+		planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
 		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
 			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 			planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;

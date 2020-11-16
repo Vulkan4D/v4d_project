@@ -433,7 +433,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		// Shift key for higher precision grid
 		if (key == GLFW_KEY_LEFT_SHIFT) {
-			if (action == GLFW_PRESS) buildInterface.highPrecisionGrid = true;
+			if (action != GLFW_RELEASE) buildInterface.highPrecisionGrid = true;
 			else buildInterface.highPrecisionGrid = false;
 		}
 		

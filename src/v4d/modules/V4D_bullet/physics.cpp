@@ -426,7 +426,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		CleanupObjects();
 		
 		// Physics Simulation
-		globalDynamicsWorld->stepSimulation(deltaTime);
+		try {
+			globalDynamicsWorld->stepSimulation(deltaTime);
+		} catch(...){
+			LOG_ERROR("Exception occured in Bullet Physics stepSimulation()")
+		}
 	}
 	
 	V4D_MODULE_FUNC(bool, PhysicsRayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {

@@ -39,9 +39,9 @@ struct BuildInterface {
 				if (objId != hitBlock->objId) return true;
 				if (customData0 != hitBlock->customData0) return true;
 				if (highPrecisionGrid) {
-					if (gridPos != glm::round(hitBlock->position*10.01f)/10.0f) return true;
+					if (gridPos != glm::round(hitBlock->position*10.001f)/10.0f) return true;
 				} else {
-					if (gridPos != glm::round(hitBlock->position*1.01f)) return true;
+					if (gridPos != glm::round(hitBlock->position*1.001f)) return true;
 				}
 			}
 			return false;
@@ -52,9 +52,9 @@ struct BuildInterface {
 				objId = hitBlock->objId;
 				customData0 = hitBlock->customData0;
 				if (highPrecisionGrid) {
-					gridPos = glm::round(hitBlock->position*10.01f)/10.0f;
+					gridPos = glm::round(hitBlock->position*10.001f)/10.0f;
 				} else {
-					gridPos = glm::round(hitBlock->position*1.01f);
+					gridPos = glm::round(hitBlock->position*1.001f);
 				}
 			} else {
 				objId = 0;
