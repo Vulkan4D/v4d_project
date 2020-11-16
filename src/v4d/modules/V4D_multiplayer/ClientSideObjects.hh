@@ -7,3 +7,5 @@ struct ClientSideObjects {
 	std::recursive_mutex mutex;
 	NetworkGameObjects objects {};
 };
+
+const int CUSTOM_PTR_CLIENT_OBJECTS = 1;

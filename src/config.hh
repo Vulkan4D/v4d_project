@@ -3,7 +3,7 @@
 // Modules
 	#define APP_DEFAULT_RENDERER_MODULE "V4D_hybrid"
 	// #define APP_DEFAULT_MODULES "V4D_sample",APP_DEFAULT_RENDERER_MODULE,"V4D_flycam","V4D_basicscene","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
-	#define APP_DEFAULT_MODULES "V4D_sample",APP_DEFAULT_RENDERER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_multiplayer","V4D_bullet","V4D_buildsystem"
+	#define APP_DEFAULT_MODULES "V4D_sample",APP_DEFAULT_RENDERER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_multiplayer","V4D_bullet","V4D_buildsystem","V4D_galaxy4d"
 	
 	#define APP_DEFAULT_MODULES_SAVE_TO_MODULES_TXT_WHEN_EMPTY
 

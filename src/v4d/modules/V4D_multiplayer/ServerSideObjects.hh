@@ -18,3 +18,5 @@ struct ServerSideObjects {
 		return obj;
 	}
 };
+
+const int CUSTOM_PTR_SERVER_OBJECTS = 0;

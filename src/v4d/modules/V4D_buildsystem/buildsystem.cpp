@@ -40,6 +40,11 @@ std::shared_ptr<OutgoingConnection> client = nullptr;
 std::recursive_mutex clientActionQueueMutex;
 std::queue<v4d::data::Stream> clientActionQueue {};
 
+void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
+	std::lock_guard lock(clientActionQueueMutex);
+	clientActionQueue.emplace(stream);
+}
+
 V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
@@ -351,11 +356,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<OutgoingConnection> _c) {
 		client = _c;
-	}
-	
-	V4D_MODULE_FUNC(void, ClientEnqueueAction, v4d::data::WriteOnlyStream& stream) {
-		std::lock_guard lock(clientActionQueueMutex);
-		clientActionQueue.emplace(stream);
 	}
 	
 	V4D_MODULE_FUNC(void, ClientSendActions, v4d::io::SocketPtr stream) {
