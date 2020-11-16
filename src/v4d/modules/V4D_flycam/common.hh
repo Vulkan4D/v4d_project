@@ -2,7 +2,9 @@
 
 struct PlayerView {
 	std::mutex mu;
-	double camSpeed = 10.0, mouseSensitivity = 1.0, tiltSpeed = 2.0;
+	double camSpeed = 10.0;
+	double tiltSpeed = 2.0;
+	float mouseSensitivity = 5.0f;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
 	glm::dvec3 worldPosition {0};
@@ -14,7 +16,7 @@ struct PlayerView {
 	glm::dvec3 viewForwardTarget = viewForward;
 	glm::dvec3 viewRightTarget = viewRight;
 	bool useFreeFlyCam = true;
-	float flyCamSmoothness = 25.0;
+	float flyCamSmoothness = 0.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
 	bool canChangeVelocity = true;
 	

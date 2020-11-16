@@ -55,6 +55,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			ImGui::Text("Mouse look");
 			ImGui::SliderFloat("Smoothness", &player.flyCamSmoothness, 0.0f, 100.0f);
+			ImGui::SliderFloat("Sensitivity", &player.mouseSensitivity, 1.0f, 30.0f);
 			// ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowSize().x + 5, 0});
 			// ImGui::End();
 		#endif
@@ -173,10 +174,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			glfwSetCursorPos(window->GetHandle(), 0, 0);
 			if (player.useFreeFlyCam) {
 				if (x != 0) {
-					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, x * player.mouseSensitivity * deltaTime, player.viewUpTarget);
+					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, x * player.mouseSensitivity/27.0 * deltaTime, player.viewUpTarget);
 				}
 				if (y != 0) {
-					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, y * player.mouseSensitivity * deltaTime, player.viewRightTarget);
+					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, y * player.mouseSensitivity/27.0 * deltaTime, player.viewRightTarget);
 				}
 				if (glfwGetKey(window->GetHandle(), GLFW_KEY_Q)) {
 					player.freeFlyCamRotationMatrix = glm::rotate(player.freeFlyCamRotationMatrix, player.tiltSpeed * deltaTime, player.viewForwardTarget);
@@ -196,8 +197,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				}
 			} else {
 				if (x != 0 || y != 0) {
-					player.horizontalAngle += double(x * player.mouseSensitivity * deltaTime);
-					player.verticalAngle -= double(y * player.mouseSensitivity * deltaTime);
+					player.horizontalAngle += double(x * player.mouseSensitivity/27.0 * deltaTime);
+					player.verticalAngle -= double(y * player.mouseSensitivity/27.0 * deltaTime);
 					if (player.verticalAngle < -1.5) player.verticalAngle = -1.5;
 					if (player.verticalAngle > 1.5) player.verticalAngle = 1.5;
 					player.viewForward = glm::normalize(glm::dvec3(

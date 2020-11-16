@@ -175,7 +175,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetCursorPos({5, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
-			if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+			if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
 				buildInterface.RemakeTmpBlock();
 			}
 			ImGui::PopStyleColor();
@@ -183,7 +183,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetCursorPos({135, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
-			if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+			if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
 				buildInterface.RemakeTmpBlock();
 			}
 			ImGui::PopStyleColor();
@@ -191,7 +191,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetCursorPos({260, 100});
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
-			if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.1f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+			if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
 				buildInterface.RemakeTmpBlock();
 			}
 			ImGui::PopStyleColor();
@@ -504,13 +504,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Resize
 					float& val = buildInterface.blockSize[buildInterface.selectedBlockType][buildInterface.selectedEditValue];
 					if (buildInterface.highPrecisionGrid) {
-						val += y / 10.0f;
+						val += glm::sign(y) / 5.0f;
 					} else {
-						val = glm::round(val) + glm::round(y);
+						val = glm::round(val) + glm::sign(y);
 					}
 					
 					// Minimum size
-					if (val < 0.1f) val = buildInterface.highPrecisionGrid? 0.1f : 1.0f;
+					if (val < 0.2f) val = buildInterface.highPrecisionGrid? 0.2f : 1.0f;
 					
 					// Maximum size
 					// if (val > 102.4f) val = 102.4f; // actual limit

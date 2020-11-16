@@ -114,6 +114,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
 		mainMultiplayerModule = V4D_Mod::LoadModule("V4D_multiplayer");
 		playerView->SetInitialPositionAndView({0,0,0}, {0,1,0}, {0,0,1});
+		playerView->useFreeFlyCam = false;
 	}
 	
 	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<ListeningServer> _srv) {
