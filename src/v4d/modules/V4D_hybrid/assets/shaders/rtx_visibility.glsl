@@ -64,8 +64,8 @@ void main() {
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
 	ray.uv = PackUVasFloat(fragment.uv);
-	ray.metallic = 0.0;
-	ray.roughness = 0.0;
+	ray.metallic = fragment.uv.s;
+	ray.roughness = fragment.uv.t;
 	ray.distance = gl_HitTEXT;
 }
 

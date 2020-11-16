@@ -62,32 +62,32 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
 	
-	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
-		if (action == GLFW_RELEASE
-			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
-			#endif
-		) {
-			switch (button) {
-				case GLFW_MOUSE_BUTTON_1:
-					if (v4d::scene::Scene::RayCastHit hit; scene->PhysicsRayCastClosest(&hit)) {
-						if (hit.obj->GetGeometries().size()) {
-							LOG("PhysicsRayCastClosest Hit = " << hit.obj->GetGeometries()[0].type)
-							hit.obj->AddImpulse(scene->camera.lookDirection*100.0);
-						}
-					}
-					break;
-				case GLFW_MOUSE_BUTTON_3:
-					if (std::vector<v4d::scene::Scene::RayCastHit> hits{}; scene->PhysicsRayCastAll(&hits)) {
-						LOG("PhysicsRayCastAll Hits = ")
-						for (auto hit : hits) if (hit.obj->GetGeometries().size()) {
-							LOG("    " << hit.obj->GetGeometries()[0].type)
-						}
-					}
-					break;
-			}
-		}
-	}
+	// V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
+	// 	if (action == GLFW_RELEASE
+	// 		#ifdef _ENABLE_IMGUI
+	// 			&& !ImGui::IsAnyWindowFocused()
+	// 		#endif
+	// 	) {
+	// 		switch (button) {
+	// 			case GLFW_MOUSE_BUTTON_1:
+	// 				if (v4d::scene::Scene::RayCastHit hit; scene->PhysicsRayCastClosest(&hit)) {
+	// 					if (hit.obj->GetGeometries().size()) {
+	// 						LOG("PhysicsRayCastClosest Hit = " << hit.obj->GetGeometries()[0].type)
+	// 						hit.obj->AddImpulse(scene->camera.lookDirection*100.0);
+	// 					}
+	// 				}
+	// 				break;
+	// 			case GLFW_MOUSE_BUTTON_3:
+	// 				if (std::vector<v4d::scene::Scene::RayCastHit> hits{}; scene->PhysicsRayCastAll(&hits)) {
+	// 					LOG("PhysicsRayCastAll Hits = ")
+	// 					for (auto hit : hits) if (hit.obj->GetGeometries().size()) {
+	// 						LOG("    " << hit.obj->GetGeometries()[0].type)
+	// 					}
+	// 				}
+	// 				break;
+	// 		}
+	// 	}
+	// }
 	
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE

@@ -162,7 +162,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
-					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
@@ -173,7 +173,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
-						ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+						ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
 						ball->physicsClientID = client->id;
@@ -184,7 +184,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch light
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Light);
-					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;

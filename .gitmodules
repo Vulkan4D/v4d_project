@@ -29,3 +29,6 @@
 [submodule "src/stb"]
 	path = src/stb
 	url = git@github.com:nothings/stb.git
+[submodule "src/tinyobjloader"]
+	path = src/tinyobjloader
+	url = git@github.com:tinyobjloader/tinyobjloader.git

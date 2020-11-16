@@ -182,8 +182,8 @@ void main() {
 	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
-	pbrGBuffers.metallic = 0.0;
-	pbrGBuffers.roughness = 0.0;
+	pbrGBuffers.metallic = v2f.uv.s;
+	pbrGBuffers.roughness = v2f.uv.t;
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();

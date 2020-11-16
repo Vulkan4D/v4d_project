@@ -6,6 +6,92 @@
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
+#pragma region Load drone model (Temporary code)
+	#define TINYOBJLOADER_IMPLEMENTATION
+	#include "tinyobjloader/tiny_obj_loader.h"
+	struct BasicVertex {
+		glm::vec3 pos;
+		glm::vec3 normal;
+		glm::vec4 color;
+		glm::vec2 uv;
+		bool operator==(const BasicVertex& other) const {
+			return pos == other.pos && normal == other.normal && color == other.color && uv == other.uv;
+		}
+	};
+	namespace std {
+		template<> struct hash<BasicVertex> {
+			size_t operator()(BasicVertex const &vertex) const {
+				return ((hash<glm::vec3>()(vertex.pos) ^
+						(hash<glm::vec4>()(vertex.color) << 1)) >> 1) ^
+						(hash<glm::vec3>()(vertex.normal) << 1);
+			}
+		};
+	}
+	std::vector<BasicVertex> droneVertices {};
+	std::vector<uint32_t> droneIndices {};
+	std::unordered_map<BasicVertex, uint32_t> droneUniqueVertices {};
+	std::weak_ptr<v4d::scene::Geometry> droneGeometry;
+	void LoadDroneModel() {
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string err, warn;
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/drone2.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources"))) {
+			throw std::runtime_error(err);
+		}
+		if (warn != "") LOG_WARN(warn);
+		for (size_t i = 0; i < shapes.size(); i++) {
+			auto& shape = shapes[i];
+			uint32_t materialId = shape.mesh.material_ids.size() > 0 ? shape.mesh.material_ids[0] : 0;
+			for (size_t j = 0; j < shape.mesh.indices.size(); j++) {
+				auto& index = shape.mesh.indices[j];
+				materialId = shape.mesh.material_ids[j/3];
+				BasicVertex vertex = {};
+				vertex.pos = {
+					attrib.vertices[3 * index.vertex_index + 0],
+					attrib.vertices[3 * index.vertex_index + 1],
+					attrib.vertices[3 * index.vertex_index + 2],
+				};
+				// vertex.uv = {
+				// 	attrib.texcoords[2 * index.texcoord_index + 0],
+				// 	1.0f - attrib.texcoords[2 * index.texcoord_index + 1], // flipped vertical component
+				// };
+				vertex.uv = {
+					materials[materialId].metallic,
+					materials[materialId].roughness
+				};
+				auto color = materials[materialId].diffuse;
+				vertex.color = {color[0], color[1], color[2], 1};
+				vertex.normal = {
+					attrib.normals[3 * index.normal_index + 0],
+					attrib.normals[3 * index.normal_index + 1],
+					attrib.normals[3 * index.normal_index + 2],
+				};
+				if (droneUniqueVertices.count(vertex) == 0) {
+					droneUniqueVertices[vertex] = droneVertices.size();
+					droneVertices.push_back(vertex);
+				}
+				droneIndices.push_back(droneUniqueVertices[vertex]);
+			}
+		}
+	}
+	void GenerateDroneGeometry(ObjectInstance* obj) {
+		auto geom = droneGeometry.lock();
+		if (geom) {
+			obj->AddGeometry(geom);
+		} else {
+			geom = obj->AddGeometry("basic", droneVertices.size(), droneIndices.size());
+			for (int i = 0; i < droneVertices.size(); ++i) {
+				geom->SetVertex(i, droneVertices[i].pos, droneVertices[i].normal, droneVertices[i].uv, droneVertices[i].color);
+			}
+			geom->SetIndices(droneIndices.data());
+			geom->colliderType = Geometry::ColliderType::SPHERE;
+			geom->boundingDistance = 1;
+			droneGeometry = geom;
+		}
+	}
+#pragma endregion
+
 using namespace v4d::scene;
 using namespace v4d::networking;
 using namespace networking::action;
@@ -55,6 +141,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
+		
+		LoadDroneModel();
+		
 	}
 	
 	V4D_MODULE_FUNC(void, ServerIncomingClient, IncomingClientPtr client) {
@@ -89,7 +178,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
-					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
@@ -100,7 +189,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
-						ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+						ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
 						ball->physicsClientID = client->id;
@@ -111,7 +200,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch light
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Light);
-					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
@@ -119,12 +208,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				else if (key == "drone") {
 					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(serverSideObjects->mutex);
-					// Launch ball
-					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
-					ball->SetTransform(playerObj->GetWorldPosition() + glm::dvec3{dir.x, dir.y, dir.z} * 5.0);
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
-					ball->isDynamic = true;
-					ball->physicsClientID = client->id;
+					// Launch drone
+					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
+					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					drone->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					drone->isDynamic = true;
+					drone->physicsClientID = client->id;
 				}
 				else if (key == "clear") {
 					std::lock_guard lock(serverSideObjects->mutex);
@@ -197,11 +286,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					auto cube = obj->AddProceduralGeometry("aabb", 1);
-						cube->SetProceduralVertex(0, glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.5, 0.5, 0.5), glm::vec4(0,1,0.5,1), 0);
-						// cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
-				});
+				(obj->objectInstance = scene->AddObjectInstance())->Configure(GenerateDroneGeometry);
 				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
 			}break;
 			case OBJECT_TYPE::Ball:{
@@ -219,10 +304,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->objectInstance->mass = 1;
 			}break;
 			case OBJECT_TYPE::Drone:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					obj->SetSphereGeometry("sphere", 1, {0.5,0.5,0.5, 1});
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+				(obj->objectInstance = scene->AddObjectInstance())->Configure(GenerateDroneGeometry);
+				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
 				obj->objectInstance->mass = 1;
 			}break;
 		}
