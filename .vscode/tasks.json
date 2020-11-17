@@ -67,6 +67,13 @@
             "group": "build"
         },
         {
+            "label": "clean build all platforms & send package",
+            "type": "shell",
+            "command": "clear; tools/cleanbuild.sh windows && workspace/sendReleasePackage.sh",
+            "problemMatcher": {"base":"$gcc","fileLocation":"absolute"},
+            "group": "build"
+        },
+        {
             "label": "unit tests linux",
             "type": "shell",
             "command": "clear; cd build && cmake --build . --parallel 8 && cd debug && ./tests",
