@@ -205,16 +205,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
-				else if (key == "drone") {
-					auto dir = stream->Read<DVector3>();
-					std::lock_guard lock(serverSideObjects->mutex);
-					// Launch drone
-					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
-					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					drone->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
-					drone->isDynamic = true;
-					drone->physicsClientID = client->id;
-				}
+				// else if (key == "drone") {
+				// 	auto dir = stream->Read<DVector3>();
+				// 	std::lock_guard lock(serverSideObjects->mutex);
+				// 	// Launch drone
+				// 	auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
+				// 	drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+				// 	drone->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+				// 	drone->isDynamic = true;
+				// 	drone->physicsClientID = client->id;
+				// }
 				else if (key == "clear") {
 					std::lock_guard lock(serverSideObjects->mutex);
 					for (auto& [objID, obj] : serverSideObjects->objects) if (obj->physicsClientID == client->id && obj->id != playerObj->id) {
@@ -303,11 +303,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
 				obj->objectInstance->mass = 1;
 			}break;
-			case OBJECT_TYPE::Drone:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure(GenerateDroneGeometry);
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-				obj->objectInstance->mass = 1;
-			}break;
+			// case OBJECT_TYPE::Drone:{
+			// 	(obj->objectInstance = scene->AddObjectInstance())->Configure(GenerateDroneGeometry);
+			// 	obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
+			// 	obj->objectInstance->mass = 1;
+			// }break;
 		}
 	}
 	
@@ -348,13 +348,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_C:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << networking::action::TEST_OBJ;
-						stream << std::string("drone");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
-					ClientEnqueueAction(stream);
-				}break;
+				// case GLFW_KEY_C:{
+				// 	v4d::data::WriteOnlyStream stream(32);
+				// 		stream << networking::action::TEST_OBJ;
+				// 		stream << std::string("drone");
+				// 		stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+				// 	ClientEnqueueAction(stream);
+				// }break;
 				case GLFW_KEY_DELETE:{
 					v4d::data::WriteOnlyStream stream(8);
 						stream << networking::action::TEST_OBJ;

@@ -324,8 +324,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						});
 					}
 				}
-			} else {
-				playerView->camSpeed = glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain), 10.0)));
 			}
 		//
 		
@@ -355,7 +353,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Camera position relative to planet
 			terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(scene->camera.worldPosition, 1);
-			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
+			auto terrainHeightAtThisPosition = terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
+			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrainHeightAtThisPosition;
+			
+			// Player Constraints (velocity and altitude)
+			playerView->camSpeed = glm::min(20'000.0, glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain)/2.0, 2.0))));
+			if (terrain->cameraAltitudeAboveTerrain < 0.5) {
+				playerView->worldPosition = scene->camera.worldPosition = terrain->matrix * glm::dvec4(glm::normalize(terrain->cameraPos) * (terrainHeightAtThisPosition + 0.5), 1);
+				scene->camera.RefreshViewMatrix();
+			}
 			
 			for (auto* chunk : terrain->chunks) {
 				chunk->BeforeRender();
