@@ -358,8 +358,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Player Constraints (velocity and altitude)
 			playerView->camSpeed = glm::min(20'000.0, glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain)/2.0, 2.0))));
-			if (terrain->cameraAltitudeAboveTerrain < 1) {
-				playerView->worldPosition = scene->camera.worldPosition = terrain->matrix * glm::dvec4(glm::normalize(terrain->cameraPos) * (terrainHeightAtThisPosition + 1), 1);
+			double playerRadius = 0.3;
+			if (terrain->cameraAltitudeAboveTerrain < playerRadius) {
+				playerView->worldPosition = scene->camera.worldPosition = terrain->matrix * glm::dvec4(glm::normalize(terrain->cameraPos) * (terrainHeightAtThisPosition + playerRadius), 1);
 				scene->camera.RefreshViewMatrix();
 			}
 			

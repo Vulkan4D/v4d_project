@@ -32,3 +32,6 @@
 [submodule "src/tinyobjloader"]
 	path = src/tinyobjloader
 	url = git@github.com:tinyobjloader/tinyobjloader.git
+[submodule "src/tinygltf"]
+	path = src/tinygltf
+	url = git@github.com:syoyo/tinygltf.git
