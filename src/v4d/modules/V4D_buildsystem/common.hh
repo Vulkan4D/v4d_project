@@ -60,6 +60,13 @@ struct BlockFace {
 	bool canAddBlock {};
 };
 
+struct BlockLine {
+	uint8_t point1;
+	uint8_t point2;
+	uint8_t face1;
+	uint8_t face2;
+};
+
 struct PackedBlockCustomData {
 	union {
 		struct {

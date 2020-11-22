@@ -13,13 +13,13 @@ public:
 		sceneObject = scene->AddObjectInstance();
 		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
 			if (block) {
-				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES, Block::MAX_INDICES);
+				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES_SIMPLE, Block::MAX_INDICES_SIMPLE);
 				
 				geom->renderWireframe = true;
 				geom->wireframeColor = wireframeColor;
 				geom->wireframeThickness = 5.0f;
 				
-				auto[vertexCount, indexCount] = block->GenerateGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
+				auto[vertexCount, indexCount] = block->GenerateSimpleGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
 				geom->Shrink(vertexCount, indexCount);
 				
 				for (int i = 0; i < geom->vertexCount; ++i) {

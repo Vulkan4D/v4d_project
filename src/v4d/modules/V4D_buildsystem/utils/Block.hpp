@@ -1,12 +1,16 @@
 #pragma once
 
+#include <unordered_set>
+
 class Block {
 public:
 	static constexpr int MAX_POINTS = 8;
 	static constexpr int MAX_FACES = 7;
 	static constexpr int MAX_LINES = 12;
-	static constexpr int MAX_VERTICES = 24;
-	static constexpr int MAX_INDICES = 36;
+	static constexpr int MAX_VERTICES_SIMPLE = 24;
+	static constexpr int MAX_INDICES_SIMPLE = 36;
+	static constexpr int MAX_VERTICES = MAX_VERTICES_SIMPLE + MAX_POINTS*3 + MAX_LINES*4 + 6;
+	static constexpr int MAX_INDICES = MAX_INDICES_SIMPLE + MAX_POINTS*3 + MAX_LINES*6;
 protected:
 	
 	// 32 Bytes
@@ -245,147 +249,147 @@ protected:
 	std::vector<BlockFace> const GetFaces() const {
 		switch (GetShapeType()) {
 			case SHAPE::CUBE: return {
-				{ // top
+				{ // 0 top
 					{0,1,2, 2,3,0},
 					{FACEDIR::PLUS_Y},
 					true
 				},
-				{ // bottom
+				{ // 1 bottom
 					{7,6,5, 5,4,7},
 					{FACEDIR::MINUS_Y},
 					true
 				},
-				{ // right
+				{ // 2 right
 					{0,3,7, 7,4,0},
 					{FACEDIR::PLUS_X},
 					true
 				},
-				{ // left
+				{ // 3 left
 					{2,1,5, 5,6,2},
 					{FACEDIR::MINUS_X},
 					true
 				},
-				{ // front
+				{ // 4 front
 					{0,4,5, 5,1,0},
 					{FACEDIR::PLUS_Z},
 					true
 				},
-				{ // back
+				{ // 5 back
 					{2,6,7, 7,3,2},
 					{FACEDIR::MINUS_Z},
 					true
 				},
 			};
 			case SHAPE::SLOPE: return {
-				{ // slope
+				{ // 0 slope
 					{0,1,2, 2,3,0},
 					{FACEDIR::PLUS_Y, FACEDIR::MINUS_Z},
 					false
 				},
-				{ // right
+				{ // 1 right
 					{0,3,4},
 					{FACEDIR::PLUS_X},
 					true
 				},
-				{ // left
+				{ // 2 left
 					{1,5,2},
 					{FACEDIR::MINUS_X},
 					true
 				},
-				{ // front
+				{ // 3 front
 					{0,4,1, 1,4,5},
 					{FACEDIR::PLUS_Z},
 					true
 				},
-				{ // bottom
+				{ // 4 bottom
 					{4,3,5, 5,3,2},
 					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::CORNER: return {
-				{ // slope
+				{ // 0 slope
 					{0,1,2},
 					{FACEDIR::MINUS_Z, FACEDIR::MINUS_X, FACEDIR::PLUS_Y},
 					false
 				},
-				{ // right
+				{ // 1 right
 					{0,2,3},
 					{FACEDIR::PLUS_X},
 					true
 				},
-				{ // front
+				{ // 2 front
 					{0,3,1},
 					{FACEDIR::PLUS_Z},
 					true
 				},
-				{ // bottom
+				{ // 3 bottom
 					{2,1,3},
 					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::PYRAMID: return {
-				{ // back slope
+				{ // 0 back slope
 					{0,1,2},
 					{FACEDIR::PLUS_Y, FACEDIR::MINUS_Z},
 					false
 				},
-				{ // left slope
+				{ // 1 left slope
 					{0,4,1},
 					{FACEDIR::PLUS_Y, FACEDIR::MINUS_X},
 					false
 				},
-				{ // right
+				{ // 2 right
 					{0,2,3},
 					{FACEDIR::PLUS_X},
 					true
 				},
-				{ // front
+				{ // 3 front
 					{0,3,4},
 					{FACEDIR::PLUS_Z},
 					true
 				},
-				{ // bottom
+				{ // 4 bottom
 					{1,4,2, 2,4,3},
 					{FACEDIR::MINUS_Y},
 					true
 				},
 			};
 			case SHAPE::INVCORNER: return {
-				{ // top
+				{ // 0 top
 					{0,1,2},
 					{FACEDIR::PLUS_Y},
 					true
 				},
-				{ // bottom
+				{ // 1 bottom
 					{6,5,4, 4,3,6},
 					{FACEDIR::MINUS_Y},
 					true
 				},
-				{ // right
+				{ // 2 right
 					{0,6,3},
 					{FACEDIR::PLUS_X},
 					true
 				},
-				{ // left
+				{ // 3 left
 					{2,1,5, 5,1,4},
 					{FACEDIR::MINUS_X},
 					true
 				},
-				{ // front
+				{ // 4 front
 					{0,3,1, 1,3,4},
 					{FACEDIR::PLUS_Z},
 					true
 				},
-				{ // back
+				{ // 5 back
 					{2,5,6},
 					{FACEDIR::MINUS_Z},
 					true
 				},
-				{ // slope
+				{ // 6 slope
 					{0,2,6},
-					{},
+					{FACEDIR::PLUS_X, FACEDIR::MINUS_Z, FACEDIR::PLUS_Y},
 					false
 				},
 			};
@@ -396,64 +400,93 @@ protected:
 		return {};
 	};
 	
-	std::vector<glm::uvec2> const GetLines() const {
-		switch (GetShapeType()) {
+	std::vector<BlockFace> const GetFacesContainingPoints(std::vector<uint8_t> pts) const {
+		std::vector<BlockFace> faces;
+		for (auto& f : GetFaces()) {
+			for (auto& pt : pts) {
+				for (auto& p : f.triangles) {
+					if (p == pt) goto Found;
+				}
+				goto NotFound;
+				Found: continue;
+			}
+			faces.push_back(f);
+			NotFound: continue;
+		}
+		return faces;
+	}
+	
+	std::tuple<uint8_t, uint8_t> const GetAdjacentFaces(uint8_t faceIndex, uint8_t pointIndex) const {
+		auto lines = GetLines();
+		std::remove_if(lines.begin(), lines.end(), [faceIndex, pointIndex](BlockLine& line){
+			if (line.face1 != faceIndex && line.face2 != faceIndex) return true;
+			if (line.point1 != pointIndex && line.point2 != pointIndex) return true;
+			return false;
+		});
+		return {
+			lines[0].face1==faceIndex? lines[0].face2 : lines[0].face1,
+			lines[1].face1==faceIndex? lines[1].face2 : lines[1].face1,
+		};
+	}
+	
+	std::vector<BlockLine> const GetLines() const {
+		switch (GetShapeType()) { /* {point1,point2, face1,face2}, */
 			case SHAPE::CUBE: return {
-				{0,1}, // top front
-				{2,3}, // top back
-				{4,5}, // bottom front
-				{6,7}, // bottom back
-				{1,2}, // top left
-				{0,3}, // top right
-				{5,6}, // bottom left
-				{4,7}, // bottom right
-				{1,5}, // front left
-				{2,6}, // back left
-				{0,4}, // front right
-				{3,7}, // back right
+				{0,1, 0,4}, // top front
+				{2,3, 0,5}, // top back
+				{4,5, 1,4}, // bottom front
+				{6,7, 1,5}, // bottom back
+				{1,2, 0,3}, // top left
+				{0,3, 0,2}, // top right
+				{5,6, 1,3}, // bottom left
+				{4,7, 1,2}, // bottom right
+				{1,5, 3,4}, // front left
+				{2,6, 3,5}, // back left
+				{0,4, 2,4}, // front right
+				{3,7, 2,5}, // back right
 			};
 			case SHAPE::SLOPE: return {
-				{0,1}, // top
-				{1,2}, // left slope
-				{0,3}, // right slope
-				{2,3}, // back
-				{4,5}, // front bottom
-				{0,4}, // front right
-				{3,4}, // bottom right
-				{1,5}, // front left
-				{2,5}, // bottom left
+				{0,1, 0,3}, // top
+				{1,2, 0,2}, // left slope
+				{0,3, 0,1}, // right slope
+				{2,3, 0,4}, // back
+				{4,5, 3,4}, // front bottom
+				{0,4, 1,3}, // front right
+				{3,4, 1,4}, // bottom right
+				{1,5, 2,3}, // front left
+				{2,5, 2,4}, // bottom left
 			};
 			case SHAPE::CORNER: return {
-				{0,1},
-				{1,2},
-				{0,2},
-				{0,3},
-				{1,3},
-				{2,3},
+				{0,1, 0,2},
+				{1,2, 0,3},
+				{0,2, 0,1},
+				{0,3, 1,2},
+				{1,3, 2,3},
+				{2,3, 1,3},
 			};
 			case SHAPE::PYRAMID: return {
-				{0,1},
-				{0,4},
-				{0,2},
-				{0,3},
-				{1,2},
-				{2,3},
-				{1,4},
-				{3,4},
+				{0,1, 0,1},
+				{0,4, 1,3},
+				{0,2, 0,2},
+				{0,3, 2,3},
+				{1,2, 0,4},
+				{2,3, 2,4},
+				{1,4, 1,4},
+				{3,4, 3,4},
 			};
 			case SHAPE::INVCORNER: return {
-				{0,1}, // top front
-				{1,2}, // top left
-				{0,2}, // top slope
-				{2,6}, // back slope
-				{0,6}, // right slope
-				{2,5}, // back left
-				{5,6}, // back bottom
-				{0,3}, // front right
-				{3,6}, // bottom right
-				{4,5}, // bottom left
-				{3,4}, // bottom front
-				{1,4}, // front left
+				{0,1, 0,4}, // top front
+				{1,2, 0,3}, // top left
+				{0,2, 0,6}, // top slope
+				{2,6, 5,6}, // back slope
+				{0,6, 2,6}, // right slope
+				{2,5, 3,5}, // back left
+				{5,6, 1,5}, // back bottom
+				{0,3, 2,4}, // front right
+				{3,6, 1,2}, // bottom right
+				{4,5, 1,3}, // bottom left
+				{3,4, 1,4}, // bottom front
+				{1,4, 3,4}, // front left
 			};
 			case SHAPE::_EXTRA1: return {};
 			case SHAPE::_EXTRA2: return {};
@@ -703,7 +736,7 @@ public:
 	}
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
-	GenerateGeometry(
+	GenerateSimpleGeometry(
 		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
 		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
 		uint vertexIndexOffset = 0,
@@ -731,9 +764,10 @@ public:
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
 					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
-					PackedBlockCustomData customData;
-					customData.blockIndex = data.index;
-					customData.faceIndex = faceIndex;
+					PackedBlockCustomData customData;{
+						customData.blockIndex = data.index;
+						customData.faceIndex = faceIndex;
+					}
 					switch (faceIndex) {
 						case 0: customData.materialId = data.face0Material;break;
 						case 1: customData.materialId = data.face1Material;break;
@@ -750,10 +784,139 @@ public:
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
 					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
 				}
-				outputIndices[indexCount++] = faceVertex->vertexIndex + vertexIndexOffset;
+				outputIndices[indexCount++] = vertexIndexOffset + faceVertex->vertexIndex;
 			}
 			++faceIndex;
 		}
+		assert(vertexCount <= MAX_VERTICES_SIMPLE);
+		assert(indexCount <= MAX_INDICES_SIMPLE);
+		return {vertexCount, indexCount};
+	}
+	
+	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
+	GenerateGeometry(
+		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
+		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
+		uint vertexIndexOffset = 0,
+		float alpha = 1.0
+	) {
+		uint vertexCount = 0, indexCount = 0;
+		auto points = GetPointsPositions(true);
+		
+		bool addBevels = true;
+		
+		std::map<uint8_t/*faceAndPointIndex*/, FaceVertex> faceVertices {};
+		std::unordered_map<uint8_t/*pointIndex*/, std::unordered_set<glm::vec3>> cornerVertices {};
+		std::unordered_map<uint8_t/*pointIndex*/, std::vector<std::tuple<uint8_t/*faceIndex*/, glm::vec3/*vertexPosition*/>>> extraCornerVertices {};
+		
+		// Generate vertices and indices
+		int faceIndex = 0;
+		for (const auto& face : GetFaces()) {
+			assert(faceIndex < MAX_FACES);
+			assert(face.triangles.size() >= 3 && (face.triangles.size() % 3) == 0);
+			// Normal
+			glm::vec3 faceNormal = glm::normalize(glm::cross(points[face.triangles[1]] - points[face.triangles[0]], points[face.triangles[1]] - points[face.triangles[2]]));
+			// Vertices
+			for (const auto& pointIndex : face.triangles) {
+				assert(pointIndex < MAX_POINTS);
+				uint8_t faceVerticesIndex = (faceIndex << 4) | pointIndex; // each face should have their own vertices, but vertices within a face can be reused
+				FaceVertex* faceVertex;
+				try {
+					faceVertex = &faceVertices.at(faceVerticesIndex);
+				} catch (...) {
+					faceVertex = &faceVertices[faceVerticesIndex];
+					faceVertex->vertexIndex = vertexCount++;
+					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
+					PackedBlockCustomData customData;{
+						customData.blockIndex = data.index;
+						customData.faceIndex = faceIndex;
+					}
+					switch (faceIndex) {
+						case 0: customData.materialId = data.face0Material;break;
+						case 1: customData.materialId = data.face1Material;break;
+						case 2: customData.materialId = data.face2Material;break;
+						case 3: customData.materialId = data.face3Material;break;
+						case 4: customData.materialId = data.face4Material;break;
+						case 5: customData.materialId = data.face5Material;break;
+						case 6: customData.materialId = data.face6Material;break;
+					}
+					faceVertex->vertexData->customData = customData.packed;
+					
+					auto pt = points[pointIndex];
+					
+					if (addBevels) {
+						float bevelSize = 0.05f;
+						pt -= glm::sign(glm::round(points[pointIndex] * glm::abs(glm::abs(faceNormal) - 1.0f) * 100.0f)) * bevelSize;
+						if ((GetShapeType() == SHAPE::INVCORNER) && (faceIndex == 6)) pt += faceNormal * bevelSize / 2.0f;
+						else if (face.facedirs.size() > 1) pt += faceNormal * bevelSize / 4.0f;
+					}
+					
+					faceVertex->vertexData->pos = pt + GetPosition();
+					faceVertex->vertexData->normal = faceNormal;
+					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
+					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
+					
+					if (cornerVertices[pointIndex].size() < 3) {
+						cornerVertices[pointIndex].emplace(glm::round(faceVertex->vertexData->pos * 100.0f) / 100.0f);
+					} else {
+						extraCornerVertices[pointIndex].emplace_back(faceIndex, faceVertex->vertexData->pos);
+					}
+				}
+				outputIndices[indexCount++] = vertexIndexOffset + faceVertex->vertexIndex;
+			}
+			++faceIndex;
+		}
+		
+		if (addBevels) {
+			auto addStructureTriangle = [&outputVertices, &outputIndices, &vertexCount, &indexCount, vertexIndexOffset, this](const auto& vertices){
+				assert(vertices.size() == 3 || vertices.size() == 4);
+				size_t index = vertexCount;
+				for (auto& vertexPos : vertices) outputVertices[vertexCount++].pos = vertexPos;
+				glm::vec3 faceNormal = glm::normalize(glm::cross(outputVertices[index+1].pos - outputVertices[index+2].pos, outputVertices[index+1].pos - outputVertices[index+0].pos));
+				if (glm::dot(faceNormal, glm::normalize(outputVertices[index].pos - GetPosition())) < 0) faceNormal *= -1;
+				PackedBlockCustomData customData;{
+					customData.blockIndex = data.index;
+					customData.faceIndex = 7; // 7 is for structure
+					customData.materialId = data.structureMaterial;
+				}
+				for (int i = 0; i < vertices.size(); ++i) {
+					outputVertices[index+i].customData = customData.packed;
+					outputVertices[index+i].normal = faceNormal;
+					outputVertices[index+i].SetColor(glm::vec4(COLORS[BLOCK_COLOR_GREY], 1));
+				}
+				outputIndices[indexCount++] = vertexIndexOffset + index + 0;
+				outputIndices[indexCount++] = vertexIndexOffset + index + 1;
+				outputIndices[indexCount++] = vertexIndexOffset + index + 2;
+				if (vertices.size() == 4) {
+					outputIndices[indexCount++] = vertexIndexOffset + index + 2;
+					outputIndices[indexCount++] = vertexIndexOffset + index + 3;
+					outputIndices[indexCount++] = vertexIndexOffset + index + 1;
+				}
+			};
+			// Corners
+			for (auto&[corner, vertices] : cornerVertices) {
+				if (vertices.size() == 3) {
+					addStructureTriangle(vertices);
+					if (extraCornerVertices.count(corner)) {
+						for (auto&[faceIndex, vert0] : extraCornerVertices[corner]) {
+							auto&[face1, face2] = GetAdjacentFaces(faceIndex, corner);
+							auto vert1 = faceVertices[(face1 << 4) | corner].vertexData->pos;
+							auto vert2 = faceVertices[(face2 << 4) | corner].vertexData->pos;
+							addStructureTriangle(std::vector<glm::vec3>{vert0, vert1, vert2});
+						}
+					}
+				}
+			}
+			// Edges
+			for (auto& line : GetLines()) {
+				auto vert0 = faceVertices[(line.face1 << 4) | line.point1].vertexData->pos;
+				auto vert1 = faceVertices[(line.face1 << 4) | line.point2].vertexData->pos;
+				auto vert2 = faceVertices[(line.face2 << 4) | line.point1].vertexData->pos;
+				auto vert3 = faceVertices[(line.face2 << 4) | line.point2].vertexData->pos;
+				addStructureTriangle(std::vector<glm::vec3>{vert0, vert1, vert2, vert3});
+			}
+		}
+		
 		assert(vertexCount <= MAX_VERTICES);
 		assert(indexCount <= MAX_INDICES);
 		return {vertexCount, indexCount};

@@ -123,6 +123,10 @@ struct BuildInterface {
 					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
 					if (!parentBlock.has_value())
 						goto INVALID;
+						
+					// Make sure we have hit a face and not the structure
+					if (customData.faceIndex == 7)
+						goto INVALID;
 					
 					auto parentFace = parentBlock->GetFace(customData.faceIndex);
 					
