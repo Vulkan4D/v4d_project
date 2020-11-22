@@ -120,7 +120,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		try { // Update build in-game
 			auto& build = cachedData.builds.at(obj->id);
-			LOG("Client Reveived build")
 			if (build) {
 				auto& blocks = cachedData.buildBlocks.at(obj->id);
 				build->SwapBlocksVector(blocks);
@@ -165,7 +164,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetCursorPos({float(i) * 74 + 2, 24});
 			if (ImGui::ImageButton(blocks_imGuiImg[i], {64, 64}, {0,0}, {1,1}, -1, buildInterface.selectedBlockType==i?ImVec4{0,0.5,0,1}:ImVec4{0,0,0,1}, buildInterface.selectedBlockType==-1?ImVec4{1,1,1,1}:ImVec4{1,1,1,0.8})) {
 				buildInterface.selectedBlockType = i;
-				buildInterface.RemakeTmpBlock();
+				buildInterface.isDirty = true;
 			}
 		}
 		if (buildInterface.selectedBlockType != -1) {
@@ -176,7 +175,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
 			if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
-				buildInterface.RemakeTmpBlock();
+				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
 			
@@ -184,7 +183,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
 			if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
-				buildInterface.RemakeTmpBlock();
+				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
 			
@@ -192,15 +191,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetNextItemWidth(90);
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
 			if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
-				buildInterface.RemakeTmpBlock();
+				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
 			
 			ImGui::SetCursorPos({5, 125});
 			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==3? activeColor : inactiveColor);
 			if (ImGui::Button("Rotate")) {
-				buildInterface.NextBlockRotation();
-				buildInterface.RemakeTmpBlock();
+				buildInterface.FindNextValidBlockRotation();
+				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
 		}
@@ -428,7 +427,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 					break;
 			}
-			buildInterface.RemakeTmpBlock();
+			buildInterface.isDirty = true;
 		}
 		
 		// Shift key for higher precision grid
@@ -478,7 +477,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							
 							// // deselect build tool
 							// buildInterface.selectedBlockType = -1;
-							// buildInterface.RemakeTmpBlock();
+							// buildInterface.isDirty = true;
 						}
 					}
 				break;
@@ -518,7 +517,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 				} else {
 					// Rotate
-					buildInterface.NextBlockRotation(y);
+					buildInterface.FindNextValidBlockRotation(glm::sign(y));
 				}
 			} else if (x != 0) {
 				buildInterface.selectedEditValue += x;
@@ -526,7 +525,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (buildInterface.selectedEditValue < 0) buildInterface.selectedEditValue = 3;
 			}
 		}
-		buildInterface.RemakeTmpBlock();
+		buildInterface.isDirty = true;
 	}
 	
 	#pragma endregion

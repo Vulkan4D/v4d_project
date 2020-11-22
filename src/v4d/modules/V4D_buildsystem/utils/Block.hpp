@@ -602,6 +602,17 @@ public:
 		return glm::vec3(data.posX, data.posY, data.posZ) / 10.0f;
 	};
 	
+	void SetSimilarTo(const Block& ref) {
+		data.shape = ref.data.shape;
+		data.posX = ref.data.posX;
+		data.posY = ref.data.posY;
+		data.posZ = ref.data.posZ;
+		data.sizeX = ref.data.sizeX;
+		data.sizeY = ref.data.sizeY;
+		data.sizeZ = ref.data.sizeZ;
+		data.orientation = ref.data.orientation;
+	}
+	
 	void SetSize(glm::vec3 size) {
 		data.sizeX = size.x * 10.0f - 1;
 		data.sizeY = size.y * 10.0f - 1;
@@ -610,6 +621,10 @@ public:
 	
 	void SetOrientation(uint8_t rot) {
 		data.orientation = rot;
+	}
+	
+	uint8_t GetOrientation() const {
+		return data.orientation;
 	}
 	
 	BlockFace GetFace(uint32_t faceIndex) const {
@@ -667,7 +682,7 @@ public:
 		return {0,0,0};
 	}
 	
-	float GetHalfSizeForFaceDir(FACEDIR dir) {
+	float GetHalfSizeForFaceDir(FACEDIR dir) const {
 		return (GetFaceSize(dir)+1) / 20.0f;
 	}
 	
@@ -691,7 +706,7 @@ public:
 		return glm::rotate(glm::mat4(1), glm::radians(rotation.w), glm::vec3(rotation));
 	}
 	
-	std::vector<glm::vec3> GetPointsPositions(bool realSize = true) {
+	std::vector<glm::vec3> GetPointsPositions(bool realSize = true) const {
 		auto points = GetPoints();
 		if (realSize) {
 			// 10 cm grid for block sizes
@@ -709,6 +724,13 @@ public:
 		for (auto& p : points) {
 			p = glm::translate(GetRotationMatrix(), p)[3];
 		}
+		return points;
+	}
+	
+	std::vector<glm::vec3> GetFinalPointsPositions() const {
+		auto points = GetPointsPositions(true);
+		auto pos = GetPosition();
+		for (auto& p : points) p += pos;
 		return points;
 	}
 	
