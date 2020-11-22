@@ -664,6 +664,34 @@ public:
 		data.color7 = color;
 	}
 	
+	void SetFaceColor(uint8_t faceIndex, uint8_t color) {
+		data.useVertexColorGradients = 0;
+		switch (faceIndex) {
+			case 0: data.color0 = color;break;
+			case 1: data.color1 = color;break;
+			case 2: data.color2 = color;break;
+			case 3: data.color3 = color;break;
+			case 4: data.color4 = color;break;
+			case 5: data.color5 = color;break;
+			case 6: data.color6 = color;break;
+			case 7: data.color7 = color;break;
+		}
+	}
+	
+	void SetVertexGradientColor(uint8_t vertexIndex, uint8_t color) {
+		data.useVertexColorGradients = 1;
+		switch (vertexIndex) {
+			case 0: data.color0 = color;break;
+			case 1: data.color1 = color;break;
+			case 2: data.color2 = color;break;
+			case 3: data.color3 = color;break;
+			case 4: data.color4 = color;break;
+			case 5: data.color5 = color;break;
+			case 6: data.color6 = color;break;
+			case 7: data.color7 = color;break;
+		}
+	}
+	
 	static const glm::vec3 GetFaceDirNormal(FACEDIR dir) {
 		switch (dir) {
 			case FACEDIR::PLUS_X:

@@ -157,19 +157,34 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		ImGui::SetNextWindowPos({20, 150}, ImGuiCond_FirstUseEver); // or ImGuiCond_Once
-		ImGui::SetNextWindowSize({380, 160}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize({460, 160}, ImGuiCond_Once);
 		ImGui::Begin("Build System");
+		auto activeColor = ImVec4{0,1,0, 1.0};
+		auto inactiveColor = ImVec4{1,1,1, 0.6};
+		
+		// Block shapes
 		for (int i = 0; i < NB_BLOCKS; ++i) {
 			if (!blocks_imGuiImg[i]) blocks_imGuiImg[i] = (ImTextureID)ImGui_ImplVulkan_AddTexture(blocks_tex[i].GetImage()->sampler, blocks_tex[i].GetImage()->view, VK_IMAGE_LAYOUT_GENERAL);
 			ImGui::SetCursorPos({float(i) * 74 + 2, 24});
 			if (ImGui::ImageButton(blocks_imGuiImg[i], {64, 64}, {0,0}, {1,1}, -1, buildInterface.selectedBlockType==i?ImVec4{0,0.5,0,1}:ImVec4{0,0,0,1}, buildInterface.selectedBlockType==-1?ImVec4{1,1,1,1}:ImVec4{1,1,1,0.8})) {
 				buildInterface.selectedBlockType = i;
+				buildInterface.paintMode = false;
 				buildInterface.isDirty = true;
 			}
 		}
+		
+		// Paint
+		ImGui::SetCursorPos({float(NB_BLOCKS) * 74 + 2, 24});
+		ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.paintMode? activeColor : inactiveColor);
+		if (ImGui::Button("Paint", {64, 64})) {
+			buildInterface.selectedBlockType = -1;
+			buildInterface.paintMode = true;
+			buildInterface.isDirty = true;
+		}
+		ImGui::PopStyleColor();
+		
 		if (buildInterface.selectedBlockType != -1) {
-			auto activeColor = ImVec4{0,1,0, 1.0};
-			auto inactiveColor = ImVec4{1,1,1, 0.6};
+			// Size/Orientation
 			
 			ImGui::SetCursorPos({5, 100});
 			ImGui::SetNextItemWidth(90);
@@ -202,7 +217,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
+			
+		} else if (buildInterface.paintMode) {
+			// Colors
+			for (int i = 0; i < NB_COLORS; ++i) {
+				ImVec4 c{COLORS[i].r, COLORS[i].g, COLORS[i].b, buildInterface.selectedColor==i? 1.0f: 0.2f};
+				ImGui::PushStyleColor(ImGuiCol_Button, c);
+				ImGui::SetCursorPos({32.0f*i + 5, 100.0f});
+				if (ImGui::Button((std::string("    ") + std::to_string(i)).c_str(), {28, 28})) {
+					buildInterface.selectedColor = i;
+				}
+				ImGui::PopStyleColor();
+			}
+			// Vertex Gradients checkbox
+			ImGui::Checkbox("Vertex gradients", &buildInterface.paintModeVertexGradients);
 		}
+		
 		ImGui::End();
 	}
 	
@@ -343,6 +373,52 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				}catch(...){break;}
 			}break;
 		
+			case PAINT_BLOCK_FACE:{
+				// Network data
+				auto parentId = stream->Read<NetworkGameObject::Id>();
+				uint32_t blockIndex = stream->Read<uint32_t>();
+				auto faceIndex = stream->Read<uint8_t>();
+				auto colorIndex = stream->Read<uint8_t>();
+				//
+				std::scoped_lock lock(serverSideObjects->mutex, cachedData.serverObjectMapsMutex);
+				try {
+					auto& buildBlocks = cachedData.serverBuildBlocks.at(parentId);
+					for (auto&b : buildBlocks) {
+						if (b.GetIndex() == blockIndex) {
+							b.SetFaceColor(faceIndex, colorIndex);
+							break;
+						}
+					}
+				}catch(...){break;}
+				try {
+					auto obj = serverSideObjects->objects.at(parentId);
+					obj->Iterate();
+				}catch(...){break;}
+			}break;
+		
+			case PAINT_BLOCK_VERTEX_GRADIENT:{
+				// Network data
+				auto parentId = stream->Read<NetworkGameObject::Id>();
+				uint32_t blockIndex = stream->Read<uint32_t>();
+				auto vertexIndex = stream->Read<uint8_t>();
+				auto colorIndex = stream->Read<uint8_t>();
+				//
+				std::scoped_lock lock(serverSideObjects->mutex, cachedData.serverObjectMapsMutex);
+				try {
+					auto& buildBlocks = cachedData.serverBuildBlocks.at(parentId);
+					for (auto&b : buildBlocks) {
+						if (b.GetIndex() == blockIndex) {
+							b.SetVertexGradientColor(vertexIndex, colorIndex);
+							break;
+						}
+					}
+				}catch(...){break;}
+				try {
+					auto obj = serverSideObjects->objects.at(parentId);
+					obj->Iterate();
+				}catch(...){break;}
+			}break;
+			
 			default: 
 				LOG_ERROR("Server ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
 			break;
@@ -391,21 +467,31 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 				case GLFW_KEY_0:
 					buildInterface.selectedBlockType = -1;
+					buildInterface.paintMode = false;
 					break;
 				case GLFW_KEY_1:
 					buildInterface.selectedBlockType = 0;
+					buildInterface.paintMode = false;
 					break;
 				case GLFW_KEY_2:
 					buildInterface.selectedBlockType = 1;
+					buildInterface.paintMode = false;
 					break;
 				case GLFW_KEY_3:
 					buildInterface.selectedBlockType = 2;
+					buildInterface.paintMode = false;
 					break;
 				case GLFW_KEY_4:
 					buildInterface.selectedBlockType = 3;
+					buildInterface.paintMode = false;
 					break;
 				case GLFW_KEY_5:
 					buildInterface.selectedBlockType = 4;
+					buildInterface.paintMode = false;
+					break;
+				case GLFW_KEY_6:
+					buildInterface.selectedBlockType = -1;
+					buildInterface.paintMode = true;
 					break;
 					
 				case GLFW_KEY_X: // delete block
@@ -434,14 +520,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		if (key == GLFW_KEY_LEFT_SHIFT) {
 			if (action != GLFW_RELEASE) buildInterface.highPrecisionGrid = true;
 			else buildInterface.highPrecisionGrid = false;
+			buildInterface.isDirty = true;
 		}
 		// C key for create mode
 		if (key == GLFW_KEY_C) {
 			if (action != GLFW_RELEASE) buildInterface.createMode = true;
 			else buildInterface.createMode = false;
+			buildInterface.isDirty = true;
 		}
 		
-		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1;
+		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1 && !buildInterface.paintMode;
 	}
 	
 	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
@@ -462,14 +550,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							
 							block.SetColor(BLOCK_COLOR_GREY);
 							
-							if (parent) {
+							if (parent && !buildInterface.createMode) {
 								v4d::data::WriteOnlyStream stream(256);
 									stream << ADD_BLOCK_TO_BUILD;
 									// Network data 
 									stream << parent->networkId;
 									stream << block;
 								ClientEnqueueAction(stream);
-							} else {
+							} else if (buildInterface.createMode) {
 								NetworkGameObjectTransform transform {};
 								transform.SetFromTransformAndVelocity(buildInterface.GetTmpBuildWorldTransform(), {0,0,0});
 								v4d::data::WriteOnlyStream stream(256);
@@ -483,6 +571,47 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							// // deselect build tool
 							// buildInterface.selectedBlockType = -1;
 							// buildInterface.isDirty = true;
+						}
+					} else if (buildInterface.paintMode && buildInterface.cachedHitBlock.hasHit) {
+						auto hitBuild = buildInterface.cachedHitBlock.build.lock();
+						if (hitBuild) {
+							PackedBlockCustomData customData;
+							customData.packed = buildInterface.cachedHitBlock.customData0;
+							auto parentBlock = hitBuild->GetBlock(customData.blockIndex);
+							if (parentBlock.has_value()) {
+								if (buildInterface.paintModeVertexGradients) {
+									auto points = parentBlock->GetFinalPointsPositions();
+									uint8_t vertexIndex = 0;
+									float closest = 99999.f;
+									for (int i = 0; i < points.size(); ++i) {
+										auto dist = glm::distance(buildInterface.cachedHitBlock.hitPositionOnBuild, points[i]);
+										if (dist < closest) {
+											closest = dist;
+											vertexIndex = i;
+										}
+									}
+									LOG_DEBUG(closest)
+									v4d::data::WriteOnlyStream stream(256);
+										stream << PAINT_BLOCK_VERTEX_GRADIENT;
+										// Network data
+										stream << hitBuild->networkId;
+										stream << parentBlock->GetIndex();
+										stream << (uint8_t)vertexIndex;
+										stream << (uint8_t)buildInterface.selectedColor;
+									ClientEnqueueAction(stream);
+								} else {
+									if (customData.faceIndex != 7) {
+										v4d::data::WriteOnlyStream stream(256);
+											stream << PAINT_BLOCK_FACE;
+											// Network data
+											stream << hitBuild->networkId;
+											stream << parentBlock->GetIndex();
+											stream << (uint8_t)customData.faceIndex;
+											stream << (uint8_t)buildInterface.selectedColor;
+										ClientEnqueueAction(stream);
+									}
+								}
+							}
 						}
 					}
 				break;
@@ -529,6 +658,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (buildInterface.selectedEditValue > 3) buildInterface.selectedEditValue = 0;
 				if (buildInterface.selectedEditValue < 0) buildInterface.selectedEditValue = 3;
 			}
+		} else if (buildInterface.paintMode) {
+			buildInterface.selectedColor += glm::sign(y);
+			if (buildInterface.selectedColor >= NB_COLORS) buildInterface.selectedColor = 0;
+			if (buildInterface.selectedColor < 0) buildInterface.selectedColor = NB_COLORS;
 		}
 		buildInterface.isDirty = true;
 	}

@@ -19,6 +19,9 @@ struct BuildInterface {
 	bool createMode = false;
 	bool isValid = false;
 	bool isDirty = false;
+	bool paintMode = false;
+	bool paintModeVertexGradients = false;
+	int selectedColor = BLOCK_COLOR_GREY;
 	mutable std::recursive_mutex mu;
 	
 	// RayCast hit block
@@ -29,6 +32,7 @@ struct BuildInterface {
 		bool hasHit = false;
 		uint32_t objId = 0;
 		uint32_t customData0 = 0;
+		glm::vec3 hitPositionOnBuild = {0,0,0};
 		glm::vec3 gridPos = {0,0,0};
 		bool highPrecisionGrid = false;
 		bool createMode = false;
@@ -66,6 +70,7 @@ struct BuildInterface {
 				if (hasHit) {
 					objId = buildInterface->hitBlock->objId;
 					customData0 = buildInterface->hitBlock->customData0;
+					hitPositionOnBuild = buildInterface->hitBlock->position;
 					if (highPrecisionGrid) {
 						gridPos = glm::round(buildInterface->hitBlock->position*10.001f)/10.0f;
 					} else {
@@ -192,9 +197,8 @@ struct BuildInterface {
 					// We are not aiming at a parent build, create a new build
 					block.SetColor(BLOCK_COLOR_GREY);
 				} else {
-					if (hitBlock->distance > 100) tmpBuildParent = nullptr;
 					// If we are aiming at a parent build, we want to add the new block to that build
-					if (tmpBuildParent) {
+					if (tmpBuildParent && hitBlock->distance < 100) {
 						
 						// Get hit block&face info from raycast's custom data
 						PackedBlockCustomData customData;
