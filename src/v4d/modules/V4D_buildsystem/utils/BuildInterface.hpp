@@ -35,41 +35,41 @@ struct BuildInterface {
 		
 		std::weak_ptr<Build> build;
 		
-		bool Invalidated(const BuildInterface* interface) const {
-			if (hasHit != (interface->hitBlock.has_value())) return true;
+		bool Invalidated(const BuildInterface* buildInterface) const {
+			if (hasHit != (buildInterface->hitBlock.has_value())) return true;
 			if (hasHit) {
-				if (this->highPrecisionGrid != interface->highPrecisionGrid) return true;
-				if (this->createMode != interface->createMode) return true;
-				if (objId != interface->hitBlock->objId) return true;
-				if (customData0 != interface->hitBlock->customData0) return true;
+				if (this->highPrecisionGrid != buildInterface->highPrecisionGrid) return true;
+				if (this->createMode != buildInterface->createMode) return true;
+				if (objId != buildInterface->hitBlock->objId) return true;
+				if (customData0 != buildInterface->hitBlock->customData0) return true;
 				if (highPrecisionGrid) {
-					if (gridPos != glm::round(interface->hitBlock->position*10.001f)/10.0f) return true;
+					if (gridPos != glm::round(buildInterface->hitBlock->position*10.001f)/10.0f) return true;
 				} else {
-					if (gridPos != glm::round(interface->hitBlock->position*1.001f)) return true;
+					if (gridPos != glm::round(buildInterface->hitBlock->position*1.001f)) return true;
 				}
 			}
 			return false;
 		}
 		
-		void Refresh(BuildInterface* interface) {
-			interface->scene->Lock();{
-				this->highPrecisionGrid = interface->highPrecisionGrid;
-				this->createMode = interface->createMode;
+		void Refresh(BuildInterface* buildInterface) {
+			buildInterface->scene->Lock();{
+				this->highPrecisionGrid = buildInterface->highPrecisionGrid;
+				this->createMode = buildInterface->createMode;
 				
-				if (interface->hitBlock.has_value() && interface->hitBuild) {
-					build = interface->hitBuild;
+				if (buildInterface->hitBlock.has_value() && buildInterface->hitBuild) {
+					build = buildInterface->hitBuild;
 				} else {
 					build.reset();
 				}
 				
-				hasHit = interface->hitBlock.has_value();
+				hasHit = buildInterface->hitBlock.has_value();
 				if (hasHit) {
-					objId = interface->hitBlock->objId;
-					customData0 = interface->hitBlock->customData0;
+					objId = buildInterface->hitBlock->objId;
+					customData0 = buildInterface->hitBlock->customData0;
 					if (highPrecisionGrid) {
-						gridPos = glm::round(interface->hitBlock->position*10.001f)/10.0f;
+						gridPos = glm::round(buildInterface->hitBlock->position*10.001f)/10.0f;
 					} else {
-						gridPos = glm::round(interface->hitBlock->position*1.001f);
+						gridPos = glm::round(buildInterface->hitBlock->position*1.001f);
 					}
 				} else {
 					objId = 0;
@@ -77,9 +77,9 @@ struct BuildInterface {
 				}
 				
 				// Get parent hit build (if any)
-				interface->tmpBuildParent = (interface->hitBlock.has_value() && interface->hitBuild)? interface->hitBuild : nullptr;
+				buildInterface->tmpBuildParent = (buildInterface->hitBlock.has_value() && buildInterface->hitBuild)? buildInterface->hitBuild : nullptr;
 			
-			}interface->scene->Unlock();
+			}buildInterface->scene->Unlock();
 		}
 		
 	} cachedHitBlock;
