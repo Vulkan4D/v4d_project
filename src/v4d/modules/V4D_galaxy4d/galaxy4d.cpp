@@ -259,13 +259,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_N:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << networking::action::TEST_OBJ;
-						stream << std::string("balls");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
-					ClientEnqueueAction(stream);
-				}break;
+				// case GLFW_KEY_N:{
+				// 	v4d::data::WriteOnlyStream stream(32);
+				// 		stream << networking::action::TEST_OBJ;
+				// 		stream << std::string("balls");
+				// 		stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+				// 	ClientEnqueueAction(stream);
+				// }break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
@@ -273,7 +273,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_C:{
+				case GLFW_KEY_INSERT:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("drone");

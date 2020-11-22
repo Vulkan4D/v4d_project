@@ -435,6 +435,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (action != GLFW_RELEASE) buildInterface.highPrecisionGrid = true;
 			else buildInterface.highPrecisionGrid = false;
 		}
+		// C key for create mode
+		if (key == GLFW_KEY_C) {
+			if (action != GLFW_RELEASE) buildInterface.createMode = true;
+			else buildInterface.createMode = false;
+		}
 		
 		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1;
 	}

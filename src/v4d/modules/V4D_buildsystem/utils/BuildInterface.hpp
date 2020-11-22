@@ -16,6 +16,7 @@ struct BuildInterface {
 	TmpBlock* tmpBlock = nullptr;
 	int blockRotation = 0;
 	bool highPrecisionGrid = false;
+	bool createMode = false;
 	bool isValid = false;
 	bool isDirty = false;
 	mutable std::recursive_mutex mu;
@@ -30,59 +31,64 @@ struct BuildInterface {
 		uint32_t customData0 = 0;
 		glm::vec3 gridPos = {0,0,0};
 		bool highPrecisionGrid = false;
+		bool createMode = false;
 		
 		std::weak_ptr<Build> build;
 		
-		bool Invalidated(const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock, bool highPrecisionGrid) {
-			if (hasHit != (hitBlock.has_value())) return true;
+		bool Invalidated(const BuildInterface* interface) const {
+			if (hasHit != (interface->hitBlock.has_value())) return true;
 			if (hasHit) {
-				if (this->highPrecisionGrid != highPrecisionGrid) return true;
-				if (objId != hitBlock->objId) return true;
-				if (customData0 != hitBlock->customData0) return true;
+				if (this->highPrecisionGrid != interface->highPrecisionGrid) return true;
+				if (this->createMode != interface->createMode) return true;
+				if (objId != interface->hitBlock->objId) return true;
+				if (customData0 != interface->hitBlock->customData0) return true;
 				if (highPrecisionGrid) {
-					if (gridPos != glm::round(hitBlock->position*10.001f)/10.0f) return true;
+					if (gridPos != glm::round(interface->hitBlock->position*10.001f)/10.0f) return true;
 				} else {
-					if (gridPos != glm::round(hitBlock->position*1.001f)) return true;
+					if (gridPos != glm::round(interface->hitBlock->position*1.001f)) return true;
 				}
 			}
 			return false;
 		}
-		void operator= (const std::optional<v4d::graphics::RenderRayCastHit>& hitBlock) {
-			hasHit = hitBlock.has_value();
-			if (hasHit) {
-				objId = hitBlock->objId;
-				customData0 = hitBlock->customData0;
-				if (highPrecisionGrid) {
-					gridPos = glm::round(hitBlock->position*10.001f)/10.0f;
+		
+		void Refresh(BuildInterface* interface) {
+			interface->scene->Lock();{
+				this->highPrecisionGrid = interface->highPrecisionGrid;
+				this->createMode = interface->createMode;
+				
+				if (interface->hitBlock.has_value() && interface->hitBuild) {
+					build = interface->hitBuild;
 				} else {
-					gridPos = glm::round(hitBlock->position*1.001f);
+					build.reset();
 				}
-			} else {
-				objId = 0;
-				customData0 = 0;
-			}
+				
+				hasHit = interface->hitBlock.has_value();
+				if (hasHit) {
+					objId = interface->hitBlock->objId;
+					customData0 = interface->hitBlock->customData0;
+					if (highPrecisionGrid) {
+						gridPos = glm::round(interface->hitBlock->position*10.001f)/10.0f;
+					} else {
+						gridPos = glm::round(interface->hitBlock->position*1.001f);
+					}
+				} else {
+					objId = 0;
+					customData0 = 0;
+				}
+				
+				// Get parent hit build (if any)
+				interface->tmpBuildParent = (interface->hitBlock.has_value() && interface->hitBuild)? interface->hitBuild : nullptr;
+			
+			}interface->scene->Unlock();
 		}
+		
 	} cachedHitBlock;
-	
-	void RefreshCachedHitBlock() {
-		scene->Lock();{
-			cachedHitBlock.highPrecisionGrid = highPrecisionGrid;
-			if (hitBlock.has_value() && hitBuild) {
-				cachedHitBlock.build = hitBuild;
-			} else {
-				cachedHitBlock.build.reset();
-			}
-			cachedHitBlock = hitBlock;
-			// Get parent hit build (if any)
-			tmpBuildParent = (hitBlock.has_value() && hitBuild)? hitBuild : nullptr;
-		}scene->Unlock();
-	}
 	
 	void UpdateTmpBlock() {
 		std::lock_guard lock(mu);
-		if (cachedHitBlock.Invalidated(hitBlock, highPrecisionGrid)) {
+		if (cachedHitBlock.Invalidated(this)) {
 			isDirty = false;
-			RefreshCachedHitBlock();
+			cachedHitBlock.Refresh(this);
 			blockRotation = -1;
 			FindNextValidBlockRotation();
 			RemakeTmpBlock();
@@ -166,7 +172,7 @@ struct BuildInterface {
 		float tmpBlockBoundingDistance = 1.0;
 		scene->Lock();
 		{
-			RefreshCachedHitBlock();
+			cachedHitBlock.Refresh(this);
 			if (tmpBlock) {
 				tmpBlockBoundingDistance = tmpBlock->boundingDistance;
 				delete tmpBlock;
@@ -182,40 +188,47 @@ struct BuildInterface {
 				block.SetOrientation(blockRotation);
 				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
 				
-				// If we are aiming at a parent build, we want to add the new block to that build
-				if (tmpBuildParent) {
-					
-					// Get hit block&face info from raycast's custom data
-					PackedBlockCustomData customData;
-					customData.packed = cachedHitBlock.customData0;
-					auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
-					if (!parentBlock.has_value())
-						goto INVALID;
-						
-					// Make sure we have hit a face and not the structure
-					if (customData.faceIndex == 7) {
-						block.SetSimilarTo(*parentBlock);
-						goto INVALID;
-					}
-					
-					auto parentFace = parentBlock->GetFace(customData.faceIndex);
-					
-					// Make sure we can add a block on this face
-					if (!parentFace.canAddBlock) {
-						block.SetSimilarTo(*parentBlock);
-						goto INVALID;
-					}
-					
-					if (!TestAddBlockOrientationAndPosition(block, tmpBuildParent.get(), parentBlock.value(), parentFace, blockRotation, cachedHitBlock.gridPos)) {
-						goto INVALID;
-					}
-					
-					// All is good, block is positioned correctly and does not conflict, make it GREEN
-					block.SetColor(BLOCK_COLOR_GREEN);
-					
-				} else {
+				if (createMode) {
 					// We are not aiming at a parent build, create a new build
 					block.SetColor(BLOCK_COLOR_GREY);
+				} else {
+					if (hitBlock->distance > 100) tmpBuildParent = nullptr;
+					// If we are aiming at a parent build, we want to add the new block to that build
+					if (tmpBuildParent) {
+						
+						// Get hit block&face info from raycast's custom data
+						PackedBlockCustomData customData;
+						customData.packed = cachedHitBlock.customData0;
+						auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
+						if (!parentBlock.has_value())
+							goto INVALID;
+							
+						// Make sure we have hit a face and not the structure
+						if (customData.faceIndex == 7) {
+							block.SetSimilarTo(*parentBlock);
+							goto INVALID;
+						}
+						
+						auto parentFace = parentBlock->GetFace(customData.faceIndex);
+						
+						// Make sure we can add a block on this face
+						if (!parentFace.canAddBlock) {
+							block.SetSimilarTo(*parentBlock);
+							goto INVALID;
+						}
+						
+						if (!TestAddBlockOrientationAndPosition(block, tmpBuildParent.get(), parentBlock.value(), parentFace, blockRotation, cachedHitBlock.gridPos)) {
+							goto INVALID;
+						}
+						
+						// All is good, block is positioned correctly and does not conflict, make it GREEN
+						block.SetColor(BLOCK_COLOR_GREEN);
+						
+					} else {
+						delete tmpBlock;
+						tmpBlock = nullptr;
+						goto Exit;
+					}
 				}
 				
 				VALID:
@@ -234,6 +247,7 @@ struct BuildInterface {
 					UpdateTmpBlock();
 			}
 		}
+		Exit:
 		scene->Unlock();
 	}
 	
