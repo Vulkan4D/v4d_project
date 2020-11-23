@@ -41,6 +41,13 @@ layout(set = 0, binding = 6) GEOMETRY_BUFFERS_ACCESS buffer VertexBuffer {vec4 v
 	layout(set = 0, binding = 7) uniform accelerationStructureEXT topLevelAS;
 #endif
 
+// Textures
+layout(set = 0, binding = 8) uniform sampler2D tex_img_metalAlbedo;
+layout(set = 0, binding = 9) uniform sampler2D tex_img_metalMetallic;
+layout(set = 0, binding = 10) uniform sampler2D tex_img_metalRoughness;
+layout(set = 0, binding = 11) uniform sampler2D tex_img_metalNormal;
+
+
 bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
 bool DebugPhysics = (camera.debugOptions & DEBUG_OPTION_PHYSICS)!=0;
 bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe && !DebugPhysics;

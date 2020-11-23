@@ -54,6 +54,19 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_thumbnail { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
+	
+	// Textures
+	Texture2D tex_metal_albedo {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_albedo.png"), STBI_rgb_alpha};
+	Texture2D tex_metal_metallic {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_metallic.png"), STBI_grey};
+	Texture2D tex_metal_roughness {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_roughness.png"), STBI_grey};
+	Texture2D tex_metal_normal {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_normal.png"), STBI_rgb_alpha};
+	std::array<Texture2D*, 4> textures {
+		&tex_metal_albedo,
+		&tex_metal_metallic,
+		&tex_metal_roughness,
+		&tex_metal_normal,
+	};
+
 #pragma endregion
 
 #pragma region Pipeline Layouts
@@ -1950,8 +1963,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				set0_base.AddBinding_storageBuffer(6, &Geometry::globalBuffers.vertexBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT);
 			#endif
 			set0_base.AddBinding_accelerationStructure(7, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
-		}
 			
+			int i = 8;
+			for (auto* tex : textures)
+				set0_base.AddBinding_combinedImageSampler(i++, tex->GetImage(), VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+		}
+		
 		{r->descriptorSets["set1_visibility_raster"] = &set1_visibility_raster;
 			//
 		}
@@ -2042,15 +2059,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			pipelineLayouts["pl_raycast"]->AddDescriptorSet(&set1_raycast);
 		}
 		
-		// Assign raster shader to render types
-		Geometry::geometryRenderTypes["basic"].rasterShader = &shader_visibility_basic;
-		Geometry::geometryRenderTypes["standard"].rasterShader = &shader_visibility_standard;
-		Geometry::geometryRenderTypes["terrain"].rasterShader = &shader_visibility_terrain;
-		Geometry::geometryRenderTypes["aabb"].rasterShader = &shader_visibility_aabb;
-		Geometry::geometryRenderTypes["sphere"].rasterShader = &shader_visibility_sphere;
-		Geometry::geometryRenderTypes["light"].rasterShader = &shader_visibility_light;
-		Geometry::geometryRenderTypes["sun"].rasterShader = &shader_visibility_sun;
-		Geometry::geometryRenderTypes["transparent"].rasterShader = &shader_transparent;
+		{// Assign raster shader to render types
+			Geometry::geometryRenderTypes["basic"].rasterShader = &shader_visibility_basic;
+			Geometry::geometryRenderTypes["standard"].rasterShader = &shader_visibility_standard;
+			Geometry::geometryRenderTypes["terrain"].rasterShader = &shader_visibility_terrain;
+			Geometry::geometryRenderTypes["aabb"].rasterShader = &shader_visibility_aabb;
+			Geometry::geometryRenderTypes["sphere"].rasterShader = &shader_visibility_sphere;
+			Geometry::geometryRenderTypes["light"].rasterShader = &shader_visibility_light;
+			Geometry::geometryRenderTypes["sun"].rasterShader = &shader_visibility_sun;
+			Geometry::geometryRenderTypes["transparent"].rasterShader = &shader_transparent;
+		}
 	}
 	
 	#pragma region Load/Upload Renderer
@@ -2130,6 +2148,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				tex_img_font_atlas.CopyStagingBufferToImage(r->renderingDevice, commandBuffer);
 			r->renderingDevice->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 			tex_img_font_atlas.FreeStagingMemory(r->renderingDevice);
+			
+			for (auto* tex : textures) {
+				tex->SetSamplerAddressMode(VK_SAMPLER_ADDRESS_MODE_REPEAT);
+				tex->SetMipLevels();
+				tex->AllocateAndWriteStagingMemory(r->renderingDevice);
+				tex->CreateImage(r->renderingDevice);
+				auto commandBuffer = r->renderingDevice->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
+					tex->CopyStagingBufferToImage(r->renderingDevice, commandBuffer);
+				r->renderingDevice->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
+				tex->FreeStagingMemory(r->renderingDevice);
+			}
 		}
 		
 		V4D_MODULE_FUNC(void, DestroyVulkanResources) {
@@ -2141,6 +2170,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Textures
 			tex_img_font_atlas.DestroyImage(r->renderingDevice);
+			
+			for (auto* tex : textures) {
+				tex->DestroyImage(r->renderingDevice);
+			}
 		}
 		
 		V4D_MODULE_FUNC(void, AllocateVulkanBuffers) {

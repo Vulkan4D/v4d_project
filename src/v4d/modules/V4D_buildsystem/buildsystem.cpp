@@ -138,7 +138,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, CreateVulkanResources2, v4d::graphics::vulkan::Device* device) {
 		for (auto& tex : blocks_tex) {
 			tex.AllocateAndWriteStagingMemory(device);
-			tex.CreateImage(device, VK_IMAGE_TILING_OPTIMAL);
+			tex.CreateImage(device);
 			auto commandBuffer = device->BeginSingleTimeCommands(device->GetQueue("graphics"));
 				tex.CopyStagingBufferToImage(device, commandBuffer);
 			device->EndSingleTimeCommands(device->GetQueue("graphics"), commandBuffer);
