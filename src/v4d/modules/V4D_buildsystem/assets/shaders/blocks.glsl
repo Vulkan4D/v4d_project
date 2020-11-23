@@ -62,7 +62,7 @@ void main() {
 	ray.distance = gl_HitTEXT;
 	
 	vec3 blending = TriplanarBlending(fragment.normal);
-	ray.albedo = TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending) * fragment.color.rgb;
+	ray.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending), fragment.color.rgb, 0.7);
 	ray.metallic = TriplanarTextureR(tex_img_metalMetallic, fragment.pos, blending);
 	ray.roughness = TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending);
 	
@@ -117,7 +117,7 @@ void main() {
 	pbrGBuffers.emit = 0;
 	
 	vec3 blending = TriplanarBlending(triplanarNormal);
-	pbrGBuffers.albedo = TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending) * v2f.color.rgb;
+	pbrGBuffers.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending), v2f.color.rgb, 0.7);
 	pbrGBuffers.metallic = TriplanarTextureR(tex_img_metalMetallic, triplanarCoords, blending);
 	pbrGBuffers.roughness = TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending);
 	
