@@ -11,8 +11,6 @@ using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
-// #define FORCE_DISABLE_RAY_TRACING
-
 #pragma region Limits
 	const uint32_t MAX_ACTIVE_LIGHTS = 256;
 #pragma endregion
@@ -496,7 +494,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		lightingRenderPass.CreateFrameBuffers(r->renderingDevice, attachmentImages);
 		
 		// Shaders
-		if (r->rayTracingFeatures.rayQuery) {
+		if (r->rayQueryFeatures.rayQuery) {
 			for (auto* s : shaderGroups["sg_lighting_rtx"]) {
 				s->SetRenderPass(&img_lit, lightingRenderPass.handle, 0);
 				s->AddColorBlendAttachmentState();
@@ -526,7 +524,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}
 	}
 	void DestroyLightingPipeline() {
-		if (r->rayTracingFeatures.rayQuery) {
+		if (r->rayQueryFeatures.rayQuery) {
 			for (auto* s : shaderGroups["sg_lighting_rtx"]) {
 				s->DestroyPipeline(r->renderingDevice);
 			}
@@ -703,7 +701,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		if (!runSubpass0 && !runSubpass1) return;
 		lightingRenderPass.Begin(device, commandBuffer, img_lit);
 			if (runSubpass0) {
-				if (r->rayTracingFeatures.rayQuery) {
+				if (r->rayQueryFeatures.rayQuery) {
 					for (auto* s : shaderGroups["sg_lighting_rtx"]) {
 						s->Execute(device, commandBuffer);
 					}
@@ -793,17 +791,18 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 #pragma endregion
 
 #pragma region Ray-Tracing Pipeliens & Resouces
-	VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties{};
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties {};
+	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties {};
 	AccelerationStructure topLevelAccelerationStructure {};
-	Buffer rayTracingShaderBindingTableBuffer_visibility {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR};
-	Buffer rayTracingShaderBindingTableBuffer_lighting {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR};
+	Buffer rayTracingShaderBindingTableBuffer_visibility {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+	Buffer rayTracingShaderBindingTableBuffer_lighting {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
 	std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 	std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
-	std::vector<VkAccelerationStructureBuildOffsetInfoKHR*> blasQueueBuildOffsetInfos {};
-	StagedBuffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos {};
+	StagedBuffer rayTracingInstanceBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, sizeof(RayTracingBLASInstance)*RAY_TRACING_TLAS_MAX_INSTANCES};
 	RayTracingBLASInstance* rayTracingInstances = nullptr;
 	uint32_t nbRayTracingInstances = 0;
-	Buffer globalScratchBuffer {VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
+	Buffer globalScratchBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
 	static const bool globalScratchDynamicSize = false;
 	static const int maxBlasBuildsPerFrame = 8;
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeRayTracedGeometries {};
@@ -813,19 +812,16 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	void ResetRayTracingBlasBuilds() {
 		std::lock_guard lock(blasBuildQueueMutex);
 		blasQueueBuildGeometryInfos.clear();
-		blasQueueBuildOffsetInfos.clear();
+		blasQueueBuildRangeInfos.clear();
 	}
 	
 	void CreateRayTracingResources() {
 		topLevelAccelerationStructure.AssignTopLevel();
-		topLevelAccelerationStructure.Create(r->renderingDevice, true);
-		topLevelAccelerationStructure.Allocate(r->renderingDevice);
+		topLevelAccelerationStructure.CreateAndAllocate(r->renderingDevice, true);
 		topLevelAccelerationStructure.SetInstanceBuffer(r->renderingDevice, rayTracingInstanceBuffer.deviceLocalBuffer.buffer);
 	}
 	void DestroyRayTracingResources() {
-		topLevelAccelerationStructure.Free(r->renderingDevice);
-		topLevelAccelerationStructure.Destroy(r->renderingDevice);
-		
+		topLevelAccelerationStructure.FreeAndDestroy(r->renderingDevice);
 		activeRayTracedGeometries.clear();
 		blasBuildsForGlobalScratchBufferReallocation.clear();
 		ResetRayTracingBlasBuilds();
@@ -854,16 +850,16 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		{
 			auto* sbt = shaderBindingTables["sbt_visibility"];
 			sbt->CreateRayTracingPipeline(r->renderingDevice);
-			rayTracingShaderBindingTableBuffer_visibility.size = sbt->GetSbtBufferSize(rayTracingProperties);
+			rayTracingShaderBindingTableBuffer_visibility.size = sbt->GetSbtBufferSize(rayTracingPipelineProperties);
 			rayTracingShaderBindingTableBuffer_visibility.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_visibility, 0, rayTracingProperties);
+			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_visibility, 0, rayTracingPipelineProperties);
 		}
 		{
 			auto* sbt = shaderBindingTables["sbt_lighting"];
 			sbt->CreateRayTracingPipeline(r->renderingDevice);
-			rayTracingShaderBindingTableBuffer_lighting.size = sbt->GetSbtBufferSize(rayTracingProperties);
+			rayTracingShaderBindingTableBuffer_lighting.size = sbt->GetSbtBufferSize(rayTracingPipelineProperties);
 			rayTracingShaderBindingTableBuffer_lighting.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_lighting, 0, rayTracingProperties);
+			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_lighting, 0, rayTracingPipelineProperties);
 		}
 	}
 	void DestroyRayTracingPipeline() {
@@ -926,10 +922,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		sbt->GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
 			commandBuffer, 
-			sbt->GetRayGenBufferRegion(),
-			sbt->GetRayMissBufferRegion(),
-			sbt->GetRayHitBufferRegion(),
-			sbt->GetRayCallableBufferRegion(),
+			sbt->GetRayGenDeviceAddressRegion(),
+			sbt->GetRayMissDeviceAddressRegion(),
+			sbt->GetRayHitDeviceAddressRegion(),
+			sbt->GetRayCallableDeviceAddressRegion(),
 			width, height, 1
 		);
 	
@@ -981,10 +977,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		sbt->GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
 			commandBuffer, 
-			sbt->GetRayGenBufferRegion(),
-			sbt->GetRayMissBufferRegion(),
-			sbt->GetRayHitBufferRegion(),
-			sbt->GetRayCallableBufferRegion(),
+			sbt->GetRayGenDeviceAddressRegion(),
+			sbt->GetRayMissDeviceAddressRegion(),
+			sbt->GetRayHitDeviceAddressRegion(),
+			sbt->GetRayCallableDeviceAddressRegion(),
 			width, height, 1
 		);
 	}
@@ -1016,7 +1012,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 				device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 2, bufferBarriers, 0, nullptr);
 			#endif
 			
-			device->CmdBuildAccelerationStructureKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildOffsetInfos.data());
+			device->CmdBuildAccelerationStructuresKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildRangeInfos.data());
 			
 			{// Wait for BLAS to finish before building TLAS
 				VkMemoryBarrier memoryBarrier {
@@ -1062,9 +1058,9 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}
 		
 		std::lock_guard lock(rayTracingInstanceMutex);
-		static const VkAccelerationStructureBuildOffsetInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildOffsetInfo;
+		static const VkAccelerationStructureBuildRangeInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildRangeInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
-		device->CmdBuildAccelerationStructureKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
+		device->CmdBuildAccelerationStructuresKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
 	
 		// Wait for TLAS to finish before calling any ray tracing shader
 		VkMemoryBarrier memoryBarrier {
@@ -1088,7 +1084,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		std::lock_guard lock(blasBuildQueueMutex);
 		if (blasQueueBuildGeometryInfos.size() < maxBlasBuildsPerFrame) {
 			blasQueueBuildGeometryInfos.push_back(blas->buildGeometryInfo);
-			blasQueueBuildOffsetInfos.push_back(&blas->buildOffsetInfo);
+			blasQueueBuildRangeInfos.push_back(&blas->buildRangeInfo);
 			blas->built = true;
 		}
 	}
@@ -1097,20 +1093,19 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		std::lock_guard lock(blasBuildQueueMutex);
 		geometryInstance->geometry->blas = std::make_shared<AccelerationStructure>();
 		geometryInstance->geometry->blas->AssignBottomLevel(r->renderingDevice, geometryInstance->geometry);
-		geometryInstance->geometry->blas->Create(r->renderingDevice);
-		geometryInstance->geometry->blas->Allocate(r->renderingDevice);
+		geometryInstance->geometry->blas->CreateAndAllocate(r->renderingDevice);
 	}
 	
 	void AddRayTracingInstance(ObjectInstancePtr obj, GeometryInstance* geometryInstance, const glm::dmat4& objectViewTransform) {
 		std::lock_guard lock(rayTracingInstanceMutex);
-		if (!geometryInstance->geometry->blas || !geometryInstance->geometry->blas->handle) return;
+		if (!geometryInstance->geometry->blas || !geometryInstance->geometry->blas->deviceAddress) return;
 		// create new instance
 		int index = nbRayTracingInstances++;
-		rayTracingInstances[index].customInstanceId = geometryInstance->geometry->geometryOffset;
-		rayTracingInstances[index].shaderInstanceOffset = (uint32_t)Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
+		rayTracingInstances[index].instanceCustomIndex = geometryInstance->geometry->geometryOffset;
+		rayTracingInstances[index].instanceShaderBindingTableRecordOffset = (uint32_t)Geometry::geometryRenderTypes[geometryInstance->type].sbtOffset;
 		activeRayTracedGeometries[index] = geometryInstance->geometry;
 		// assign blas handle
-		rayTracingInstances[index].accelerationStructureHandle = geometryInstance->geometry->blas->handle;
+		rayTracingInstances[index].accelerationStructureReference = geometryInstance->geometry->blas->deviceAddress;
 		// assign transform and data
 		rayTracingInstances[index].mask = (geometryInstance->geometry->rayTracingMask | obj->rayTracingMaskAdded) & ~obj->rayTracingMaskRemoved;
 		rayTracingInstances[index].flags = geometryInstance->geometry->flags;
@@ -1695,8 +1690,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		// Ray Tracing
 		size_t globalScratchBufferSize = 0;
 		{
-			if (r->rayTracingFeatures.rayTracing) {
-				topLevelAccelerationStructure.GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 				ResetRayTracingBlasBuilds();
 			}
 		}
@@ -1719,7 +1713,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 							activeLights[nbActiveLights++] = lightSource->lightOffset;
 						}
 						// Geometries
-						if (r->rayTracingFeatures.rayTracing) {
+						if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 							for (auto& geom : obj->GetGeometries()) {
 								if (Geometry::geometryRenderTypes[geom.type].sbtOffset != -1) {
 									if (geom.geometry->active) {
@@ -1730,7 +1724,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 											
 											// Global Scratch Buffer
 											if (AccelerationStructure::useGlobalScratchBuffer) {
-												VkDeviceSize scratchSize = geom.geometry->blas->GetMemoryRequirementSizeForScratchBuffer(r->renderingDevice);
+												VkDeviceSize scratchSize = geom.geometry->blas->accelerationStructureBuildSizesInfo.buildScratchSize;
 												if (!globalScratchDynamicSize && globalScratchBufferSize + scratchSize > globalScratchBuffer.size) {
 													continue;
 												}
@@ -1756,7 +1750,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		scene->Unlock();
 		
 		// Global Scratch Buffer
-		if (r->rayTracingFeatures.rayTracing && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
+		if (r->rayTracingPipelineFeatures.rayTracingPipeline && AccelerationStructure::useGlobalScratchBuffer && globalScratchDynamicSize) {
 			// If current scratch buffer size is too small or more than 4x the necessary size, reallocate it
 			if (globalScratchBuffer.size < globalScratchBufferSize || globalScratchBuffer.size > globalScratchBufferSize*4) {
 				globalScratchBuffer.Free(r->renderingDevice);
@@ -1789,7 +1783,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		activeLightsUniformBuffer.Update(r->renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
 		Geometry::globalBuffers.PushObjects(r->renderingDevice, commandBuffer);
 		Geometry::globalBuffers.PushLights(r->renderingDevice, commandBuffer);
-		if (r->rayTracingFeatures.rayTracing) {
+		if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 			for (auto[i,geometry] : activeRayTracedGeometries) {
 				if (geometry) geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 			}
@@ -1798,7 +1792,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		scene->Lock();
 			for (auto obj : scene->objectInstances) if (obj && obj->IsActive()) {
 				obj->Lock();
-					for (auto& geom : obj->GetGeometries()) if (geom.geometry && geom.geometry->active && (!r->rayTracingFeatures.rayTracing || Geometry::geometryRenderTypes[geom.type].sbtOffset == -1)) {
+					for (auto& geom : obj->GetGeometries()) if (geom.geometry && geom.geometry->active && (!r->rayTracingPipelineFeatures.rayTracingPipeline || Geometry::geometryRenderTypes[geom.type].sbtOffset == -1)) {
 						geom.geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 					}
 				obj->Unlock();
@@ -1806,7 +1800,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		scene->Unlock();
 		
 		// Build Acceleration Structures
-		if (r->rayTracingFeatures.rayTracing) {
+		if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 			BuildBottomLevelRayTracingAccelerationStructures(r->renderingDevice, commandBuffer);
 			BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 		}
@@ -1872,10 +1866,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		V4D_MODULE_FUNC(void, ScorePhysicalDeviceSelection, int& score, PhysicalDevice* physicalDevice) {
 			// Higher score for Ray Tracing support
-			if (physicalDevice->GetRayTracingFeatures().rayTracing) {
+			if (physicalDevice->GetRayTracingPipelineFeatures().rayTracingPipeline) {
 				score += 2;
 			}
-			if (physicalDevice->GetRayTracingFeatures().rayQuery) {
+			if (physicalDevice->GetRayQueryFeatures().rayQuery) {
 				score += 1;
 			}
 		}
@@ -1895,10 +1889,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Device Extensions
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
-				r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_EXTENSION_NAME); // RayTracing extension
-				r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME); // Needed for RayTracing extension
-				r->OptionalDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME); // Needed for RayTracing extension
-				r->OptionalDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME); // Needed for RayTracing extension
+				// RayTracing extensions
+				r->OptionalDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+				r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+				r->OptionalDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+				// Needed for RayTracing extensions
+				r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+				r->OptionalDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+				r->OptionalDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
 			}
 			
 			// UBOs
@@ -1919,23 +1917,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
 				r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
-				r->EnableRayTracingFeatures()->rayTracing = VK_TRUE;
-				r->EnableRayTracingFeatures()->rayQuery = VK_TRUE;
+				r->EnableAccelerationStructureFeatures()->accelerationStructure = VK_TRUE;
+				r->EnableAccelerationStructureFeatures()->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
+				r->EnableRayTracingPipelineFeatures()->rayTracingPipeline = VK_TRUE;
+				r->EnableRayTracingPipelineFeatures()->rayTracingPipelineTraceRaysIndirect = VK_TRUE;
+				r->EnableRayQueryFeatures()->rayQuery = VK_TRUE;
 			}
 		}
 		
 		V4D_MODULE_FUNC(void, ConfigureRenderer) {
-			#ifdef FORCE_DISABLE_RAY_TRACING
-				r->rayTracingFeatures.rayTracing = VK_FALSE;
-				r->rayTracingFeatures.rayQuery = VK_FALSE;
-			#endif
-			if (r->rayTracingFeatures.rayTracing) {
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 				LOG_SUCCESS("Ray-Tracing Supported")
 				// Query the ray tracing properties of the current implementation
-				rayTracingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_KHR;
-				VkPhysicalDeviceProperties2 deviceProps2 {};
+				accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+				rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+				accelerationStructureProperties.pNext = &rayTracingPipelineProperties;
+				VkPhysicalDeviceProperties2 deviceProps2 {};{
 					deviceProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-					deviceProps2.pNext = &rayTracingProperties;
+					deviceProps2.pNext = &accelerationStructureProperties;
+				}
 				r->GetPhysicalDeviceProperties2(r->renderingDevice->GetPhysicalDevice()->GetHandle(), &deviceProps2);
 			} else {
 				// No Ray-Tracing support
@@ -2136,7 +2136,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			CreateUiResources();
 			CreateRenderingResources();
 			CreatePostProcessingResources();
-			if (r->rayTracingFeatures.rayTracing) CreateRayTracingResources();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) CreateRayTracingResources();
 			CreateRasterVisibilityResources();
 			
 			// Textures
@@ -2165,7 +2165,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			DestroyUiResources();
 			DestroyRenderingResources();
 			DestroyPostProcessingResources();
-			if (r->rayTracingFeatures.rayTracing) DestroyRayTracingResources();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) DestroyRayTracingResources();
 			DestroyRasterVisibilityResources();
 			
 			// Textures
@@ -2196,7 +2196,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
 			
 			AllocateComputeBuffers();
-			if (r->rayTracingFeatures.rayTracing) AllocateRayTracingBuffers();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) AllocateRayTracingBuffers();
 			
 			Geometry::globalBuffers.DefragmentMemory();
 			Geometry::globalBuffers.Allocate(r->renderingDevice, {r->renderingDevice->GetQueue("compute").familyIndex, r->renderingDevice->GetQueue("graphics").familyIndex});
@@ -2225,7 +2225,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			activeLightsUniformBuffer.Free(r->renderingDevice);
 			
 			FreeComputeBuffers();
-			if (r->rayTracingFeatures.rayTracing) FreeRayTracingBuffers();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) FreeRayTracingBuffers();
 			
 			Geometry::globalBuffers.Free(r->renderingDevice);
 		}
@@ -2253,7 +2253,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			CreateRasterVisibilityPipeline();
 			
 			// Ray Tracing
-			if (r->rayTracingFeatures.rayTracing) CreateRayTracingPipeline();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) CreateRayTracingPipeline();
 			
 			// Lighting
 			CreateLightingPipeline();
@@ -2273,7 +2273,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			DestroyRasterVisibilityPipeline();
 			
 			// Ray Tracing
-			if (r->rayTracingFeatures.rayTracing) DestroyRayTracingPipeline();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) DestroyRayTracingPipeline();
 			
 			// Lighting
 			DestroyLightingPipeline();
@@ -2491,7 +2491,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		r->currentFrameInFlight = nextFrameInFlight;
 	
 		// //TODO find a better fix...
-		if (r->rayTracingFeatures.rayTracing) r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
+		if (r->rayTracingPipelineFeatures.rayTracingPipeline) r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate) {
@@ -2529,13 +2529,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (DEBUG_OPTIONS::WIREFRAME) {
 				// ...
 			} else {
-				if (r->rayTracingFeatures.rayTracing) {
+				if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 					ImGui::Checkbox("Ray-traced visibility", &RENDER_OPTIONS::RAY_TRACED_VISIBILITY);
 					ImGui::Checkbox("Ray-traced lighting", &RENDER_OPTIONS::RAY_TRACED_LIGHTING);
 				} else {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
-				if (RENDER_OPTIONS::RAY_TRACED_LIGHTING || r->rayTracingFeatures.rayQuery) {
+				if (RENDER_OPTIONS::RAY_TRACED_LIGHTING || r->rayQueryFeatures.rayQuery) {
 					ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
 				} else {
 					ImGui::Text("Shadows functionality unavailable");
