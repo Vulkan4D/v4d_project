@@ -58,7 +58,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	Texture2D tex_metal_metallic {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_metallic.png"), STBI_grey};
 	Texture2D tex_metal_roughness {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_roughness.png"), STBI_grey};
 	Texture2D tex_metal_normal {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_normal.tga"), STBI_rgb_alpha};
-	std::array<Texture2D*, 5> textures {
+	std::array<Texture2D*, 4> textures {
 		&tex_metal_albedo,
 		&tex_metal_metallic,
 		&tex_metal_roughness,
