@@ -29,7 +29,6 @@ namespace app::graphics {
 			ImGui::GetStyle().Alpha = 0.8f;
 			ImGui_ImplGlfw_InitForVulkan(app::window->GetHandle(), true);
 		#endif
-		
 	}
 	void UnloadUi (){
 		// ImGui

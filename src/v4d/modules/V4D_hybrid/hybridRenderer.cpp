@@ -1847,11 +1847,19 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
+		V4D_Mod::ForEachSortedModule([commandBuffer, imageIndex](auto* mod){
+			if (mod->RecordStaticGraphicsCommands) mod->RecordStaticGraphicsCommands(commandBuffer, imageIndex);
+		}, "render");
+		
 		// raycast compute
 		shader_raycast_compute.SetGroupCounts(1, 1, 1);
 		shader_raycast_compute.Execute(r->renderingDevice, commandBuffer);
 		
 		RecordPostProcessingCommands(commandBuffer, imageIndex);
+		
+		V4D_Mod::ForEachSortedModule([commandBuffer, imageIndex](auto* mod){
+			if (mod->RecordStaticGraphicsCommands2) mod->RecordStaticGraphicsCommands2(commandBuffer, imageIndex);
+		}, "render");
 	}
 
 #pragma endregion
