@@ -54,6 +54,10 @@ else()
 	# set(BUILD_FLAGS "${BUILD_FLAGS} -Wshadow")
 endif()
 
+# Remove compiler Warnings from VMA...
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-missing-field-initializers")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-type-limits")
+	
 # Address Sanitizer
 if(ADDRESS_SANITIZER)
 	if(WIN32)

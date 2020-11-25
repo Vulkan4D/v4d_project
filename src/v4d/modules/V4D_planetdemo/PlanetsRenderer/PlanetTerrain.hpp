@@ -787,7 +787,7 @@ struct PlanetTerrain {
 	static void StartChunkGenerator() {
 		if (chunkGeneratorActive) return;
 		chunkGeneratorActive = true;
-		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - 3);
+		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - 4);
 		chunkGeneratorThreads.reserve(nbThreads);
 		LOG_VERBOSE("Using " << nbThreads << " threads to render planet terrain")
 		for (int i = 0; i < nbThreads; ++i) {

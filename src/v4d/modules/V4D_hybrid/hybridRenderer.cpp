@@ -832,7 +832,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		rayTracingInstances = (RayTracingBLASInstance*)rayTracingInstanceBuffer.stagingBuffer.data;
 		
 		if (AccelerationStructure::useGlobalScratchBuffer) {
-			globalScratchBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+			globalScratchBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_GPU_ONLY, false);
 			topLevelAccelerationStructure.SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
 		}
 	}
@@ -851,14 +851,14 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			auto* sbt = shaderBindingTables["sbt_visibility"];
 			sbt->CreateRayTracingPipeline(r->renderingDevice);
 			rayTracingShaderBindingTableBuffer_visibility.size = sbt->GetSbtBufferSize(rayTracingPipelineProperties);
-			rayTracingShaderBindingTableBuffer_visibility.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+			rayTracingShaderBindingTableBuffer_visibility.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_visibility, 0, rayTracingPipelineProperties);
 		}
 		{
 			auto* sbt = shaderBindingTables["sbt_lighting"];
 			sbt->CreateRayTracingPipeline(r->renderingDevice);
 			rayTracingShaderBindingTableBuffer_lighting.size = sbt->GetSbtBufferSize(rayTracingPipelineProperties);
-			rayTracingShaderBindingTableBuffer_lighting.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+			rayTracingShaderBindingTableBuffer_lighting.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			sbt->WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer_lighting, 0, rayTracingPipelineProperties);
 		}
 	}
@@ -1036,6 +1036,29 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void BuildTopLevelRayTracingAccelerationStructure(Device* device, VkCommandBuffer commandBuffer) {
 		
+		if (!device->TouchAllocation(topLevelAccelerationStructure.accelerationStructureAllocation)) {
+			LOG_DEBUG("Top Level acceleration structure ALLOCATION LOST")
+			return;
+		}
+		
+		{// Wait for previous frame acceleration structure traversal to finish
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags dstAccessMask
+			};
+			device->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
 		// Push new instance buffer
 		rayTracingInstanceBuffer.Update(device, commandBuffer);
 		
@@ -1043,7 +1066,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			VkMemoryBarrier memoryBarrier {
 				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 				nullptr,// pNext
-				VK_ACCESS_TRANSFER_READ_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags srcAccessMask
 				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
 			};
 			device->CmdPipelineBarrier(
@@ -1062,12 +1085,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
 		device->CmdBuildAccelerationStructuresKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
 	
-		// Wait for TLAS to finish before calling any ray tracing shader
+		// Wait for TLAS build to finish before calling any ray tracing shader
 		VkMemoryBarrier memoryBarrier {
 			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 			nullptr,// pNext
 			VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
-			VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
+			VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
 		};
 		device->CmdPipelineBarrier(
 			commandBuffer, 
@@ -1082,7 +1105,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void AddRayTracingBlasBuild(std::shared_ptr<AccelerationStructure> blas) {
 		std::lock_guard lock(blasBuildQueueMutex);
-		if (blasQueueBuildGeometryInfos.size() < maxBlasBuildsPerFrame) {
+		if (!r->renderingDevice->TouchAllocation(blas->accelerationStructureAllocation)) {
+			LOG_DEBUG("AddRayTracingBlasBuild ALLOCATION LOST")
+		}
+		if (maxBlasBuildsPerFrame == 0 || blasQueueBuildGeometryInfos.size() < maxBlasBuildsPerFrame) {
 			blasQueueBuildGeometryInfos.push_back(blas->buildGeometryInfo);
 			blasQueueBuildRangeInfos.push_back(&blas->buildRangeInfo);
 			blas->built = true;
@@ -1349,12 +1375,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	
 	void AllocateComputeBuffers() {
 		// histogram
-		totalLuminance.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		totalLuminance.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU, false);
 		totalLuminance.MapMemory(r->renderingDevice);
 		glm::vec4 luminance {0,0,0,1};
 		totalLuminance.WriteToMappedData(&luminance);
 		// raycast
-		raycastBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		raycastBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU, false);
 		raycastBuffer.MapMemory(r->renderingDevice);
 		currentRayCast = {};
 		raycastBuffer.WriteToMappedData(&currentRayCast);
@@ -1737,6 +1763,10 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 											AddRayTracingBlasBuild(geom.geometry->blas);
 										}
 										if (geom.geometry->blas && geom.geometry->blas->built) {
+											if (!r->renderingDevice->TouchAllocation(geom.geometry->blas->accelerationStructureAllocation)) {
+												LOG_DEBUG("BLAS ALLOCATION LOST")
+												continue;
+											}
 											AddRayTracingInstance(obj, &geom, scene->camera.viewMatrix * obj->GetWorldTransform());
 										}
 									}
@@ -1755,7 +1785,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 			if (globalScratchBuffer.size < globalScratchBufferSize || globalScratchBuffer.size > globalScratchBufferSize*4) {
 				globalScratchBuffer.Free(r->renderingDevice);
 				globalScratchBuffer.size = globalScratchBufferSize;
-				globalScratchBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, false);
+				globalScratchBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_GPU_ONLY, false);
 				LOG("Reallocated global scratch buffer size " << globalScratchBufferSize)
 				topLevelAccelerationStructure.SetGlobalScratchBuffer(r->renderingDevice, globalScratchBuffer.buffer);
 				ResetRayTracingBlasBuilds();
@@ -1774,6 +1804,12 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 #pragma region Graphics commands
 
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
+		for (auto&[name, img] : images) {
+			if (!r->renderingDevice->TouchAllocation(img->allocation)) {
+				LOG_DEBUG("Image ALLOCATION LOST")
+			}
+		}
+		
 		ClearLitImage(commandBuffer);
 		
 		// Transfer data to rendering device
@@ -2182,16 +2218,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			activeLightsUniformBuffer.Allocate(r->renderingDevice);
 			
 			// Overlays
-			overlayLinesBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayLinesBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			overlayLinesBuffer.MapMemory(r->renderingDevice);
 			overlayLines = (OverlayLine*)overlayLinesBuffer.data;
-			overlayTextBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayTextBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			overlayTextBuffer.MapMemory(r->renderingDevice);
 			overlayText = (OverlayText*)overlayTextBuffer.data;
-			overlayCirclesBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlayCirclesBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			overlayCirclesBuffer.MapMemory(r->renderingDevice);
 			overlayCircles = (OverlayCircle*)overlayCirclesBuffer.data;
-			overlaySquaresBuffer.Allocate(r->renderingDevice, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+			overlaySquaresBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
 			overlaySquaresBuffer.MapMemory(r->renderingDevice);
 			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
 			
@@ -2437,13 +2473,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			graphicsSubmitInfo[1].pSignalSemaphores = &semaphores["staticRenderFinished"][r->currentFrameInFlight];
 		}
 		
-		// Next Frame In Flight
-		size_t nextFrameInFlight = (r->currentFrameInFlight + 1) % r->NB_FRAMES_IN_FLIGHT;
 		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
-		r->renderingDevice->ResetFences(1, &fences["graphics"][nextFrameInFlight]);
+		r->renderingDevice->ResetFences(1, &fences["graphics"][r->nextFrameInFlight]);
 		
 		// Submit Graphics
-		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][nextFrameInFlight]);
+		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][r->nextFrameInFlight]);
 		if (result != VK_SUCCESS) {
 			if (result == VK_ERROR_DEVICE_LOST) {
 				LOG_ERROR("Render() Failed to submit graphics command buffer : VK_ERROR_DEVICE_LOST")
@@ -2486,9 +2520,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		} else if (result != VK_SUCCESS) {
 			throw std::runtime_error("Failed to present swap chain images");
 		}
-
-		// Increment r->currentFrameInFlight
-		r->currentFrameInFlight = nextFrameInFlight;
 	
 		// //TODO find a better fix...
 		if (r->rayTracingPipelineFeatures.rayTracingPipeline) r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures

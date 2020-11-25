@@ -146,7 +146,7 @@ public:
 			LoadImagePixelsFromFile();
 		}
 		stagingBuffer.size = bufferSize;
-		stagingBuffer.Allocate(device, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, false);
+		stagingBuffer.Allocate(device, MEMORY_USAGE_CPU_ONLY, false);
 		stagingBuffer.MapMemory(device);
 			memcpy(stagingBuffer.data, pixels, bufferSize);
 		stagingBuffer.UnmapMemory(device);
@@ -299,9 +299,9 @@ public:
 	}
 
 
-	void CreateImage(Device* device, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL, VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VkMemoryPropertyFlags memoryPropertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+	void CreateImage(Device* device, VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL, VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, MemoryUsage memoryUsage = MEMORY_USAGE_GPU_ONLY) {
 		image.usage = usage;
-		image.memoryPropertyFlags = memoryPropertyFlags;
+		image.memoryUsage = memoryUsage;
 		
 		// Image
 		VkImageCreateInfo& imageInfo = image.imageInfo;
