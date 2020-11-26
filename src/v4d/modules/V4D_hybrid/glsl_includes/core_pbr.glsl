@@ -65,7 +65,7 @@ vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float r
 					shadowed = true;
 					if (dot(L, normal) > 0) {
 						vec3 shadowRayStart = hitPoint + bump + V*(length(hitPoint)*0.0001); // starting shadow ray just outside the surface this way solves precision issues when casting shadows
-						traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT, GEOMETRY_ATTR_CAST_SHADOWS, 0, 0, 0, shadowRayStart, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 0);
+						traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT, GEOMETRY_ATTR_CAST_SHADOWS, 0, 0, 0, shadowRayStart, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 1);
 					}
 				}
 				if (!HardShadows || !shadowed)

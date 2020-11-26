@@ -847,8 +847,7 @@ public:
 	GenerateGeometry(
 		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
 		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
-		uint vertexIndexOffset = 0,
-		float alpha = 1.0
+		uint vertexIndexOffset = 0
 	) {
 		uint vertexCount = 0, indexCount = 0;
 		auto points = GetPointsPositions(true);
@@ -895,7 +894,7 @@ public:
 					auto pt = points[pointIndex];
 					
 					if (addBevels) {
-						float bevelSize = 0.05f;
+						float bevelSize = 0.02f;
 						pt -= glm::sign(glm::round(points[pointIndex] * glm::abs(glm::abs(faceNormal) - 1.0f) * 100.0f)) * bevelSize;
 						if ((GetShapeType() == SHAPE::INVCORNER) && (faceIndex == 6)) pt += faceNormal * bevelSize / 2.0f;
 						else if (face.facedirs.size() > 1) pt += faceNormal * bevelSize / 4.0f;
@@ -903,8 +902,9 @@ public:
 					
 					faceVertex->vertexData->pos = pt + GetPosition();
 					faceVertex->vertexData->normal = faceNormal;
-					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
-					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
+					auto colorIndex = GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex);
+					auto color = COLORS[colorIndex];
+					faceVertex->vertexData->SetColor({color.r, color.g, color.b, colorIndex? 1:0});
 					
 					if (cornerVertices[pointIndex].size() < 3) {
 						cornerVertices[pointIndex].emplace(glm::round(faceVertex->vertexData->pos * 100.0f) / 100.0f);

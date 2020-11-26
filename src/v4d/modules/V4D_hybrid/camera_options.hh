@@ -7,10 +7,12 @@
 #define RENDER_OPTION_TXAA 1<< 4
 #define RENDER_OPTION_HDR_TONE_MAPPING 1<< 5
 #define RENDER_OPTION_GAMMA_CORRECTION 1<< 6
+#define RENDER_OPTION_RAY_TRACED_REFLECTIONS 1<< 7
 
 // maximum of 32 debug options
 #define DEBUG_OPTION_WIREFRAME 1<< 1
 #define DEBUG_OPTION_PHYSICS 1<< 2
+#define DEBUG_OPTION_NORMALS 1<< 3
 
 
 // C++ Only, within this module only
@@ -22,6 +24,7 @@ namespace RENDER_OPTIONS {
 	bool TXAA = true;
 	bool HDR_TONE_MAPPING = true;
 	bool GAMMA_CORRECTION = true;
+	bool RAY_TRACED_REFLECTIONS = true;
 	
 	uint32_t Get() {
 		uint32_t flags = 0;
@@ -31,17 +34,20 @@ namespace RENDER_OPTIONS {
 		if (TXAA) flags |= RENDER_OPTION_TXAA;
 		if (HDR_TONE_MAPPING) flags |= RENDER_OPTION_HDR_TONE_MAPPING;
 		if (GAMMA_CORRECTION) flags |= RENDER_OPTION_GAMMA_CORRECTION;
+		if (RAY_TRACED_REFLECTIONS) flags |= RENDER_OPTION_RAY_TRACED_REFLECTIONS;
 		return flags;
 	}
 }
 namespace DEBUG_OPTIONS {
 	bool WIREFRAME = false;
 	bool PHYSICS = false;
+	bool NORMALS = false;
 	
 	uint32_t Get() {
 		uint32_t flags = 0;
 		if (WIREFRAME) flags |= DEBUG_OPTION_WIREFRAME;
 		if (PHYSICS) flags |= DEBUG_OPTION_PHYSICS;
+		if (NORMALS) flags |= DEBUG_OPTION_NORMALS;
 		return flags;
 	}
 }

@@ -16,7 +16,7 @@ void StandardPbrFragmentLightingShader() {
 	
 	ReadPbrGBuffers();
 	
-	if (DebugWireframe) {
+	if (DebugWireframe || DebugNormals) {
 		WriteLitImage(vec4(pbrGBuffers.viewSpaceNormal, 1));
 		return;
 	}

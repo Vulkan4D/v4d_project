@@ -50,11 +50,13 @@ layout(set = 0, binding = 11) uniform sampler2D tex_img_metalNormal;
 
 bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
 bool DebugPhysics = (camera.debugOptions & DEBUG_OPTION_PHYSICS)!=0;
+bool DebugNormals = (camera.debugOptions & DEBUG_OPTION_NORMALS)!=0;
 bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugWireframe && !DebugPhysics;
 bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && !DebugWireframe;
 bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && !DebugWireframe;
 bool RayTracedVisibility = (camera.renderOptions & RENDER_OPTION_RAY_TRACED_VISIBILITY)!=0 && !DebugWireframe;
 bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && !DebugWireframe;
+bool RayTracedReflections = (camera.renderOptions & RENDER_OPTION_RAY_TRACED_REFLECTIONS)!=0 && !DebugWireframe;
 
 double GetTrueDistanceFromDepthBuffer(double depth) {
 	if (depth == 1) return camera.zfar;

@@ -33,7 +33,7 @@ public:
 					uint nextVertex = 0;
 					uint nextIndex = 0;
 					for (int i = 0; i < blocks.size(); ++i) {
-						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geometry->GetVertexPtr(nextVertex), geometry->GetIndexPtr(nextIndex), nextVertex, 0.6);
+						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geometry->GetVertexPtr(nextVertex), geometry->GetIndexPtr(nextIndex), nextVertex);
 						nextVertex += vertexCount;
 						nextIndex += indexCount;
 					}

@@ -14,28 +14,42 @@ vec3 TriplanarBlending(vec3 norm) {
 	return blending;
 }
 vec4 TriplanarTextureRGBA(sampler2D tex, vec3 coords, vec3 blending) {
-	vec4 xaxis = texture( tex, coords.yz);
+	vec4 xaxis = texture( tex, coords.zy);
 	vec4 yaxis = texture( tex, coords.xz);
 	vec4 zaxis = texture( tex, coords.xy);
 	return xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
 }
 vec3 TriplanarTextureRGB(sampler2D tex, vec3 coords, vec3 blending) {
-	vec3 xaxis = texture( tex, coords.yz).rgb;
+	vec3 xaxis = texture( tex, coords.zy).rgb;
 	vec3 yaxis = texture( tex, coords.xz).rgb;
 	vec3 zaxis = texture( tex, coords.xy).rgb;
 	return xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
 }
 float TriplanarTextureR(sampler2D tex, vec3 coords, vec3 blending) {
-	float xaxis = texture( tex, coords.yz).r;
+	float xaxis = texture( tex, coords.zy).r;
 	float yaxis = texture( tex, coords.xz).r;
 	float zaxis = texture( tex, coords.xy).r;
 	return xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
 }
 float TriplanarTextureA(sampler2D tex, vec3 coords, vec3 blending) {
-	float xaxis = texture( tex, coords.yz).a;
+	float xaxis = texture( tex, coords.zy).a;
 	float yaxis = texture( tex, coords.xz).a;
 	float zaxis = texture( tex, coords.xy).a;
 	return xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
+}
+vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNormal, vec3 blending) {
+	vec3 tnormalX = texture( normalTex, coords.zy).xyz * 2 - 1;
+	vec3 tnormalY = texture( normalTex, coords.xz).xyz * 2 - 1;
+	vec3 tnormalZ = texture( normalTex, coords.xy).xyz * 2 - 1;
+	tnormalX = vec3(0, tnormalX.yx);
+	tnormalY = vec3(tnormalY.x, 0, tnormalY.y);
+	tnormalZ = vec3(tnormalZ.xy, 0);
+	return normalize(
+		localFaceNormal
+		+ tnormalX * blending.x
+		+ tnormalY * blending.y
+		+ tnormalZ * blending.z
+	);
 }
 
 #common .*rchit
@@ -62,16 +76,10 @@ void main() {
 	ray.distance = gl_HitTEXT;
 	
 	vec3 blending = TriplanarBlending(fragment.normal);
-	ray.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending), fragment.color.rgb, 0.7);
-	ray.metallic = TriplanarTextureR(tex_img_metalMetallic, fragment.pos, blending);
-	ray.roughness = TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending);
-	
-	// Normal map
-	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0.758,0.899,1.212)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
-	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
-	ray.viewSpaceNormal = normalize(TBN * TriplanarTextureRGB(tex_img_metalNormal, fragment.pos, blending));
-
+	ray.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending), fragment.color.rgb, fragment.color.a);
+	ray.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, fragment.pos, blending), 0.3, fragment.color.a);
+	ray.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending), 0.6, fragment.color.a);
+	ray.viewSpaceNormal = fragment.geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, fragment.pos, fragment.normal, blending);
 }
 
 ###########################################
@@ -112,21 +120,16 @@ layout(location = 4) in vec3 triplanarCoords;
 layout(location = 5) in vec3 triplanarNormal;
 
 void main() {
+	GeometryInstance geometryInstance = GetGeometryInstance(geometryIndex);
 	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
 	pbrGBuffers.uv = uintBitsToFloat(customData);
 	pbrGBuffers.emit = 0;
 	
 	vec3 blending = TriplanarBlending(triplanarNormal);
-	pbrGBuffers.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending), v2f.color.rgb, 0.7);
-	pbrGBuffers.metallic = TriplanarTextureR(tex_img_metalMetallic, triplanarCoords, blending);
-	pbrGBuffers.roughness = TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending);
-	
-	// Normal map
-	GeometryInstance geometryInstance = GetGeometryInstance(geometryIndex);
-	vec3 tangentX = normalize(cross(geometryInstance.normalViewTransform * normalize(vec3(0.758,0.899,1.212))/* fixed arbitrary vector in object space */, v2f.normal));
-	vec3 tangentY = normalize(cross(v2f.normal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, v2f.normal); // viewSpace TBN
-	pbrGBuffers.viewSpaceNormal = normalize(TBN * TriplanarTextureRGB(tex_img_metalNormal, triplanarCoords, blending));
+	pbrGBuffers.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending), v2f.color.rgb, v2f.color.a);
+	pbrGBuffers.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, triplanarCoords, blending), 0.3, v2f.color.a);
+	pbrGBuffers.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending), 0.6, v2f.color.a);
+	pbrGBuffers.viewSpaceNormal = geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, triplanarCoords, triplanarNormal, blending);
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();

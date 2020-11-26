@@ -1987,6 +1987,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				RENDER_OPTIONS::RAY_TRACED_VISIBILITY = false;
 				RENDER_OPTIONS::RAY_TRACED_LIGHTING = false;
 				RENDER_OPTIONS::HARD_SHADOWS = false;
+				RENDER_OPTIONS::RAY_TRACED_REFLECTIONS = false;
 			}
 		}
 	
@@ -2564,6 +2565,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// #ifdef _DEBUG
 				ImGui::Checkbox("Debug Wireframe", &DEBUG_OPTIONS::WIREFRAME);
 				ImGui::Checkbox("Debug Physics", &DEBUG_OPTIONS::PHYSICS);
+				ImGui::Checkbox("Debug Normals", &DEBUG_OPTIONS::NORMALS);
 			// #endif
 			if (DEBUG_OPTIONS::WIREFRAME) {
 				// ...
@@ -2571,6 +2573,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 					ImGui::Checkbox("Ray-traced visibility", &RENDER_OPTIONS::RAY_TRACED_VISIBILITY);
 					ImGui::Checkbox("Ray-traced lighting", &RENDER_OPTIONS::RAY_TRACED_LIGHTING);
+					if (RENDER_OPTIONS::RAY_TRACED_LIGHTING) {
+						ImGui::Checkbox("Ray-traced reflections", &RENDER_OPTIONS::RAY_TRACED_REFLECTIONS);
+					}
 				} else {
 					ImGui::Text("Ray-Tracing unavailable, using rasterization");
 				}
