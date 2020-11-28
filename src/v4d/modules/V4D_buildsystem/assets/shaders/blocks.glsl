@@ -76,10 +76,15 @@ void main() {
 	ray.distance = gl_HitTEXT;
 	
 	vec3 blending = TriplanarBlending(fragment.normal);
-	ray.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending), fragment.color.rgb, fragment.color.a);
-	ray.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, fragment.pos, blending), 0.3, fragment.color.a);
-	ray.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending), 0.6, fragment.color.a);
+	// ray.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, fragment.pos, blending), fragment.color.rgb, fragment.color.a);
+	// ray.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, fragment.pos, blending), 0.3, fragment.color.a);
+	// ray.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending), 0.6, fragment.color.a);
 	ray.viewSpaceNormal = fragment.geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, fragment.pos, fragment.normal, blending);
+	
+	ray.albedo = vec3(0.8);
+	ray.metallic = 0.3;
+	ray.roughness = 0.6;
+	
 }
 
 ###########################################
@@ -126,10 +131,14 @@ void main() {
 	pbrGBuffers.emit = 0;
 	
 	vec3 blending = TriplanarBlending(triplanarNormal);
-	pbrGBuffers.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending), v2f.color.rgb, v2f.color.a);
-	pbrGBuffers.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, triplanarCoords, blending), 0.3, v2f.color.a);
-	pbrGBuffers.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending), 0.6, v2f.color.a);
+	// pbrGBuffers.albedo = mix(TriplanarTextureRGB(tex_img_metalAlbedo, triplanarCoords, blending), v2f.color.rgb, v2f.color.a);
+	// pbrGBuffers.metallic = mix(TriplanarTextureR(tex_img_metalMetallic, triplanarCoords, blending), 0.3, v2f.color.a);
+	// pbrGBuffers.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending), 0.6, v2f.color.a);
 	pbrGBuffers.viewSpaceNormal = geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, triplanarCoords, triplanarNormal, blending);
+	
+	pbrGBuffers.albedo = vec3(0.8);
+	pbrGBuffers.metallic = 0.3;
+	pbrGBuffers.roughness = 0.6;
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();

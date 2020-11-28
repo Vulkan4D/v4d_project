@@ -875,6 +875,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		
 		// Lighting Miss (Shadow)
 		shaderBindingTables["sbt_lighting"]->AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_lighting.shadow.rmiss"));
+		shaderBindingTables["sbt_lighting"]->AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rtx_lighting.reflection.rmiss"));
 		
 		// Basic
 		Geometry::geometryRenderTypes["basic"].sbtOffset = 

@@ -49,8 +49,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
-		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
-		mainMultiplayerModule = V4D_Mod::LoadModule("V4D_multiplayer");
+		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
+		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
 	}
 	
 	V4D_MODULE_FUNC(void, ModuleUnload) {

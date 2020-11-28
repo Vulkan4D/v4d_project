@@ -231,7 +231,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleLoad) {
 		// Load Dependencies
-		mainRenderModule = V4D_Mod::LoadModule("V4D_hybrid");
+		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		// playerView->camSpeed = 100000;
 		auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
@@ -322,6 +322,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						renderingDevice->RunSingleTimeCommands(renderingDevice->GetQueue("graphics"), [](auto cmdBuffer){
 							terrain->atmosphere.Allocate(renderingDevice, cmdBuffer);
 						});
+						
+						// // Ray-traced atmosphere
+						// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
+						// 	obj->SetSphereGeometry("planet_atmosphere", planet.atmosphereRadius);
+						// });
+						
 					}
 				}
 			}
@@ -525,6 +531,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
 			shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
 		Geometry::geometryRenderTypes["planet_terrain"].rasterShader = planetTerrainRasterShader;
+		
+		// Geometry::geometryRenderTypes["planet_atmosphere"].sbtOffset = 
+		// 	shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rint");
+		// 	shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rint");
 		
 		// Atmosphere
 		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());

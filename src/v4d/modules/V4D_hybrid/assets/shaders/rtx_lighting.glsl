@@ -37,10 +37,12 @@ void main() {
 		const vec3 origin = pbrGBuffers.viewSpacePosition + pbrGBuffers.viewSpaceNormal * 0.01;
 		const vec3 direction = normalize(pbrGBuffers.viewSpacePosition);
 		const vec3 reflectDirection = reflect(direction, normalize(pbrGBuffers.viewSpaceNormal));
-		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, GEOMETRY_ATTR_REFLECTION_VISIBLE, 0, 0, 0, origin, float(camera.znear), reflectDirection, float(camera.zfar), 0);
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, GEOMETRY_ATTR_REFLECTION_VISIBLE, 0, 0, 1, origin, float(camera.znear), reflectDirection, float(camera.zfar), 0);
 		if (reflectionRay.distance > 0) {
 			vec3 reflectColor = ApplyPBRShading(reflectionRay.viewSpacePosition, reflectionRay.albedo, reflectionRay.viewSpaceNormal, /*bump*/vec3(0), reflectionRay.roughness, reflectionRay.metallic);
-			litColor = mix(litColor, reflectColor, pbrGBuffers.metallic);
+			litColor = mix(litColor, reflectColor * pbrGBuffers.metallic, pbrGBuffers.metallic);
+		} else {
+			litColor = mix(litColor, vec3(0.5)/* fake atmosphere color (temporary) */ * pbrGBuffers.metallic, pbrGBuffers.metallic);
 		}
 	}
 	
@@ -60,5 +62,15 @@ layout(location = 1) rayPayloadInEXT bool shadowed;
 
 void main() {
 	shadowed = false;
+}
+
+
+#############################################################
+#shader reflection.rmiss
+
+layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+void main() {
+	ray.distance = 0;
 }
 

@@ -4,7 +4,7 @@
 // layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
 // layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
 
-#common .*rchit
+#common .*rchit|.*rint
 
 #include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
 #include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
@@ -129,8 +129,8 @@ void main() {
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
 	ray.uv = PackUVasFloat(fragment.uv);
-	ray.metallic = 0.1;
-	ray.roughness = 0.9;
+	ray.metallic = 0.0;
+	ray.roughness = 0.99;
 	ray.distance = gl_HitTEXT;
 }
 
@@ -160,11 +160,70 @@ void main() {
 	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
-	pbrGBuffers.metallic = 0;
-	pbrGBuffers.roughness = 0;
+	pbrGBuffers.metallic = 0.0;
+	pbrGBuffers.roughness = 0.99;
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
 	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
 }
 
+
+// #############################################################
+// #shader atmosphere.rint
+
+// hitAttributeEXT ProceduralGeometry sphereGeomAttr;
+
+// void main() {
+// 	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
+// 	vec3 spherePosition = geom.geometryInstance.viewPosition;
+// 	float sphereRadius = geom.aabbMax.x;
+	
+// 	const vec3 origin = gl_WorldRayOriginEXT;
+// 	const vec3 direction = gl_WorldRayDirectionEXT;
+// 	const float tMin = gl_RayTminEXT;
+// 	const float tMax = gl_RayTmaxEXT;
+
+// 	const vec3 oc = origin - spherePosition;
+// 	const float a = dot(direction, direction);
+// 	const float b = dot(oc, direction);
+// 	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
+// 	const float discriminant = b * b - a * c;
+
+// 	if (discriminant >= 0) {
+// 		const float discriminantSqrt = sqrt(discriminant);
+// 		const float t1 = (-b - discriminantSqrt) / a;
+// 		const float t2 = (-b + discriminantSqrt) / a;
+
+// 		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
+// 			sphereGeomAttr = geom;
+// 			reportIntersectionEXT((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
+// 		}
+// 	}
+// }
+
+
+// #############################################################
+// #shader atmosphere.rchit
+
+// hitAttributeEXT ProceduralGeometry sphereGeomAttr;
+
+// layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
+
+// void main() {
+// 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+// 	vec4 color = sphereGeomAttr.color;
+	
+// 	// Calculate normal for a sphere
+// 	const vec3 normal = normalize(hitPoint - sphereGeomAttr.geometryInstance.viewPosition);
+	
+// 	ray.customData = GenerateCustomData(sphereGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
+// 	ray.viewSpacePosition = hitPoint;
+// 	ray.viewSpaceNormal = normal;
+// 	ray.albedo = color.rgb;
+// 	ray.emit = 0;
+// 	ray.uv = 0;
+// 	ray.metallic = 0.0;
+// 	ray.roughness = 0.0;
+// 	ray.distance = gl_HitTEXT;
+// }
