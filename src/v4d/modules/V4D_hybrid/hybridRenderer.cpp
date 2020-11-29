@@ -1723,7 +1723,6 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		}
 		
 		nbRayTracingInstances = 0;
-		activeRayTracedGeometries.clear();
 		
 		scene->Lock();
 		{// Update object transforms and light sources (Use all lights for now)
@@ -1822,6 +1821,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 		Geometry::globalBuffers.PushLights(r->renderingDevice, commandBuffer);
 		if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
 			for (auto[i,geometry] : activeRayTracedGeometries) {
+				if (i >= nbRayTracingInstances) break;
 				if (geometry) geometry->AutoPush(r->renderingDevice, commandBuffer, true);
 			}
 		}
@@ -2530,9 +2530,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		} else if (result != VK_SUCCESS) {
 			throw std::runtime_error("Failed to present swap chain images");
 		}
-	
-		// //TODO find a better fix...
-		if (r->rayTracingPipelineFeatures.rayTracingPipeline) r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle); // Temporary fix for occasional crash with acceleration structures
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate) {
