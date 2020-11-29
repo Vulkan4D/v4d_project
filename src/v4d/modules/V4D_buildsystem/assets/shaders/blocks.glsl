@@ -82,8 +82,8 @@ void main() {
 	ray.viewSpaceNormal = fragment.geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, fragment.pos, fragment.normal, blending);
 	
 	ray.albedo = vec3(0.8);
-	ray.metallic = 0.3;
-	ray.roughness = 0.6;
+	ray.metallic = 0.7;
+	ray.roughness = 0.1;
 	
 }
 
@@ -137,8 +137,8 @@ void main() {
 	pbrGBuffers.viewSpaceNormal = geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, triplanarCoords, triplanarNormal, blending);
 	
 	pbrGBuffers.albedo = vec3(0.8);
-	pbrGBuffers.metallic = 0.3;
-	pbrGBuffers.roughness = 0.6;
+	pbrGBuffers.metallic = 0.7;
+	pbrGBuffers.roughness = 0.1;
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
