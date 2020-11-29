@@ -270,8 +270,8 @@ void main() {
 	pbrGBuffers.viewSpacePosition = in_pos.xyz;
 	pbrGBuffers.viewSpaceNormal = vec3(0);
 	pbrGBuffers.albedo = in_color.rgb;
-	pbrGBuffers.metallic = 0.0;
-	pbrGBuffers.roughness = 0.0;
+	pbrGBuffers.metallic = 0.8;
+	pbrGBuffers.roughness = 0.1;
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.uv = 0;
 	pbrGBuffers.distance = float(camera.znear);

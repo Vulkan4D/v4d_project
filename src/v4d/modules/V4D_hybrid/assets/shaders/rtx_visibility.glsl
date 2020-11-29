@@ -236,8 +236,8 @@ void main() {
 	ray.albedo = color.rgb;
 	ray.emit = 0;
 	ray.uv = 0;
-	ray.metallic = 0.0;
-	ray.roughness = 0.0;
+	ray.metallic = 0.8;
+	ray.roughness = 0.1;
 	ray.distance = gl_HitTEXT;
 }
 

@@ -171,14 +171,14 @@ bool bumpMapsGenerated = false;
 
 #pragma endregion
 
-void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk, int& chunksToGeneratePerFrame) {
+void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk) {
 	if (chunk->active) {
 		
 		// subChunks
 		{
 			std::scoped_lock lock(chunk->subChunksMutex);
 			for (auto* subChunk : chunk->subChunks) {
-				ComputeChunkVertices(device, commandBuffer, subChunk, chunksToGeneratePerFrame);
+				ComputeChunkVertices(device, commandBuffer, subChunk);
 			}
 		}
 		
@@ -418,9 +418,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);
 				terrainChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
 				std::lock_guard lock(terrain->chunksMutex);
-				int chunksToGeneratePerFrame = 8;
 				for (auto* chunk : terrain->chunks) {
-					ComputeChunkVertices(renderingDevice, commandBuffer, chunk, chunksToGeneratePerFrame);
+					ComputeChunkVertices(renderingDevice, commandBuffer, chunk);
 				}
 			}
 		//

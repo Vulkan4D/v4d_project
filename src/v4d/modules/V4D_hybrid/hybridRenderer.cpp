@@ -804,7 +804,7 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	uint32_t nbRayTracingInstances = 0;
 	Buffer globalScratchBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 16*1024*1024/* 16 MB */};
 	static const bool globalScratchDynamicSize = false;
-	static const int maxBlasBuildsPerFrame = 8;
+	static const int maxBlasBuildsPerFrame = 0; // 0 = unlimited
 	std::map<int/*instance index*/, std::shared_ptr<Geometry>> activeRayTracedGeometries {};
 	std::mutex geometriesToRemoveFromRayTracingInstancesMutex;
 	std::vector<std::shared_ptr<AccelerationStructure>> blasBuildsForGlobalScratchBufferReallocation {};

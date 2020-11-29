@@ -31,6 +31,7 @@ struct PlanetTerrain {
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
+	static constexpr uint32_t CHUNK_CACHE_VERSION = 1;
 	static const bool useSkirts = true;
 	#pragma endregion
 
@@ -224,6 +225,9 @@ struct PlanetTerrain {
 		// 	}
 		// }
 		
+		std::string GetChunkId() const {
+			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)centerPos.x) + "_" + std::to_string((int64_t)centerPos.y) + "_" + std::to_string((int64_t)centerPos.z);
+		}
 		
 		void Generate() {
 			/* 
@@ -282,15 +286,12 @@ struct PlanetTerrain {
 			// #ifdef _DEBUG
 				auto timer = v4d::Timer(true);
 			// #endif
-			int genRow = 0;
-			int genCol = 0;
-			int genVertexIndex = 0;
-			int genIndexIndex = 0;
 			
 			if (!meshGenerating) return;
 			if (!planet->scene) return;
-			planet->scene->Lock();
-			{
+			
+			{// Prepare object for mesh generation
+				planet->scene->Lock();
 				if (!obj) {
 					obj = planet->scene->AddObjectInstance();
 				}
@@ -301,273 +302,355 @@ struct PlanetTerrain {
 						geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
 					}
 					geometry->active = false;
+					geometry->custom3f = {uvOffsetX, uvOffsetY, uvMult};
 				obj->Unlock();
+				planet->scene->Unlock();
 			}
-			planet->scene->Unlock();
+		
+			// Cache file
+			std::string chunkId = GetChunkId();
+			v4d::io::BinaryFileStream cacheFile (std::string(V4D_MODULE_CACHE_PATH(THIS_MODULE, "chunks/")) + chunkId + ".binary", 1024*1024);
+			constexpr size_t cacheFileSize 
+								= sizeof(CHUNK_CACHE_VERSION)
+								+ nbVerticesPerChunk * sizeof(Geometry::VertexBuffer_T)
+								+ nbIndicesPerChunk * sizeof(Geometry::IndexBuffer_T)
+								+ 24 * sizeof(uint32_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
+								+ sizeof(topLeftPosLowest)
+								+ sizeof(lowestAltitude)
+								+ sizeof(topRightPosLowest)
+								+ sizeof(bottomLeftPosLowest)
+								+ sizeof(bottomRightPosLowest)
+								+ sizeof(topLeftPosHighest)
+								+ sizeof(highestAltitude)
+								+ sizeof(topRightPosHighest)
+								+ sizeof(bottomLeftPosHighest)
+								+ sizeof(bottomRightPosHighest)
+								+ sizeof(geometry->boundingDistance)
+			;
 			
-			geometry->custom3f = {uvOffsetX, uvOffsetY, uvMult};
-			
-			auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
-			double topSign = topDir.x + topDir.y + topDir.z;
-			double rightSign = rightDir.x + rightDir.y + rightDir.z;
-			
-			while (genRow <= vertexSubdivisionsPerChunk) {
-				while (genCol <= vertexSubdivisionsPerChunk) {
-					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+			if (cacheFile.GetSize() == cacheFileSize && cacheFile.Read<uint32_t>() == CHUNK_CACHE_VERSION) {
+				
+				{// Load from cache file
+					cacheFile.LockReadWrite();
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(geometry->GetVertexPtr()), nbVerticesPerChunk*sizeof(Geometry::VertexBuffer_T));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(geometry->GetIndexPtr()), nbIndicesPerChunk*sizeof(Geometry::IndexBuffer_T));
+						cacheFile >> geometry->simplifiedMeshIndices;
+						cacheFile >> lowestAltitude;
+						cacheFile >> highestAltitude;
+						cacheFile >> topLeftPosLowest;
+						cacheFile >> topRightPosLowest;
+						cacheFile >> bottomLeftPosLowest;
+						cacheFile >> bottomRightPosLowest;
+						cacheFile >> topLeftPosHighest;
+						cacheFile >> topRightPosHighest;
+						cacheFile >> bottomLeftPosHighest;
+						cacheFile >> bottomRightPosHighest;
+						cacheFile >> geometry->boundingDistance;
+					cacheFile.UnlockReadWrite();
+				}
+				
+			} else {
+				
+				{// Generate
 					
-					glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-					glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+					int genRow = 0;
+					int genCol = 0;
+					int genVertexIndex = 0;
+					int genIndexIndex = 0;
 					
-					// position
-					glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-					double altitude = planet->GetHeightMap(pos, triangleSize);
-					glm::dvec3 posOnChunk = pos * altitude - centerPos;
-					auto* vertex = geometry->GetVertexPtr(currentIndex);
-					vertex->pos = posOnChunk;
-					// Color
-					// vertex->SetColor(planet->GetColorMap(pos, triangleSize));
-					if (PlanetTerrain::generateColor) {
-						vertex->SetColor(glm::vec4(PlanetTerrain::generateColor(altitude - planet->solidRadius), 1.0f));
-					}
-					// UV
-					vertex->SetUV(glm::vec2(
-						rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
-						topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow
-					) / float(vertexSubdivisionsPerChunk));
-					// Normal
-					vertex->normal = pos; // already normalized
+					// Fetch information for generating this chunk
+					auto [faceDir, topDir, rightDir] = GetFaceVectors(face);
+					double topSign = topDir.x + topDir.y + topDir.z;
+					double rightSign = rightDir.x + rightDir.y + rightDir.z;
 					
-					geometry->isDirty = true;
-					genVertexIndex++;
-					
-					// Bounding distance
-					geometry->boundingDistance = std::max(geometry->boundingDistance, glm::length(vertex->pos));
-					
-					// Altitude bounds
-					lowestAltitude = std::min(lowestAltitude, altitude);
-					highestAltitude = std::max(highestAltitude, altitude);
+					// Generate terrain mesh
+					while (genRow <= vertexSubdivisionsPerChunk) {
+						while (genCol <= vertexSubdivisionsPerChunk) {
+							uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+							
+							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+							
+							// position
+							glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+							double altitude = planet->GetHeightMap(pos, triangleSize);
+							glm::dvec3 posOnChunk = pos * altitude - centerPos;
+							auto* vertex = geometry->GetVertexPtr(currentIndex);
+							vertex->pos = posOnChunk;
+							// Color
+							// vertex->SetColor(planet->GetColorMap(pos, triangleSize));
+							if (PlanetTerrain::generateColor) {
+								vertex->SetColor(glm::vec4(PlanetTerrain::generateColor(altitude - planet->solidRadius), 1.0f));
+							}
+							// UV
+							vertex->SetUV(glm::vec2(
+								rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
+								topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow
+							) / float(vertexSubdivisionsPerChunk));
+							// Normal
+							vertex->normal = pos; // already normalized
+							
+							genVertexIndex++;
+							
+							// Bounding distance
+							geometry->boundingDistance = std::max(geometry->boundingDistance, glm::length(vertex->pos));
+							
+							// Altitude bounds
+							lowestAltitude = std::min(lowestAltitude, altitude);
+							highestAltitude = std::max(highestAltitude, altitude);
 
-					// indices
-					if (genRow < vertexSubdivisionsPerChunk) {
-						uint32_t topLeftIndex = currentIndex;
-						uint32_t topRightIndex = topLeftIndex+1;
-						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
-						uint32_t bottomRightIndex = bottomLeftIndex+1;
-						if (genCol < vertexSubdivisionsPerChunk) {
-							if (topSign == rightSign) {
-								geometry->SetIndex(genIndexIndex++, topLeftIndex);
-								geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
-								geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-								geometry->SetIndex(genIndexIndex++, topLeftIndex);
-								geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-								geometry->SetIndex(genIndexIndex++, topRightIndex);
-							} else {
-								geometry->SetIndex(genIndexIndex++, topLeftIndex);
-								geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-								geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
-								geometry->SetIndex(genIndexIndex++, topLeftIndex);
-								geometry->SetIndex(genIndexIndex++, topRightIndex);
-								geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+							// indices
+							if (genRow < vertexSubdivisionsPerChunk) {
+								uint32_t topLeftIndex = currentIndex;
+								uint32_t topRightIndex = topLeftIndex+1;
+								uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
+								uint32_t bottomRightIndex = bottomLeftIndex+1;
+								if (genCol < vertexSubdivisionsPerChunk) {
+									if (topSign == rightSign) {
+										geometry->SetIndex(genIndexIndex++, topLeftIndex);
+										geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
+										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+										geometry->SetIndex(genIndexIndex++, topLeftIndex);
+										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+										geometry->SetIndex(genIndexIndex++, topRightIndex);
+									} else {
+										geometry->SetIndex(genIndexIndex++, topLeftIndex);
+										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+										geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
+										geometry->SetIndex(genIndexIndex++, topLeftIndex);
+										geometry->SetIndex(genIndexIndex++, topRightIndex);
+										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+									}
+								}
+							}
+							
+							++genCol;
+							if (!meshGenerating) return;
+						}
+						
+						genCol = 0;
+						++genRow;
+					}
+					
+					{// Simplified mesh
+						const int sub = vertexSubdivisionsPerChunk;
+						const int tl = 0;
+						const int tr = sub;
+						const int bl = sub * (sub + 1);
+						const int br = sub * (sub + 2);
+						const int bm = (bl + br) / 2;
+						const int tm = (tl + tr) / 2;
+						const int lm = (tl + bl) / 2;
+						const int rm = (tr + br) / 2;
+						const int mm = (tl + br) / 2;
+						geometry->simplifiedMeshIndices = {
+							// minimum (one quad, two triangles)
+								// tl,bl,br,  tl,br,tr,
+							// medium (4 quads, 8 triangles)
+								tl,lm,mm,  tl,mm,tm,
+								lm,bl,bm,  lm,bm,mm,
+								tm,mm,rm,  tm,rm,tr,
+								mm,bm,br,  mm,br,rm,
+						};
+					}
+
+					if (!meshGenerating) return;
+					
+					{// Normals
+						for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
+							for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
+								uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
+								auto* vertex = geometry->GetVertexPtr(currentIndex);
+								
+								glm::vec3 tangentX, tangentY;
+								
+								if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
+									// For full face (generate top left)
+									uint32_t topLeftIndex = currentIndex;
+									uint32_t topRightIndex = topLeftIndex+1;
+									uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
+									
+									tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
+									tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
+									
+								} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
+									// For right-most bottom-most vertex (generate bottom-most right-most)
+									
+									glm::vec3 bottomLeftPos {0};
+									{
+										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+									}
+
+									glm::vec3 topRightPos {0};
+									{
+										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+									}
+
+									tangentX = glm::normalize(topRightPos - vertex->pos);
+									tangentY = glm::normalize(vertex->pos - bottomLeftPos);
+									
+								} else if (genCol == vertexSubdivisionsPerChunk) {
+									// For others in right col (generate top right)
+									uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
+									
+									glm::vec3 topRightPos {0};
+									{
+										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
+										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
+										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+									}
+
+									tangentX = glm::normalize(topRightPos - vertex->pos);
+									tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
+									
+								} else if (genRow == vertexSubdivisionsPerChunk) {
+									// For others in bottom row (generate bottom left)
+									
+									glm::vec3 bottomLeftPos {0};
+									{
+										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
+										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
+										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
+										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+									}
+
+									tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
+									tangentY = glm::normalize((vertex->pos - bottomLeftPos));
+								}
+								
+								tangentX *= (float)rightSign;
+								tangentY *= (float)topSign;
+								
+								glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
+								
+								vertex->normal = normal;
+								
+								// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
+										
+								if (!meshGenerating) return;
 							}
 						}
 					}
 					
-					++genCol;
 					if (!meshGenerating) return;
+					
+					// Skirts
+					if (useSkirts) {
+						int firstSkirtIndex = genVertexIndex;
+						auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
+							int skirtIndex = genVertexIndex++;
+							
+							auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
+							*skirtVertex = *geometry->GetVertexPtr(pointIndex);
+							skirtVertex->pos -= glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0);
+							
+							if (topSign == rightSign) {
+								geometry->SetIndex(genIndexIndex++, pointIndex);
+								geometry->SetIndex(genIndexIndex++, skirtIndex);
+								geometry->SetIndex(genIndexIndex++, nextPointIndex);
+								geometry->SetIndex(genIndexIndex++, nextPointIndex);
+								geometry->SetIndex(genIndexIndex++, skirtIndex);
+								if (lastPoint) {
+									geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
+								} else {
+									geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
+								}
+							} else {
+								geometry->SetIndex(genIndexIndex++, pointIndex);
+								geometry->SetIndex(genIndexIndex++, nextPointIndex);
+								geometry->SetIndex(genIndexIndex++, skirtIndex);
+								geometry->SetIndex(genIndexIndex++, skirtIndex);
+								geometry->SetIndex(genIndexIndex++, nextPointIndex);
+								if (lastPoint) {
+									geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
+								} else {
+									geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
+								}
+							}
+						};
+						// Left
+						for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+							int pointIndex = i * (vertexSubdivisionsPerChunk+1);
+							int nextPointIndex = (i+1) * (vertexSubdivisionsPerChunk+1);
+							addSkirt(pointIndex, nextPointIndex, i == 0);
+						}
+						// Bottom
+						for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+							int pointIndex = vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+1) + i;
+							int nextPointIndex = pointIndex + 1;
+							addSkirt(pointIndex, nextPointIndex);
+						}
+						// Right
+						for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+							int pointIndex = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1) - 1 - i*(vertexSubdivisionsPerChunk+1);
+							int nextPointIndex = pointIndex - vertexSubdivisionsPerChunk - 1;
+							addSkirt(pointIndex, nextPointIndex);
+						}
+						// Top
+						for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
+							int pointIndex = vertexSubdivisionsPerChunk - i;
+							int nextPointIndex = pointIndex - 1;
+							addSkirt(pointIndex, nextPointIndex, false, i == vertexSubdivisionsPerChunk - 1);
+						}
+					}
+					
+					{// Check for errors
+						if (genVertexIndex != nbVerticesPerChunk) {
+							INVALIDCODE("Problem with terrain mesh generation, generated vertices do not match array size " << genVertexIndex << " != " << nbVerticesPerChunk)
+							return;
+						}
+						if (genIndexIndex != nbIndicesPerChunk) {
+							INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size " << genIndexIndex << " != " << nbIndicesPerChunk)
+							return;
+						}
+					}
+					
+					{// Adjust boundaries
+						topLeftPosLowest = glm::normalize(topLeftPos) * lowestAltitude;
+						topRightPosLowest = glm::normalize(topRightPos) * lowestAltitude;
+						bottomLeftPosLowest = glm::normalize(bottomLeftPos) * lowestAltitude;
+						bottomRightPosLowest = glm::normalize(bottomRightPos) * lowestAltitude;
+						
+						topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
+						topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
+						bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
+						bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
+					}
+					
 				}
 				
-				genCol = 0;
-				++genRow;
-			}
-			
-			// Simplified mesh
-			const int sub = vertexSubdivisionsPerChunk;
-			const int tl = 0;
-			const int tr = sub;
-			const int bl = sub * (sub + 1);
-			const int br = sub * (sub + 2);
-			const int bm = (bl + br) / 2;
-			const int tm = (tl + tr) / 2;
-			const int lm = (tl + bl) / 2;
-			const int rm = (tr + br) / 2;
-			const int mm = (tl + br) / 2;
-			geometry->simplifiedMeshIndices = {
-				// minimum (one quad, two triangles)
-					// tl,bl,br,  tl,br,tr,
-				// medium (4 quads, 8 triangles)
-					tl,lm,mm,  tl,mm,tm,
-					lm,bl,bm,  lm,bm,mm,
-					tm,mm,rm,  tm,rm,tr,
-					mm,bm,br,  mm,br,rm,
-			};
-
-			if (!meshGenerating) return;
-			
-			// Normals
-			for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
-				for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
-					uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
-					auto* vertex = geometry->GetVertexPtr(currentIndex);
-					
-					glm::vec3 tangentX, tangentY;
-					
-					if (genRow < vertexSubdivisionsPerChunk && genCol < vertexSubdivisionsPerChunk) {
-						// For full face (generate top left)
-						uint32_t topLeftIndex = currentIndex;
-						uint32_t topRightIndex = topLeftIndex+1;
-						uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
-						
-						tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
-						
-					} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
-						// For right-most bottom-most vertex (generate bottom-most right-most)
-						
-						glm::vec3 bottomLeftPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
-
-						glm::vec3 topRightPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
-
-						tangentX = glm::normalize(topRightPos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - bottomLeftPos);
-						
-					} else if (genCol == vertexSubdivisionsPerChunk) {
-						// For others in right col (generate top right)
-						uint32_t bottomRightIndex = currentIndex+vertexSubdivisionsPerChunk+1;
-						
-						glm::vec3 topRightPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
-
-						tangentX = glm::normalize(topRightPos - vertex->pos);
-						tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
-						
-					} else if (genRow == vertexSubdivisionsPerChunk) {
-						// For others in bottom row (generate bottom left)
-						
-						glm::vec3 bottomLeftPos {0};
-						{
-							glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
-							glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
-							glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-							bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
-						}
-
-						tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
-						tangentY = glm::normalize((vertex->pos - bottomLeftPos));
-					}
-					
-					tangentX *= (float)rightSign;
-					tangentY *= (float)topSign;
-					
-					glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
-					
-					vertex->normal = normal;
-					
-					// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
-							
-					if (!meshGenerating) return;
+				{// Store into cache file
+					cacheFile.LockReadWrite();
+					cacheFile.Truncate();
+					cacheFile << CHUNK_CACHE_VERSION;
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(geometry->GetVertexPtr()), nbVerticesPerChunk*sizeof(Geometry::VertexBuffer_T));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(geometry->GetIndexPtr()), nbIndicesPerChunk*sizeof(Geometry::IndexBuffer_T));
+						cacheFile << geometry->simplifiedMeshIndices;
+						cacheFile << lowestAltitude;
+						cacheFile << highestAltitude;
+						cacheFile << topLeftPosLowest;
+						cacheFile << topRightPosLowest;
+						cacheFile << bottomLeftPosLowest;
+						cacheFile << bottomRightPosLowest;
+						cacheFile << topLeftPosHighest;
+						cacheFile << topRightPosHighest;
+						cacheFile << bottomLeftPosHighest;
+						cacheFile << bottomRightPosHighest;
+						cacheFile << geometry->boundingDistance;
+					cacheFile.Flush();
+					cacheFile.UnlockReadWrite();
 				}
 			}
-			
-			if (!meshGenerating) return;
-			
-			// Skirts
-			if (useSkirts) {
-				int firstSkirtIndex = genVertexIndex;
-				auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
-					int skirtIndex = genVertexIndex++;
-					
-					auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
-					*skirtVertex = *geometry->GetVertexPtr(pointIndex);
-					skirtVertex->pos -= glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0);
-					
-					if (topSign == rightSign) {
-						geometry->SetIndex(genIndexIndex++, pointIndex);
-						geometry->SetIndex(genIndexIndex++, skirtIndex);
-						geometry->SetIndex(genIndexIndex++, nextPointIndex);
-						geometry->SetIndex(genIndexIndex++, nextPointIndex);
-						geometry->SetIndex(genIndexIndex++, skirtIndex);
-						if (lastPoint) {
-							geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
-						} else {
-							geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
-						}
-					} else {
-						geometry->SetIndex(genIndexIndex++, pointIndex);
-						geometry->SetIndex(genIndexIndex++, nextPointIndex);
-						geometry->SetIndex(genIndexIndex++, skirtIndex);
-						geometry->SetIndex(genIndexIndex++, skirtIndex);
-						geometry->SetIndex(genIndexIndex++, nextPointIndex);
-						if (lastPoint) {
-							geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
-						} else {
-							geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
-						}
-					}
-				};
-				// Left
-				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
-					int pointIndex = i * (vertexSubdivisionsPerChunk+1);
-					int nextPointIndex = (i+1) * (vertexSubdivisionsPerChunk+1);
-					addSkirt(pointIndex, nextPointIndex, i == 0);
-				}
-				// Bottom
-				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
-					int pointIndex = vertexSubdivisionsPerChunk*(vertexSubdivisionsPerChunk+1) + i;
-					int nextPointIndex = pointIndex + 1;
-					addSkirt(pointIndex, nextPointIndex);
-				}
-				// Right
-				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
-					int pointIndex = (vertexSubdivisionsPerChunk+1) * (vertexSubdivisionsPerChunk+1) - 1 - i*(vertexSubdivisionsPerChunk+1);
-					int nextPointIndex = pointIndex - vertexSubdivisionsPerChunk - 1;
-					addSkirt(pointIndex, nextPointIndex);
-				}
-				// Top
-				for (int i = 0; i < vertexSubdivisionsPerChunk; ++i) {
-					int pointIndex = vertexSubdivisionsPerChunk - i;
-					int nextPointIndex = pointIndex - 1;
-					addSkirt(pointIndex, nextPointIndex, false, i == vertexSubdivisionsPerChunk - 1);
-				}
-			}
-			
-			// Check for errors
-			if (genVertexIndex != nbVerticesPerChunk) {
-				INVALIDCODE("Problem with terrain mesh generation, generated vertices do not match array size " << genVertexIndex << " != " << nbVerticesPerChunk)
-				return;
-			}
-			if (genIndexIndex != nbIndicesPerChunk) {
-				INVALIDCODE("Problem with terrain mesh generation, generated indices do not match array size " << genIndexIndex << " != " << nbIndicesPerChunk)
-				return;
-			}
-			
-			topLeftPosLowest = glm::normalize(topLeftPos) * lowestAltitude;
-			topRightPosLowest = glm::normalize(topRightPos) * lowestAltitude;
-			bottomLeftPosLowest = glm::normalize(bottomLeftPos) * lowestAltitude;
-			bottomRightPosLowest = glm::normalize(bottomRightPos) * lowestAltitude;
-			
-			topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
-			topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
-			bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
-			bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
 			
 			// std::scoped_lock lock(stateMutex);
+			geometry->isDirty = true;
 			if (meshGenerating) {
 				obj->SetGeometriesDirty(false);
 				computedLevel = 0;
