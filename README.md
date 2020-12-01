@@ -15,17 +15,24 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 ☑️ Mudular structure  
 ☑️ Sample Module and documentation  
 ☑️ Core Graphics utilities (Vulkan API)  
-☑️ Hybrid Ray-Tracing Renderer module  
 ☑️ Physics Module (Bullet3)  
 ☑️ Multiplayer/Networking utilities  
-⚙️ Demo game (Galaxy4D)  
-⬜ In-game coding framework (XenonCode)  
+☑️ Entity-Component system  
+⚙️ Hybrid Ray-Tracing Renderer module  
+⚙️ glTF Model Loader  
+⚙️ Cake (V4D's mascot)  
+⚙️ Demo game ([Galaxy4D](https://trello.com/b/2BPytpD9/galaxy4d-roadmap))  
 ⬜ Audio system  
+⬜ Human Avatar system  
 ⬜ Launcher template  
-⬜ Build system for Visual Studio on Windows host  
+⬜ In-game coding framework (XenonCode)  
+⬜ Voxel planet system  
+⬜ Build system for a Windows host  
 ⬜ LTBL (Let-There-Be-Light) Fully path-traced renderer  
-⬜ Complete Engine documentation  
+⬜ VOIP & FOIP support  
+⬜ VR support  
 ⬜ Editor Tools  
+⬜ Complete Engine documentation  
 ⬜ Licensing  
 
 Here's the Discord Server for Vulkan4D related discussions : 
@@ -47,10 +54,14 @@ https://discord.gg/5aY3ZBW
 
 ## Renderer
 
-V4D games will allow for up to three modes of rendering : 
+Games made using V4D can allow for three modes of rendering : 
 - **Basic** : basic rasterization without shadows nor reflections
 - **Hybrid** : rasterizaton with ray-traced shadows, reflections and GI
 - **Let There Be Light** : 100% Path-Traced with photorealistic graphics
+
+However, Galaxy4D will only support Ray-tracing enabled GPUs (RTX and RDNA2)
+
+V4D is optimized for Ray-Tracing and we will priorize it over Rasterization
 
 ----
 
@@ -60,24 +71,25 @@ You **may** use V4D if one of these apply to your project :
 
 * You are making a realistic space game with full size planets
 * You are making a large scale open-world MMO
-* You want high fidelity graphics with Ray-Tracing
+* You want high fidelity graphics with full Ray-Tracing support
 * You need double precision physics
-* You want your game to support Modding
+* You want your game to support Modding out of the box
 * Your game world is very dynamic and cannot afford having baked lighting/assets
+* You don't want any loading screen in your game
 
 You **should NOT** use V4D if one of these apply to your project : 
 
 * You are making a game for Consoles or Mobile devices
 * You want MAC/OSX or 32-bit support
 * You are making a game that can run on integrated graphics
-* You are/have level designers who need to drag and drop assets in a scene
-* You are making a 2D or 2.5D game
+* You are a level designer who just wants to drag and drop assets in a scene
+* You are making a 2D game
 
 ----
 
 ### Requirements for development
 
-* Vulkan capable dedicated GPU and driver
+* Vulkan 1.2 capable dedicated GPU and driver
 * Linux 64-bit system with `gcc` 9.3+ (Manjaro works great)
 
 *Support for Windows 10 & MSVC **coming soon***
@@ -90,13 +102,13 @@ You **should NOT** use V4D if one of these apply to your project :
 
 * 64-bit **Windows 10** or **Linux**
 * Vulkan capable dedicated GPU with at least 4 gb or VRAM
-* Recent GPU drivers with Vulkan 1.1+ support
+* Recent GPU drivers with Vulkan 1.2+ support
 * CPU with at least 4 cores
 * At least 8 gb or system RAM
 
-*We are **NOT** planning to support MAC/OSX, Mobile, Consoles or 32-bit OS*
+*We are **NOT** planning to natively support MAC/OSX, Mobile, Consoles or 32-bit OS*
 
-*However, we plan to support streaming in the future for other platforms*
+*However, we plan to support cloud gaming / streaming in the future for other platforms*
 
 ----
 
@@ -108,7 +120,7 @@ This means that other game engines are not meant for Large-scale Procedural Dyna
 
 But that is where Vulkan4D shines !
 
-Vulkan4D is also designed especially for realistic large scale space games/simulators. 
+Vulkan4D is also designed from the ground up for realistic large scale space games/simulators with Full Ray-Tracing pipelines. 
 
 ----
 
