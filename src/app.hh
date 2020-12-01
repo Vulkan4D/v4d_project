@@ -63,13 +63,13 @@ namespace app {
 	enum class ARG {invalid_arg=0
 		,server
 		,client
-		,host
+		,solo
 		,port
 	};
 	ARG Arg(std::string arg) {
 		if (arg == "server") return ARG::server;
 		if (arg == "client") return ARG::client;
-		if (arg == "host") return ARG::host;
+		if (arg == "solo") return ARG::solo;
 		if (arg == "port") return ARG::port;
 		return ARG::invalid_arg;
 	}

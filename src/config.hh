@@ -1,9 +1,15 @@
 #pragma once
 
 // Modules
-	#define APP_MAIN_RENDER_MODULE "V4D_hybrid"
 	#define APP_MAIN_MULTIPLAYER_MODULE "V4D_multiplayer"
+	
+	#define APP_MAIN_RENDER_MODULE "V4D_hybrid"
 	#define APP_DEFAULT_MODULES "V4D_sample",APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_bullet","V4D_buildsystem","V4D_galaxy4d"
+	
+	// #define APP_MAIN_RENDER_MODULE "V4D_hybrid2"
+	// #define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_sample","V4D_flycam" // ,"V4D_basicscene" // ,"V4D_bullet" // ,"V4D_buildsystem" // ,"V4D_galaxy4d" // ,"V4D_planetdemo"
+	
+	
 	
 	#define APP_DEFAULT_MODULES_SAVE_TO_MODULES_TXT_WHEN_EMPTY
 
@@ -13,7 +19,7 @@
 // Networking
 	#define APP_ENABLE_SOLO
 	#define APP_ENABLE_BURST_STREAMS
-	#define APP_NETWORKING_DEFAULT_HOST "127.0.0.1"
+	#define APP_NETWORKING_DEFAULT_HOST "testserver1.vulkan4d.com"
 	#define APP_NETWORKING_DEFAULT_PORT 12345
 	// #define APP_NETWORKING_USE_RSA_KEY
 	#define APP_NETWORKING_POLL_TIMEOUT_MS 100

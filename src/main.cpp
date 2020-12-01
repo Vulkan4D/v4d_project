@@ -24,24 +24,35 @@ int main(const int argc, const char** argv) {
 	if (argc > 1) for (int i = 1; i < argc; ++i) {
 		if (*argv[i] == '-') {
 			app::ARG arg = app::Arg(std::string(argv[i]+1));
-			auto nextArg = [&i, &argc, &argv](){
-				return ++i < argc? argv[i] : "";
+			auto nextArg = [&i, &argc, &argv](const char* defaultValue = ""){
+				return ++i < argc? argv[i] : defaultValue;
+			};
+			auto nextArgInt = [&i, &argc, &argv](const int& defaultValue = 0){
+				return ++i < argc? atoi(argv[i]) : defaultValue;
 			};
 			switch (arg) {
 				case app::ARG::server: {
+					app::isClient = false;
 					app::isServer = true;
 					app::hasGraphics = false;
+					app::networking::serverPort = nextArgInt(APP_NETWORKING_DEFAULT_PORT);
 				break;}
 				case app::ARG::client: {
 					app::isClient = true;
-				break;}
-				case app::ARG::host: {
 					app::isServer = false;
+					app::hasGraphics = true;
+					app::networking::remoteHost = nextArg(APP_NETWORKING_DEFAULT_HOST);
+					app::networking::serverPort = nextArgInt(APP_NETWORKING_DEFAULT_PORT);
+				break;}
+				case app::ARG::solo: {
 					app::isClient = true;
-					app::networking::remoteHost = nextArg();
+					app::isServer = true;
+					app::hasGraphics = true;
+					app::networking::remoteHost = "127.0.0.1";
+					app::networking::serverPort = APP_NETWORKING_DEFAULT_PORT;
 				break;}
 				case app::ARG::port: {
-					app::networking::serverPort = atoi(nextArg());
+					app::networking::serverPort = nextArgInt();
 				break;}
 				case app::ARG::invalid_arg:default:{
 					LOG_ERROR("Invalid option: " << std::string(argv[i]))
@@ -64,9 +75,20 @@ int main(const int argc, const char** argv) {
 	
 	// when no arguments defining server or client, use Solo mode
 	#ifdef APP_ENABLE_SOLO
+		// Play solo
 		if (!app::isClient && !app::isServer) {
 			app::isClient = true;
 			app::isServer = true;
+			app::hasGraphics = true;
+		}
+	#else
+		// Connect to default server
+		if (!app::isClient && !app::isServer) {
+			app::isClient = true;
+			app::isServer = false;
+			app::hasGraphics = true;
+			app::networking::remoteHost = APP_NETWORKING_DEFAULT_HOST;
+			app::networking::serverPort = APP_NETWORKING_DEFAULT_PORT;
 		}
 	#endif
 	

@@ -557,7 +557,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 									stream << parent->networkId;
 									stream << block;
 								ClientEnqueueAction(stream);
-							} else if (buildInterface.createMode) {
+							} else if (buildInterface.createMode && !parent) {
 								NetworkGameObjectTransform transform {};
 								transform.SetFromTransformAndVelocity(buildInterface.GetTmpBuildWorldTransform(), {0,0,0});
 								v4d::data::WriteOnlyStream stream(256);

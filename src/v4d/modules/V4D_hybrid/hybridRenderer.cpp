@@ -1934,6 +1934,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Device Extensions
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
+				r->RequiredDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 				// RayTracing extensions
 				r->OptionalDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
 				r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
@@ -1962,6 +1963,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
 				r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
+				r->EnableVulkan12DeviceFeatures()->descriptorIndexing = VK_TRUE;
 				r->EnableAccelerationStructureFeatures()->accelerationStructure = VK_TRUE;
 				r->EnableAccelerationStructureFeatures()->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
 				r->EnableRayTracingPipelineFeatures()->rayTracingPipeline = VK_TRUE;
