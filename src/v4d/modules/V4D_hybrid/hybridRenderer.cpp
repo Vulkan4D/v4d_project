@@ -794,8 +794,8 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties {};
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties {};
 	AccelerationStructure topLevelAccelerationStructure {};
-	Buffer rayTracingShaderBindingTableBuffer_visibility {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
-	Buffer rayTracingShaderBindingTableBuffer_lighting {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+	Buffer rayTracingShaderBindingTableBuffer_visibility {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
+	Buffer rayTracingShaderBindingTableBuffer_lighting {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
 	std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 	std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos {};
@@ -2184,7 +2184,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			CreateUiResources();
 			CreateRenderingResources();
 			CreatePostProcessingResources();
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) CreateRayTracingResources();
+			if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
+				CreateRayTracingResources();
+				
+				// It appears that we now need to initially BUILD the empty TLAS before updating descriptor sets... maybe a bug in the validation layers (issue #2368 opened)
+				r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](auto commandBuffer){
+					BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
+				});
+				
+			}
 			CreateRasterVisibilityResources();
 			
 			// Textures

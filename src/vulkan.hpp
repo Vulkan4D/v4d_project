@@ -8,7 +8,7 @@ namespace app::vulkan {
 		
 		// Validation layers
 		#if defined(_DEBUG) && defined(_LINUX)
-			// app::vulkanLoader->requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+			app::vulkanLoader->requiredInstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
 		#endif
 		
 		// Load the Vulkan driver
