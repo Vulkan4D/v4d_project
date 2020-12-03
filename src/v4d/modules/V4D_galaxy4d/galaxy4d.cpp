@@ -222,10 +222,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
 				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					droneModel(obj);
-					auto geom = droneModel.modelData->modelGeometry.lock();
-					geom->colliderType = Geometry::ColliderType::SPHERE;
-					geom->boundingDistance = 0.3;
+					// droneModel(obj);
+					// auto geom = droneModel.modelData->modelGeometry.lock();
+					// geom->colliderType = Geometry::ColliderType::SPHERE;
+					// geom->boundingDistance = 0.3;
 				});
 				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
 			}break;

@@ -81,7 +81,7 @@ void main() {
 	// ray.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, fragment.pos, blending), 0.6, fragment.color.a);
 	ray.viewSpaceNormal = fragment.geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, fragment.pos, fragment.normal, blending);
 	
-	ray.albedo = vec3(0.8);
+	ray.albedo = fragment.color.rgb;
 	ray.metallic = 0.7;
 	ray.roughness = 0.1;
 	
@@ -136,7 +136,7 @@ void main() {
 	// pbrGBuffers.roughness = mix(TriplanarTextureR(tex_img_metalRoughness, triplanarCoords, blending), 0.6, v2f.color.a);
 	pbrGBuffers.viewSpaceNormal = geometryInstance.normalViewTransform * TriplanarLocalNormalMap(tex_img_metalNormal, triplanarCoords, triplanarNormal, blending);
 	
-	pbrGBuffers.albedo = vec3(0.8);
+	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.metallic = 0.7;
 	pbrGBuffers.roughness = 0.1;
 	

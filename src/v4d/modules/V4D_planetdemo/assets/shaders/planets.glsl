@@ -129,8 +129,8 @@ void main() {
 	ray.albedo = fragment.color.rgb;
 	ray.emit = 0;
 	ray.uv = PackUVasFloat(fragment.uv);
-	ray.metallic = 0.0;
-	ray.roughness = 0.99;
+	ray.metallic = -0.07;
+	ray.roughness = 0.7;
 	ray.distance = gl_HitTEXT;
 }
 
@@ -160,8 +160,8 @@ void main() {
 	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
 	pbrGBuffers.albedo = v2f.color.rgb;
 	pbrGBuffers.emit = 0;
-	pbrGBuffers.metallic = 0.0;
-	pbrGBuffers.roughness = 0.99;
+	pbrGBuffers.metallic = -0.07;
+	pbrGBuffers.roughness = 0.7;
 	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();

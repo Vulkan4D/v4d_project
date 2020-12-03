@@ -62,7 +62,7 @@ namespace OBJECT_TYPE {
 	static constexpr int NB_COLORS = 9; //TODO define 128 colors
 	
 	static const glm::vec3 COLORS[NB_COLORS] = {
-		{0.5, 0.5, 0.5}, // grey
+		{0.7, 0.7, 0.7}, // grey
 		{1.0, 0.0, 0.0}, // red
 		{0.0, 1.0, 0.0}, // green
 		{0.0, 0.0, 1.0}, // blue
@@ -70,7 +70,7 @@ namespace OBJECT_TYPE {
 		{1.0, 0.0, 1.0}, // pink
 		{0.0, 1.0, 1.0}, // turquoise
 		{1.0, 1.0, 1.0}, // white
-		{0.0, 0.0, 0.0}, // black
+		{0.2, 0.2, 0.2}, // black
 		// ...
 	};
 	

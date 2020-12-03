@@ -184,10 +184,6 @@ void main() {
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.metallic = v2f.uv.s;
 	pbrGBuffers.roughness = v2f.uv.t;
-	
-	pbrGBuffers.metallic = 0.5;
-	pbrGBuffers.roughness = 0.2;
-	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
 	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
@@ -208,10 +204,6 @@ void main() {
 	pbrGBuffers.emit = 0;
 	pbrGBuffers.metallic = 0.0;
 	pbrGBuffers.roughness = 0.0;
-	
-	pbrGBuffers.metallic = 0.5;
-	pbrGBuffers.roughness = 0.2;
-	
 	pbrGBuffers.distance = v2f.pos.w;
 	WritePbrGBuffers();
 	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);

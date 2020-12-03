@@ -67,9 +67,6 @@ void main() {
 	ray.metallic = fragment.uv.s;
 	ray.roughness = fragment.uv.t;
 	ray.distance = gl_HitTEXT;
-	
-	ray.metallic = 0.5;
-	ray.roughness = 0.2;
 }
 
 
@@ -94,9 +91,6 @@ void main() {
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
-	
-	ray.metallic = 0.5;
-	ray.roughness = 0.2;
 }
 
 

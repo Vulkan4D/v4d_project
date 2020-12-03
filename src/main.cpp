@@ -80,6 +80,8 @@ int main(const int argc, const char** argv) {
 			app::isClient = true;
 			app::isServer = true;
 			app::hasGraphics = true;
+			app::networking::remoteHost = "127.0.0.1";
+			app::networking::serverPort = APP_NETWORKING_DEFAULT_PORT;
 		}
 	#else
 		// Connect to default server

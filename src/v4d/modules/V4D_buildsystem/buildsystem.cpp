@@ -590,7 +590,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 											vertexIndex = i;
 										}
 									}
-									LOG_DEBUG(closest)
 									v4d::data::WriteOnlyStream stream(256);
 										stream << PAINT_BLOCK_VERTEX_GRADIENT;
 										// Network data
