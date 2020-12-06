@@ -18,7 +18,7 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 ☑️ Physics Module (Bullet3)  
 ☑️ Multiplayer/Networking utilities  
 ☑️ Entity-Component system  
-⚙️ Hybrid Ray-Tracing Renderer module  
+⚙️ Ray-Tracing-only Renderer module  
 ⚙️ glTF Model Loader  
 ⚙️ Cake (V4D's mascot)  
 ⚙️ Demo game ([Galaxy4D](https://trello.com/b/2BPytpD9/galaxy4d-roadmap))  
@@ -45,7 +45,8 @@ https://discord.gg/5aY3ZBW
 **Vulkan4D** is a game engine meant for large scale open worlds with high fidelity graphics. 
 
 * Pure C++17 game engine (C++20 coming soon)
-* Build games for 64-bit Windows and Linux platforms with dedicated GPU
+* 100% Ray-traced using Vulkan's VK_KHR_ray_tracing extension
+* Build games for 64-bit Windows and Linux platforms with dedicated ray-tracing-capable GPU
 * Developed from the ground up for optimal use of the Vulkan API and Ray-Tracing
 * Specialized for completely dynamic or procedural worlds with user-created content
 * Fully Modular and supports Modding out of the box
@@ -54,14 +55,7 @@ https://discord.gg/5aY3ZBW
 
 ## Renderer
 
-Games made using V4D can allow for three modes of rendering : 
-- **Basic** : basic rasterization without shadows nor reflections
-- **Hybrid** : rasterizaton with ray-traced shadows, reflections and GI
-- **Let There Be Light** : 100% Path-Traced with photorealistic graphics
-
-However, Galaxy4D will only support Ray-tracing enabled GPUs (RTX and RDNA2)
-
-V4D is optimized for Ray-Tracing and we will priorize it over Rasterization
+Games made using V4D are fully ray-traced and will only support Ray-tracing enabled GPUs (RTX and RDNA2)
 
 ----
 
@@ -237,4 +231,4 @@ Developers/companies that contribute to its development may get a free/reduced p
 
 # Diagrams
 
-![Diagram](res/hybrid_renderer.png)
+<!-- ![Diagram](res/raytracing_renderer.png) -->
