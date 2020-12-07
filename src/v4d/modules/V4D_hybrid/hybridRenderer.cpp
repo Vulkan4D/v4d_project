@@ -2443,6 +2443,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 		}
 
+		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
+		
 		// Update data every frame
 		FrameUpdate(imageIndex);
 
@@ -2493,7 +2495,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			graphicsSubmitInfo[1].pSignalSemaphores = &semaphores["staticRenderFinished"][r->currentFrameInFlight];
 		}
 		
-		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
 		r->renderingDevice->ResetFences(1, &fences["graphics"][r->nextFrameInFlight]);
 		
 		// Submit Graphics
