@@ -42,21 +42,17 @@ layout(set = 0, binding = 0) uniform Camera {
 	layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
 
 	// RenderableEntityInstances
-	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
+	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT)
 		layout(buffer_reference, std430, buffer_reference_align = 4) buffer Indices { uint indices[]; };
-		layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexPositions { vec3 vertexPositions[]; };
-		layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexNormals { vec3 vertexNormals[]; };
+		layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexPositions { float vertexPositions[]; };
+		layout(buffer_reference, std430, buffer_reference_align = 4) buffer ProceduralVerticesAABB { float proceduralVerticesAABB[]; };
+		layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexNormals { float vertexNormals[]; };
 		layout(buffer_reference, std430, buffer_reference_align = 16) buffer VertexColors { vec4 vertexColors[]; };
 		layout(buffer_reference, std430, buffer_reference_align = 8) buffer VertexUVs { vec2 vertexUVs[]; };
-		layout(buffer_reference, std430, buffer_reference_align = 256) buffer ModelTransform {
+		layout(buffer_reference, std430, buffer_reference_align = 16) buffer ModelTransform {
 			dmat4 worldTransform;
 			mat4 modelView;
-			mat3 normalView;
-			float distanceFromCamera;
-			float _0;
-			float _1;
-			float _2;
-			vec3 viewSpaceVelocity;
+			mat4 normalView;
 		};
 		
 		struct RenderableEntityInstance {
@@ -78,25 +74,53 @@ layout(set = 0, binding = 0) uniform Camera {
 			return Indices(renderableEntityInstances[gl_InstanceCustomIndexEXT].indices).indices[3 * gl_PrimitiveID + n];
 		}
 		vec3 GetVertexPosition(uint index) {
-			return VertexPositions(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexPositions).vertexPositions[index];
+			VertexPositions vertexPositions = VertexPositions(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexPositions);
+			return vec3(vertexPositions.vertexPositions[index*3], vertexPositions.vertexPositions[index*3+1], vertexPositions.vertexPositions[index*3+2]);
+		}
+		vec3 GetProceduralVertexAABB_min(uint index) {
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexPositions);
+			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6], proceduralVerticesAABB.proceduralVerticesAABB[index*6+1], proceduralVerticesAABB.proceduralVerticesAABB[index*6+2]);
+		}
+		vec3 GetProceduralVertexAABB_max(uint index) {
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexPositions);
+			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6+3], proceduralVerticesAABB.proceduralVerticesAABB[index*6+4], proceduralVerticesAABB.proceduralVerticesAABB[index*6+5]);
 		}
 		vec3 GetVertexNormal(uint index) {
-			return VertexNormals(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexNormals).vertexNormals[index];
+			VertexNormals vertexNormals = VertexNormals(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexNormals);
+			return vec3(vertexNormals.vertexNormals[index*3], vertexNormals.vertexNormals[index*3+1], vertexNormals.vertexNormals[index*3+2]);
+		}
+		bool HasVertexColor() {
+			return renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexColors != 0;
 		}
 		vec4 GetVertexColor(uint index) {
 			return VertexColors(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexColors).vertexColors[index];
 		}
+		bool HasVertexUV() {
+			return renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexUVs != 0;
+		}
 		vec2 GetVertexUV(uint index) {
 			return VertexUVs(renderableEntityInstances[gl_InstanceCustomIndexEXT].vertexUVs).vertexUVs[index];
 		}
-		ModelTransform GetModelTransform() {
-			return ModelTransform(renderableEntityInstances[gl_InstanceCustomIndexEXT].modelTransform);
+		mat4 GetModelViewMatrix() {
+			return ModelTransform(renderableEntityInstances[gl_InstanceCustomIndexEXT].modelTransform).modelView;
+		}
+		mat3 GetModelNormalViewMatrix() {
+			return mat3(ModelTransform(renderableEntityInstances[gl_InstanceCustomIndexEXT].modelTransform).normalView);
 		}
 	#endif
+
+	struct LightSource {
+		vec3 position;
+		float radius;
+		vec3 color;
+		float reach;
+	};
+	layout(set = 0, binding = 3) buffer LightSources { LightSource lightSources[]; };
+	
 #endif
 
 // Test normal texture
-layout(set = 0, binding = 3) uniform sampler2D tex_img_metalNormal;
+layout(set = 0, binding = 4) uniform sampler2D tex_img_metalNormal;
 
 
 

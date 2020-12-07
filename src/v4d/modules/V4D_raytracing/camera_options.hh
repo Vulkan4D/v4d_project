@@ -11,6 +11,7 @@
 #define DEBUG_OPTION_NORMALS 1<< 1
 #define DEBUG_OPTION_PHYSICS 1<< 2
 
+#define MAX_ACTIVE_LIGHTS 16
 
 // C++ Only, within this module only
 #ifdef V4D_HYBRID_RENDERER_MODULE

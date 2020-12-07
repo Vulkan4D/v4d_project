@@ -3,11 +3,11 @@
 // Modules
 	#define APP_MAIN_MULTIPLAYER_MODULE "V4D_multiplayer"
 	
-	#define APP_MAIN_RENDER_MODULE "V4D_hybrid"
-	#define APP_DEFAULT_MODULES "V4D_sample",APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_bullet","V4D_buildsystem","V4D_galaxy4d"
+	// #define APP_MAIN_RENDER_MODULE "V4D_hybrid"
+	// #define APP_DEFAULT_MODULES "V4D_sample",APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_flycam","V4D_planetdemo","V4D_bullet","V4D_buildsystem","V4D_galaxy4d"
 	
-	// #define APP_MAIN_RENDER_MODULE "V4D_raytracing"
-	// #define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_sample","V4D_flycam" // ,"V4D_basicscene" // ,"V4D_bullet" // ,"V4D_buildsystem" // ,"V4D_galaxy4d" // ,"V4D_planetdemo"
+	#define APP_MAIN_RENDER_MODULE "V4D_raytracing"
+	#define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_sample","V4D_flycam" // ,"V4D_basicscene" // ,"V4D_bullet" // ,"V4D_buildsystem" // ,"V4D_galaxy4d" // ,"V4D_planetdemo"
 	
 	
 	

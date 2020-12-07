@@ -16,7 +16,6 @@ using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Limits
-	const uint32_t MAX_ACTIVE_LIGHTS = 256;
 	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 80 bytes each
 #pragma endregion
 
@@ -29,6 +28,13 @@ RayCast currentRayCast {};
 // Textures
 Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/monospace_font_atlas.png"), STBI_grey_alpha};
 
+#pragma region Buffers
+	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
+	StagedBuffer lightSourcesBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(RenderableGeometryEntity::LightSource)*MAX_ACTIVE_LIGHTS};
+	RenderableGeometryEntity::LightSource* lightSources = nullptr;
+	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
+	Buffer raycastBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(RayCast)};
+#pragma endregion
 
 void CreateCornellBox(RenderableGeometryEntity* entity) {
 	// obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
@@ -37,9 +43,6 @@ void CreateCornellBox(RenderableGeometryEntity* entity) {
 		->Add_meshVertexPosition()
 		->Add_meshVertexNormal()
 		->Add_meshVertexColor()
-		->Add_buffersDeviceAddresses()
-		->Add_transform()
-		->device = r->renderingDevice
 	;
 	entity->meshIndices->AllocateBuffers(r->renderingDevice, {
 		0, 1, 2, 2, 3, 0,
@@ -161,40 +164,68 @@ void CreateCornellBox(RenderableGeometryEntity* entity) {
 		{0.0,1.0,0.0, 1.0},
 		{0.0,1.0,0.0, 1.0},
 	});
-	entity->transform->AllocateBuffers(r->renderingDevice);
 }
 
 void LoadStuff() {
 	((PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0))->useFreeFlyCam = false;
 	
+	// Cornell boxes
 	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
 		->generator = [](RenderableGeometryEntity* entity){
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}));
 			CreateCornellBox(entity);
-			entity->transform->data->worldTransform = glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1});
+		};
+	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		->generator = [](RenderableGeometryEntity* entity){
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}));
+			CreateCornellBox(entity);
+		};
+	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		->generator = [](RenderableGeometryEntity* entity){
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}));
+			CreateCornellBox(entity);
 		};
 		
+	// Ball
 	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
 		->generator = [](RenderableGeometryEntity* entity){
-			CreateCornellBox(entity);
-			entity->transform->data->worldTransform = glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1});
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {5,250,-30}), glm::radians(0.0), {0,0,1}), "aabb_sphere");
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-2), glm::vec3(2)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.7f,0.7f,0.7f,1.0f}});
 		};
 		
+	// Cube
 	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
 		->generator = [](RenderableGeometryEntity* entity){
-			CreateCornellBox(entity);
-			entity->transform->data->worldTransform = glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1});
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {-5,250,-30}), glm::radians(0.0), {0,0,1}), "aabb_cube");
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-2), glm::vec3(2)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.8f,0.0f,0.0f,1.0f}});
 		};
-
-	// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-	// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-	// 	obj->mass = 10;
-	// 	obj->SetSphereLightSource("light", 20, 100000000);
-	// }, {10,-2000,10});
-	// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-	// 	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-	// 	obj->mass = 10;
-	// 	obj->SetSphereLightSource("light", 200, 1000000000);
-	// }, {10,-500,1000});
+		
+	// Light sources
+	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		->generator = [](RenderableGeometryEntity* entity){
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}), "aabb_sphere_light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-200), glm::vec3(200)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
+			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*1000000000.0f, 200, 1000000);
+		};
+	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		->generator = [](RenderableGeometryEntity* entity){
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,10}), glm::radians(0.0), {0,0,1}), "aabb_sphere_light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-20), glm::vec3(20)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
+			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000000.0f, 20, 100000);
+		};
+	
 }
 
 std::vector<std::shared_ptr<Blas>> activeBlass {};
@@ -210,96 +241,6 @@ RayTracingBLASInstance* rayTracingInstances = nullptr;
 uint32_t nbRayTracingInstances = 0;
 StagedBuffer renderableEntityInstanceBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(Mesh::ModelInfo)*MAX_RENDERABLE_ENTITY_INSTANCES};
 Mesh::ModelInfo* renderableEntityInstances = nullptr;
-
-void UpdateRayTracingStuff() {
-	
-	std::scoped_lock lock(blasBuildQueueMutex, rayTracingInstanceMutex);
-	
-	activeBlass.clear();
-	nbRayTracingInstances = 0;
-	
-	RenderableGeometryEntity::ForEach([](auto& entity){
-		if (!entity->generated) {
-			renderableEntityInstances[entity->GetIndex()].moduleVen = entity->moduleId.vendor;
-			renderableEntityInstances[entity->GetIndex()].moduleId = entity->moduleId.module;
-			renderableEntityInstances[entity->GetIndex()].objId = entity->objId;
-			renderableEntityInstances[entity->GetIndex()].customData = entity->customData;
-			// Generate/Load
-			entity->generator(entity.get());
-			entity->generated = true;
-			
-			// Indices
-			if (auto indexData = entity->meshIndices.Lock(); indexData) {
-				entity->geometryData.indexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(indexData->deviceBuffer);
-				entity->geometryData.indexOffset = 0;
-				entity->geometryData.indexCount = indexData->count;
-				entity->geometryData.indexSize = sizeof(Mesh::Index);
-
-				renderableEntityInstances[entity->GetIndex()].indices = entity->geometryData.indexBuffer.deviceAddress;
-			}
-			// Vertex Positions
-			if (auto vertexData = entity->meshVertexPosition.Lock(); vertexData) {
-				entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(vertexData->deviceBuffer);
-				entity->geometryData.vertexOffset = 0;
-				entity->geometryData.vertexCount = vertexData->count;
-				entity->geometryData.vertexSize = sizeof(Mesh::VertexPosition);
-				
-				renderableEntityInstances[entity->GetIndex()].vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
-			}
-			// Vertex normals
-			if (auto vertexData = entity->meshVertexNormal.Lock(); vertexData) {
-				renderableEntityInstances[entity->GetIndex()].vertexNormals = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-			}
-			// Vertex colors
-			if (auto vertexData = entity->meshVertexColor.Lock(); vertexData) {
-				renderableEntityInstances[entity->GetIndex()].vertexColors = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-			}
-			// Vertex UVs
-			if (auto vertexData = entity->meshVertexUV.Lock(); vertexData) {
-				renderableEntityInstances[entity->GetIndex()].vertexUVs = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-			}
-			// Transform
-			if (auto transformData = entity->transform.Lock(); transformData) {
-				renderableEntityInstances[entity->GetIndex()].transform = r->renderingDevice->GetBufferDeviceAddress(transformData->deviceBuffer);
-			}
-		}
-		if (!entity->blas) {
-			entity->blas = std::make_shared<Blas>();
-			entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometryData);
-			entity->blas->CreateAndAllocate(r->renderingDevice);
-			blasQueueBuildGeometryInfos.push_back(entity->blas->buildGeometryInfo);
-			blasQueueBuildRangeInfos.push_back(&entity->blas->buildRangeInfo);
-			entity->blas->built = true;
-		}
-		if (!r->renderingDevice->TouchAllocation(entity->blas->accelerationStructureAllocation)) {
-			LOG_DEBUG("AddRayTracingBlasBuild ALLOCATION LOST")
-		}
-		
-		activeBlass.push_back(entity->blas);
-		
-		// add BLAS instance to TLAS
-		int index = nbRayTracingInstances++;
-		rayTracingInstances[index].instanceCustomIndex = entity->GetIndex();
-		rayTracingInstances[index].instanceShaderBindingTableRecordOffset = 0/* sbtOffset */;
-		// assign blas handle
-		rayTracingInstances[index].accelerationStructureReference = entity->blas->deviceAddress;
-		// assign mask & flags
-		rayTracingInstances[index].mask = 0xff;
-		rayTracingInstances[index].flags = 0;
-		
-		// Update and Assign transform
-		auto transform = entity->transform.Lock();
-		transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
-		transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
-		transform->data->distanceFromCamera = glm::distance(scene->camera.worldPosition, glm::dvec3(transform->data->worldTransform[3]));
-		transform->data->viewSpaceVelocity = glm::vec3(0);
-		transform->dirtyOnDevice = true;
-		rayTracingInstances[index].transform = glm::transpose(transform->data->modelView);
-	});
-	
-}
-
-
 
 
 #pragma region Descriptor Sets
@@ -430,15 +371,6 @@ void UpdateRayTracingStuff() {
 	RenderPass uiRenderPass;
 #pragma endregion
 
-#pragma region Buffers
-	StagedBuffer cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(Camera)};
-	StagedBuffer activeLightsUniformBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
-		uint32_t nbActiveLights = 0;
-		uint32_t activeLights[MAX_ACTIVE_LIGHTS];
-	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
-	Buffer raycastBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(RayCast)};
-#pragma endregion
-
 #pragma region Rendering Resources
 
 	void CreateRenderingResources() {
@@ -458,24 +390,18 @@ void UpdateRayTracingStuff() {
 		img_depth.Destroy(r->renderingDevice);
 	}
 	
-	void ClearLitImage(VkCommandBuffer commandBuffer) {
-		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			const VkClearColorValue clearValues = {0,0,0,0};
-			VkImageSubresourceRange range {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1};
-			r->renderingDevice->CmdClearColorImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValues, 1, &range);
-		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-	}
+	// void ClearLitImage(VkCommandBuffer commandBuffer) {
+	// 	r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	// 		const VkClearColorValue clearValues = {0,0,0,0};
+	// 		VkImageSubresourceRange range {VK_IMAGE_ASPECT_COLOR_BIT, 0,1,0,1};
+	// 		r->renderingDevice->CmdClearColorImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValues, 1, &range);
+	// 	r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+	// }
 	
 #pragma endregion
 
 #pragma region Ray-Tracing Pipelines & Resouces
 
-	void ResetRayTracingBlasBuilds() {
-		std::lock_guard lock(blasBuildQueueMutex);
-		blasQueueBuildGeometryInfos.clear();
-		blasQueueBuildRangeInfos.clear();
-	}
-	
 	void CreateRayTracingResources() {
 		topLevelAccelerationStructure.AssignTopLevel();
 		topLevelAccelerationStructure.CreateAndAllocate(r->renderingDevice, true);
@@ -483,7 +409,6 @@ void UpdateRayTracingStuff() {
 	}
 	void DestroyRayTracingResources() {
 		topLevelAccelerationStructure.FreeAndDestroy(r->renderingDevice);
-		ResetRayTracingBlasBuilds();
 	}
 	
 	void AllocateRayTracingBuffers() {
@@ -510,7 +435,10 @@ void UpdateRayTracingStuff() {
 	void ConfigureRayTracingShaders() {
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
-		auto sbtOffsetBasicGeometry = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rchit"));
+		RenderableGeometryEntity::sbtOffsets["default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rchit"));
+		RenderableGeometryEntity::sbtOffsets["aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.cube.rint"));
+		RenderableGeometryEntity::sbtOffsets["aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rint"));
+		RenderableGeometryEntity::sbtOffsets["aabb_sphere_light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rint"));
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -534,118 +462,19 @@ void UpdateRayTracingStuff() {
 		// Build all new/updated bottom levels
 		std::lock_guard lock(blasBuildQueueMutex);
 		if (blasQueueBuildGeometryInfos.size() > 0) {
-			#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-				VkBufferMemoryBarrier bufferBarriers[2];
-				bufferBarriers[0] = {};
-					bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					bufferBarriers[0].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-					bufferBarriers[0].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-					bufferBarriers[0].offset = 0;
-					bufferBarriers[0].size = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.size;
-					bufferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					bufferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					bufferBarriers[0].buffer = Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer.buffer;
-				bufferBarriers[1] = {};
-					bufferBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					bufferBarriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
-					bufferBarriers[1].dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-					bufferBarriers[1].offset = 0;
-					bufferBarriers[1].size = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.size;
-					bufferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					bufferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					bufferBarriers[1].buffer = Geometry::globalBuffers.indexBuffer.deviceLocalBuffer.buffer;
-				device->CmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 0, nullptr, 2, bufferBarriers, 0, nullptr);
-			#endif
-			
 			device->CmdBuildAccelerationStructuresKHR(commandBuffer, blasQueueBuildGeometryInfos.size(), blasQueueBuildGeometryInfos.data(), blasQueueBuildRangeInfos.data());
-			
-			{// Wait for BLAS to finish before building TLAS
-				VkMemoryBarrier memoryBarrier {
-					VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-					nullptr,// pNext
-					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags srcAccessMask
-					VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,// VkAccessFlags dstAccessMask
-				};
-				device->CmdPipelineBarrier(
-					commandBuffer, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-					VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-					0, 
-					1, &memoryBarrier, 
-					0, 0, 
-					0, 0
-				);
-			}
 		}
 	}
 	
 	void BuildTopLevelRayTracingAccelerationStructure(Device* device, VkCommandBuffer commandBuffer) {
-		
 		if (!device->TouchAllocation(topLevelAccelerationStructure.accelerationStructureAllocation)) {
 			LOG_DEBUG("Top Level acceleration structure ALLOCATION LOST")
 			return;
 		}
-		
-		{// Wait for previous frame acceleration structure traversal to finish
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags srcAccessMask
-				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags dstAccessMask
-			};
-			device->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
-				VK_PIPELINE_STAGE_TRANSFER_BIT, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
-		}
-		
-		// Push new instance buffer
-		rayTracingInstanceBuffer.Update(device, commandBuffer);
-		
-		{// Wait for buffer transfer to finish before (re)building TLAS
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags srcAccessMask
-				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
-			};
-			device->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_TRANSFER_BIT, 
-				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
-		}
-		
 		std::lock_guard lock(rayTracingInstanceMutex);
 		static const VkAccelerationStructureBuildRangeInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildRangeInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
 		device->CmdBuildAccelerationStructuresKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
-	
-		// Wait for TLAS build to finish before calling any ray tracing shader
-		VkMemoryBarrier memoryBarrier {
-			VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-			nullptr,// pNext
-			VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
-			VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
-		};
-		device->CmdPipelineBarrier(
-			commandBuffer, 
-			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
-			0, 
-			1, &memoryBarrier, 
-			0, 0, 
-			0, 0
-		);
 	}
 	
 #pragma endregion
@@ -1183,7 +1012,7 @@ void UpdateRayTracingStuff() {
 
 #pragma endregion
 
-#pragma region Frame Update
+#pragma region Frame Update & Graphics commands
 
 	void FrameUpdate(uint imageIndex) {
 		
@@ -1220,17 +1049,130 @@ void UpdateRayTracingStuff() {
 		
 		// Modules
 		V4D_Mod::ForEachSortedModule([](auto* mod){
-			if (mod->BeginFrameUpdate) mod->BeginFrameUpdate();
+			if (mod->BeginFrameUpdate) mod->BeginFrameUpdate(); // camera's View Matrix is created here in FlyCam Module
 		});
 		
+		
 		// Ray Tracing
-		ResetRayTracingBlasBuilds();
-		UpdateRayTracingStuff();
+		
+		std::scoped_lock lock(blasBuildQueueMutex, rayTracingInstanceMutex);
+
+		blasQueueBuildGeometryInfos.clear();
+		blasQueueBuildRangeInfos.clear();
+		
+		activeBlass.clear();
+		nbRayTracingInstances = 0;
+		
+		int nbActiveLights = 0;
+		
+		RenderableGeometryEntity::ForEach([&nbActiveLights](auto& entity){
+			if (!entity->generated) {
+				renderableEntityInstances[entity->GetIndex()].moduleVen = entity->moduleId.vendor;
+				renderableEntityInstances[entity->GetIndex()].moduleId = entity->moduleId.module;
+				renderableEntityInstances[entity->GetIndex()].objId = entity->objId;
+				renderableEntityInstances[entity->GetIndex()].customData = entity->customData;
+				// Generate/Load
+				entity->generator(entity.get());
+				entity->generated = true;
+				
+				// Indices
+				if (auto indexData = entity->meshIndices.Lock(); indexData) {
+					entity->geometryData.indexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(indexData->deviceBuffer);
+					entity->geometryData.indexOffset = 0;
+					entity->geometryData.indexCount = indexData->count;
+					entity->geometryData.indexSize = sizeof(Mesh::Index);
+
+					renderableEntityInstances[entity->GetIndex()].indices = entity->geometryData.indexBuffer.deviceAddress;
+				}
+				// Vertex Positions
+				if (auto vertexData = entity->meshVertexPosition.Lock(); vertexData) {
+					entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(vertexData->deviceBuffer);
+					entity->geometryData.vertexOffset = 0;
+					entity->geometryData.vertexCount = vertexData->count;
+					entity->geometryData.vertexSize = sizeof(Mesh::VertexPosition);
+					
+					renderableEntityInstances[entity->GetIndex()].vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
+				} else if (auto proceduralVertexData = entity->proceduralVertexAABB.Lock(); proceduralVertexData) {
+					entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(proceduralVertexData->deviceBuffer);
+					entity->geometryData.vertexOffset = 0;
+					entity->geometryData.vertexCount = proceduralVertexData->count;
+					entity->geometryData.vertexSize = sizeof(Mesh::ProceduralVertexAABB);
+					
+					renderableEntityInstances[entity->GetIndex()].vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
+				}
+				// Vertex normals
+				if (auto vertexData = entity->meshVertexNormal.Lock(); vertexData) {
+					renderableEntityInstances[entity->GetIndex()].vertexNormals = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+				}
+				// Vertex colors
+				if (auto vertexData = entity->meshVertexColor.Lock(); vertexData) {
+					renderableEntityInstances[entity->GetIndex()].vertexColors = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+				}
+				// Vertex UVs
+				if (auto vertexData = entity->meshVertexUV.Lock(); vertexData) {
+					renderableEntityInstances[entity->GetIndex()].vertexUVs = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+				}
+				// Transform
+				if (auto transformData = entity->transform.Lock(); transformData) {
+					renderableEntityInstances[entity->GetIndex()].transform = r->renderingDevice->GetBufferDeviceAddress(transformData->deviceBuffer);
+				}
+			}
+			if (!entity->blas && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
+				entity->blas = std::make_shared<Blas>();
+				if (entity->meshVertexPosition) {
+					entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometryData);
+				} else {
+					entity->blas->AssignBottomLevelProceduralVertex(r->renderingDevice, entity->geometryData);
+				}
+				entity->blas->CreateAndAllocate(r->renderingDevice);
+				blasQueueBuildGeometryInfos.push_back(entity->blas->buildGeometryInfo);
+				blasQueueBuildRangeInfos.push_back(&entity->blas->buildRangeInfo);
+				entity->blas->built = true;
+			}
+			
+			if (entity->blas) {
+				if (!r->renderingDevice->TouchAllocation(entity->blas->accelerationStructureAllocation)) {
+					LOG_DEBUG("AddRayTracingBlasBuild ALLOCATION LOST")
+				}
+				activeBlass.push_back(entity->blas);
+			}
+			
+			// add BLAS instance to TLAS
+			int index = 0;
+			if (entity->blas) {
+				index = nbRayTracingInstances++;
+				rayTracingInstances[index].instanceCustomIndex = entity->GetIndex();
+				rayTracingInstances[index].accelerationStructureReference = entity->blas->deviceAddress;
+				rayTracingInstances[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
+				rayTracingInstances[index].mask = entity->rayTracingMask;
+				rayTracingInstances[index].flags = entity->rayTracingFlags;
+			}
+			
+			// Update and Assign transform
+			if (auto transform = entity->transform.Lock(); transform) {
+				transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
+				transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
+				transform->dirtyOnDevice = true;
+				if (entity->blas) {
+					rayTracingInstances[index].transform = glm::transpose(transform->data->modelView);
+				}
+				
+				// Light Source
+				entity->lightSource.Do([&nbActiveLights, &transform](auto& lightSource){
+					lightSources[nbActiveLights] = lightSource;
+					lightSources[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * transform->data->worldTransform * glm::dvec4(glm::dvec3(lightSource.position), 1));
+					++nbActiveLights;
+				});
+			} else {
+				throw std::runtime_error("Entity is missing a transform component");
+			}
+			
+		});
+		
+		for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
+			lightSources[i].Reset();
+		}
 	}
-
-#pragma endregion
-
-#pragma region Graphics commands
 
 	void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
 		for (auto&[name, img] : images) {
@@ -1239,10 +1181,31 @@ void UpdateRayTracingStuff() {
 			}
 		}
 		
+		{// Wait for previous ray-tracing pass to finish before starting transfers
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
 		RenderableGeometryEntity::meshIndicesComponents.ForEach([commandBuffer](uint32_t, auto& data){
 			data.Upload(r->renderingDevice, commandBuffer);
 		});
 		RenderableGeometryEntity::meshVertexPositionComponents.ForEach([commandBuffer](uint32_t, auto& data){
+			data.Upload(r->renderingDevice, commandBuffer);
+		});
+		RenderableGeometryEntity::proceduralVertexAABBComponents.ForEach([commandBuffer](uint32_t, auto& data){
 			data.Upload(r->renderingDevice, commandBuffer);
 		});
 		RenderableGeometryEntity::meshVertexNormalComponents.ForEach([commandBuffer](uint32_t, auto& data){
@@ -1258,23 +1221,73 @@ void UpdateRayTracingStuff() {
 			transform.Upload(r->renderingDevice, commandBuffer);
 		});
 		
-		ClearLitImage(commandBuffer);
-		
 		// Transfer data to rendering device
 		scene->camera.renderOptions = RENDER_OPTIONS::Get();
 		scene->camera.debugOptions = DEBUG_OPTIONS::Get();
 		cameraUniformBuffer.Update(r->renderingDevice, commandBuffer);
 		renderableEntityInstanceBuffer.Update(r->renderingDevice, commandBuffer);
+		lightSourcesBuffer.Update(r->renderingDevice, commandBuffer);
+		rayTracingInstanceBuffer.Update(r->renderingDevice, commandBuffer);
 		
-		activeLightsUniformBuffer.Update(r->renderingDevice, commandBuffer, sizeof(uint32_t)/*lightCount*/ + sizeof(uint32_t)*nbActiveLights/*lightIndices*/);
-		Geometry::globalBuffers.PushLights(r->renderingDevice, commandBuffer);
-
-		// Build Acceleration Structures
+		{// Wait for TRANSFERS to finish before building BLAS
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
+		// Build Buttom-level Acceleration Structures
 		BuildBottomLevelRayTracingAccelerationStructures(r->renderingDevice, commandBuffer);
+	
+		{// Wait for BLAS to finish before building TLAS
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
+				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
+		// Build Top-Level acceleration structure
 		BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 		
-		// Run Ray Tracing
-		RunRayTracingCommands(commandBuffer);
+		{// Wait for TLAS build to finish before calling any ray tracing shader
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
+				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
 		
 		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
 			if (mod->RenderUpdate2) mod->RenderUpdate2(commandBuffer);
@@ -1282,6 +1295,28 @@ void UpdateRayTracingStuff() {
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
+		
+		// Run Ray Tracing
+		RunRayTracingCommands(commandBuffer);
+		
+		{// Wait for ray-tracing to finish before calling any fragment shader (overlay and post processing)
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,// VkAccessFlags dstAccessMask
+				VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT,// VkAccessFlags srcAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
 		V4D_Mod::ForEachSortedModule([commandBuffer, imageIndex](auto* mod){
 			if (mod->RecordStaticGraphicsCommands) mod->RecordStaticGraphicsCommands(commandBuffer, imageIndex);
 		}, "render");
@@ -1383,8 +1418,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// UBOs
 			cameraUniformBuffer.AddSrcDataPtr(&scene->camera, sizeof(Camera));
-			activeLightsUniformBuffer.AddSrcDataPtr(&nbActiveLights, sizeof(uint32_t));
-			activeLightsUniformBuffer.AddSrcDataPtr(&activeLights, sizeof(uint32_t)*MAX_ACTIVE_LIGHTS);
 		}
 		
 		V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
@@ -1430,8 +1463,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set0.AddBinding_uniformBuffer(0, &cameraUniformBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			set0.AddBinding_accelerationStructure(1, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
 			set0.AddBinding_storageBuffer(2, &renderableEntityInstanceBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
+			set0.AddBinding_storageBuffer(3, &lightSourcesBuffer.deviceLocalBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 			
-			set0.AddBinding_combinedImageSampler(3, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
+			set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_raytracing"] = &set1_raytracing;
@@ -1542,15 +1576,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			CreateUiResources();
 			CreateRenderingResources();
 			CreatePostProcessingResources();
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
-				CreateRayTracingResources();
-				
-				// It appears that we now need to initially BUILD the empty TLAS before updating descriptor sets... maybe a bug in the validation layers (issue #2368 opened)
-				r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](auto commandBuffer){
-					BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
-				});
-				
-			}
+		
+			CreateRayTracingResources();
+			
+			// It appears that we now need to initially BUILD the empty TLAS before updating descriptor sets... maybe a bug in the validation layers (issue #2368 opened)
+			r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](auto commandBuffer){
+				BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
+			});
+			
 			
 			// Textures
 			tex_img_font_atlas.SetMipLevels();
@@ -1578,7 +1611,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			DestroyUiResources();
 			DestroyRenderingResources();
 			DestroyPostProcessingResources();
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) DestroyRayTracingResources();
+			DestroyRayTracingResources();
 			
 			// Textures
 			tex_img_font_atlas.DestroyImage(r->renderingDevice);
@@ -1589,11 +1622,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		V4D_MODULE_FUNC(void, AllocateVulkanBuffers) {
-			// Uniform Buffers
+			// Buffers
 			cameraUniformBuffer.Allocate(r->renderingDevice);
 			renderableEntityInstanceBuffer.Allocate(r->renderingDevice);
 			renderableEntityInstances = (Mesh::ModelInfo*)renderableEntityInstanceBuffer.stagingBuffer.data;
-			activeLightsUniformBuffer.Allocate(r->renderingDevice);
+			lightSourcesBuffer.Allocate(r->renderingDevice);
+			lightSources = (RenderableGeometryEntity::LightSource*)lightSourcesBuffer.stagingBuffer.data;
 			
 			// Overlays
 			overlayLinesBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
@@ -1610,10 +1644,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			overlaySquares = (OverlaySquare*)overlaySquaresBuffer.data;
 			
 			AllocateComputeBuffers();
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) AllocateRayTracingBuffers();
-			
-			Geometry::globalBuffers.DefragmentMemory();
-			Geometry::globalBuffers.Allocate(r->renderingDevice, {r->renderingDevice->GetQueue("compute").familyIndex, r->renderingDevice->GetQueue("graphics").familyIndex});
+			AllocateRayTracingBuffers();
 		}
 		
 		V4D_MODULE_FUNC(void, FreeVulkanBuffers) {
@@ -1621,7 +1652,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->FreeComponentsBuffers();
 			});
 			
-			scene->ClenupObjectInstancesGeometries();
 			activeBlass.clear();
 			
 			// Overlays
@@ -1638,16 +1668,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			overlaySquaresBuffer.Free(r->renderingDevice);
 			overlaySquares = nullptr;
 			
-			// Uniform Buffers
+			// Buffers
 			cameraUniformBuffer.Free(r->renderingDevice);
 			renderableEntityInstances = nullptr;
 			renderableEntityInstanceBuffer.Free(r->renderingDevice);
-			activeLightsUniformBuffer.Free(r->renderingDevice);
+			lightSources = nullptr;
+			lightSourcesBuffer.Free(r->renderingDevice);
 			
 			FreeComputeBuffers();
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) FreeRayTracingBuffers();
-			
-			Geometry::globalBuffers.Free(r->renderingDevice);
+			FreeRayTracingBuffers();
 		}
 
 		V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
@@ -1815,6 +1844,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 		};
 		
+		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
+		r->renderingDevice->ResetFences(1, &fences["graphics"][r->currentFrameInFlight]);
+		
 		{// Configure Graphics
 			VkCommandBufferBeginInfo beginInfo = {};
 			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1846,11 +1878,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			graphicsSubmitInfo[1].pSignalSemaphores = &semaphores["staticRenderFinished"][r->currentFrameInFlight];
 		}
 		
-		r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout);
-		r->renderingDevice->ResetFences(1, &fences["graphics"][r->nextFrameInFlight]);
-		
 		// Submit Graphics
-		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][r->nextFrameInFlight]);
+		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][r->currentFrameInFlight]);
 		if (result != VK_SUCCESS) {
 			if (result == VK_ERROR_DEVICE_LOST) {
 				LOG_ERROR("Render() Failed to submit graphics command buffer : VK_ERROR_DEVICE_LOST")

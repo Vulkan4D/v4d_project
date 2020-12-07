@@ -61,14 +61,9 @@ namespace Mesh {
 		ModelInfo() {static_assert(sizeof(ModelInfo) == 80);}
 	};
 	struct ModelTransform {
-		glm::dmat4 worldTransform;
-		glm::mat4 modelView;
-		glm::mat3 normalView;
-		float distanceFromCamera;
-		float _0;
-		float _1;
-		float _2;
-		glm::vec3 viewSpaceVelocity;
+		alignas(128) glm::dmat4 worldTransform;
+		alignas(64) glm::mat4 modelView;
+		alignas(64) glm::mat4 normalView;
 		ModelTransform(const glm::dmat4& m) : worldTransform(m) {}
 		ModelTransform() {static_assert(sizeof(ModelTransform) == 256);}
 	};
