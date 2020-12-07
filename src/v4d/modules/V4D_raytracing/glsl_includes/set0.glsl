@@ -38,6 +38,7 @@ layout(set = 0, binding = 0) uniform Camera {
 
 // Ray-Tracing descriptor sets
 #ifdef RAY_TRACING
+
 	// Top-Level Acceleration Structure
 	layout(set = 0, binding = 1) uniform accelerationStructureEXT topLevelAS;
 
@@ -133,6 +134,22 @@ bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=
 bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0;
 bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0;
 
+
+#ifdef RAY_TRACING
+
+	// 64 bytes
+	struct RayTracingPayload {
+		vec3 albedo;
+		vec3 normal;
+		vec3 emission;
+		vec3 position;
+		float refractionIndex;
+		float metallic;
+		float roughness;
+		float distance;
+	};
+	
+#endif
 
 
 // double GetTrueDistanceFromDepthBuffer(double depth) {

@@ -209,7 +209,7 @@ void LoadStuff() {
 	// Light sources
 	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
 		->generator = [](RenderableGeometryEntity* entity){
-			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}), "aabb_sphere_light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}), "aabb_sphere.light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
 			entity->Add_proceduralVertexAABB();
 			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-200), glm::vec3(200)}});
 			entity->Add_meshVertexColor();
@@ -218,7 +218,7 @@ void LoadStuff() {
 		};
 	RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
 		->generator = [](RenderableGeometryEntity* entity){
-			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,10}), glm::radians(0.0), {0,0,1}), "aabb_sphere_light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
+			entity->Prepare(r->renderingDevice, glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,10}), glm::radians(0.0), {0,0,1}), "aabb_sphere.light", GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE);
 			entity->Add_proceduralVertexAABB();
 			entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-20), glm::vec3(20)}});
 			entity->Add_meshVertexColor();
@@ -435,10 +435,10 @@ Mesh::ModelInfo* renderableEntityInstances = nullptr;
 	void ConfigureRayTracingShaders() {
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
-		RenderableGeometryEntity::sbtOffsets["default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rchit"));
-		RenderableGeometryEntity::sbtOffsets["aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.cube.rint"));
-		RenderableGeometryEntity::sbtOffsets["aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rint"));
-		RenderableGeometryEntity::sbtOffsets["aabb_sphere_light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.aabb.sphere.rint"));
+		RenderableGeometryEntity::sbtOffsets["default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
+		RenderableGeometryEntity::sbtOffsets["aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rint"));
+		RenderableGeometryEntity::sbtOffsets["aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		RenderableGeometryEntity::sbtOffsets["aabb_sphere.light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
