@@ -34,7 +34,7 @@ std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos {};
 
-std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
+std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
 
 #pragma region Buffers
 	StagingBuffer<Mesh::ModelInfo, MAX_RENDERABLE_ENTITY_INSTANCES, 1> renderableEntityInstanceBuffer {};
@@ -870,15 +870,10 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		
 		int nbActiveLights = 0;
 		
-		currentRenderableEntities[r->currentFrameInFlight].clear();
+		// currentRenderableEntities[r->currentFrameInFlight].clear();
 		
-		RenderableGeometryEntity::ForEach([&nbActiveLights](auto& entity){
-			if (entity->deleted) {
-				entity = nullptr;
-				return;
-			}
-			
-			currentRenderableEntities[r->currentFrameInFlight].push_back(entity);
+		RenderableGeometryEntity::ForEach([&nbActiveLights](auto entity){
+			if (entity->GetIndex() == -1) return;
 			
 			if (!entity->generated) {
 				renderableEntityInstanceBuffer[entity->GetIndex()].moduleVen = entity->moduleId.vendor;
@@ -947,7 +942,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			// add BLAS instance to TLAS
 			if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 				// Update and Assign transform
-				if (auto transform = entity->transform.Lock(); transform && entity->blas) {
+				if (auto transform = entity->transform.Lock(); transform && transform->data && entity->blas) {
 					
 					if (!r->renderingDevice->TouchAllocation(entity->blas->accelerationStructureAllocation)) {
 						LOG_DEBUG("AddRayTracingBlasBuild ALLOCATION LOST")
@@ -974,10 +969,11 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 						});
 					}
 				} else {
-					LOG_ERROR("An entity is missing a transform component")
+					// LOG_ERROR("An entity is missing a transform component or blas")
 				}
 			}
 			
+			currentRenderableEntities[r->currentFrameInFlight][entity->GetIndex()] = entity;
 		});
 		
 		for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
@@ -1010,25 +1006,25 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			);
 		}
 		
-		RenderableGeometryEntity::meshIndicesComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::meshIndicesComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::meshVertexPositionComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::meshVertexPositionComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::proceduralVertexAABBComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::proceduralVertexAABBComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::meshVertexNormalComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::meshVertexNormalComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::meshVertexColorComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::meshVertexColorComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::meshVertexUVComponents.ForEach([commandBuffer](uint32_t, auto& data){
+		RenderableGeometryEntity::meshVertexUVComponents.ForEach([commandBuffer](int32_t, auto& data){
 			data.Push(r->renderingDevice, commandBuffer);
 		});
-		RenderableGeometryEntity::transformComponents.ForEach([commandBuffer](uint32_t, auto& transform){
+		RenderableGeometryEntity::transformComponents.ForEach([commandBuffer](int32_t, auto& transform){
 			transform.Push(r->renderingDevice, commandBuffer);
 		});
 		
@@ -1458,6 +1454,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			});
 			
 			for (auto& v : currentRenderableEntities) {
+				for (auto& [i,e] : v) {
+					if (e) e->FreeComponentsBuffers();
+				}
 				v.clear();
 			}
 			
