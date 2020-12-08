@@ -40,7 +40,7 @@ void main() {
 	// ) : vec2(0);
 	
 	ray.albedo = color.rgb;
-	ray.normal = normalize(GetModelNormalViewMatrix() * normal);
+	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
 	ray.emission = vec3(0);
 	ray.position = hitPoint;
 	ray.refractionIndex = 0.0;

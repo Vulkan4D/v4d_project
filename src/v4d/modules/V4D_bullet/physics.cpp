@@ -1,7 +1,7 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "btBulletDynamicsCommon.h"
-#include "../V4D_hybrid/camera_options.hh"
+#include "../V4D_raytracing/camera_options.hh"
 
 using namespace v4d::scene;
 using namespace v4d::graphics;
@@ -93,32 +93,35 @@ glm::dmat4 BulletToGlm(const btTransform& t) {
 }
 
 struct PhysicsObject : btMotionState {
-	v4d::scene::ObjectInstanceWeakPtr objectInstance;
+	std::weak_ptr<v4d::scene::RenderableGeometryEntity> entityInstance;
 	btTransform centerOfMassOffset {};
 	btRigidBody* rigidbody = nullptr;
 	bool isGroupedCollisionShape = false;
 	btCollisionShape* groupedCollisionShape = nullptr;
 	std::vector<btCollisionShape*> localCollisionShapes {};
 	
-	PhysicsObject(v4d::scene::ObjectInstancePtr obj = nullptr) : objectInstance(obj) {
-		if (obj) RefreshCenterOfMass();
+	PhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
+		if (entity) RefreshCenterOfMass();
 	}
 	
 	void RefreshCenterOfMass() {
-		auto obj = objectInstance.lock();if(!obj)return;
+		auto entity = entityInstance.lock();if(!entity)return;
 		centerOfMassOffset.setIdentity();
-		centerOfMassOffset.setOrigin(btVector3(obj->centerOfMass.x, obj->centerOfMass.y, obj->centerOfMass.z));
+		auto physics = entity->physics.Lock();if(!physics)return;
+		centerOfMassOffset.setOrigin(btVector3(physics->centerOfMass.x, physics->centerOfMass.y, physics->centerOfMass.z));
 	}
 	
 	virtual void getWorldTransform(btTransform& centerOfMassWorldTrans) const override {
-		auto obj = objectInstance.lock();if(!obj)return;
-		centerOfMassWorldTrans = GlmToBullet(obj->GetWorldTransform()) * centerOfMassOffset.inverse();
+		auto entity = entityInstance.lock();if(!entity)return;
+		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
+		centerOfMassWorldTrans = GlmToBullet(transform->data->worldTransform) * centerOfMassOffset.inverse();
 	}
 
 	//Bullet only calls the update of worldtransform for active objects
 	virtual void setWorldTransform(const btTransform& centerOfMassWorldTrans) override {
-		auto obj = objectInstance.lock();if(!obj)return;
-		obj->SetWorldTransform(BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset));
+		auto entity = entityInstance.lock();if(!entity)return;
+		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
+		transform->data->worldTransform = BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset);
 	}
 	
 	void RefreshCollisionShape() {
@@ -135,13 +138,12 @@ struct PhysicsObject : btMotionState {
 		}
 		groupedCollisionShape = nullptr;
 		
-		// calculate geometries shapes
-		auto obj = objectInstance.lock();if(!obj)return;
-		obj->Lock();
-		for (auto& geometryInstance : obj->GetGeometries()) {
-			auto geom = geometryInstance.geometry;
-			btCollisionShape* collisionShape = (btCollisionShape*)geom->colliderShapeObject;
-			if (geom->colliderDirty || (!geom->active && collisionShape)) {
+		{// calculate geometries shapes
+			auto entity = entityInstance.lock();if(!entity)return;
+			auto physics = entity->physics.Lock();
+			btCollisionShape* collisionShape = (btCollisionShape*)physics->colliderShapeObject;
+			if (physics->colliderDirty || ((!physics || !physics->physicsActive) && collisionShape)) {
+				physics->colliderDirty = false;
 				// Delete old collision shape
 				if (collisionShape) {
 					for (int i = 0; i < globalCollisionShapes.size(); ++i) {
@@ -162,33 +164,35 @@ struct PhysicsObject : btMotionState {
 					collisionShape = nullptr;
 				}
 				// Add new collision shape
-				if (geom->active && geom->colliderType != v4d::scene::Geometry::ColliderType::NONE) {
-					switch (geom->colliderType) {
-						case v4d::scene::Geometry::ColliderType::SPHERE:
-							collisionShape = new btSphereShape(btScalar(geom->boundingDistance));
+				if (physics && physics->physicsActive && physics->colliderType != v4d::scene::PhysicsInfo::ColliderType::NONE) {
+					switch (physics->colliderType) {
+						case v4d::scene::PhysicsInfo::ColliderType::SPHERE:
+							collisionShape = new btSphereShape(btScalar(physics->boundingDistance));
 						break;
-						case v4d::scene::Geometry::ColliderType::BOX:
-							collisionShape = new btBoxShape(btVector3(btScalar(geom->boundingBoxSize.x), btScalar(geom->boundingBoxSize.y), btScalar(geom->boundingBoxSize.z)));
+						case v4d::scene::PhysicsInfo::ColliderType::BOX:
+							collisionShape = new btBoxShape(btVector3(btScalar(physics->boundingBoxSize.x), btScalar(physics->boundingBoxSize.y), btScalar(physics->boundingBoxSize.z)));
 						break;
-						case v4d::scene::Geometry::ColliderType::TRIANGLE_MESH:
+						case v4d::scene::PhysicsInfo::ColliderType::MESH:
 							{
-								int indexCount;
-								v4d::scene::Geometry::IndexBuffer_T* indices;
-								if (geom->simplifiedMeshIndices.size()) {
-									indexCount = geom->simplifiedMeshIndices.size();
-									indices = geom->simplifiedMeshIndices.data();
-								} else {
-									indexCount = geom->indexCount;
-									indices = geom->GetIndexPtr(0);
-								}
 								auto* mesh = new btTriangleMesh();
 								globalTriangleMeshes.push_back(mesh);
-								auto* vertices = geom->GetVertexPtr(0);
-								for (int i = 0; i < indexCount; i+=3) {
-									btVector3 v0(vertices[indices[i]].pos.x, vertices[indices[i]].pos.y, vertices[indices[i]].pos.z);
-									btVector3 v1(vertices[indices[i+1]].pos.x, vertices[indices[i+1]].pos.y, vertices[indices[i+1]].pos.z);
-									btVector3 v2(vertices[indices[i+2]].pos.x, vertices[indices[i+2]].pos.y, vertices[indices[i+2]].pos.z);
-									mesh->addTriangle(v0, v1, v2, true);
+								
+								auto generateColliderMeshFunc = [&physics, &mesh](v4d::scene::Mesh::VertexPosition* vertices){
+									for (int i = 0; i < physics->colliderMeshIndices.size(); i+=3) {
+										btVector3 v0(vertices[physics->colliderMeshIndices[i]].x, vertices[physics->colliderMeshIndices[i]].y, vertices[physics->colliderMeshIndices[i]].z);
+										btVector3 v1(vertices[physics->colliderMeshIndices[i+1]].x, vertices[physics->colliderMeshIndices[i+1]].y, vertices[physics->colliderMeshIndices[i+1]].z);
+										btVector3 v2(vertices[physics->colliderMeshIndices[i+2]].x, vertices[physics->colliderMeshIndices[i+2]].y, vertices[physics->colliderMeshIndices[i+2]].z);
+										mesh->addTriangle(v0, v1, v2, true);
+									}
+								};
+								
+								if (physics->colliderMeshVertices.size() > 0){
+									generateColliderMeshFunc(physics->colliderMeshVertices.data());
+								} else if (entity->meshVertexPosition) {
+									auto meshVertexPositions = entity->meshVertexPosition.Lock();
+									if (meshVertexPositions) {
+										generateColliderMeshFunc(meshVertexPositions->data);
+									}
 								}
 								try {
 									collisionShape = new btBvhTriangleMeshShape(mesh, true);
@@ -197,29 +201,24 @@ struct PhysicsObject : btMotionState {
 								}
 							}
 						break;
-						case v4d::scene::Geometry::ColliderType::STATIC_PLANE:
-							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), obj->GetWorldTransform()[3].z);
-						break;
-						// case v4d::scene::Geometry::ColliderType::HEIGHTFIELD:
+						case v4d::scene::PhysicsInfo::ColliderType::STATIC_PLANE:{
+							auto transform = entity->transform.Lock();
+							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), transform->data->worldTransform[3].z);
+						}break;
+						// case v4d::scene::PhysicsInfo::ColliderType::HEIGHTFIELD:
 						// 	collisionShape = 
 						// break;
-					}
-					if (!obj->IsActive()){
-						delete collisionShape;
-						collisionShape = nullptr;
 					}
 					if (collisionShape) {
 						globalCollisionShapes.push_back(collisionShape);
 						localCollisionShapes.push_back(collisionShape);
-						geom->colliderShapeObject = collisionShape;
+						physics->colliderShapeObject = collisionShape;
 					}
 				}
 				// Assign collision shape
-				geom->colliderShapeObject = collisionShape;
-				geom->colliderDirty = false;
+				physics->colliderShapeObject = collisionShape;
 			}
 		}
-		obj->Unlock();
 		
 		if (localCollisionShapes.size() == 1) {
 			groupedCollisionShape = localCollisionShapes[0];
@@ -234,15 +233,17 @@ struct PhysicsObject : btMotionState {
 	}
 	
 	void RefreshRigidbody() {
-		auto obj = objectInstance.lock();if(!obj)return;
+		auto entity = entityInstance.lock();if(!entity)return;
 		RemoveRigidbody();
 		if (groupedCollisionShape == nullptr) {
 			LOG_ERROR("PhysicsObject has no collision shape")
 			return;
 		}
 		btVector3 localInertia {0,0,0};
-		btScalar mass = obj->mass;
-		if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::DYNAMIC) {
+		
+		auto physics = entity->physics.Lock();if(!physics)return;
+		btScalar mass = physics->mass;
+		if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
 			// groupedCollisionShape->calculateLocalInertia(mass, localInertia);
 		} else {
 			mass = 0;
@@ -254,7 +255,7 @@ struct PhysicsObject : btMotionState {
 		
 		rigidbody = new btRigidBody(rbInfo);
 		rigidbody->setUserPointer(this);
-		if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::KINEMATIC) {
+		if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::KINEMATIC) {
 			rigidbody->setCollisionFlags(rigidbody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
 			rigidbody->setActivationState(DISABLE_DEACTIVATION);
 		}
@@ -277,38 +278,44 @@ struct PhysicsObject : btMotionState {
 	
 };
 
-std::unordered_map<v4d::scene::ObjectInstance*, PhysicsObject> physicsObjects {};
-std::queue<v4d::scene::ObjectInstancePtr> objectsToRefresh {};
-std::queue<v4d::scene::ObjectInstancePtr> objectsToRemove {};
+std::unordered_map<v4d::scene::RenderableGeometryEntity*, PhysicsObject> physicsObjects {};
+std::queue<std::shared_ptr<v4d::scene::RenderableGeometryEntity>> objectsToRefresh {};
+std::queue<std::shared_ptr<v4d::scene::RenderableGeometryEntity>> objectsToRemove {};
 std::mutex objectsToRemoveMutex;
 
-void RemovePhysicsObject(v4d::scene::ObjectInstance* obj) {
-	obj->physicsObject = nullptr;
-	physicsObjects[obj].RemoveRigidbody();
-	physicsObjects.erase(obj);
+void AddPhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity) {
+	physicsObjects[entity.get()] = entity;
+	auto physics = entity->physics.Lock();if(!physics)return;
+	physics->physicsObject = &physicsObjects[entity.get()];
 }
 
-void AddPhysicsObject(v4d::scene::ObjectInstancePtr obj) {
-	physicsObjects[obj.get()] = obj;
-	obj->physicsObject = &physicsObjects[obj.get()];
-}
-
-void UpdatePhysicsObject(v4d::scene::ObjectInstancePtr obj) {
-	if (!obj->IsActive()) return;
+void UpdatePhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity) {
 	try {
-		physicsObjects.at(obj.get());
+		physicsObjects.at(entity.get());
 	} catch(...) {
-		LOG_ERROR("physics object does not exist for this objectInstance")
+		LOG_ERROR("physics object does not exist for this entityInstance")
 		return;
 	}
-	physicsObjects[obj.get()].Refresh();
+	physicsObjects[entity.get()].Refresh();
 }
 
 void CleanupObjects() {
 	std::lock_guard lock(objectsToRemoveMutex);
 	while (!objectsToRemove.empty()) {
-		RemovePhysicsObject(objectsToRemove.front().get());
+		auto entity = objectsToRemove.front();
+		auto physics = entity->physics.Lock();if(!physics)continue;
+		physics->physicsObject = nullptr;
+		physicsObjects[entity.get()].RemoveRigidbody();
+		physicsObjects.erase(entity.get());
 		objectsToRemove.pop();
+	}
+	for (auto it = physicsObjects.begin(); it != physicsObjects.end();) {
+		auto&[ptr, obj] = *it;
+		if (!obj.entityInstance.lock()) {
+			it = physicsObjects.erase(it);
+		} else {
+			++it;
+		}
 	}
 }
 
@@ -332,11 +339,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// #ifdef _DEBUG
 			globalDynamicsWorld->setDebugDrawer(&debugDrawer);
 		// #endif
-		
-		scene->objectInstanceRemovedCallbacks[THIS_MODULE] = [](v4d::scene::ObjectInstancePtr obj) {
-			std::lock_guard lock(objectsToRemoveMutex);
-			objectsToRemove.emplace(obj);
-		};
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
@@ -344,19 +346,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			objectsToRefresh.pop();
 		}
 		CleanupObjects();
-		scene->objectInstanceRemovedCallbacks.erase(THIS_MODULE);
+		physicsObjects.clear();
 		
 		for (int i = 0; i < globalCollisionShapes.size(); i++) {
-			auto* obj = globalCollisionShapes[i];
+			auto* entity = globalCollisionShapes[i];
 			globalCollisionShapes[i] = 0;
-			delete obj;
+			delete entity;
 		}
 		globalCollisionShapes.clear();
 		
 		for (int i = 0; i < globalTriangleMeshes.size(); i++) {
-			auto* obj = globalTriangleMeshes[i];
+			auto* entity = globalTriangleMeshes[i];
 			globalTriangleMeshes[i] = 0;
-			delete obj;
+			delete entity;
 		}
 		globalTriangleMeshes.clear();
 		
@@ -368,55 +370,58 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-		scene->Lock();
-			globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
-			// Refresh info from scene objects
-			bool tmpPhysicsActive;
-			for (auto obj : scene->objectInstances) {
-				obj->Lock();
-					if ((tmpPhysicsActive = obj->IsPhysicsActive()) || obj->physicsDirty) {
-						if (tmpPhysicsActive && !obj->physicsObject && obj->rigidbodyType != v4d::scene::ObjectInstance::RigidBodyType::NONE) {
-							AddPhysicsObject(obj);
+		globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
+		// Refresh info from scene objects
+		bool tmpPhysicsActive;
+		v4d::scene::RenderableGeometryEntity::ForEach([&tmpPhysicsActive](auto& entity){
+			auto physics = entity->physics.Lock();
+			if(!physics || !physics->physicsActive) {
+				try {
+					auto physicsObject = physicsObjects.at(entity.get());
+					physicsObject.RemoveRigidbody();
+				}catch(...){}
+				return;
+			}
+			if ((tmpPhysicsActive = physics->physicsActive) || physics->physicsDirty) {
+				if (tmpPhysicsActive && !physics->physicsObject && physics->rigidbodyType != v4d::scene::PhysicsInfo::RigidBodyType::NONE) {
+					AddPhysicsObject(entity);
+				}
+				if (physics->physicsDirty) {
+					if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::NONE) {
+						if (physics->physicsObject) {
+							std::lock_guard lock(objectsToRemoveMutex);
+							objectsToRemove.emplace(entity);
+							physics->physicsDirty = false;
+							return;
 						}
-						if (obj->physicsDirty) {
-							if (obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::NONE) {
-								if (obj->physicsObject) {
-									std::lock_guard lock(objectsToRemoveMutex);
-									objectsToRemove.emplace(obj);
-									obj->physicsDirty = false;
-									obj->Unlock();
-									continue;
-								}
-							} else if (tmpPhysicsActive) {
-								objectsToRefresh.emplace(obj);
+					} else if (tmpPhysicsActive) {
+						objectsToRefresh.emplace(entity);
+					}
+					physics->physicsDirty = false;
+				}
+				if (tmpPhysicsActive && (physics->addedForce || physics->physicsForceImpulses.size() > 0) && physics->physicsObject) {
+					auto* rb = ((PhysicsObject*)physics->physicsObject)->rigidbody;
+					if (rb) {
+						if (physics->addedForce) {
+							if (physics->forcePoint.length() == 0) {
+								rb->applyCentralForce(btVector3(physics->forceDirection.x, physics->forceDirection.y, physics->forceDirection.z));
+							} else {
+								rb->applyForce(btVector3(physics->forceDirection.x, physics->forceDirection.y, physics->forceDirection.z), btVector3(physics->forcePoint.x, physics->forcePoint.y, physics->forcePoint.z));
 							}
-							obj->physicsDirty = false;
 						}
-						if (tmpPhysicsActive && (obj->addedForce || obj->physicsForceImpulses.size() > 0) && obj->physicsObject) {
-							auto* rb = ((PhysicsObject*)obj->physicsObject)->rigidbody;
-							if (rb) {
-								if (obj->addedForce) {
-									if (obj->forcePoint.length() == 0) {
-										rb->applyCentralForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z));
-									} else {
-										rb->applyForce(btVector3(obj->forceDirection.x, obj->forceDirection.y, obj->forceDirection.z), btVector3(obj->forcePoint.x, obj->forcePoint.y, obj->forcePoint.z));
-									}
-								}
-								if (obj->physicsForceImpulses.size() > 0) {
-									auto&[impulseDir, atPoint] = obj->physicsForceImpulses.front();
-									if (atPoint.length() == 0) {
-										rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
-									} else {
-										rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
-									}
-									obj->physicsForceImpulses.pop();
-								}
+						if (physics->physicsForceImpulses.size() > 0) {
+							auto&[impulseDir, atPoint] = physics->physicsForceImpulses.front();
+							if (atPoint.length() == 0) {
+								rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+							} else {
+								rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
 							}
+							physics->physicsForceImpulses.pop();
 						}
 					}
-				obj->Unlock();
+				}
 			}
-		scene->Unlock();
+		});
 		
 		// Generate/Update collision shapes
 		while (!objectsToRefresh.empty()) {
@@ -433,61 +438,61 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(bool, PhysicsRayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
-		if (!hit) {
-			LOG_ERROR("RayCastClosest: The given hit pointer is null")
-			return false;
-		}
-		if (globalDynamicsWorld) {
-			btVector3 from = GlmToBullet(origin);
-			btVector3 to = GlmToBullet(target);
-			btCollisionWorld::ClosestRayResultCallback rayResult(from, to);
-			rayResult.m_collisionFilterMask = mask;
-			globalDynamicsWorld->rayTest(from, to, rayResult);
+	// V4D_MODULE_FUNC(bool, PhysicsRayCastClosest, v4d::scene::Scene::RayCastHit* hit, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	// 	if (!hit) {
+	// 		LOG_ERROR("RayCastClosest: The given hit pointer is null")
+	// 		return false;
+	// 	}
+	// 	if (globalDynamicsWorld) {
+	// 		btVector3 from = GlmToBullet(origin);
+	// 		btVector3 to = GlmToBullet(target);
+	// 		btCollisionWorld::ClosestRayResultCallback rayResult(from, to);
+	// 		rayResult.m_collisionFilterMask = mask;
+	// 		globalDynamicsWorld->rayTest(from, to, rayResult);
 			
-			if (!rayResult.hasHit())
-				return false;
+	// 		if (!rayResult.hasHit())
+	// 			return false;
 				
-			auto* physicsObject = (PhysicsObject*)rayResult.m_collisionObject->getUserPointer();
-			if (!physicsObject)
-				return false;
+	// 		auto* physicsObject = (PhysicsObject*)rayResult.m_collisionObject->getUserPointer();
+	// 		if (!physicsObject)
+	// 			return false;
 			
-			*hit = {
-				physicsObject->objectInstance.lock(),
-				BulletToGlm(rayResult.m_hitPointWorld),
-				BulletToGlm(rayResult.m_hitNormalWorld)
-			};
-			return true;
-		}
-		return false;
-	}
+	// 		*hit = {
+	// 			physicsObject->entityInstance.lock(),
+	// 			BulletToGlm(rayResult.m_hitPointWorld),
+	// 			BulletToGlm(rayResult.m_hitNormalWorld)
+	// 		};
+	// 		return true;
+	// 	}
+	// 	return false;
+	// }
 	
-	V4D_MODULE_FUNC(int, PhysicsRayCastAll, std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
-		if (!hits) {
-			LOG_ERROR("RayCastAll: The given hits pointer is null")
-			return 0;
-		}
-		if (globalDynamicsWorld) {
-			btVector3 from = GlmToBullet(origin);
-			btVector3 to = GlmToBullet(target);
-			btCollisionWorld::AllHitsRayResultCallback rayResult(from, to);
-			rayResult.m_collisionFilterMask = mask;
-			globalDynamicsWorld->rayTest(from, to, rayResult);
-			if (rayResult.hasHit()) {
-				int nbHits = rayResult.m_collisionObjects.size();
-				hits->reserve(nbHits);
-				for (int i = 0; i < nbHits; ++i) {
-					hits->emplace_back(
-						((PhysicsObject*)rayResult.m_collisionObjects[i]->getUserPointer())->objectInstance.lock(),
-						BulletToGlm(rayResult.m_hitPointWorld[i]),
-						BulletToGlm(rayResult.m_hitNormalWorld[i])
-					);
-				}
-				return nbHits;
-			}
-		}
-		return 0;
-	}
+	// V4D_MODULE_FUNC(int, PhysicsRayCastAll, std::vector<v4d::scene::Scene::RayCastHit>* hits, glm::dvec3 origin, glm::dvec3 target, uint32_t mask) {
+	// 	if (!hits) {
+	// 		LOG_ERROR("RayCastAll: The given hits pointer is null")
+	// 		return 0;
+	// 	}
+	// 	if (globalDynamicsWorld) {
+	// 		btVector3 from = GlmToBullet(origin);
+	// 		btVector3 to = GlmToBullet(target);
+	// 		btCollisionWorld::AllHitsRayResultCallback rayResult(from, to);
+	// 		rayResult.m_collisionFilterMask = mask;
+	// 		globalDynamicsWorld->rayTest(from, to, rayResult);
+	// 		if (rayResult.hasHit()) {
+	// 			int nbHits = rayResult.m_collisionObjects.size();
+	// 			hits->reserve(nbHits);
+	// 			for (int i = 0; i < nbHits; ++i) {
+	// 				hits->emplace_back(
+	// 					((PhysicsObject*)rayResult.m_collisionObjects[i]->getUserPointer())->entityInstance.lock(),
+	// 					BulletToGlm(rayResult.m_hitPointWorld[i]),
+	// 					BulletToGlm(rayResult.m_hitNormalWorld[i])
+	// 				);
+	// 			}
+	// 			return nbHits;
+	// 		}
+	// 	}
+	// 	return 0;
+	// }
 	
 	// #ifdef _DEBUG
 		V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {

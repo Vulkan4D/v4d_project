@@ -197,7 +197,6 @@ void app::Stop() {
 	
 	{// Unload scene
 		app::modules::UnloadScene();
-		app::scene->ClearAllRemainingObjects(); 
 		delete app::scene;
 	}
 	

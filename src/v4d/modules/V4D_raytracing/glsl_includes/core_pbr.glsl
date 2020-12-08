@@ -27,12 +27,13 @@ vec3 fresnelSchlick(float HdotV, vec3 baseReflectivity) {
 	return baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - HdotV, 5.0);
 }
 
-vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float roughness, float metallic) {
+vec3 ApplyPBRShading(vec3 origin, vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float roughness, float metallic) {
 	vec3 color = vec3(0);
 	
 	// PBR lighting
+	float distance = distance(origin, hitPoint);
 	vec3 N = normal;
-	vec3 V = normalize(-hitPoint);
+	vec3 V = normalize(origin - hitPoint);
 	// calculate reflectance at normal incidence; if dia-electric (like plastic) use baseReflectivity of 0.4 and if it's metal, use the albedo color as baseReflectivity
 	vec3 baseReflectivity = mix(vec3(0.04), albedo, max(0,metallic));
 	
@@ -50,8 +51,8 @@ vec3 ApplyPBRShading(vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float r
 				if (HardShadows) {
 					shadowed = true;
 					if (dot(L, normal) > 0) {
-						vec3 shadowRayStart = hitPoint + bump + V*(length(hitPoint)*0.0001); // starting shadow ray just outside the surface this way solves precision issues when casting shadows
-						traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT, GEOMETRY_ATTR_CAST_SHADOWS, 0, 0, 1, shadowRayStart, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 1);
+						vec3 shadowRayStart = hitPoint + bump + V*GetOptimalBounceStartDistance(distance); // starting shadow ray just outside the surface this way solves precision issues when casting shadows
+						traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT | gl_RayFlagsSkipClosestHitShaderEXT, RAY_TRACE_MASK_SHADOWS, 0, 0, 1, shadowRayStart, float(camera.znear), L, length(light.position - hitPoint) - light.radius, 1);
 					}
 				}
 				if (!HardShadows || !shadowed)

@@ -197,7 +197,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod) {
 							if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream);
 						}
-						obj->UpdateObjectInstanceTransform();
+						obj->UpdateGameObjectTransform();
 					}
 				} catch(std::exception& err) {
 					LOG_ERROR("Server ReceiveAction SYNC_OBJECT_TRANSFORM : " << err.what())
@@ -219,7 +219,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		std::lock_guard lock(clientSideObjects.mutex);
 		for (auto&[objID, obj] : clientSideObjects.objects) {
 			if (obj->physicsControl) {
-				obj->ReverseUpdateObjectInstanceTransform();
+				obj->ReverseUpdateGameObjectTransform();
 				stream->Begin();
 					*stream << SYNC_OBJECT_TRANSFORM;
 					*stream << obj->id;
@@ -271,8 +271,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream2);
 						if (mod->AddGameObjectToScene) {
 							mod->AddGameObjectToScene(obj, scene);
-							obj->UpdateObjectInstance();
-							obj->UpdateObjectInstanceTransform();
+							obj->UpdateGameObject();
+							obj->UpdateGameObjectTransform();
 						}
 					} else {
 						LOG_ERROR("Client ReceiveAction ADD_OBJECT : module " << moduleID.String() << " is not loaded")
@@ -308,8 +308,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod->ReceiveStreamCustomGameObjectData) mod->ReceiveStreamCustomGameObjectData(obj, tmpStream1);
 						if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream2);
 					}
-					obj->UpdateObjectInstance();
-					obj->UpdateObjectInstanceTransform();
+					obj->UpdateGameObject();
+					obj->UpdateGameObjectTransform();
 				} catch(std::exception& err) {
 					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
 				}
@@ -327,7 +327,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod->DestroyGameObject) mod->DestroyGameObject(obj, scene);
 					}
 					
-					obj->RemoveObjectInstance(scene);
+					obj->RemoveGameObject();
 					
 					clientSideObjects.objects.erase(obj->id);
 					
@@ -360,7 +360,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod) {
 							if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream);
 						}
-						obj->UpdateObjectInstanceTransform();
+						obj->UpdateGameObjectTransform();
 					}
 				} catch(std::exception& err) {
 					LOG_ERROR_VERBOSE("Client ReceiveBurst SYNC_OBJECT_TRANSFORM : " << err.what())

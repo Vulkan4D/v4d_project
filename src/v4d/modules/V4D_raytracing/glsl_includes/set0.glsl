@@ -108,6 +108,10 @@ layout(set = 0, binding = 0) uniform Camera {
 		mat3 GetModelNormalViewMatrix() {
 			return mat3(ModelTransform(renderableEntityInstances[gl_InstanceCustomIndexEXT].modelTransform).normalView);
 		}
+		
+		vec3 DoubleSidedNormals(in vec3 viewSpaceNormal) {
+			return -sign(dot(viewSpaceNormal, gl_WorldRayDirectionEXT)) * viewSpaceNormal;
+		}
 	#endif
 
 	struct LightSource {
@@ -150,6 +154,11 @@ bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0;
 	};
 	
 #endif
+
+
+float GetOptimalBounceStartDistance(float distance) {
+	return max(float(camera.znear)*2, float(camera.znear)*distance);
+}
 
 
 // double GetTrueDistanceFromDepthBuffer(double depth) {

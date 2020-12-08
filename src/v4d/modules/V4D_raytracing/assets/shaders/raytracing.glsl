@@ -25,10 +25,12 @@ void main() {
 	int bounces = 0;
 
 	// Trace Primary Rays
-	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, GEOMETRY_ATTR_PRIMARY_VISIBLE, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
+	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
 	
 	if (ray.distance > 0) {
-		litColor = ApplyPBRShading(ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+		litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+		
+		float primaryRayDistance = ray.distance;
 		
 		// // Refraction
 		// if (ray.refractionIndex >= 1.0) {
@@ -38,18 +40,18 @@ void main() {
 		// }
 		
 		float reflectivity = min(0.9, ray.metallic);
-		vec3 reflectionOrigin = ray.position + ray.normal * 0.01;
+		vec3 reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
 		vec3 viewDirection = normalize(ray.position);
 		vec3 surfaceNormal = normalize(ray.normal);
 		while (Reflections && reflectivity > 0.01) {
 			vec3 reflectDirection = reflect(viewDirection, surfaceNormal);
-			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, GEOMETRY_ATTR_REFLECTION_VISIBLE, 0, 0, 0, reflectionOrigin, float(camera.znear), reflectDirection, float(camera.zfar), 0);
+			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_REFLECTION, 0, 0, 0, reflectionOrigin, GetOptimalBounceStartDistance(primaryRayDistance), reflectDirection, float(camera.zfar), 0);
 			if (ray.distance > 0) {
-				vec3 reflectColor = ApplyPBRShading(ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+				vec3 reflectColor = ApplyPBRShading(reflectionOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
 				litColor = mix(litColor, reflectColor*litColor, reflectivity);
 				reflectivity *= min(0.9, ray.metallic);
 				if (reflectivity > 0) {
-					reflectionOrigin = ray.position + ray.normal * 0.01;
+					reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
 					viewDirection = normalize(ray.position);
 					surfaceNormal = normalize(ray.normal);
 				}

@@ -3,6 +3,7 @@
 #include "../V4D_flycam/common.hh"
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
+#include "../V4D_raytracing/camera_options.hh"
 
 namespace OBJECT_TYPE {
 	const uint32_t Player = 0;
@@ -40,68 +41,142 @@ ClientSideObjects* clientSideObjects = nullptr;
 PlayerView* playerView = nullptr;
 
 Scene* scene = nullptr;
+Renderer* r = nullptr;
 
 void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 	std::lock_guard lock(clientActionQueueMutex);
 	clientActionQueue.emplace(stream);
 }
 
-void CreateCornellBox(ObjectInstance* obj) {
-	obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-
-	auto geom1 = obj->AddGeometry(28, 42);
-	
-	geom1->SetVertex(0,  /*pos*/{-5.0,-5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-	geom1->SetVertex(1,  /*pos*/{ 5.0,-5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-	geom1->SetVertex(2,  /*pos*/{ 5.0, 5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-	geom1->SetVertex(3,  /*pos*/{-5.0, 5.0, -2.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-	//
-	geom1->SetVertex(4,  /*pos*/{-5.0,-5.0,-8.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0, 0.0, 0.0, 1.0});
-	geom1->SetVertex(5,  /*pos*/{ 5.0,-5.0,-8.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 0.0, 1.0});
-	geom1->SetVertex(6,  /*pos*/{ 5.0, 5.0,-8.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 0.0, 1.0, 1.0});
-	geom1->SetVertex(7,  /*pos*/{-5.0, 5.0,-8.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0, 1.0, 1.0, 1.0});
-	
-	// bottom white
-	geom1->SetVertex(8,  /*pos*/{-80.0,-80.0,-20.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-	geom1->SetVertex(9,  /*pos*/{ 80.0,-80.0,-20.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-	geom1->SetVertex(10, /*pos*/{ 80.0, 80.0,-20.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-	geom1->SetVertex(11, /*pos*/{-80.0, 80.0,-20.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-	
-	// top yellow
-	geom1->SetVertex(12, /*pos*/{-80.0,-80.0, 40.0}, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
-	geom1->SetVertex(13, /*pos*/{ 80.0,-80.0, 40.0}, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
-	geom1->SetVertex(14, /*pos*/{ 80.0, 80.0, 40.0}, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
-	geom1->SetVertex(15, /*pos*/{-80.0, 80.0, 40.0}, /*normal*/{ 0.0, 0.0,-1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,0.0, 1.0});
-	
-	// left red
-	geom1->SetVertex(16, /*pos*/{ 80.0, 80.0,-20.0}, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
-	geom1->SetVertex(17, /*pos*/{ 80.0,-80.0,-20.0}, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
-	geom1->SetVertex(18, /*pos*/{ 80.0, 80.0, 40.0}, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
-	geom1->SetVertex(19, /*pos*/{ 80.0,-80.0, 40.0}, /*normal*/{-1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,0.0,0.0, 0.5});
-	
-	// back blue
-	geom1->SetVertex(20, /*pos*/{ 80.0,-80.0, 40.0}, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-	geom1->SetVertex(21, /*pos*/{ 80.0,-80.0,-20.0}, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-	geom1->SetVertex(22, /*pos*/{-80.0,-80.0, 40.0}, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-	geom1->SetVertex(23, /*pos*/{-80.0,-80.0,-20.0}, /*normal*/{ 0.0, 1.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,0.0,1.0, 1.0});
-	
-	// right green
-	geom1->SetVertex(24, /*pos*/{-80.0, 80.0,-20.0}, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-	geom1->SetVertex(25, /*pos*/{-80.0,-80.0,-20.0}, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-	geom1->SetVertex(26, /*pos*/{-80.0, 80.0, 40.0}, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-	geom1->SetVertex(27, /*pos*/{-80.0,-80.0, 40.0}, /*normal*/{ 1.0, 0.0, 0.0}, /*uv*/{0.0, 0.0}, /*color*/{0.0,1.0,0.0, 1.0});
-	
-	geom1->SetIndices({
+void CreateCornellBox(RenderableGeometryEntity* entity) {
+	entity
+		->Add_meshIndices()
+		->Add_meshVertexPosition()
+		->Add_meshVertexNormal()
+		->Add_meshVertexColor()
+		->Add_physics(PhysicsInfo::RigidBodyType::STATIC)
+	;
+	entity->meshIndices->AllocateBuffers(r->renderingDevice, {
 		0, 1, 2, 2, 3, 0,
 		4, 5, 6, 6, 7, 4,
 		8, 9, 10, 10, 11, 8,
-		//
 		13, 12, 14, 14, 12, 15,
 		16, 17, 18, 18, 17, 19,
 		20, 21, 22, 22, 21, 23,
 		25, 24, 26, 26, 27, 25,
 	});
-	
+	entity->meshVertexPosition->AllocateBuffers(r->renderingDevice, {
+		//
+		{-5.0,-5.0, -2.0},
+		{ 5.0,-5.0, -2.0},
+		{ 5.0, 5.0, -2.0},
+		{-5.0, 5.0, -2.0},
+		//
+		{-5.0,-5.0,-8.0},
+		{ 5.0,-5.0,-8.0},
+		{ 5.0, 5.0,-8.0},
+		{-5.0, 5.0,-8.0},
+		// bottom white
+		{-40.0,-40.0,-20.0},
+		{ 40.0,-40.0,-20.0},
+		{ 40.0, 40.0,-20.0},
+		{-40.0, 40.0,-20.0},
+		// top yellow
+		{-40.0,-40.0, 40.0},
+		{ 40.0,-40.0, 40.0},
+		{ 40.0, 40.0, 40.0},
+		{-40.0, 40.0, 40.0},
+		// left red
+		{ 40.0, 40.0,-20.0},
+		{ 40.0,-40.0,-20.0},
+		{ 40.0, 40.0, 40.0},
+		{ 40.0,-40.0, 40.0},
+		// back blue
+		{ 40.0,-40.0, 40.0},
+		{ 40.0,-40.0,-20.0},
+		{-40.0,-40.0, 40.0},
+		{-40.0,-40.0,-20.0},
+		// right green
+		{-40.0, 40.0,-20.0},
+		{-40.0,-40.0,-20.0},
+		{-40.0, 40.0, 40.0},
+		{-40.0,-40.0, 40.0},
+	});
+	entity->meshVertexNormal->AllocateBuffers(r->renderingDevice, {
+		//
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		//
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		// bottom white
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		{ 0.0, 0.0, 1.0},
+		// top yellow
+		{ 0.0, 0.0,-1.0},
+		{ 0.0, 0.0,-1.0},
+		{ 0.0, 0.0,-1.0},
+		{ 0.0, 0.0,-1.0},
+		// left red
+		{-1.0, 0.0, 0.0},
+		{-1.0, 0.0, 0.0},
+		{-1.0, 0.0, 0.0},
+		{-1.0, 0.0, 0.0},
+		// back blue
+		{ 0.0, 1.0, 0.0},
+		{ 0.0, 1.0, 0.0},
+		{ 0.0, 1.0, 0.0},
+		{ 0.0, 1.0, 0.0},
+		// right green
+		{ 1.0, 0.0, 0.0},
+		{ 1.0, 0.0, 0.0},
+		{ 1.0, 0.0, 0.0},
+		{ 1.0, 0.0, 0.0},
+	});
+	entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {
+		//
+		{1.0, 0.0, 0.0, 1.0},
+		{0.0, 1.0, 0.0, 1.0},
+		{0.0, 0.0, 1.0, 1.0},
+		{0.0, 1.0, 1.0, 1.0},
+		//
+		{1.0, 0.0, 0.0, 1.0},
+		{0.0, 1.0, 0.0, 1.0},
+		{0.0, 0.0, 1.0, 1.0},
+		{0.0, 1.0, 1.0, 1.0},
+		// bottom white
+		{1.0,1.0,1.0, 1.0},
+		{1.0,1.0,1.0, 1.0},
+		{1.0,1.0,1.0, 1.0},
+		{1.0,1.0,1.0, 1.0},
+		// top yellow
+		{1.0,1.0,0.0, 1.0},
+		{1.0,1.0,0.0, 1.0},
+		{1.0,1.0,0.0, 1.0},
+		{1.0,1.0,0.0, 1.0},
+		// left red
+		{1.0,0.0,0.0, 0.5},
+		{1.0,0.0,0.0, 0.5},
+		{1.0,0.0,0.0, 0.5},
+		{1.0,0.0,0.0, 0.5},
+		// back blue
+		{0.0,0.0,1.0, 1.0},
+		{0.0,0.0,1.0, 1.0},
+		{0.0,0.0,1.0, 1.0},
+		{0.0,0.0,1.0, 1.0},
+		// right green
+		{0.0,1.0,0.0, 1.0},
+		{0.0,1.0,0.0, 1.0},
+		{0.0,1.0,0.0, 1.0},
+		{0.0,1.0,0.0, 1.0},
+	});
+	entity->physics->SetMeshCollider(entity->meshIndices->data, entity->meshIndices->count);
 }
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -115,6 +190,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
 		playerView->SetInitialPositionAndView({0,0,0}, {0,1,0}, {0,0,1});
 		playerView->useFreeFlyCam = false;
+	}
+	
+	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
+		r = _r;
 	}
 	
 	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<ListeningServer> _srv) {
@@ -241,9 +320,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				try {
 					std::lock_guard lock(clientSideObjects->mutex);
 					auto obj = clientSideObjects->objects.at(id);
-					scene->cameraParent = obj->objectInstance;
-					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
-					obj->objectInstance->SetGeometriesDirty();
+					scene->cameraParent = obj->renderableGeometryEntityInstance;
+					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+						entity->rayTracingMask &= ~GEOMETRY_ATTR_PRIMARY_VISIBLE;
+					}
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
 				}
@@ -260,97 +340,181 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
-		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(10000);
-		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(10000);
-		v4d::scene::Geometry::globalBuffers.lightBuffer.Extend(1024);
 		
 		// Cornell boxes
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {0,250,-30}, 180.0);
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {200,250,-30}, 120.0);
-		scene->AddObjectInstance()->Configure(CreateCornellBox, {-200,250,-30}, -120.0);
-		for (int i = 0; i < 100; ++i)
-			scene->AddObjectInstance()->Configure(CreateCornellBox, {0,500,-30 + (i*90)}, 180.0);
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				entity->Prepare(r->renderingDevice, "default");
+				CreateCornellBox(entity);
+			};
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				entity->Prepare(r->renderingDevice, "default");
+				CreateCornellBox(entity);
+			};
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				entity->Prepare(r->renderingDevice, "default");
+				CreateCornellBox(entity);
+			};
 			
-		// Ground (static)
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			auto plane = obj->AddGeometry(4, 6);
-			// plane->colliderType = Geometry::ColliderType::STATIC_PLANE;
-			plane->SetVertex(0, /*pos*/{-80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			plane->SetVertex(1, /*pos*/{ 80000.0,-80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			plane->SetVertex(2, /*pos*/{ 80000.0, 80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			plane->SetVertex(3, /*pos*/{-80000.0, 80000.0, 0.0}, /*normal*/{ 0.0, 0.0, 1.0}, /*uv*/{0.0, 0.0}, /*color*/{1.0,1.0,1.0, 1.0});
-			plane->SetIndices({
-				0, 1, 2, 2, 3, 0,
-			});
-		}, {0,0,-200});
+		// Ball
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {5,250,-30}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				float radius = 2;
+				entity->Prepare(r->renderingDevice, "aabb_sphere");
+				entity->Add_proceduralVertexAABB();
+				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+				entity->Add_meshVertexColor();
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.7f,0.7f,0.7f,1.0f}});
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetSphereCollider(radius);
+			};
+			
+		// Cube
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-5,250,-30}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				entity->Prepare(r->renderingDevice, "aabb_cube");
+				entity->Add_proceduralVertexAABB();
+				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-2), glm::vec3(2)}});
+				entity->Add_meshVertexColor();
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.8f,0.0f,0.0f,1.0f}});
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetBoxCollider(glm::vec3(2));
+			};
+			
+		// Light sources
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				float radius = 200;
+				entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+				entity->Add_proceduralVertexAABB();
+				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+				entity->Add_meshVertexColor();
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*1000000000.0f, radius, 1000000);
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetSphereCollider(radius);
+			};
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,11}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				float radius = 20;
+				entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+				entity->Add_proceduralVertexAABB();
+				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+				entity->Add_meshVertexColor();
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000000.0f, radius, 100000);
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetSphereCollider(radius);
+			};
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {2,260,-30}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				float radius = 0.5f;
+				entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+				entity->Add_proceduralVertexAABB();
+				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+				entity->Add_meshVertexColor();
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{10000.0f,10000.0f,10000.0f,10000.0f}});
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetSphereCollider(radius);
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*10000.0f, radius, 100);
+			};
 		
-		// Lights (static)
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 20, 100000000);
-		}, {10,-2000,10});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 200, 1000000000);
-		}, {10,-500,1000});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 2, 10000);
-		}, {10,270,10});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 1, 10000);
-		}, {210,270,-20});
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereLightSource("light", 1, 10000);
-		}, {-190,270,-15});
+		// Ground
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,0,-200}), glm::radians(0.0), {0,0,1}))
+			->generator = [](RenderableGeometryEntity* entity){
+				entity->Prepare(r->renderingDevice, "default");
+				entity->Add_meshVertexPosition();
+				entity->Add_meshVertexNormal();
+				entity->Add_meshVertexColor();
+				entity->Add_meshIndices();
+				entity->meshVertexPosition->AllocateBuffers(r->renderingDevice, {
+					{-1000.0,-1000.0, 0.0},
+					{ 1000.0,-1000.0, 0.0},
+					{ 1000.0, 1000.0, 0.0},
+					{-1000.0, 1000.0, 0.0},
+				});
+				entity->meshVertexNormal->AllocateBuffers(r->renderingDevice, {
+					{ 0.0, 0.0, 1.0},
+					{ 0.0, 0.0, 1.0},
+					{ 0.0, 0.0, 1.0},
+					{ 0.0, 0.0, 1.0},
+				});
+				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {
+					{1.0,1.0,1.0, 1.0},
+					{1.0,1.0,1.0, 1.0},
+					{1.0,1.0,1.0, 1.0},
+					{1.0,1.0,1.0, 1.0},
+				});
+				entity->meshIndices->AllocateBuffers(r->renderingDevice, {
+					0, 1, 2, 2, 3, 0,
+				});
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				entity->physics->SetMeshCollider(entity->meshIndices->data, entity->meshIndices->count);
+			};
 		
-		// Red Sphere (static)
-		scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-			obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-			obj->mass = 10;
-			obj->SetSphereGeometry("sphere", 50, {1,0,0, 1});
-		}, {60,300,500});
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
-		for (auto obj : scene->objectInstances) {
-			scene->RemoveObjectInstance(obj);
-		}
-		scene->objectInstances.clear();
-		scene->ClenupObjectInstancesGeometries();
+		
 	}
 	
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					auto cube = obj->AddProceduralGeometry("aabb", 1);
-						cube->SetProceduralVertex(0, glm::vec3(-0.5, -0.5, -0.5), glm::vec3(0.5, 0.5, 0.5), glm::vec4(0,1,0.5,1), 0);
-						// cube->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_COLLIDER | GEOMETRY_ATTR_REFLECTION_VISIBLE;
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
+				// entity->physics->SetBoxCollider(glm::vec3{0.5f});
+				entity->generator = [](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_cube");
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-0.5), glm::vec3(0.5)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.0f,1.0f,0.5f, 1.0f}});
+				};
 			}break;
 			case OBJECT_TYPE::Ball:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					obj->SetSphereGeometry("sphere", 1, {0.5,0.5,0.5, 1});
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-				obj->objectInstance->mass = 1;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 0.5f;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+				entity->physics->SetSphereCollider(radius);
+				entity->generator = [radius](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_sphere");
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.5f,0.5f,0.5f,1.0f}});
+				};
 			}break;
 			case OBJECT_TYPE::Light:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					obj->SetSphereLightSource("light", 2, 100000);
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-				obj->objectInstance->mass = 1;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 2;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
+				entity->physics->SetSphereCollider(radius);
+				entity->generator = [radius](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000.0f, radius, 1000);
+				};
 			}break;
 		}
 	}
@@ -361,7 +525,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, DrawUiDebug2) {
 		#ifdef _ENABLE_IMGUI
-			ImGui::Text("%d objects", Geometry::globalBuffers.nbAllocatedObjects);
+			ImGui::Text("%d rendered objects", RenderableGeometryEntity::Count());
 		#endif
 	}
 	
