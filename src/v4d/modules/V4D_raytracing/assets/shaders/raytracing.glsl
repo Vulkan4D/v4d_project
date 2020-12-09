@@ -26,11 +26,11 @@ void main() {
 
 	// Trace Primary Rays
 	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
-	
+
+	float primaryRayDistance = ray.distance;
+
 	if (ray.distance > 0) {
 		litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
-		
-		float primaryRayDistance = ray.distance;
 		
 		// // Refraction
 		// if (ray.refractionIndex >= 1.0) {
@@ -67,7 +67,7 @@ void main() {
 	}
 	
 	float depth = clamp(GetFragDepthFromViewSpacePosition(ray.position), 0, 1);
-	imageStore(img_depth, imgCoords, vec4(depth, 0,0,0));
+	imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
 	imageStore(img_lit, imgCoords, vec4(litColor,1));
 }
 

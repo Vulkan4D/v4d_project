@@ -48,6 +48,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 
 #pragma region Descriptor Sets
 	DescriptorSet set0;
+	DescriptorSet set1_fog_raster;
 	DescriptorSet set1_raytracing;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
@@ -57,7 +58,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 #pragma endregion
 
 #pragma region Images
-	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32_SFLOAT } };
+	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT } };
 	Image img_lit { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_pp { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
@@ -73,6 +74,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 #pragma endregion
 
 #pragma region Pipeline Layouts
+	PipelineLayout pl_fog_raster;
 	PipelineLayout pl_raytracing;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
@@ -86,6 +88,16 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	// Ray Tracing
 	ShaderBindingTable sbt_raytracing {pl_raytracing, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rgen")};
 
+	// Transparent/Fog
+	RasterShaderPipeline shader_transparent {pl_fog_raster, {
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.transparent.frag"),
+	}};
+	RasterShaderPipeline shader_wireframe {pl_fog_raster, {
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.vert"),
+		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.wireframe.frag"),
+	}};
+	
 	// Overlay
 	RasterShaderPipeline shader_overlay_circles {pl_overlay, {
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/overlay_shapes.vert"),
@@ -145,6 +157,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		{"img_overlay", &img_overlay},
 	};
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
+		{"pl_fog_raster", &pl_fog_raster},
 		{"pl_raytracing", &pl_raytracing},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
@@ -153,6 +166,9 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		{"pl_raycast", &pl_raycast},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
+		{"sg_transparent", {&shader_transparent}},
+		{"sg_wireframe", {&shader_wireframe}},
+		{"sg_fog", {}},
 		{"sg_thumbnail", {&shader_thumbnail}},
 		{"sg_postfx", {&shader_fx_txaa}},
 		{"sg_history_write", {&shader_history_write}},
@@ -172,6 +188,12 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	RenderPass postProcessingRenderPass;
 	RenderPass thumbnailRenderPass;
 	RenderPass uiRenderPass;
+	RenderPass fogRenderPass;
+	
+	struct RasterPushConstant {
+		int32_t instanceCustomIndexValue;
+	};
+	
 #pragma endregion
 
 #pragma region Rendering Resources
@@ -200,6 +222,71 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	// 		r->renderingDevice->CmdClearColorImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValues, 1, &range);
 	// 	r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	// }
+	
+	void CreateFogPipeline() {
+		const int nbColorAttachments = 1;
+		VkAttachmentDescription attachment {};
+		VkAttachmentReference colorAttachmentRef {};
+		
+		// Color attachment
+		attachment.format = img_lit.format;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		colorAttachmentRef = {
+			fogRenderPass.AddAttachment(attachment),
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		};
+	
+		// VkSubpassDependency subpassDependency = {
+		// 	VK_SUBPASS_EXTERNAL,// srcSubpass;
+		// 	0,// dstSubpass;
+		// 	VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
+		// 	VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
+		// 	VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
+		// 	VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
+		// 	0// dependencyFlags;
+		// };
+		VkSubpassDescription subpass {};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = 1;
+			subpass.pColorAttachments = &colorAttachmentRef;
+		fogRenderPass.AddSubpass(subpass);
+		// fogRenderPass.renderPassInfo.dependencyCount = 1;
+		// fogRenderPass.renderPassInfo.pDependencies = &subpassDependency;
+		
+		// Create the render pass
+		fogRenderPass.Create(r->renderingDevice);
+		fogRenderPass.CreateFrameBuffers(r->renderingDevice, img_lit);
+		
+		// Shaders
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
+			for (auto* s : sg) {
+				s->SetRenderPass(&img_lit, fogRenderPass.handle, 0);
+				s->AddColorBlendAttachmentState(
+					VK_TRUE,
+					VK_BLEND_FACTOR_SRC_ALPHA,
+					VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+					VK_BLEND_OP_ADD,
+					VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+					VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+					VK_BLEND_OP_ADD
+				);
+				s->CreatePipeline(r->renderingDevice);
+			}
+		}
+	}
+	void DestroyFogPipeline() {
+		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
+			for (auto* s : sg) {
+				s->DestroyPipeline(r->renderingDevice);
+			}
+		}
+		fogRenderPass.DestroyFrameBuffers(r->renderingDevice);
+		fogRenderPass.Destroy(r->renderingDevice);
+	}
 	
 #pragma endregion
 
@@ -602,6 +689,78 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	
 #pragma endregion
 
+void ConfigureFogShaders() {
+	pl_fog_raster.AddPushConstant<RasterPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	
+	for (auto* s : shaderGroups["sg_fog"]) {
+		s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+		s->depthStencilState.depthTestEnable = VK_FALSE;
+		s->depthStencilState.depthWriteEnable = VK_FALSE;
+		s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+		s->SetData(3);
+	}
+	
+	for (auto* s : shaderGroups["sg_transparent"]) {
+		// s->AddVertexInputBinding(sizeof(v4d::graphics::Mesh::VertexPosition), VK_VERTEX_INPUT_RATE_VERTEX, v4d::graphics::Mesh::VertexPosition::GetInputAttributes());
+		s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+		s->depthStencilState.depthTestEnable = VK_FALSE;
+		s->depthStencilState.depthWriteEnable = VK_FALSE;
+	}
+	
+	for (auto* s : shaderGroups["sg_wireframe"]) {
+		// s->AddVertexInputBinding(sizeof(v4d::graphics::Mesh::VertexPosition), VK_VERTEX_INPUT_RATE_VERTEX, v4d::graphics::Mesh::VertexPosition::GetInputAttributes());
+		s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		s->rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+		s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+		s->depthStencilState.depthTestEnable = VK_FALSE;
+		s->depthStencilState.depthWriteEnable = VK_FALSE;
+		s->dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
+	}
+}
+
+void RunFogCommands(VkCommandBuffer commandBuffer) {
+	for (auto* s : shaderGroups["sg_fog"]) {
+		s->Execute(r->renderingDevice, commandBuffer);
+	}
+	for (auto* s : shaderGroups["sg_transparent"]) {
+		// Transparent
+		RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+			if (entity->raster_transparent) {
+				auto meshVertexPosition = entity->meshVertexPosition.Lock();
+				auto meshIndices = entity->meshIndices.Lock();
+				if (meshVertexPosition && meshIndices) {
+					s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+				} else if (meshVertexPosition) {
+					s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+				} else {
+					s->SetData(3);
+				}
+				RasterPushConstant pushConstant {entity->GetIndex()};
+				s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+			}
+		});
+	}
+	for (auto* s : shaderGroups["sg_wireframe"]) {
+		// Wireframe
+		RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+			if (entity->raster_wireframe) {
+				auto meshVertexPosition = entity->meshVertexPosition.Lock();
+				auto meshIndices = entity->meshIndices.Lock();
+				if (meshVertexPosition && meshIndices) {
+					s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+				} else if (meshVertexPosition) {
+					s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+				} else {
+					s->SetData(3);
+				}
+				RasterPushConstant pushConstant {entity->GetIndex()};
+				s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+			}
+		});
+	}
+}
+
 #pragma region UI
 	float img_overlayScale = 1.0;
 	
@@ -745,7 +904,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		shader_overlay_lines.depthStencilState.depthTestEnable = false;
 		shader_overlay_lines.depthStencilState.depthWriteEnable = false;
 		shader_overlay_lines.dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
-		shader_overlay_lines.SetData(&overlayLinesBuffer, 0);
+		shader_overlay_lines.SetData(overlayLinesBuffer.buffer, 0);
 		
 		// Text
 		shader_overlay_text.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -753,7 +912,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		shader_overlay_text.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_text.depthStencilState.depthTestEnable = false;
 		shader_overlay_text.depthStencilState.depthWriteEnable = false;
-		shader_overlay_text.SetData(&overlayTextBuffer, 0);
+		shader_overlay_text.SetData(overlayTextBuffer.buffer, 0);
 		
 		// Circles
 		shader_overlay_circles.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -761,7 +920,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		shader_overlay_circles.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_circles.depthStencilState.depthTestEnable = false;
 		shader_overlay_circles.depthStencilState.depthWriteEnable = false;
-		shader_overlay_circles.SetData(&overlayCirclesBuffer, 0);
+		shader_overlay_circles.SetData(overlayCirclesBuffer.buffer, 0);
 		
 		// Squares
 		shader_overlay_squares.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -769,7 +928,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		shader_overlay_squares.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_squares.depthStencilState.depthTestEnable = false;
 		shader_overlay_squares.depthStencilState.depthWriteEnable = false;
-		shader_overlay_squares.SetData(&overlaySquaresBuffer, 0);
+		shader_overlay_squares.SetData(overlaySquaresBuffer.buffer, 0);
 	}
 	
 	#ifdef _ENABLE_IMGUI
@@ -926,7 +1085,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 				}
 			}
 			
-			if (!entity->blas && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
+			if (!entity->blas && entity->rayTracingMask && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
 				entity->blas = std::make_shared<Blas>();
 				if (entity->meshVertexPosition) {
 					entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometryData);
@@ -967,7 +1126,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 					}
 				
 				} else {
-					LOG_ERROR("An entity is missing a transform component or blas")
+					LOG_ERROR("An entity is missing a transform component")
 				}
 			}
 			
@@ -1096,15 +1255,21 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 			);
 		}
 		
+		// Run Ray Tracing
+		RunRayTracingCommands(commandBuffer);
+		
 		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
 			if (mod->RenderUpdate2) mod->RenderUpdate2(commandBuffer);
 		}, "render");
+		
+		// Fog
+		RunFogCommands(commandBuffer);
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 		
-		// Run Ray Tracing
-		RunRayTracingCommands(commandBuffer);
+		// // Run Ray Tracing
+		// RunRayTracingCommands(commandBuffer);
 		
 		{// Wait for ray-tracing to finish before calling any fragment shader (overlay and post processing)
 			VkMemoryBarrier memoryBarrier {
@@ -1275,6 +1440,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set1_raytracing.AddBinding_imageView(1, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
+		{r->descriptorSets["set1_fog_raster"] = &set1_fog_raster;
+			set1_fog_raster.AddBinding_combinedImageSampler(0, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		}
+		
 		{r->descriptorSets["set1_post"] = &set1_post;
 			int i = 0;
 			set1_post.AddBinding_combinedImageSampler(i++, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1308,6 +1477,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			// Add specific set 1 to specific layout lists
 			pipelineLayouts["pl_raytracing"]->AddDescriptorSet(&set1_raytracing);
+			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_fog_raster);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
@@ -1320,6 +1490,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		V4D_MODULE_FUNC(void, ConfigureShaders) {
 			ConfigureRayTracingShaders();
+			ConfigureFogShaders();
 			ConfigurePostProcessingShaders();
 			ConfigureOverlayShaders();
 		}
@@ -1504,6 +1675,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Ray Tracing
 			CreateRayTracingPipeline();
 			
+			// Fog
+			CreateFogPipeline();
+			
 			// Post Processing
 			CreatePostProcessingPipeline();
 		}
@@ -1517,6 +1691,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Ray Tracing
 			DestroyRayTracingPipeline();
+			
+			// Fog
+			DestroyFogPipeline();
 			
 			// Post Processing
 			DestroyPostProcessingPipeline();

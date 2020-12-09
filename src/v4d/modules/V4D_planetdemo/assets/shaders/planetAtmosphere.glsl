@@ -1,5 +1,5 @@
-#include "core.glsl"
-#include "v4d/modules/V4D_hybrid/glsl_includes/pl_fog_raster.glsl"
+#define NO_GLOBAL_BUFFERS
+#include "v4d/modules/V4D_raytracing/glsl_includes/pl_fog_raster.glsl"
 
 const int NB_SUNS = 3;
 
@@ -69,7 +69,7 @@ void main() {
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
-	float depthDistance = subpassLoad(in_img_gBuffer_2).w;
+	float depthDistance = texture(tex_img_depth, gl_FragCoord.xy).g;
 	
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
 	depthDistance = max(minStepSize, depthDistance);
@@ -179,12 +179,7 @@ void main() {
 				vec3 posLightScreenSpace = posLightNDC * vec3(0.5, 0.5, 0) + vec3(0.5, 0.5, -posLightViewSpace.z);
 				
 				if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
-					float depth;
-					if (RayTracedVisibility) {
-						depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
-					} else {
-						depth = texture(tex_img_rasterDepth, posLightScreenSpace.xy).r;
-					}
+					float depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
 					if (depth > lightRayTravelDepthMax) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
 				}
 				

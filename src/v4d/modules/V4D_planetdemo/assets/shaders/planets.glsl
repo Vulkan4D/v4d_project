@@ -1,14 +1,3 @@
-#include "core.glsl"
-
-// #define MAX_PLANETS 1
-// layout(set = 3, binding = 0) readonly buffer PlanetBuffer {dmat4 planets[];};
-// layout(set = 3, binding = 0) readonly buffer PlanetBuffer {vec4 planets[];};
-
-#common .*rchit|.*rint
-
-#include "v4d/modules/V4D_hybrid/glsl_includes/rtx.glsl"
-#include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_rays.glsl"
-
 #common .*comp
 
 #include "noise.glsl"
@@ -52,7 +41,7 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
-#common terrain.*comp|terrain.rchit|terrain.frag
+#common terrain.*comp|terrain.rchit
 
 layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 
@@ -105,125 +94,64 @@ void main() {
 #############################################################
 #shader terrain.rchit
 
+#define RAY_TRACING
+#include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
+
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
-
-#include "rtx_fragment.glsl"
+layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
 void main() {
-	Fragment fragment = GetHitFragment(true);
-
-	vec3 tangentX = normalize(cross(fragment.geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, fragment.viewSpaceNormal));
-	vec3 tangentY = normalize(cross(fragment.viewSpaceNormal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, fragment.viewSpaceNormal); // viewSpace TBN
-	vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
-	vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
-	vec2 uv = (fragment.uv*uvMult+uvOffset);
-	vec4 bump = GetBumpMap(uv, fragment.uv);
-	vec3 normal = normalize(TBN * bump.xyz);
+	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
-	ray.customData = GenerateCustomData(fragment.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
-	ray.viewSpacePosition = fragment.hitPoint;
-	ray.viewSpaceNormal = normal;
-	ray.albedo = fragment.color.rgb;
-	ray.emit = 0;
-	ray.uv = PackUVasFloat(fragment.uv);
+	uint i0 = GetIndex(0);
+	uint i1 = GetIndex(1);
+	uint i2 = GetIndex(2);
+	
+	// Interpolate fragment
+	vec3 barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
+	// vec3 pos = (
+	// 	+ GetVertexPosition(i0) * barycentricCoords.x
+	// 	+ GetVertexPosition(i1) * barycentricCoords.y
+	// 	+ GetVertexPosition(i2) * barycentricCoords.z
+	// );
+	vec3 normal = normalize(
+		+ GetVertexNormal(i0) * barycentricCoords.x
+		+ GetVertexNormal(i1) * barycentricCoords.y
+		+ GetVertexNormal(i2) * barycentricCoords.z
+	);
+	vec4 color = HasVertexColor()? (
+		+ GetVertexColor(i0) * barycentricCoords.x
+		+ GetVertexColor(i1) * barycentricCoords.y
+		+ GetVertexColor(i2) * barycentricCoords.z
+	) : vec4(0);
+	vec2 uv = HasVertexUV()? (
+		+ GetVertexUV(i0) * barycentricCoords.x
+		+ GetVertexUV(i1) * barycentricCoords.y
+		+ GetVertexUV(i2) * barycentricCoords.z
+	) : vec2(0);
+	
+	
+	
+	// vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, normal));
+	// vec3 tangentY = normalize(cross(normal, tangentX));
+	// mat3 TBN = mat3(tangentX, tangentY, normal); // viewSpace TBN
+	// vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
+	// vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
+	// vec2 uv = (fragment.uv*uvMult+uvOffset);
+	// vec4 bump = GetBumpMap(uv, fragment.uv);
+	// normal = normalize(TBN * bump.xyz);
+	
+	
+	
+	ray.albedo = color.rgb;
+	// ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
+	ray.normal = normal;
+	ray.emission = vec3(0);
+	ray.position = hitPoint;
+	ray.refractionIndex = 0.0;
 	ray.metallic = -0.07;
 	ray.roughness = 0.7;
 	ray.distance = gl_HitTEXT;
 }
 
-
-###########################################
-#shader terrain.frag
-
-#include "v4d/modules/V4D_hybrid/glsl_includes/pl_visibility_raster.glsl"
-#include "v4d/modules/V4D_hybrid/glsl_includes/V2F.glsl"
-
-layout(location = 0) in V2F v2f;
-
-void main() {
-	GeometryInstance geometryInstance = GetGeometryInstance(geometryIndex);
-	vec3 tangentX = normalize(cross(geometryInstance.normalViewTransform * vec3(0,1,0)/* fixed arbitrary vector in object space */, v2f.normal));
-	vec3 tangentY = normalize(cross(v2f.normal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, v2f.normal); // viewSpace TBN
-	vec2 uvOffset = geometryInstance.custom3f.xy;
-	vec2 uvMult = vec2(geometryInstance.custom3f.z);
-	vec2 uv = (v2f.uv*uvMult+uvOffset);
-	vec4 bump = GetBumpMap(uv, v2f.uv);
-	vec3 normal = normalize(TBN * bump.xyz);
-
-	pbrGBuffers.viewSpacePosition = v2f.pos.xyz;
-	pbrGBuffers.viewSpaceNormal = normal;
-	// pbrGBuffers.viewSpaceNormal = v2f.normal;
-	pbrGBuffers.uv = PackUVasFloat(v2f.uv);
-	pbrGBuffers.albedo = v2f.color.rgb;
-	pbrGBuffers.emit = 0;
-	pbrGBuffers.metallic = -0.07;
-	pbrGBuffers.roughness = 0.7;
-	
-	pbrGBuffers.distance = v2f.pos.w;
-	WritePbrGBuffers();
-	WriteCustomBuffer(objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
-}
-
-
-// #############################################################
-// #shader atmosphere.rint
-
-// hitAttributeEXT ProceduralGeometry sphereGeomAttr;
-
-// void main() {
-// 	ProceduralGeometry geom = GetProceduralGeometry(gl_InstanceCustomIndexEXT);
-// 	vec3 spherePosition = geom.geometryInstance.viewPosition;
-// 	float sphereRadius = geom.aabbMax.x;
-	
-// 	const vec3 origin = gl_WorldRayOriginEXT;
-// 	const vec3 direction = gl_WorldRayDirectionEXT;
-// 	const float tMin = gl_RayTminEXT;
-// 	const float tMax = gl_RayTmaxEXT;
-
-// 	const vec3 oc = origin - spherePosition;
-// 	const float a = dot(direction, direction);
-// 	const float b = dot(oc, direction);
-// 	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
-// 	const float discriminant = b * b - a * c;
-
-// 	if (discriminant >= 0) {
-// 		const float discriminantSqrt = sqrt(discriminant);
-// 		const float t1 = (-b - discriminantSqrt) / a;
-// 		const float t2 = (-b + discriminantSqrt) / a;
-
-// 		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
-// 			sphereGeomAttr = geom;
-// 			reportIntersectionEXT((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
-// 		}
-// 	}
-// }
-
-
-// #############################################################
-// #shader atmosphere.rchit
-
-// hitAttributeEXT ProceduralGeometry sphereGeomAttr;
-
-// layout(location = 0) rayPayloadInEXT RayPayload_visibility ray;
-
-// void main() {
-// 	const vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-// 	vec4 color = sphereGeomAttr.color;
-	
-// 	// Calculate normal for a sphere
-// 	const vec3 normal = normalize(hitPoint - sphereGeomAttr.geometryInstance.viewPosition);
-	
-// 	ray.customData = GenerateCustomData(sphereGeomAttr.objectIndex, /*type8*/0, /*flags32*/0, /*custom32*/0, /*custom32*/0);
-// 	ray.viewSpacePosition = hitPoint;
-// 	ray.viewSpaceNormal = normal;
-// 	ray.albedo = color.rgb;
-// 	ray.emit = 0;
-// 	ray.uv = 0;
-// 	ray.metallic = 0.0;
-// 	ray.roughness = 0.0;
-// 	ray.distance = gl_HitTEXT;
-// }
