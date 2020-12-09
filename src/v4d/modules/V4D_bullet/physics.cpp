@@ -93,14 +93,14 @@ glm::dmat4 BulletToGlm(const btTransform& t) {
 }
 
 struct PhysicsObject : btMotionState {
-	std::weak_ptr<v4d::scene::RenderableGeometryEntity> entityInstance;
+	std::weak_ptr<v4d::graphics::RenderableGeometryEntity> entityInstance;
 	btTransform centerOfMassOffset {};
 	btRigidBody* rigidbody = nullptr;
 	bool isGroupedCollisionShape = false;
 	btCollisionShape* groupedCollisionShape = nullptr;
 	std::vector<btCollisionShape*> localCollisionShapes {};
 	
-	PhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
+	PhysicsObject(std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
 		centerOfMassOffset.setIdentity();
 	}
 	
@@ -177,7 +177,7 @@ struct PhysicsObject : btMotionState {
 								auto* mesh = new btTriangleMesh();
 								globalTriangleMeshes.push_back(mesh);
 								
-								auto generateColliderMeshFunc = [&physics, &mesh](v4d::scene::Mesh::VertexPosition* vertices){
+								auto generateColliderMeshFunc = [&physics, &mesh](v4d::graphics::Mesh::VertexPosition* vertices){
 									for (int i = 0; i < physics->colliderMeshIndices.size(); i+=3) {
 										btVector3 v0(vertices[physics->colliderMeshIndices[i]].x, vertices[physics->colliderMeshIndices[i]].y, vertices[physics->colliderMeshIndices[i]].z);
 										btVector3 v1(vertices[physics->colliderMeshIndices[i+1]].x, vertices[physics->colliderMeshIndices[i+1]].y, vertices[physics->colliderMeshIndices[i+1]].z);
@@ -348,13 +348,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		// Loop through all physics components within active entities
-		v4d::scene::RenderableGeometryEntity::physicsComponents.ForEach_LockEntities([](int32_t entityInstanceIndex, auto& physics){
+		v4d::graphics::RenderableGeometryEntity::physicsComponents.ForEach_LockEntities([](int32_t entityInstanceIndex, auto& physics){
 			// Fetch/Add physics object
 			PhysicsObject* physicsObj;
 			try {
 				physicsObj = physicsObjects.at(physics.uniqueId);
 			} catch(...) {
-				physicsObj = (physicsObjects[physics.uniqueId] = new PhysicsObject(v4d::scene::RenderableGeometryEntity::Get(entityInstanceIndex)));
+				physicsObj = (physicsObjects[physics.uniqueId] = new PhysicsObject(v4d::graphics::RenderableGeometryEntity::Get(entityInstanceIndex)));
 			}
 			
 			// Update physics objects

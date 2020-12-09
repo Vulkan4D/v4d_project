@@ -3,6 +3,7 @@
 #include "common.hh"
 #include "actions.hh"
 #include "../V4D_flycam/common.hh"
+#include "../V4D_raytracing/camera_options.hh"
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
@@ -12,6 +13,8 @@ using namespace v4d::scene;
 using namespace v4d::networking;
 using namespace networking::action;
 using namespace v4d::modular;
+using namespace v4d::graphics;
+using namespace v4d::graphics::Mesh;
 
 V4D_Mod* mainRenderModule = nullptr;
 V4D_Mod* mainMultiplayerModule = nullptr;
