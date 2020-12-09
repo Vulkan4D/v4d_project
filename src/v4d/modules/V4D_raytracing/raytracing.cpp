@@ -37,8 +37,8 @@ std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos 
 std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
 
 #pragma region Buffers
-	StagingBuffer<Mesh::ModelInfo, MAX_RENDERABLE_ENTITY_INSTANCES, 1> renderableEntityInstanceBuffer {};
-	StagingBuffer<Camera, 1> cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
+	StagingBuffer<Mesh::ModelInfo, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
+	StagingBuffer<Camera> cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
 	StagingBuffer<RenderableGeometryEntity::LightSource, MAX_ACTIVE_LIGHTS> lightSourcesBuffer {};
 	StagingBuffer<RayTracingBLASInstance, RAY_TRACING_TLAS_MAX_INSTANCES> rayTracingInstanceBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR};
 	uint32_t nbRayTracingInstances = 0;
@@ -873,13 +873,12 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		// currentRenderableEntities[r->currentFrameInFlight].clear();
 		
 		RenderableGeometryEntity::ForEach([&nbActiveLights](auto entity){
-			if (entity->GetIndex() == -1) return;
+			if (entity->GetIndex() == -1) {
+				LOG_ERROR("Entity has been removed")
+				return;
+			}
 			
 			if (!entity->generated) {
-				renderableEntityInstanceBuffer[entity->GetIndex()].moduleVen = entity->moduleId.vendor;
-				renderableEntityInstanceBuffer[entity->GetIndex()].moduleId = entity->moduleId.module;
-				renderableEntityInstanceBuffer[entity->GetIndex()].objId = entity->objId;
-				renderableEntityInstanceBuffer[entity->GetIndex()].customData = entity->customData;
 				// Generate/Load
 				entity->generator(entity.get());
 				entity->generated = true;
@@ -891,7 +890,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 					entity->geometryData.indexCount = indexData->count;
 					entity->geometryData.indexSize = sizeof(Mesh::Index);
 
-					renderableEntityInstanceBuffer[entity->GetIndex()].indices = entity->geometryData.indexBuffer.deviceAddress;
+					entity->modelInfo.indices = entity->geometryData.indexBuffer.deviceAddress;
 				}
 				// Vertex Positions
 				if (auto vertexData = entity->meshVertexPosition.Lock(); vertexData) {
@@ -900,32 +899,33 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 					entity->geometryData.vertexCount = vertexData->count;
 					entity->geometryData.vertexSize = sizeof(Mesh::VertexPosition);
 					
-					renderableEntityInstanceBuffer[entity->GetIndex()].vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
+					entity->modelInfo.vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
 				} else if (auto proceduralVertexData = entity->proceduralVertexAABB.Lock(); proceduralVertexData) {
 					entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(proceduralVertexData->deviceBuffer);
 					entity->geometryData.vertexOffset = 0;
 					entity->geometryData.vertexCount = proceduralVertexData->count;
 					entity->geometryData.vertexSize = sizeof(Mesh::ProceduralVertexAABB);
 					
-					renderableEntityInstanceBuffer[entity->GetIndex()].vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
+					entity->modelInfo.vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
 				}
 				// Vertex normals
 				if (auto vertexData = entity->meshVertexNormal.Lock(); vertexData) {
-					renderableEntityInstanceBuffer[entity->GetIndex()].vertexNormals = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+					entity->modelInfo.vertexNormals = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
 				}
 				// Vertex colors
 				if (auto vertexData = entity->meshVertexColor.Lock(); vertexData) {
-					renderableEntityInstanceBuffer[entity->GetIndex()].vertexColors = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+					entity->modelInfo.vertexColors = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
 				}
 				// Vertex UVs
 				if (auto vertexData = entity->meshVertexUV.Lock(); vertexData) {
-					renderableEntityInstanceBuffer[entity->GetIndex()].vertexUVs = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
+					entity->modelInfo.vertexUVs = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
 				}
 				// Transform
 				if (auto transformData = entity->transform.Lock(); transformData) {
-					renderableEntityInstanceBuffer[entity->GetIndex()].transform = r->renderingDevice->GetBufferDeviceAddress(transformData->deviceBuffer);
+					entity->modelInfo.transform = r->renderingDevice->GetBufferDeviceAddress(transformData->deviceBuffer);
 				}
 			}
+			
 			if (!entity->blas && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
 				entity->blas = std::make_shared<Blas>();
 				if (entity->meshVertexPosition) {
@@ -942,23 +942,20 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 			// add BLAS instance to TLAS
 			if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 				// Update and Assign transform
-				if (auto transform = entity->transform.Lock(); transform && transform->data && entity->blas) {
-					
-					if (!r->renderingDevice->TouchAllocation(entity->blas->accelerationStructureAllocation)) {
-						LOG_DEBUG("AddRayTracingBlasBuild ALLOCATION LOST")
+				if (auto transform = entity->transform.Lock(); transform && transform->data) {
+					if (entity->blas) {
+						int index = nbRayTracingInstances++;
+						rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
+						rayTracingInstanceBuffer[index].accelerationStructureReference = entity->blas->deviceAddress;
+						rayTracingInstanceBuffer[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
+						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
+						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
+						rayTracingInstanceBuffer[index].transform = glm::transpose(transform->data->modelView);
+						
+						transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
+						transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
+						transform->dirtyOnDevice = true;
 					}
-					
-					int index = nbRayTracingInstances++;
-					rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
-					rayTracingInstanceBuffer[index].accelerationStructureReference = entity->blas->deviceAddress;
-					rayTracingInstanceBuffer[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
-					rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
-					rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
-					rayTracingInstanceBuffer[index].transform = glm::transpose(transform->data->modelView);
-					
-					transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
-					transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
-					transform->dirtyOnDevice = true;
 					
 					// Light Source
 					if (nbActiveLights < MAX_ACTIVE_LIGHTS) {
@@ -968,11 +965,13 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 							++nbActiveLights;
 						});
 					}
+				
 				} else {
-					// LOG_ERROR("An entity is missing a transform component or blas")
+					LOG_ERROR("An entity is missing a transform component or blas")
 				}
 			}
 			
+			renderableEntityInstanceBuffer[entity->GetIndex()] = entity->modelInfo;
 			currentRenderableEntities[r->currentFrameInFlight][entity->GetIndex()] = entity;
 		});
 		

@@ -101,79 +101,79 @@ struct PhysicsObject : btMotionState {
 	std::vector<btCollisionShape*> localCollisionShapes {};
 	
 	PhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
-		if (entity) RefreshCenterOfMass();
-	}
-	
-	void RefreshCenterOfMass() {
-		auto entity = entityInstance.lock();if(!entity)return;
 		centerOfMassOffset.setIdentity();
-		auto physics = entity->physics.Lock();if(!physics)return;
-		centerOfMassOffset.setOrigin(btVector3(physics->centerOfMass.x, physics->centerOfMass.y, physics->centerOfMass.z));
 	}
 	
 	virtual void getWorldTransform(btTransform& centerOfMassWorldTrans) const override {
-		auto entity = entityInstance.lock();if(!entity)return;
+		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1 || !entity->transform)return;
 		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
 		centerOfMassWorldTrans = GlmToBullet(transform->data->worldTransform) * centerOfMassOffset.inverse();
 	}
 
 	//Bullet only calls the update of worldtransform for active objects
 	virtual void setWorldTransform(const btTransform& centerOfMassWorldTrans) override {
-		auto entity = entityInstance.lock();if(!entity)return;
+		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1 || !entity->transform)return;
 		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
 		transform->data->worldTransform = BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset);
 	}
 	
-	void RefreshCollisionShape() {
-		// Delete grouped collision shape
-		if (groupedCollisionShape && isGroupedCollisionShape) {
-			for (int i = 0; i < globalCollisionShapes.size(); ++i) {
-				if (globalCollisionShapes[i] == groupedCollisionShape) {
-					if (i != globalCollisionShapes.size()-1) globalCollisionShapes[i] = globalCollisionShapes[globalCollisionShapes.size()-1];
-					globalCollisionShapes.pop_back();
-					break;
-				}
-			}
-			delete groupedCollisionShape;
-		}
-		groupedCollisionShape = nullptr;
+	void Update() {
+		auto entity = entityInstance.lock();if(!entity)return;
+		auto physics = entity->physics.Lock();if(!physics)return;
+		physics->physicsDirty = false;
 		
-		{// calculate geometries shapes
-			auto entity = entityInstance.lock();if(!entity)return;
-			auto physics = entity->physics.Lock();
-			btCollisionShape* collisionShape = (btCollisionShape*)physics->colliderShapeObject;
-			if (physics->colliderDirty || ((!physics || !physics->physicsActive) && collisionShape)) {
-				physics->colliderDirty = false;
-				// Delete old collision shape
-				if (collisionShape) {
-					for (int i = 0; i < globalCollisionShapes.size(); ++i) {
-						if (globalCollisionShapes[i] == collisionShape) {
-							if (i != globalCollisionShapes.size()-1) globalCollisionShapes[i] = globalCollisionShapes[globalCollisionShapes.size()-1];
-							globalCollisionShapes.pop_back();
-							break;
-						}
+		{// Update Center Of Mass
+			centerOfMassOffset.setIdentity();
+			centerOfMassOffset.setOrigin(btVector3(physics->centerOfMass.x, physics->centerOfMass.y, physics->centerOfMass.z));
+		}
+		
+		{// Update Collision Shape
+			// Delete grouped collision shape
+			if (groupedCollisionShape && isGroupedCollisionShape) {
+				for (int i = 0; i < globalCollisionShapes.size(); ++i) {
+					if (globalCollisionShapes[i] == groupedCollisionShape) {
+						if (i != globalCollisionShapes.size()-1) globalCollisionShapes[i] = globalCollisionShapes[globalCollisionShapes.size()-1];
+						globalCollisionShapes.pop_back();
+						break;
 					}
-					for (int i = 0; i < localCollisionShapes.size(); ++i) {
-						if (localCollisionShapes[i] == collisionShape) {
-							if (i != localCollisionShapes.size()-1) localCollisionShapes[i] = localCollisionShapes[localCollisionShapes.size()-1];
-							localCollisionShapes.pop_back();
-							break;
-						}
-					}
-					delete collisionShape;
-					collisionShape = nullptr;
 				}
-				// Add new collision shape
-				if (physics && physics->physicsActive && physics->colliderType != v4d::scene::PhysicsInfo::ColliderType::NONE) {
-					switch (physics->colliderType) {
-						case v4d::scene::PhysicsInfo::ColliderType::SPHERE:
-							collisionShape = new btSphereShape(btScalar(physics->boundingDistance));
-						break;
-						case v4d::scene::PhysicsInfo::ColliderType::BOX:
-							collisionShape = new btBoxShape(btVector3(btScalar(physics->boundingBoxSize.x), btScalar(physics->boundingBoxSize.y), btScalar(physics->boundingBoxSize.z)));
-						break;
-						case v4d::scene::PhysicsInfo::ColliderType::MESH:
-							{
+				delete groupedCollisionShape;
+			}
+			groupedCollisionShape = nullptr;
+			
+			{// calculate geometries shapes
+				btCollisionShape* collisionShape = (btCollisionShape*)physics->colliderShapeObject;
+				if (physics->colliderDirty) {
+					physics->colliderDirty = false;
+					// Delete old collision shape
+					if (collisionShape) {
+						for (int i = 0; i < globalCollisionShapes.size(); ++i) {
+							if (globalCollisionShapes[i] == collisionShape) {
+								if (i != globalCollisionShapes.size()-1) globalCollisionShapes[i] = globalCollisionShapes[globalCollisionShapes.size()-1];
+								globalCollisionShapes.pop_back();
+								break;
+							}
+						}
+						for (int i = 0; i < localCollisionShapes.size(); ++i) {
+							if (localCollisionShapes[i] == collisionShape) {
+								if (i != localCollisionShapes.size()-1) localCollisionShapes[i] = localCollisionShapes[localCollisionShapes.size()-1];
+								localCollisionShapes.pop_back();
+								break;
+							}
+						}
+						delete collisionShape;
+						collisionShape = nullptr;
+					}
+					// Add new collision shape
+					if (physics && physics->colliderType != v4d::scene::PhysicsInfo::ColliderType::NONE) {
+						switch (physics->colliderType) {
+							case v4d::scene::PhysicsInfo::ColliderType::SPHERE:
+								collisionShape = new btSphereShape(btScalar(physics->boundingDistance));
+							break;
+							case v4d::scene::PhysicsInfo::ColliderType::BOX:
+								collisionShape = new btBoxShape(btVector3(btScalar(physics->boundingBoxSize.x), btScalar(physics->boundingBoxSize.y), btScalar(physics->boundingBoxSize.z)));
+							break;
+							case v4d::scene::PhysicsInfo::ColliderType::MESH:{
 								auto* mesh = new btTriangleMesh();
 								globalTriangleMeshes.push_back(mesh);
 								
@@ -199,73 +199,66 @@ struct PhysicsObject : btMotionState {
 								} catch(...){
 									LOG_ERROR("Exception occured in Bullet BVH generation from triangle mesh")
 								}
-							}
-						break;
-						case v4d::scene::PhysicsInfo::ColliderType::STATIC_PLANE:{
-							auto transform = entity->transform.Lock();
-							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), transform->data->worldTransform[3].z);
-						}break;
-						// case v4d::scene::PhysicsInfo::ColliderType::HEIGHTFIELD:
-						// 	collisionShape = 
-						// break;
+							}break;
+							case v4d::scene::PhysicsInfo::ColliderType::STATIC_PLANE:{
+								auto transform = entity->transform.Lock();
+								collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), transform->data->worldTransform[3].z);
+							}break;
+							// case v4d::scene::PhysicsInfo::ColliderType::HEIGHTFIELD:
+							// 	collisionShape = 
+							// break;
+						}
+						if (collisionShape) {
+							globalCollisionShapes.push_back(collisionShape);
+							localCollisionShapes.push_back(collisionShape);
+						}
 					}
-					if (collisionShape) {
-						globalCollisionShapes.push_back(collisionShape);
-						localCollisionShapes.push_back(collisionShape);
-						physics->colliderShapeObject = collisionShape;
-					}
+					// Assign collision shape
+					physics->colliderShapeObject = collisionShape;
 				}
-				// Assign collision shape
-				physics->colliderShapeObject = collisionShape;
+			}
+			
+			if (localCollisionShapes.size() == 1) {
+				groupedCollisionShape = localCollisionShapes[0];
+				isGroupedCollisionShape = false;
+			} else if (localCollisionShapes.size() > 1) {
+				//TODO generate one group collision shape that shall contain all sub-geometries
+				LOG_WARN("groupedCollisionShape Not implemented yet")
+				isGroupedCollisionShape = true;
+			} else if (isGroupedCollisionShape) {
+				isGroupedCollisionShape = false;
 			}
 		}
-		
-		if (localCollisionShapes.size() == 1) {
-			groupedCollisionShape = localCollisionShapes[0];
-			isGroupedCollisionShape = false;
-		} else if (localCollisionShapes.size() > 1) {
-			//TODO generate one group collision shape that shall contain all sub-geometries
-			LOG_WARN("groupedCollisionShape Not implemented yet")
-			isGroupedCollisionShape = true;
-		} else if (isGroupedCollisionShape) {
-			isGroupedCollisionShape = false;
+
+		{// Update RigidBody
+			RemoveRigidbody();
+			
+			if (groupedCollisionShape == nullptr) {
+				LOG_ERROR("PhysicsObject has no collision shape")
+				return;
+			}
+			
+			btVector3 localInertia {0,0,0};
+			btScalar mass = physics->mass;
+			if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
+				// groupedCollisionShape->calculateLocalInertia(mass, localInertia);
+			} else {
+				mass = 0;
+			}
+			
+			btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, this, groupedCollisionShape, localInertia);
+			
+			//TODO set additional stuff in rbInfo
+			rbInfo.m_restitution = 0.7;
+			
+			rigidbody = new btRigidBody(rbInfo);
+			rigidbody->setUserPointer(this);
+			if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::KINEMATIC) {
+				rigidbody->setCollisionFlags(rigidbody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
+				rigidbody->setActivationState(DISABLE_DEACTIVATION);
+			}
+			globalDynamicsWorld->addRigidBody(rigidbody);
 		}
-	}
-	
-	void RefreshRigidbody() {
-		auto entity = entityInstance.lock();if(!entity)return;
-		RemoveRigidbody();
-		if (groupedCollisionShape == nullptr) {
-			LOG_ERROR("PhysicsObject has no collision shape")
-			return;
-		}
-		btVector3 localInertia {0,0,0};
-		
-		auto physics = entity->physics.Lock();if(!physics)return;
-		btScalar mass = physics->mass;
-		if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
-			// groupedCollisionShape->calculateLocalInertia(mass, localInertia);
-		} else {
-			mass = 0;
-		}
-		btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, this, groupedCollisionShape, localInertia);
-		
-		//TODO set additional stuff in rbInfo
-		rbInfo.m_restitution = 0.7;
-		
-		rigidbody = new btRigidBody(rbInfo);
-		rigidbody->setUserPointer(this);
-		if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::KINEMATIC) {
-			rigidbody->setCollisionFlags(rigidbody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
-			rigidbody->setActivationState(DISABLE_DEACTIVATION);
-		}
-		globalDynamicsWorld->addRigidBody(rigidbody);
-	}
-	
-	void Refresh() {
-		RefreshCenterOfMass();
-		RefreshCollisionShape();
-		RefreshRigidbody();
 	}
 	
 	void RemoveRigidbody() {
@@ -276,22 +269,15 @@ struct PhysicsObject : btMotionState {
 		}
 	}
 	
+	~PhysicsObject() {
+		RemoveRigidbody();
+	}
+	
 };
 
+std::unordered_map<uint32_t, PhysicsObject*> physicsObjects {};
 
-
-
-void AddPhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity) {
-	//TODO Instantiate a new PhysicsObject
-}
-
-void UpdatePhysicsObject(std::shared_ptr<v4d::scene::RenderableGeometryEntity> entity) {
-	//TODO call Refresh on PhysicsObject
-}
-
-void CleanupObjects() {
-	//TODO Delete all PhysicsObjects
-}
+#define PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
 
 V4D_MODULE_CLASS(V4D_Mod) {
 	
@@ -316,19 +302,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
-		CleanupObjects();
+		for (auto&[i,obj] : physicsObjects) delete obj;
+		physicsObjects.clear();
 		
 		for (int i = 0; i < globalCollisionShapes.size(); i++) {
-			auto* entity = globalCollisionShapes[i];
+			auto* o = globalCollisionShapes[i];
 			globalCollisionShapes[i] = 0;
-			delete entity;
+			delete o;
 		}
 		globalCollisionShapes.clear();
 		
 		for (int i = 0; i < globalTriangleMeshes.size(); i++) {
-			auto* entity = globalTriangleMeshes[i];
+			auto* o = globalTriangleMeshes[i];
 			globalTriangleMeshes[i] = 0;
-			delete entity;
+			delete o;
 		}
 		globalTriangleMeshes.clear();
 		
@@ -340,64 +327,75 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+		#ifdef PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
+			static std::vector<PhysicsObject*> objectsToRefreshCollisionShape {};
+			objectsToRefreshCollisionShape.clear();
+		#endif
+		
+		// Set Gravity vector
 		globalDynamicsWorld->setGravity(btVector3(scene->gravityVector.x, scene->gravityVector.y, scene->gravityVector.z));
 		
+		// Erase physics objects that have been destroyed
+		for (auto it = physicsObjects.begin(); it != physicsObjects.end();) {
+			auto&[i, physicsObj] = *it;
+			auto e = physicsObj->entityInstance.lock();
+			if (!e || e->GetIndex() == -1 || !e->physics || !e->transform) {
+				delete physicsObj;
+				it = physicsObjects.erase(it);
+			} else {
+				++it;
+			}
+		}
 		
-		// // Refresh info from scene objects
-		// v4d::scene::RenderableGeometryEntity::ForEach([&tmpPhysicsActive](auto& entity){
-		// 	auto physics = entity->physics.Lock();
-		// 	if(!physics || !physics->physicsActive) {
-		// 		try {
-		// 			auto physicsObject = physicsObjects.at(entity.get());
-		// 			physicsObject.RemoveRigidbody();
-		// 		}catch(...){}
-		// 		return;
-		// 	}
-		// 	if ((tmpPhysicsActive = physics->physicsActive) || physics->physicsDirty) {
-		// 		if (tmpPhysicsActive && !physics->physicsObject && physics->rigidbodyType != v4d::scene::PhysicsInfo::RigidBodyType::NONE) {
-		// 			AddPhysicsObject(entity);
-		// 		}
-		// 		if (physics->physicsDirty) {
-		// 			if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::NONE) {
-		// 				if (physics->physicsObject) {
-		// 					std::lock_guard lock(objectsToRemoveMutex);
-		// 					objectsToRemove.emplace(entity);
-		// 					physics->physicsDirty = false;
-		// 					return;
-		// 				}
-		// 			} else if (tmpPhysicsActive) {
-		// 				objectsToRefresh.emplace(entity);
-		// 			}
-		// 			physics->physicsDirty = false;
-		// 		}
-		// 		if (tmpPhysicsActive && (physics->addedForce || physics->physicsForceImpulses.size() > 0) && physics->physicsObject) {
-		// 			auto* rb = ((PhysicsObject*)physics->physicsObject)->rigidbody;
-		// 			if (rb) {
-		// 				if (physics->addedForce) {
-		// 					if (physics->forcePoint.length() == 0) {
-		// 						rb->applyCentralForce(btVector3(physics->forceDirection.x, physics->forceDirection.y, physics->forceDirection.z));
-		// 					} else {
-		// 						rb->applyForce(btVector3(physics->forceDirection.x, physics->forceDirection.y, physics->forceDirection.z), btVector3(physics->forcePoint.x, physics->forcePoint.y, physics->forcePoint.z));
-		// 					}
-		// 				}
-		// 				if (physics->physicsForceImpulses.size() > 0) {
-		// 					auto&[impulseDir, atPoint] = physics->physicsForceImpulses.front();
-		// 					if (atPoint.length() == 0) {
-		// 						rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
-		// 					} else {
-		// 						rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
-		// 					}
-		// 					physics->physicsForceImpulses.pop();
-		// 				}
-		// 			}
-		// 		}
-		// 	}
-		// });
+		// Loop through all physics components within active entities
+		v4d::scene::RenderableGeometryEntity::physicsComponents.ForEach_LockEntities([](int32_t entityInstanceIndex, auto& physics){
+			// Fetch/Add physics object
+			PhysicsObject* physicsObj;
+			try {
+				physicsObj = physicsObjects.at(physics.uniqueId);
+			} catch(...) {
+				physicsObj = (physicsObjects[physics.uniqueId] = new PhysicsObject(v4d::scene::RenderableGeometryEntity::Get(entityInstanceIndex)));
+			}
+			
+			// Update physics objects
+			if (physics.physicsDirty) {
+				#ifdef PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
+					objectsToRefreshCollisionShape.push_back(physicsObj);
+				#else
+					physicsObj->Update();
+				#endif
+			}
+			
+			// Apply forces
+			if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
+				auto* rb = physicsObj->rigidbody;
+				if (rb) {
+					if (physics.addedForce) {
+						if (physics.forcePoint.length() == 0) {
+							rb->applyCentralForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z));
+						} else {
+							rb->applyForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z), btVector3(physics.forcePoint.x, physics.forcePoint.y, physics.forcePoint.z));
+						}
+					}
+					if (physics.physicsForceImpulses.size() > 0) {
+						auto&[impulseDir, atPoint] = physics.physicsForceImpulses.front();
+						if (atPoint.length() == 0) {
+							rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+						} else {
+							rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
+						}
+						physics.physicsForceImpulses.pop();
+					}
+				}
+			}
+		});
 		
-		
-		
-		// Generate/Update collision shapes
-		//TODO call UpdatePhysicsObject on dirty objects
+		// Update physics objects
+		#ifdef PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
+			for (auto* physicsObj : objectsToRefreshCollisionShape) {
+				physicsObj->Update();
+			}
+		#endif
 		
 		// Physics Simulation
 		try {

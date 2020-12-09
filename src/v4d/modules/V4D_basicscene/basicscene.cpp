@@ -478,13 +478,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
 				obj->renderableGeometryEntityInstance = entity;
 				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
-				// entity->physics->SetBoxCollider(glm::vec3{0.5f});
 				entity->generator = [](RenderableGeometryEntity* entity){
 					entity->Prepare(r->renderingDevice, "aabb_cube");
 					entity->Add_proceduralVertexAABB();
 					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-0.5), glm::vec3(0.5)}});
 					entity->Add_meshVertexColor();
 					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.0f,1.0f,0.5f, 1.0f}});
+					// entity->physics->SetBoxCollider(glm::vec3{0.5f});
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
@@ -492,13 +492,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
-				entity->physics->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity){
 					entity->Prepare(r->renderingDevice, "aabb_sphere");
 					entity->Add_proceduralVertexAABB();
 					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColor();
 					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->physics->SetSphereCollider(radius);
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
@@ -506,14 +506,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
-				entity->physics->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity){
 					entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 					entity->Add_proceduralVertexAABB();
 					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColor();
 					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000.0f,100000.0f,100000.0f,100000.0f}});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000.0f, radius, 1000);
+					entity->physics->SetSphereCollider(radius);
 				};
 			}break;
 		}
