@@ -28,6 +28,7 @@ ClientSideObjects* clientSideObjects = nullptr;
 PlayerView* playerView = nullptr;
 
 Scene* scene = nullptr;
+Renderer* r = nullptr;
 
 void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 	std::lock_guard lock(clientActionQueueMutex);
@@ -41,6 +42,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
 		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
+	}
+	
+	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
+		r = _r;
 	}
 	
 	#pragma region Server
@@ -200,9 +205,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				try {
 					std::lock_guard lock(clientSideObjects->mutex);
 					auto obj = clientSideObjects->objects.at(id);
-					scene->cameraParent = obj->objectInstance;
-					obj->objectInstance->rayTracingMaskRemoved |= GEOMETRY_ATTR_PRIMARY_VISIBLE;
-					obj->objectInstance->SetGeometriesDirty();
+					scene->cameraParent = obj->renderableGeometryEntityInstance;
+					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+						entity->rayTracingMask &= ~GEOMETRY_ATTR_PRIMARY_VISIBLE;
+					}
 					playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
@@ -221,37 +227,58 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					// droneModel(obj);
-					// auto geom = droneModel.modelData->modelGeometry.lock();
-					// geom->colliderType = Geometry::ColliderType::SPHERE;
-					// geom->boundingDistance = 0.3;
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::NONE;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
+				entity->generator = [](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_cube");
+					entity->rayTracingMask = 0; // 0 makes it invisible
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-0.5), glm::vec3(0.5)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.0f,1.0f,0.5f, 1.0f}});
+					// entity->physics->SetBoxCollider(glm::vec3{0.5f});
+				};
 			}break;
 			case OBJECT_TYPE::Ball:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					obj->SetSphereGeometry("sphere", 1, {0.5,0.5,0.5, 1});
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-				obj->objectInstance->mass = 1;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 0.5f;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+				entity->generator = [radius](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_sphere");
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->physics->SetSphereCollider(radius);
+				};
 			}break;
 			case OBJECT_TYPE::Light:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					obj->SetSphereLightSource("light", 2, 100000);
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
-				obj->objectInstance->mass = 1;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 2;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
+				entity->generator = [radius](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "aabb_sphere.light");
+					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+					entity->Add_proceduralVertexAABB();
+					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor();
+					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000.0f, radius, 1000);
+					entity->physics->SetSphereCollider(radius);
+				};
 			}break;
 			case OBJECT_TYPE::Drone:{
-				(obj->objectInstance = scene->AddObjectInstance())->Configure([](ObjectInstance* obj){
-					droneModel(obj);
-					auto geom = droneModel.modelData->modelGeometry.lock();
-					geom->colliderType = Geometry::ColliderType::SPHERE;
-					geom->boundingDistance = 0.3;
-				});
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-				obj->objectInstance->mass = 1;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				obj->renderableGeometryEntityInstance = entity;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f);
+				entity->generator = [](RenderableGeometryEntity* entity){
+					entity->Prepare(r->renderingDevice, "default");
+					droneModel.Generate(r->renderingDevice, entity);
+					entity->physics->SetSphereCollider(0.4f);
+				};
 			}break;
 		}
 	}
