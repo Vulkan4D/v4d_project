@@ -138,7 +138,7 @@ struct LightSource {
 	vec3 position;
 	float radius;
 	vec3 color;
-	float reach;
+	float intensity;
 };
 layout(set = 0, binding = 3) buffer LightSources { LightSource lightSources[]; };
 

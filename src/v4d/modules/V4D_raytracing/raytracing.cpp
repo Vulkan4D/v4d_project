@@ -48,7 +48,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 
 #pragma region Descriptor Sets
 	DescriptorSet set0;
-	DescriptorSet set1_fog_raster;
+	DescriptorSet set1_raster;
 	DescriptorSet set1_raytracing;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
@@ -74,6 +74,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 #pragma endregion
 
 #pragma region Pipeline Layouts
+	PipelineLayout pl_raster;
 	PipelineLayout pl_fog_raster;
 	PipelineLayout pl_raytracing;
 	PipelineLayout pl_overlay;
@@ -89,11 +90,11 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	ShaderBindingTable sbt_raytracing {pl_raytracing, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rgen")};
 
 	// Transparent/Fog
-	RasterShaderPipeline shader_transparent {pl_fog_raster, {
+	RasterShaderPipeline shader_transparent {pl_raster, {
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.vert"),
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.transparent.frag"),
 	}};
-	RasterShaderPipeline shader_wireframe {pl_fog_raster, {
+	RasterShaderPipeline shader_wireframe {pl_raster, {
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.vert"),
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.wireframe.frag"),
 	}};
@@ -157,6 +158,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 		{"img_overlay", &img_overlay},
 	};
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
+		{"pl_raster", &pl_raster},
 		{"pl_fog_raster", &pl_fog_raster},
 		{"pl_raytracing", &pl_raytracing},
 		{"pl_overlay", &pl_overlay},
@@ -690,7 +692,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 #pragma endregion
 
 void ConfigureFogShaders() {
-	pl_fog_raster.AddPushConstant<RasterPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	pl_raster.AddPushConstant<RasterPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	
 	for (auto* s : shaderGroups["sg_fog"]) {
 		s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -720,45 +722,47 @@ void ConfigureFogShaders() {
 }
 
 void RunFogCommands(VkCommandBuffer commandBuffer) {
-	for (auto* s : shaderGroups["sg_fog"]) {
-		s->Execute(r->renderingDevice, commandBuffer);
-	}
-	for (auto* s : shaderGroups["sg_transparent"]) {
-		// Transparent
-		RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-			if (entity->raster_transparent) {
-				auto meshVertexPosition = entity->meshVertexPosition.Lock();
-				auto meshIndices = entity->meshIndices.Lock();
-				if (meshVertexPosition && meshIndices) {
-					s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-				} else if (meshVertexPosition) {
-					s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
-				} else {
-					s->SetData(3);
+	fogRenderPass.Begin(r->renderingDevice, commandBuffer, img_lit);
+		for (auto* s : shaderGroups["sg_fog"]) {
+			s->Execute(r->renderingDevice, commandBuffer);
+		}
+		for (auto* s : shaderGroups["sg_transparent"]) {
+			// Transparent
+			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+				if (entity->raster_transparent) {
+					auto meshVertexPosition = entity->meshVertexPosition.Lock();
+					auto meshIndices = entity->meshIndices.Lock();
+					if (meshVertexPosition && meshIndices) {
+						s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+					} else if (meshVertexPosition) {
+						s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+					} else {
+						s->SetData(3);
+					}
+					RasterPushConstant pushConstant {entity->GetIndex()};
+					s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 				}
-				RasterPushConstant pushConstant {entity->GetIndex()};
-				s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
-			}
-		});
-	}
-	for (auto* s : shaderGroups["sg_wireframe"]) {
-		// Wireframe
-		RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-			if (entity->raster_wireframe) {
-				auto meshVertexPosition = entity->meshVertexPosition.Lock();
-				auto meshIndices = entity->meshIndices.Lock();
-				if (meshVertexPosition && meshIndices) {
-					s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-				} else if (meshVertexPosition) {
-					s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
-				} else {
-					s->SetData(3);
+			});
+		}
+		for (auto* s : shaderGroups["sg_wireframe"]) {
+			// Wireframe
+			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+				if (entity->raster_wireframe) {
+					auto meshVertexPosition = entity->meshVertexPosition.Lock();
+					auto meshIndices = entity->meshIndices.Lock();
+					if (meshVertexPosition && meshIndices) {
+						s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+					} else if (meshVertexPosition) {
+						s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+					} else {
+						s->SetData(3);
+					}
+					RasterPushConstant pushConstant {entity->GetIndex()};
+					s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 				}
-				RasterPushConstant pushConstant {entity->GetIndex()};
-				s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
-			}
-		});
-	}
+			});
+		}
+	fogRenderPass.End(r->renderingDevice, commandBuffer);
 }
 
 #pragma region UI
@@ -904,7 +908,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		shader_overlay_lines.depthStencilState.depthTestEnable = false;
 		shader_overlay_lines.depthStencilState.depthWriteEnable = false;
 		shader_overlay_lines.dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
-		shader_overlay_lines.SetData(overlayLinesBuffer.buffer, 0);
 		
 		// Text
 		shader_overlay_text.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -912,7 +915,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		shader_overlay_text.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_text.depthStencilState.depthTestEnable = false;
 		shader_overlay_text.depthStencilState.depthWriteEnable = false;
-		shader_overlay_text.SetData(overlayTextBuffer.buffer, 0);
 		
 		// Circles
 		shader_overlay_circles.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -920,7 +922,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		shader_overlay_circles.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_circles.depthStencilState.depthTestEnable = false;
 		shader_overlay_circles.depthStencilState.depthWriteEnable = false;
-		shader_overlay_circles.SetData(overlayCirclesBuffer.buffer, 0);
 		
 		// Squares
 		shader_overlay_squares.AddVertexInputBinding(16, VK_VERTEX_INPUT_RATE_VERTEX, {{0, 0, VK_FORMAT_R32G32B32A32_SFLOAT}});
@@ -928,7 +929,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		shader_overlay_squares.rasterizer.cullMode = VK_CULL_MODE_NONE;
 		shader_overlay_squares.depthStencilState.depthTestEnable = false;
 		shader_overlay_squares.depthStencilState.depthWriteEnable = false;
-		shader_overlay_squares.SetData(overlaySquaresBuffer.buffer, 0);
 	}
 	
 	#ifdef _ENABLE_IMGUI
@@ -1039,53 +1039,10 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			
 			if (!entity->generated) {
 				// Generate/Load
-				entity->generator(entity.get());
-				entity->generated = true;
-				
-				// Indices
-				if (auto indexData = entity->meshIndices.Lock(); indexData) {
-					entity->geometryData.indexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(indexData->deviceBuffer);
-					entity->geometryData.indexOffset = 0;
-					entity->geometryData.indexCount = indexData->count;
-					entity->geometryData.indexSize = sizeof(Mesh::Index);
-
-					entity->modelInfo.indices = entity->geometryData.indexBuffer.deviceAddress;
-				}
-				// Vertex Positions
-				if (auto vertexData = entity->meshVertexPosition.Lock(); vertexData) {
-					entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(vertexData->deviceBuffer);
-					entity->geometryData.vertexOffset = 0;
-					entity->geometryData.vertexCount = vertexData->count;
-					entity->geometryData.vertexSize = sizeof(Mesh::VertexPosition);
-					
-					entity->modelInfo.vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
-				} else if (auto proceduralVertexData = entity->proceduralVertexAABB.Lock(); proceduralVertexData) {
-					entity->geometryData.vertexBuffer = r->renderingDevice->GetBufferDeviceOrHostAddressConst(proceduralVertexData->deviceBuffer);
-					entity->geometryData.vertexOffset = 0;
-					entity->geometryData.vertexCount = proceduralVertexData->count;
-					entity->geometryData.vertexSize = sizeof(Mesh::ProceduralVertexAABB);
-					
-					entity->modelInfo.vertexPositions = entity->geometryData.vertexBuffer.deviceAddress;
-				}
-				// Vertex normals
-				if (auto vertexData = entity->meshVertexNormal.Lock(); vertexData) {
-					entity->modelInfo.vertexNormals = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-				}
-				// Vertex colors
-				if (auto vertexData = entity->meshVertexColor.Lock(); vertexData) {
-					entity->modelInfo.vertexColors = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-				}
-				// Vertex UVs
-				if (auto vertexData = entity->meshVertexUV.Lock(); vertexData) {
-					entity->modelInfo.vertexUVs = r->renderingDevice->GetBufferDeviceAddress(vertexData->deviceBuffer);
-				}
-				// Transform
-				if (auto transformData = entity->transform.Lock(); transformData) {
-					entity->modelInfo.transform = r->renderingDevice->GetBufferDeviceAddress(transformData->deviceBuffer);
-				}
+				entity->Generate(r->renderingDevice);
 			}
 			
-			if (!entity->blas && entity->rayTracingMask && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
+			if (entity->generated && !entity->blas && entity->rayTracingMask && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
 				entity->blas = std::make_shared<Blas>();
 				if (entity->meshVertexPosition) {
 					entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometryData);
@@ -1440,8 +1397,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set1_raytracing.AddBinding_imageView(1, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
-		{r->descriptorSets["set1_fog_raster"] = &set1_fog_raster;
-			set1_fog_raster.AddBinding_combinedImageSampler(0, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
+		{r->descriptorSets["set1_raster"] = &set1_raster;
+			set1_raster.AddBinding_combinedImageSampler(0, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_post"] = &set1_post;
@@ -1477,7 +1434,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			// Add specific set 1 to specific layout lists
 			pipelineLayouts["pl_raytracing"]->AddDescriptorSet(&set1_raytracing);
-			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_fog_raster);
+			pipelineLayouts["pl_raster"]->AddDescriptorSet(&set1_raster);
+			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_raster);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
@@ -1992,6 +1950,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	// Render pipelines
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
+		
+		shader_overlay_lines.SetData(overlayLinesBuffer.buffer, 0);
+		shader_overlay_text.SetData(overlayTextBuffer.buffer, 0);
+		shader_overlay_circles.SetData(overlayCirclesBuffer.buffer, 0);
+		shader_overlay_squares.SetData(overlaySquaresBuffer.buffer, 0);
+		
 		// Overlay/UI
 		uiRenderPass.Begin(r->renderingDevice, commandBuffer, img_overlay, {{.0,.0,.0,.0}});
 			{

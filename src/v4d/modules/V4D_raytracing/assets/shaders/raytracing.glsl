@@ -26,48 +26,67 @@ void main() {
 
 	// Trace Primary Rays
 	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
-
-	float primaryRayDistance = ray.distance;
-
-	if (ray.distance > 0) {
-		litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
-		
-		// // Refraction
-		// if (ray.refractionIndex >= 1.0) {
-		// 	vec3 glassColor = ray.albedo;
-		// 	float glassRoughness = ray.roughness;
-		// 	//TODO
-		// }
-		
-		float reflectivity = min(0.9, ray.metallic);
-		vec3 reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
-		vec3 viewDirection = normalize(ray.position);
-		vec3 surfaceNormal = normalize(ray.normal);
-		while (Reflections && reflectivity > 0.01) {
-			vec3 reflectDirection = reflect(viewDirection, surfaceNormal);
-			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_REFLECTION, 0, 0, 0, reflectionOrigin, GetOptimalBounceStartDistance(primaryRayDistance), reflectDirection, float(camera.zfar), 0);
-			if (ray.distance > 0) {
-				vec3 reflectColor = ApplyPBRShading(reflectionOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
-				litColor = mix(litColor, reflectColor*litColor, reflectivity);
-				reflectivity *= min(0.9, ray.metallic);
-				if (reflectivity > 0) {
-					reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
-					viewDirection = normalize(ray.position);
-					surfaceNormal = normalize(ray.normal);
-				}
-			} else {
-				litColor = mix(litColor, litColor*vec3(0.5)/* fake atmosphere color (temporary) */, reflectivity);
-				reflectivity = 0;
-			}
-			if (MAX_BOUNCES > 0 && ++bounces > MAX_BOUNCES) break;
-		}
-		
-	} else {
-		vec3(0); // background
-	}
 	
+	// Store depth and distance
+	float primaryRayDistance = ray.distance;
 	float depth = clamp(GetFragDepthFromViewSpacePosition(ray.position), 0, 1);
 	imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
+	
+	if (primaryRayDistance == 0) {
+		imageStore(img_lit, imgCoords, vec4(0)); //TODO sample Galaxy Background
+		return;
+	}
+
+	// Debug
+	bool DebugAlbedo = false;
+	bool DebugEmission = false;
+	if (DebugNormals) {
+		imageStore(img_lit, imgCoords, vec4(ray.normal,1));
+		return;
+	}
+	if (DebugAlbedo) {
+		imageStore(img_lit, imgCoords, vec4(ray.albedo,1));
+		return;
+	}
+	if (DebugEmission) {
+		imageStore(img_lit, imgCoords, vec4(ray.emission,1));
+		return;
+	}
+	
+	litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+	
+	// // Refraction
+	// if (ray.refractionIndex >= 1.0) {
+	// 	vec3 glassColor = ray.albedo;
+	// 	float glassRoughness = ray.roughness;
+	// 	//TODO
+	// }
+	
+	// Reflections
+	float reflectivity = min(0.9, ray.metallic);
+	vec3 reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
+	vec3 viewDirection = normalize(ray.position);
+	vec3 surfaceNormal = normalize(ray.normal);
+	while (Reflections && reflectivity > 0.01) {
+		vec3 reflectDirection = reflect(viewDirection, surfaceNormal);
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_REFLECTION, 0, 0, 0, reflectionOrigin, GetOptimalBounceStartDistance(primaryRayDistance), reflectDirection, float(camera.zfar), 0);
+		if (ray.distance > 0) {
+			vec3 reflectColor = ApplyPBRShading(reflectionOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+			litColor = mix(litColor, reflectColor*litColor, reflectivity);
+			reflectivity *= min(0.9, ray.metallic);
+			if (reflectivity > 0) {
+				reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
+				viewDirection = normalize(ray.position);
+				surfaceNormal = normalize(ray.normal);
+			}
+		} else {
+			litColor = mix(litColor, litColor*vec3(0.5)/* fake atmosphere color (temporary) */, reflectivity);
+			reflectivity = 0;
+		}
+		if (MAX_BOUNCES > 0 && ++bounces > MAX_BOUNCES) break;
+	}
+	
+	// Store final color
 	imageStore(img_lit, imgCoords, vec4(litColor,1));
 }
 

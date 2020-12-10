@@ -47,11 +47,9 @@ layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 
 // #include "noise.glsl"
 
-vec4 GetBumpMap(vec2 uv, vec2 uvChunk) {
+vec4 GetBumpMap(vec2 uv) {
 	return vec4(0,0,1,0)
-	//  + texture(bumpMap[0], uv)
-	//  + texture(bumpMap[0], uv*256)
-	 + texture(bumpMap[0], uvChunk)/2.0
+	 + texture(bumpMap[0], uv)/2.0
 	;
 }
 
@@ -131,21 +129,14 @@ void main() {
 		+ GetVertexUV(i2) * barycentricCoords.z
 	) : vec2(0);
 	
-	
-	
-	// vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, normal));
-	// vec3 tangentY = normalize(cross(normal, tangentX));
-	// mat3 TBN = mat3(tangentX, tangentY, normal); // viewSpace TBN
-	// vec2 uvOffset = fragment.geometryInstance.custom3f.xy;
-	// vec2 uvMult = vec2(fragment.geometryInstance.custom3f.z);
-	// vec2 uv = (fragment.uv*uvMult+uvOffset);
-	// vec4 bump = GetBumpMap(uv, fragment.uv);
-	// normal = normalize(TBN * bump.xyz);
-	
-	
+	vec3 viewSpaceNormal = GetModelNormalViewMatrix() * normal;
+	vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, viewSpaceNormal));
+	vec3 tangentY = normalize(cross(viewSpaceNormal, tangentX));
+	mat3 TBN = mat3(tangentX, tangentY, viewSpaceNormal); // viewSpace TBN
+	vec4 bump = GetBumpMap(uv);
+	normal = normalize(TBN * bump.xyz);
 	
 	ray.albedo = color.rgb;
-	// ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
 	ray.normal = normal;
 	ray.emission = vec3(0);
 	ray.position = hitPoint;

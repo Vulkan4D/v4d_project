@@ -1,14 +1,22 @@
 #include "common.hh"
 #include "../V4D_flycam/common.hh"
 
-// #define PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
-
 using namespace v4d::graphics;
+using namespace v4d::graphics::Mesh;
 using namespace v4d::scene;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
 const double distanceFromChunkToGenerateCollider = 2000;
+
+std::shared_ptr<RenderableGeometryEntity> sun = nullptr;
+std::shared_ptr<RenderableGeometryEntity> sun2 = nullptr;
+PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
+Device* renderingDevice = nullptr;
+Scene* scene = nullptr;
+Renderer* r = nullptr;
+V4D_Mod* mainRenderModule = nullptr;
+PlayerView* playerView = nullptr;
 
 #pragma region Planet
 
@@ -100,7 +108,7 @@ namespace TerrainGeneratorLib {
 			}
 		//
 		LOG_SUCCESS("terrain generator submodule Loaded")
-		PlanetTerrain::StartChunkGenerator();
+		PlanetTerrain::StartChunkGenerator(renderingDevice);
 	}
 	void Start() {
 		if (running) return;
@@ -131,19 +139,6 @@ namespace TerrainGeneratorLib {
 
 #pragma endregion
 
-ObjectInstancePtr sun = nullptr;
-ObjectInstancePtr sun2 = nullptr;
-PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
-Device* renderingDevice = nullptr;
-Scene* scene = nullptr;
-Renderer* r = nullptr;
-V4D_Mod* mainRenderModule = nullptr;
-PlayerView* playerView = nullptr;
-
-#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
-	std::vector<glm::dvec3> collidingObjectPositions {};
-#endif
-
 #pragma region Graphics stuff
 
 PipelineLayout planetsMapGenLayout;
@@ -171,58 +166,42 @@ bool bumpMapsGenerated = false;
 
 #pragma endregion
 
-void ComputeChunkVertices(Device* device, VkCommandBuffer commandBuffer, PlanetTerrain::Chunk* chunk) {
+void ComputeChunkVertices(PlanetTerrain::Chunk* chunk) {
 	if (chunk->active) {
-		
-		// subChunks
-		{
+		{// subChunks
 			std::scoped_lock lock(chunk->subChunksMutex);
 			for (auto* subChunk : chunk->subChunks) {
-				ComputeChunkVertices(device, commandBuffer, subChunk);
+				ComputeChunkVertices(subChunk);
 			}
 		}
-		
-		if (chunk->obj && chunk->meshGenerated) {
-			if (chunk->computedLevel == 0) {
-				chunk->obj->Lock();
-					chunk->obj->physicsActive = false;
-					chunk->geometry->colliderType = v4d::scene::Geometry::ColliderType::TRIANGLE_MESH;
-					chunk->obj->SetGeometriesDirty();
-					chunk->obj->PushGeometries(device, commandBuffer);
-					chunk->computedLevel = 2;
-					chunk->obj->rigidbodyType = ObjectInstance::RigidBodyType::STATIC;
-					if (chunk->geometry->blas) {
-						chunk->geometry->blas->built = false;
-						LOG_WARN("BLAS already created but should not be...")
+		if (chunk->entity) {
+			if (chunk->computedLevel == 1) {
+				auto lock = RenderableGeometryEntity::GetLock();
+				chunk->computedLevel = 2;
+				chunk->entity->generator = [](auto* entity){
+					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_CAST_SHADOWS | GEOMETRY_ATTR_REFLECTION_VISIBLE | GEOMETRY_ATTR_SOLID;
+				};
+			} else if (chunk->computedLevel == 2) {
+				if (chunk->entity->physics->colliderType == PhysicsInfo::ColliderType::NONE) {
+					if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
+						auto physics = chunk->entity->physics.Lock();
+						if (physics) {
+							physics->colliderType = PhysicsInfo::ColliderType::MESH;
+							physics->rigidbodyType = PhysicsInfo::RigidBodyType::STATIC;
+							physics->colliderDirty = true;
+							physics->physicsDirty = true;
+						}
 					}
-					chunk->geometry->active = true;
-					chunk->geometry->colliderDirty = true;
-					chunk->obj->SetGenerated();
-				chunk->obj->Unlock();
-			}
-			#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
-				else if (!chunk->obj->physicsActive) {
-					for (auto& pos : collidingObjectPositions) {
-						if (glm::distance(chunk->centerPos, pos) < chunk->obj->boundingDistance) {
-							chunk->obj->physicsActive = true;
-							chunk->obj->physicsDirty = true;
-							break;
+				} else if (chunk->entity->physics->colliderType != PhysicsInfo::ColliderType::NONE) {
+					if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*1.5) {
+						auto physics = chunk->entity->physics.Lock();
+						if (physics) {
+							physics->colliderType = PhysicsInfo::ColliderType::NONE;
+							physics->physicsDirty = true;
 						}
 					}
 				}
-			#else
-				else if (!chunk->obj->physicsActive) {
-					if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
-						chunk->obj->physicsActive = true;
-						chunk->obj->physicsDirty = true;
-					}
-				} else if (chunk->obj->physicsActive) {
-					if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*1.5) {
-						chunk->obj->physicsActive = false;
-						chunk->obj->physicsDirty = true;
-					}
-				}
-			#endif
+			}
 		}
 	}
 }
@@ -254,41 +233,58 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 		
-		static const int maxTerrainChunksInMemory = 1800; // 1.0 Gb (577 kb per chunk)
-		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(maxTerrainChunksInMemory);
-		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(maxTerrainChunksInMemory);
-		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbVerticesPerChunk);
-		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(maxTerrainChunksInMemory * PlanetTerrain::nbIndicesPerChunk);
-		
-		TerrainGeneratorLib::Start();
-		
 		// Light source
-		sun = scene->AddObjectInstance();
-		sun->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource("light", 700000000, 1e24f);
-		}, sun1Position);
+		sun = RenderableGeometryEntity::Create(THIS_MODULE);
+		sun->SetInitialTransform(glm::translate(glm::dmat4(1), sun1Position));
+		sun->generator = [](auto* entity){
+			float lightIntensity = 1e24f;
+			float radius = 700000000;
+			entity->Prepare(renderingDevice, "aabb_sphere.light");
+			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(renderingDevice, {glm::vec4{lightIntensity}});
+			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
+		}, sun1Position;
 		
-		sun2 = scene->AddObjectInstance();
-		sun2->Configure([](ObjectInstance* obj){
-			obj->SetSphereLightSource("light", 700000000, 5e22f);
-		}, sun2Position);
+		sun2 = RenderableGeometryEntity::Create(THIS_MODULE);
+		sun2->SetInitialTransform(glm::translate(glm::dmat4(1), sun2Position));
+		sun2->generator = [](auto* entity){
+			float lightIntensity = 5e22f;
+			float radius = 700000000;
+			entity->Prepare(renderingDevice, "aabb_sphere.light");
+			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+			entity->Add_proceduralVertexAABB();
+			entity->proceduralVertexAABB->AllocateBuffers(renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->Add_meshVertexColor();
+			entity->meshVertexColor->AllocateBuffers(renderingDevice, {glm::vec4{lightIntensity}});
+			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
+		}, sun2Position;
 		
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
-		TerrainGeneratorLib::Stop();
+		if (sun) {
+			sun->Destroy();
+		}
+		if (sun2) {
+			sun2->Destroy();
+		}
 	}
 	
 	// Images / Buffers / Pipelines
 	V4D_MODULE_FUNC(void, CreateVulkanResources2, Device* device) {
 		renderingDevice = device;
 		// Chunk Generator
-		PlanetTerrain::StartChunkGenerator();
+		TerrainGeneratorLib::Start();
+		PlanetTerrain::StartChunkGenerator(device);
 	}
 	
 	V4D_MODULE_FUNC(void, DestroyVulkanResources2, Device* device) {
 		// Chunk Generator
 		PlanetTerrain::EndChunkGenerator();
+		TerrainGeneratorLib::Stop();
 		if (terrain) {
 			terrain->atmosphere.Free(device);
 			delete terrain;
@@ -297,6 +293,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				planetAtmosphereShader->planets.clear();
 				planetAtmosphereShader->lightSources.clear();
 			}
+		}
+		if (sun) {
+			sun->FreeComponentsBuffers();
+		}
+		if (sun2) {
+			sun2->FreeComponentsBuffers();
 		}
 	}
 	
@@ -311,29 +313,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				{
 					std::lock_guard lock(terrain->planetMutex);
 					terrain->scene = scene;
-					sun->GenerateGeometries();
-					sun2->GenerateGeometries();
 					if (planetAtmosphereShader) {
 						planetAtmosphereShader->planets.push_back(terrain);
-						planetAtmosphereShader->lightSources.push_back(sun->GetLightSources()[0]);
-						planetAtmosphereShader->lightSources.push_back(sun2->GetLightSources()[0]);
+						planetAtmosphereShader->lightSources.push_back(sun);
+						planetAtmosphereShader->lightSources.push_back(sun2);
 					}
 					if (terrain->atmosphere.radius > 0) {
 						renderingDevice->RunSingleTimeCommands(renderingDevice->GetQueue("graphics"), [](auto cmdBuffer){
 							terrain->atmosphere.Allocate(renderingDevice, cmdBuffer);
 						});
-						
-						// // Ray-traced atmosphere
-						// scene->AddObjectInstance()->Configure([](ObjectInstance* obj){
-						// 	obj->SetSphereGeometry("planet_atmosphere", planet.atmosphereRadius);
-						// });
-						
 					}
 				}
 			}
 		//
 		
-		
+		{
 						// // // for each planet
 						// 	int planetIndex = 0;
 						// 	auto* planetBuffer = &((PlanetBuffer*)(planetsBuffer.stagingBuffer.data))[planetIndex];
@@ -341,12 +335,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						// 	planetBuffer->northDir = glm::normalize(glm::transpose(glm::inverse(glm::dmat3(terrain->matrix))) * glm::dvec3(0,1,0));
 						// // //
 						// auto cmdBuffer = r->BeginSingleTimeCommands(*graphicsQueue);
-						// planetsBuffer.Update(r->renderingDevice, cmdBuffer);
+						// planetsBuffer.Update(renderingDevice, cmdBuffer);
 						// r->EndSingleTimeCommands(*graphicsQueue, cmdBuffer);
-				
+		}
 		
-		
-		// for each planet
+		{// for each planet
 			std::lock_guard lock(terrain->chunksMutex);
 			
 			// //TODO Planet rotation
@@ -374,7 +367,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				chunk->BeforeRender();
 			}
 			
-		//
+		}
 	}
 	
 	V4D_MODULE_FUNC(void, BeginSecondaryFrameUpdate) {
@@ -395,31 +388,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (terrain) {
 				scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
 				
-				#ifdef PHYSICS_GENERATE_COLLIDERS_UPON_OBJECT_GOING_THROUGH
-					collidingObjectPositions.clear();
-					const double maxTerrainHeight = terrain->solidRadius + terrain->heightVariation;
-					scene->Lock();
-						for (auto obj : scene->objectInstances) {
-							if (obj && obj->IsPhysicsActive() && obj->rigidbodyType == v4d::scene::ObjectInstance::RigidBodyType::DYNAMIC && obj->physicsObject) {
-								auto positionRelativeToPlanetCenter = obj->GetWorldPosition() - terrain->absolutePosition;
-								auto distanceFromPlanetCenter = positionRelativeToPlanetCenter.length() - obj->boundingDistance;
-								if (distanceFromPlanetCenter < maxTerrainHeight) {
-									if (distanceFromPlanetCenter < terrain->GetHeightMap(glm::normalize(positionRelativeToPlanetCenter), 0) + 5/* threshold of 5 meters above terrain */) {
-										collidingObjectPositions.push_back(positionRelativeToPlanetCenter);
-									}
-								}
-							}
-						}
-					scene->Unlock();
-				#endif
-				
 				// planet.GenerateMaps(renderingDevice, commandBuffer);
 				terrainChunkPushConstant.planetIndex = 0;
 				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);
 				terrainChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
 				std::lock_guard lock(terrain->chunksMutex);
 				for (auto* chunk : terrain->chunks) {
-					ComputeChunkVertices(renderingDevice, commandBuffer, chunk);
+					ComputeChunkVertices(chunk);
 				}
 			}
 		//
@@ -441,27 +416,43 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 					ImGui::Separator();
 					ImGui::Text("Sun1");
-					static glm::vec3 sunPosition = glm::normalize(glm::dvec3(sun->GetWorldTransform()[3]));
-					static double sunDistance = glm::distance(glm::dvec3(sun->GetWorldTransform()[3]), terrain->absolutePosition);
-					static float intensity = std::log10(sun->GetLightSources()[0]->intensity);
-					float* pos = (float*)&sunPosition;
-					ImGui::SliderFloat("Intensity1", &intensity, 20, 27);
-					ImGui::SliderFloat3("Position1", pos, -1, 1);
-					ImGui::ColorEdit3("Color1", (float*)&sun->GetLightSources()[0]->color);
-					sun->GetLightSources()[0]->intensity = std::pow(10.0f, intensity);
-					sun->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance));
+					if (sun && sun->generated) {
+						auto transform = sun->transform.Lock();
+						auto lightSource = sun->lightSource.Lock();
+						if (transform && transform->data && lightSource) {
+							static glm::vec3 sunPosition = glm::normalize(sun1Position);
+							static double sunDistance = glm::distance(sun1Position, terrain->absolutePosition);
+							static float intensity = std::log10(lightSource->intensity);
+							static glm::vec3 color = lightSource->color;
+							float* pos = (float*)&sunPosition;
+							ImGui::SliderFloat("Intensity1", &intensity, 20, 27);
+							ImGui::SliderFloat3("Position1", pos, -1, 1);
+							ImGui::ColorEdit3("Color1", (float*)&color);
+							lightSource->color = color;
+							lightSource->intensity = std::pow(10.0f, intensity);
+							transform->data->worldTransform = glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance);
+						}
+					}
 					
 					ImGui::Separator();
 					ImGui::Text("Sun2");
-					static glm::vec3 sunPosition2 = glm::normalize(glm::dvec3(sun2->GetWorldTransform()[3]));
-					static double sunDistance2 = glm::distance(glm::dvec3(sun2->GetWorldTransform()[3]), terrain->absolutePosition);
-					static float intensity2 = std::log10(sun2->GetLightSources()[0]->intensity);
-					float* pos2 = (float*)&sunPosition2;
-					ImGui::SliderFloat("Intensity2", &intensity2, 20, 27);
-					ImGui::SliderFloat3("Position2", pos2, -1, 1);
-					ImGui::ColorEdit3("Color2", (float*)&sun2->GetLightSources()[0]->color);
-					sun2->GetLightSources()[0]->intensity = std::pow(10.0f, intensity2);
-					sun2->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2));
+					if (sun2 && sun2->generated) {
+						auto transform = sun2->transform.Lock();
+						auto lightSource = sun2->lightSource.Lock();
+						if (transform && transform->data && lightSource) {
+							static glm::vec3 sunPosition2 = glm::normalize(sun2Position);
+							static double sunDistance2 = glm::distance(sun2Position, terrain->absolutePosition);
+							static float intensity2 = std::log10(lightSource->intensity);
+							static glm::vec3 color2 = lightSource->color;
+							float* pos2 = (float*)&sunPosition2;
+							ImGui::SliderFloat("Intensity2", &intensity2, 20, 27);
+							ImGui::SliderFloat3("Position2", pos2, -1, 1);
+							ImGui::ColorEdit3("Color2", (float*)&color2);
+							lightSource->color = color2;
+							lightSource->intensity = std::pow(10.0f, intensity2);
+							transform->data->worldTransform = glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2);
+						}
+					}
 					
 				}
 			//
@@ -481,29 +472,27 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::Text("Altitude above terrain: %d km", (int)std::ceil(altitude/1000.0));
 					}
 					ImGui::Text("Chunk generator queue : %d", (int)PlanetTerrain::chunkGeneratorQueue.size());
-					ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
+					if (terrain->totalChunkTimeNb) {
+						ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
+					}
 				}
 			#endif
 		// #endif
 	}
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
-		auto* rasterVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_raster");
-		auto* rayTracingVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_rays");
-		auto* rayTracingLightingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_lighting_rays");
+		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_raytracing");
 		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		r->descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;
-		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0_base"]);
+		planetsMapGenLayout.AddDescriptorSet(r->descriptorSets["set0"]);
 		planetsMapGenLayout.AddDescriptorSet(&mapsGenDescriptorSet);
 		planetsMapGenLayout.AddPushConstant<MapGenPushConstant>(VK_SHADER_STAGE_COMPUTE_BIT);
 		mapsGenDescriptorSet.AddBinding_imageView_array(0, bumpMaps, 1, VK_SHADER_STAGE_COMPUTE_BIT);
 		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
-		rayTracingVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		rayTracingLightingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		rasterVisibilityPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
+		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
 		
 		// Atmosphere raster shader
 		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*fogPipelineLayout, {
@@ -513,37 +502,24 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		planetAtmosphereShader->camera = &scene->camera;
 		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
 		mainRenderModule->AddShader("sg_fog", planetAtmosphereShader);
-		
-		// Terrain raster shader
-		planetTerrainRasterShader = new RasterShaderPipeline(*rasterVisibilityPipelineLayout, {
-			Geometry::geometryRenderTypes["terrain"].rasterShader->GetShaderPath("vert"),
-			"modules/V4D_planetdemo/assets/shaders/planets.terrain.frag",
-		});
-		mainRenderModule->AddShader("sg_visibility", planetTerrainRasterShader);
 	}
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		auto* shaderBindingTableVisibility = mainRenderModule->GetShaderBindingTable("sbt_visibility");
-		auto* shaderBindingTableLighting = mainRenderModule->GetShaderBindingTable("sbt_lighting");
+		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
 		
-		Geometry::geometryRenderTypes["planet_terrain"].sbtOffset = 
-			shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
-			shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
-		Geometry::geometryRenderTypes["planet_terrain"].rasterShader = planetTerrainRasterShader;
-		
-		// Geometry::geometryRenderTypes["planet_atmosphere"].sbtOffset = 
-		// 	shaderBindingTableVisibility->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rint");
-		// 	shaderBindingTableLighting->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.atmosphere.rint");
+		RenderableGeometryEntity::sbtOffsets["V4D_planetdemo.planet_terrain"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
 		
 		// Atmosphere
-		planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
-		planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-		#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
-			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-			planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
-		#else
-			planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-		#endif
+		if (planetAtmosphereShader) {
+			planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
+			planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+			#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
+				planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+				planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
+			#else
+				planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			#endif
+		}
 	}
 	
 	V4D_MODULE_FUNC(void, ReadShaders) {
@@ -570,22 +546,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
-		planetsMapGenLayout.Create(r->renderingDevice);
-		bumpMapsAltitudeGen.CreatePipeline(r->renderingDevice);
-		bumpMapsNormalsGen.CreatePipeline(r->renderingDevice);
+		planetsMapGenLayout.Create(renderingDevice);
+		bumpMapsAltitudeGen.CreatePipeline(renderingDevice);
+		bumpMapsNormalsGen.CreatePipeline(renderingDevice);
 	}
 	
 	V4D_MODULE_FUNC(void, DestroyVulkanPipelines) {
-		bumpMapsAltitudeGen.DestroyPipeline(r->renderingDevice);
-		bumpMapsNormalsGen.DestroyPipeline(r->renderingDevice);
-		planetsMapGenLayout.Destroy(r->renderingDevice);
+		bumpMapsAltitudeGen.DestroyPipeline(renderingDevice);
+		bumpMapsNormalsGen.DestroyPipeline(renderingDevice);
+		planetsMapGenLayout.Destroy(renderingDevice);
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer cmdBuffer) {
 		if (!bumpMapsGenerated) {
 			
 			bumpMapsAltitudeGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
-			bumpMapsAltitudeGen.Execute(r->renderingDevice, cmdBuffer);
+			bumpMapsAltitudeGen.Execute(renderingDevice, cmdBuffer);
 			
 			VkImageMemoryBarrier barrier = {};
 				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -603,7 +579,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			r->renderingDevice->CmdPipelineBarrier(
+			renderingDevice->CmdPipelineBarrier(
 				cmdBuffer,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 				0,
@@ -613,7 +589,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			);
 	
 			bumpMapsNormalsGen.SetGroupCounts(bumpMaps[0].width, bumpMaps[0].height, bumpMaps[0].arrayLayers);
-			bumpMapsNormalsGen.Execute(r->renderingDevice, cmdBuffer);
+			bumpMapsNormalsGen.Execute(renderingDevice, cmdBuffer);
 				
 			bumpMapsGenerated = true;
 		}

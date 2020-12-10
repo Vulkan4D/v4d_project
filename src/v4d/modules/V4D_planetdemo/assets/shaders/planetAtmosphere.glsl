@@ -69,7 +69,7 @@ void main() {
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
 	float atmosphereHeight = planetAtmosphere.outerRadius - planetAtmosphere.innerRadius;
-	float depthDistance = texture(tex_img_depth, gl_FragCoord.xy).g;
+	float depthDistance = texture(tex_img_depth, gl_FragCoord.xy/vec2(camera.width, camera.height)).g;
 	
 	if (depthDistance == 0) depthDistance = float(camera.zfar);
 	depthDistance = max(minStepSize, depthDistance);
@@ -115,22 +115,6 @@ void main() {
 	vec3 atmColor = vec3(0);
 	float maxDepth = 0;
 	
-	// vec4 aurora = vec4(0);
-	// float auroraHeight = 100000;
-	// float t = camera.time / 32.0;
-	// vec3 polarPos = mix(rayStart, rayEnd, smoothstep(atmosphereHeight, atmosphereHeight-auroraHeight, (length(rayStart)-planetAtmosphere.innerRadius)));
-	// // vec3 polarPos = mix(rayStart, rayEnd, 0.5);
-	// vec3 polarDir = PlanetSpaceDir(normalize(polarPos));
-	// float polar = abs(dot(polarDir, vec3(0,1,0)));
-	// float auroraWidth = max(0.1, (FastSimplex(polarDir*2.0+vec3(48.5,0.8*t,t)))/2.0+0.5) * 0.1;
-	// float auroraPosition = 0.9;
-	// auroraPosition += FastSimplexFractal(polarDir*2.0+vec3(12.5,64.0,t/16.0), 2)/8.0;
-	// auroraPosition += FastSimplexFractal(polarDir*vec3(5.0, 40.0, 5.0)+vec3(8.5,16.5,t/8.0), 2)/16.0;
-	// auroraPosition += FastSimplexFractal(polarDir*vec3(15.0, 100.0, 15.0)+vec3(48.5,12.0,t), 4)/40.0;
-	// vec3 auroraMainColor = vec3(0.0, 1.0, 0.0);
-	// vec3 auroraSecondaryColor = mix(vec3(1.0, 0.1, 0.3), vec3(0.0, 0.2, 1.0), FastSimplexFractal(polarDir*3.0+vec3(9.5,24.0,t*3.0), 2)/2.0+0.5);
-	// vec3 auroraFinalColor = normalize(mix(auroraMainColor, auroraSecondaryColor, pow(FastSimplexFractal(polarDir*2.0+vec3(28.5,2.0,t*2.0), 2)/2.0+0.5, 1.5)));
-	
 	for (int sunIndex = 0; sunIndex < NB_SUNS; ++sunIndex) if (suns[sunIndex].valid) {
 		// Calculate Rayleigh and Mie phases
 		vec3 lightDir = suns[sunIndex].dir;
@@ -151,11 +135,6 @@ void main() {
 			float altitude = max(0.001, length(posOnSphere) - planetAtmosphere.innerRadius);
 			vec2 density = exp(-altitude / scaleHeight) * stepSize;
 			opticalDepth += density;
-			
-			// polarDir = PlanetSpaceDir(normalize(posOnSphere));
-			// polar = abs(dot(polarDir, vec3(0,1,0)));
-			// float aur = smoothstep(auroraPosition-auroraWidth/2.0, auroraPosition, polar) * smoothstep(auroraPosition+auroraWidth/2.0, auroraPosition, polar) * smoothstep(auroraHeight, auroraHeight/2.0, depth);
-			// aurora += vec4(auroraFinalColor*aur, aur*maxDepth/atmosphereHeight)/float(rayMarchingSteps)/4.0;
 			
 			// step size for light ray
 			float a = dot(lightDir, lightDir);
@@ -178,10 +157,11 @@ void main() {
 				vec3 posLightNDC = posLightClipSpace.xyz/posLightClipSpace.w;
 				vec3 posLightScreenSpace = posLightNDC * vec3(0.5, 0.5, 0) + vec3(0.5, 0.5, -posLightViewSpace.z);
 				
-				if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
-					float depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
-					if (depth > lightRayTravelDepthMax) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
-				}
+				// // Sun shafts
+				// if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
+				// 	float depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
+				// 	if (depth > lightRayTravelDepthMax) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
+				// }
 				
 				lightRayOpticalDepth += lightRayDensity;
 				lightRayDist += lightRayStepSize;
@@ -206,6 +186,4 @@ void main() {
 	
 	float alpha = clamp(maxDepth/atmosphereHeight, 0, 0.5);
 	out_img_lit = vec4(atmColor, alpha);
-	// float alpha = clamp(maxDepth/atmosphereHeight + aurora.a, 0, 0.5);
-	// out_img_lit = vec4(mix(aurora.rgb, atmColor, clamp(length(atmColor)+0.5, 0, 1)), alpha);
 }

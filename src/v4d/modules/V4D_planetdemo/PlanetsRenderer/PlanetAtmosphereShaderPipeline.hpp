@@ -10,7 +10,7 @@ public:
 	using RasterShaderPipeline::RasterShaderPipeline;
 	
 	Camera* camera = nullptr;
-	std::vector<LightSource*> lightSources {};
+	std::vector<std::shared_ptr<RenderableGeometryEntity>> lightSources {};
 	std::vector<PlanetTerrain*> planets {};
 	int atmospherePushConstantIndex = 0;
 	
@@ -50,16 +50,23 @@ public:
 			);
 			
 			int i = 0;
-			for (auto* lightSource : lightSources) {
-				auto planetViewSpacePosition = glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3]);
-				double lightDist = glm::distance(glm::dvec3(lightSource->viewSpacePosition), planetViewSpacePosition);
-				planetAtmospherePushConstant.suns[i] = CompactSunInfo(
-					// Sun direction is from planet center to sun, in view space
-					glm::normalize(glm::dvec3(lightSource->viewSpacePosition) - planetViewSpacePosition), 
-					lightSource->intensity * float(1.0 / (lightDist*lightDist)), 
-					lightSource->color
-				);
-				if (i++ == 3) break;
+			for (auto& entity : lightSources) {
+				if (entity->generated) {
+					auto transform = entity->transform.Lock();
+					auto lightSource = entity->lightSource.Lock();
+					if (transform && transform->data && lightSource) {
+						auto planetViewSpacePosition = glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3]);
+						glm::dvec3 lightSourceViewSpacePosition = transform->data->modelView[3];
+						double lightDist = glm::distance(lightSourceViewSpacePosition, planetViewSpacePosition);
+						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
+							// Sun direction is from planet center to sun, in view space
+							glm::normalize(lightSourceViewSpacePosition - planetViewSpacePosition), 
+							lightSource->intensity * float(1.0 / (lightDist*lightDist)), 
+							lightSource->color
+						);
+						if (i++ == 3) break;
+					}
+				}
 			}
 			while (i<3) {
 				planetAtmospherePushConstant.suns[i++] = {0,0,0,0};
@@ -68,8 +75,8 @@ public:
 			PushConstant(device, cmdBuffer, &planetAtmospherePushConstant, atmospherePushConstantIndex);
 			
 			SetData(
-				&planet->atmosphere.vertexBuffer.deviceLocalBuffer,
-				&planet->atmosphere.indexBuffer.deviceLocalBuffer,
+				planet->atmosphere.vertexBuffer.deviceLocalBuffer.buffer,
+				planet->atmosphere.indexBuffer.deviceLocalBuffer.buffer,
 				PlanetAtmosphere::nbIndices
 			);
 			

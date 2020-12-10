@@ -399,7 +399,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColor();
 				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
-				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*1000000000.0f, radius, 1000000);
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 1000000000.0f);
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 				entity->physics->SetSphereCollider(radius);
 			};
@@ -413,7 +413,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColor();
 				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
-				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000000.0f, radius, 100000);
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000000.0f);
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 				entity->physics->SetSphereCollider(radius);
 			};
@@ -429,7 +429,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{10000.0f,10000.0f,10000.0f,10000.0f}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 				entity->physics->SetSphereCollider(radius);
-				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*10000.0f, radius, 100);
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 10000.0f);
 			};
 		
 		// Ground
@@ -513,7 +513,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->proceduralVertexAABB->AllocateBuffers(r->renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColor();
 					entity->meshVertexColor->AllocateBuffers(r->renderingDevice, {{100000.0f,100000.0f,100000.0f,100000.0f}});
-					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1,1,1}*100000.0f, radius, 1000);
+					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
 					entity->physics->SetSphereCollider(radius);
 				};
 			}break;

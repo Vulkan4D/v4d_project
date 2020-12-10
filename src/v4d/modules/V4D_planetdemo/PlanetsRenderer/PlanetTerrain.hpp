@@ -5,9 +5,13 @@
 #include "PlanetAtmosphere.hpp"
 #include "Noise.hpp"
 
+#include "v4d/modules/V4D_raytracing/camera_options.hh"
+
 using namespace v4d::scene;
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
+
+#define PLANET_CHUNK_CACHE_ENABLE
 
 struct PlanetTerrain {
 	
@@ -31,7 +35,7 @@ struct PlanetTerrain {
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
-	static constexpr uint32_t CHUNK_CACHE_VERSION = 1;
+	static constexpr int CHUNK_CACHE_VERSION = 3;
 	static const bool useSkirts = true;
 	#pragma endregion
 
@@ -107,6 +111,7 @@ struct PlanetTerrain {
 		double heightAtCenter = 0;
 		double lowestAltitude = 0;
 		double highestAltitude = 0;
+		double boundingDistance = 0;
 		std::atomic<double> distanceFromCamera = 0;
 		#pragma endregion
 		
@@ -125,8 +130,7 @@ struct PlanetTerrain {
 		
 		#pragma region Data
 		std::vector<Chunk*> subChunks {};
-		ObjectInstancePtr obj = nullptr;
-		std::shared_ptr<Geometry> geometry = nullptr;
+		std::shared_ptr<RenderableGeometryEntity> entity = nullptr;
 		std::recursive_mutex generatorMutex;
 		#pragma endregion
 		
@@ -135,7 +139,8 @@ struct PlanetTerrain {
 		}
 		
 		bool ShouldAddSubChunks() {
-			if (IsLastLevel()) return false;
+			if (IsLastLevel()) 
+				return false;
 			return distanceFromCamera < chunkSubdivisionDistanceFactor*chunkSize;
 		}
 		
@@ -207,29 +212,11 @@ struct PlanetTerrain {
 		uint32_t bottomLeftVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk;
 		uint32_t bottomRightVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk + vertexSubdivisionsPerChunk;
 		
-		// void RefreshVertices() {
-		// 	if (obj && obj->IsGenerated()) {
-		// 		topLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(topLeftVertexIndex)->pos);
-		// 		topRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(topRightVertexIndex)->pos);
-		// 		bottomLeftPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(bottomLeftVertexIndex)->pos);
-		// 		bottomRightPos = centerPos + glm::dvec3(obj->GetGeometries()[0].geometry->GetVertexPtr(bottomRightVertexIndex)->pos);
-		// 		topLeftPosLowest = glm::normalize(topLeftPos) * lowestAltitude;
-		// 		topRightPosLowest = glm::normalize(topRightPos) * lowestAltitude;
-		// 		bottomLeftPosLowest = glm::normalize(bottomLeftPos) * lowestAltitude;
-		// 		bottomRightPosLowest = glm::normalize(bottomRightPos) * lowestAltitude;
-		// 		topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
-		// 		topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
-		// 		bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
-		// 		bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
-		// 		RefreshDistanceFromCamera();
-		// 	}
-		// }
-		
 		std::string GetChunkId() const {
 			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)centerPos.x) + "_" + std::to_string((int64_t)centerPos.y) + "_" + std::to_string((int64_t)centerPos.z);
 		}
 		
-		void Generate() {
+		void Generate(Device* device) {
 			/* 
 					Example using vertexSubdivisionsPerChunk = 4 (sub)
 						[Vertex indices]
@@ -289,32 +276,45 @@ struct PlanetTerrain {
 			
 			if (!meshGenerating) return;
 			if (!planet->scene) return;
+	
+			uint32_t* meshIndices;
+			glm::vec3* vertexPositions;
+			glm::vec3* vertexNormals;
+			glm::vec4* vertexColors;
+			glm::vec2* vertexUVs;
 			
 			{// Prepare object for mesh generation
-				planet->scene->Lock();
-				if (!obj) {
-					obj = planet->scene->AddObjectInstance();
-				}
-				obj->Lock();
-					obj->Disable();
-					obj->physicsActive = false;
-					if (!geometry || obj->CountGeometries() == 0) {
-						geometry = obj->AddGeometry("planet_terrain", nbVerticesPerChunk, nbIndicesPerChunk /* , material */ );
-					}
-					geometry->active = false;
-					geometry->custom3f = {uvOffsetX, uvOffsetY, uvMult};
-				obj->Unlock();
-				planet->scene->Unlock();
+				auto lock = RenderableGeometryEntity::GetLock();
+				if (entity) entity->Destroy();
+				entity = RenderableGeometryEntity::Create(THIS_MODULE, 0, 0);
+				entity->Prepare(device, "V4D_planetdemo.planet_terrain");
+				entity->rayTracingMask = 0;
+				entity->Add_meshIndices();
+				entity->Add_meshVertexPosition();
+				entity->Add_meshVertexNormal();
+				entity->Add_meshVertexColor();
+				entity->Add_meshVertexUV();
+				entity->Add_physics();
+				meshIndices = (uint32_t*) entity->meshIndices->AllocateBuffersCount(device, nbIndicesPerChunk);
+				vertexPositions = (glm::vec3*) entity->meshVertexPosition->AllocateBuffersCount(device, nbVerticesPerChunk);
+				vertexNormals = (glm::vec3*) entity->meshVertexNormal->AllocateBuffersCount(device, nbVerticesPerChunk);
+				vertexColors = (glm::vec4*) entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
+				vertexUVs = (glm::vec2*) entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
+				entity->generator = [](auto* entity){entity->generated = false;};
 			}
 		
+			#ifdef PLANET_CHUNK_CACHE_ENABLE
 			// Cache file
 			std::string chunkId = GetChunkId();
 			v4d::io::BinaryFileStream cacheFile (std::string(V4D_MODULE_CACHE_PATH(THIS_MODULE, "chunks/")) + chunkId + ".binary", 1024*1024);
 			constexpr size_t cacheFileSize 
 								= sizeof(CHUNK_CACHE_VERSION)
-								+ nbVerticesPerChunk * sizeof(Geometry::VertexBuffer_T)
-								+ nbIndicesPerChunk * sizeof(Geometry::IndexBuffer_T)
-								+ 24 * sizeof(uint32_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
+								+ nbIndicesPerChunk * sizeof(Mesh::Index)
+								+ nbVerticesPerChunk * sizeof(Mesh::VertexPosition)
+								+ nbVerticesPerChunk * sizeof(Mesh::VertexNormal)
+								+ nbVerticesPerChunk * sizeof(Mesh::VertexColor)
+								+ nbVerticesPerChunk * sizeof(Mesh::VertexUV)
+								+ 24 * sizeof(Mesh::Index) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
 								+ sizeof(topLeftPosLowest)
 								+ sizeof(lowestAltitude)
 								+ sizeof(topRightPosLowest)
@@ -325,16 +325,18 @@ struct PlanetTerrain {
 								+ sizeof(topRightPosHighest)
 								+ sizeof(bottomLeftPosHighest)
 								+ sizeof(bottomRightPosHighest)
-								+ sizeof(geometry->boundingDistance)
+								+ sizeof(boundingDistance)
 			;
-			
 			if (cacheFile.GetSize() == cacheFileSize && cacheFile.Read<uint32_t>() == CHUNK_CACHE_VERSION) {
-				
 				{// Load from cache file
 					cacheFile.LockReadWrite();
-						cacheFile.ReadBytes(reinterpret_cast<byte*>(geometry->GetVertexPtr()), nbVerticesPerChunk*sizeof(Geometry::VertexBuffer_T));
-						cacheFile.ReadBytes(reinterpret_cast<byte*>(geometry->GetIndexPtr()), nbIndicesPerChunk*sizeof(Geometry::IndexBuffer_T));
-						cacheFile >> geometry->simplifiedMeshIndices;
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexPositions), nbVerticesPerChunk*sizeof(Mesh::VertexPosition));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
+						{auto physics = entity->physics.Lock();
+						cacheFile >> physics->colliderMeshIndices;}
 						cacheFile >> lowestAltitude;
 						cacheFile >> highestAltitude;
 						cacheFile >> topLeftPosLowest;
@@ -345,12 +347,12 @@ struct PlanetTerrain {
 						cacheFile >> topRightPosHighest;
 						cacheFile >> bottomLeftPosHighest;
 						cacheFile >> bottomRightPosHighest;
-						cacheFile >> geometry->boundingDistance;
+						cacheFile >> boundingDistance;
 					cacheFile.UnlockReadWrite();
 				}
-				
-			} else {
-				
+			} else 
+			#endif
+			{
 				{// Generate
 					
 					int genRow = 0;
@@ -375,25 +377,26 @@ struct PlanetTerrain {
 							glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							double altitude = planet->GetHeightMap(pos, triangleSize);
 							glm::dvec3 posOnChunk = pos * altitude - centerPos;
-							auto* vertex = geometry->GetVertexPtr(currentIndex);
-							vertex->pos = posOnChunk;
+							vertexPositions[currentIndex] = glm::vec3(posOnChunk);
+							
 							// Color
-							// vertex->SetColor(planet->GetColorMap(pos, triangleSize));
 							if (PlanetTerrain::generateColor) {
-								vertex->SetColor(glm::vec4(PlanetTerrain::generateColor(altitude - planet->solidRadius), 1.0f));
+								vertexColors[currentIndex] = glm::vec4(PlanetTerrain::generateColor(altitude - planet->solidRadius), 1.0f);
 							}
+							
 							// UV
-							vertex->SetUV(glm::vec2(
-								rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol,
-								topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow
-							) / float(vertexSubdivisionsPerChunk));
+							vertexUVs[currentIndex] = glm::vec2(
+								(rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol) * uvMult + uvOffsetX,
+								(topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow) * uvMult + uvOffsetY
+							) / float(vertexSubdivisionsPerChunk);
+							
 							// Normal
-							vertex->normal = pos; // already normalized
+							vertexNormals[currentIndex] = glm::vec3(pos); // already normalized
 							
 							genVertexIndex++;
 							
 							// Bounding distance
-							geometry->boundingDistance = std::max(geometry->boundingDistance, glm::length(vertex->pos));
+							boundingDistance = std::max(boundingDistance, glm::length(posOnChunk));
 							
 							// Altitude bounds
 							lowestAltitude = std::min(lowestAltitude, altitude);
@@ -407,25 +410,25 @@ struct PlanetTerrain {
 								uint32_t bottomRightIndex = bottomLeftIndex+1;
 								if (genCol < vertexSubdivisionsPerChunk) {
 									if (topSign == rightSign) {
-										geometry->SetIndex(genIndexIndex++, topLeftIndex);
-										geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
-										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-										geometry->SetIndex(genIndexIndex++, topLeftIndex);
-										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-										geometry->SetIndex(genIndexIndex++, topRightIndex);
+										meshIndices[genIndexIndex++] = topLeftIndex;
+										meshIndices[genIndexIndex++] = bottomLeftIndex;
+										meshIndices[genIndexIndex++] = bottomRightIndex;
+										meshIndices[genIndexIndex++] = topLeftIndex;
+										meshIndices[genIndexIndex++] = bottomRightIndex;
+										meshIndices[genIndexIndex++] = topRightIndex;
 									} else {
-										geometry->SetIndex(genIndexIndex++, topLeftIndex);
-										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
-										geometry->SetIndex(genIndexIndex++, bottomLeftIndex);
-										geometry->SetIndex(genIndexIndex++, topLeftIndex);
-										geometry->SetIndex(genIndexIndex++, topRightIndex);
-										geometry->SetIndex(genIndexIndex++, bottomRightIndex);
+										meshIndices[genIndexIndex++] = topLeftIndex;
+										meshIndices[genIndexIndex++] = bottomRightIndex;
+										meshIndices[genIndexIndex++] = bottomLeftIndex;
+										meshIndices[genIndexIndex++] = topLeftIndex;
+										meshIndices[genIndexIndex++] = topRightIndex;
+										meshIndices[genIndexIndex++] = bottomRightIndex;
 									}
 								}
 							}
 							
 							++genCol;
-							if (!meshGenerating) return;
+							// if (!meshGenerating) return;
 						}
 						
 						genCol = 0;
@@ -443,7 +446,8 @@ struct PlanetTerrain {
 						const int lm = (tl + bl) / 2;
 						const int rm = (tr + br) / 2;
 						const int mm = (tl + br) / 2;
-						geometry->simplifiedMeshIndices = {
+						auto physics = entity->physics.Lock();
+						physics->colliderMeshIndices = {
 							// minimum (one quad, two triangles)
 								// tl,bl,br,  tl,br,tr,
 							// medium (4 quads, 8 triangles)
@@ -454,13 +458,12 @@ struct PlanetTerrain {
 						};
 					}
 
-					if (!meshGenerating) return;
+					// if (!meshGenerating) return;
 					
 					{// Normals
 						for (genRow = 0; genRow <= vertexSubdivisionsPerChunk; ++genRow) {
 							for (genCol = 0; genCol <= vertexSubdivisionsPerChunk; ++genCol) {
 								uint32_t currentIndex = (vertexSubdivisionsPerChunk+1) * genRow + genCol;
-								auto* vertex = geometry->GetVertexPtr(currentIndex);
 								
 								glm::vec3 tangentX, tangentY;
 								
@@ -470,8 +473,8 @@ struct PlanetTerrain {
 									uint32_t topRightIndex = topLeftIndex+1;
 									uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 									
-									tangentX = glm::normalize(geometry->GetVertexPtr(topRightIndex)->pos - vertex->pos);
-									tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomLeftIndex)->pos);
+									tangentX = glm::normalize(vertexPositions[topRightIndex] - vertexPositions[currentIndex]);
+									tangentY = glm::normalize(vertexPositions[currentIndex] - vertexPositions[bottomLeftIndex]);
 									
 								} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
 									// For right-most bottom-most vertex (generate bottom-most right-most)
@@ -492,8 +495,8 @@ struct PlanetTerrain {
 										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(topRightPos - vertex->pos);
-									tangentY = glm::normalize(vertex->pos - bottomLeftPos);
+									tangentX = glm::normalize(topRightPos - vertexPositions[currentIndex]);
+									tangentY = glm::normalize(vertexPositions[currentIndex] - bottomLeftPos);
 									
 								} else if (genCol == vertexSubdivisionsPerChunk) {
 									// For others in right col (generate top right)
@@ -507,8 +510,8 @@ struct PlanetTerrain {
 										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(topRightPos - vertex->pos);
-									tangentY = glm::normalize(vertex->pos - geometry->GetVertexPtr(bottomRightIndex)->pos);
+									tangentX = glm::normalize(topRightPos - vertexPositions[currentIndex]);
+									tangentY = glm::normalize(vertexPositions[currentIndex] - vertexPositions[bottomRightIndex]);
 									
 								} else if (genRow == vertexSubdivisionsPerChunk) {
 									// For others in bottom row (generate bottom left)
@@ -521,8 +524,8 @@ struct PlanetTerrain {
 										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(geometry->GetVertexPtr(currentIndex+1)->pos - vertex->pos);
-									tangentY = glm::normalize((vertex->pos - bottomLeftPos));
+									tangentX = glm::normalize(vertexPositions[currentIndex+1] - vertexPositions[currentIndex]);
+									tangentY = glm::normalize((vertexPositions[currentIndex] - bottomLeftPos));
 								}
 								
 								tangentX *= (float)rightSign;
@@ -530,48 +533,50 @@ struct PlanetTerrain {
 								
 								glm::vec3 normal = glm::normalize(glm::cross(tangentX, tangentY));
 								
-								vertex->normal = normal;
+								vertexNormals[currentIndex] = normal;
 								
-								// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertex->pos))));
-										
-								if (!meshGenerating) return;
+								// slope = (float) glm::max(0.0, dot(glm::dvec3(normal), glm::normalize(centerPos + glm::dvec3(vertexPositions[currentIndex]))));
+								
+								// if (!meshGenerating) return;
 							}
 						}
 					}
 					
-					if (!meshGenerating) return;
+					// if (!meshGenerating) return;
 					
 					// Skirts
 					if (useSkirts) {
 						int firstSkirtIndex = genVertexIndex;
-						auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
+						auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign, meshIndices, vertexPositions, vertexNormals, vertexColors, vertexUVs](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 							int skirtIndex = genVertexIndex++;
-							
-							auto* skirtVertex = geometry->GetVertexPtr(skirtIndex);
-							*skirtVertex = *geometry->GetVertexPtr(pointIndex);
-							skirtVertex->pos -= glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0);
+							{
+								vertexPositions[skirtIndex] = vertexPositions[pointIndex] - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0));
+							}
+							vertexNormals[skirtIndex] = vertexNormals[pointIndex];
+							vertexColors[skirtIndex] = vertexColors[pointIndex];
+							vertexUVs[skirtIndex] = vertexUVs[pointIndex];
 							
 							if (topSign == rightSign) {
-								geometry->SetIndex(genIndexIndex++, pointIndex);
-								geometry->SetIndex(genIndexIndex++, skirtIndex);
-								geometry->SetIndex(genIndexIndex++, nextPointIndex);
-								geometry->SetIndex(genIndexIndex++, nextPointIndex);
-								geometry->SetIndex(genIndexIndex++, skirtIndex);
+								meshIndices[genIndexIndex++] = pointIndex;
+								meshIndices[genIndexIndex++] = skirtIndex;
+								meshIndices[genIndexIndex++] = nextPointIndex;
+								meshIndices[genIndexIndex++] = nextPointIndex;
+								meshIndices[genIndexIndex++] = skirtIndex;
 								if (lastPoint) {
-									geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
+									meshIndices[genIndexIndex++] = firstSkirtIndex;
 								} else {
-									geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
+									meshIndices[genIndexIndex++] = skirtIndex + 1;
 								}
 							} else {
-								geometry->SetIndex(genIndexIndex++, pointIndex);
-								geometry->SetIndex(genIndexIndex++, nextPointIndex);
-								geometry->SetIndex(genIndexIndex++, skirtIndex);
-								geometry->SetIndex(genIndexIndex++, skirtIndex);
-								geometry->SetIndex(genIndexIndex++, nextPointIndex);
+								meshIndices[genIndexIndex++] = pointIndex;
+								meshIndices[genIndexIndex++] = nextPointIndex;
+								meshIndices[genIndexIndex++] = skirtIndex;
+								meshIndices[genIndexIndex++] = skirtIndex;
+								meshIndices[genIndexIndex++] = nextPointIndex;
 								if (lastPoint) {
-									geometry->SetIndex(genIndexIndex++, firstSkirtIndex);
+									meshIndices[genIndexIndex++] = firstSkirtIndex;
 								} else {
-									geometry->SetIndex(genIndexIndex++, skirtIndex + 1);
+									meshIndices[genIndexIndex++] = skirtIndex + 1;
 								}
 							}
 						};
@@ -626,13 +631,18 @@ struct PlanetTerrain {
 					
 				}
 				
+				#ifdef PLANET_CHUNK_CACHE_ENABLE
 				{// Store into cache file
 					cacheFile.LockReadWrite();
 					cacheFile.Truncate();
 					cacheFile << CHUNK_CACHE_VERSION;
-						cacheFile.WriteBytes(reinterpret_cast<byte*>(geometry->GetVertexPtr()), nbVerticesPerChunk*sizeof(Geometry::VertexBuffer_T));
-						cacheFile.WriteBytes(reinterpret_cast<byte*>(geometry->GetIndexPtr()), nbIndicesPerChunk*sizeof(Geometry::IndexBuffer_T));
-						cacheFile << geometry->simplifiedMeshIndices;
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexPositions), nbVerticesPerChunk*sizeof(Mesh::VertexPosition));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
+						{auto physics = entity->physics.Lock();
+						cacheFile << physics->colliderMeshIndices;}
 						cacheFile << lowestAltitude;
 						cacheFile << highestAltitude;
 						cacheFile << topLeftPosLowest;
@@ -643,20 +653,16 @@ struct PlanetTerrain {
 						cacheFile << topRightPosHighest;
 						cacheFile << bottomLeftPosHighest;
 						cacheFile << bottomRightPosHighest;
-						cacheFile << geometry->boundingDistance;
+						cacheFile << boundingDistance;
 					cacheFile.Flush();
 					cacheFile.UnlockReadWrite();
 				}
+				#endif
 			}
 			
-			// std::scoped_lock lock(stateMutex);
-			geometry->isDirty = true;
-			if (meshGenerating) {
-				obj->SetGeometriesDirty(false);
-				computedLevel = 0;
-				meshGenerated = true;
-			}
-			
+			computedLevel = 1;
+			meshGenerated = true;
+		
 			// #ifdef _DEBUG
 				planet->totalChunkTimeNb++;
 				planet->totalChunkTime += (float)timer.GetElapsedMilliseconds();
@@ -745,14 +751,9 @@ struct PlanetTerrain {
 				computedLevel = 0;
 				meshGenerated = false;
 			}
-			if (obj) {
-				if (geometry) geometry->active = false;
-				obj->Disable();
-				if (planet->scene) {
-					planet->scene->RemoveObjectInstance(obj);
-					obj = nullptr;
-					geometry = nullptr;
-				}
+			if (entity) {
+				entity->Destroy();
+				entity = nullptr;
 			}
 			std::scoped_lock lock(subChunksMutex);
 			if (recursive && subChunks.size() > 0) {
@@ -786,7 +787,7 @@ struct PlanetTerrain {
 			bool allSubchunksRendered = false;
 			
 			active = chunkVisibleByAngle;
-			render = active && meshGenerated && obj && obj->IsGenerated() && geometry->active;
+			render = active && meshGenerated && entity && entity->generated;
 			
 			if (active) {
 				if (ShouldAddSubChunks()) {
@@ -804,19 +805,20 @@ struct PlanetTerrain {
 						ChunkGeneratorCancel(this);
 					}
 				} else {
-					if (ShouldRemoveSubChunks() && obj && obj->IsGenerated() && geometry->active) {
+					bool shouldRemoveSubChunks = ShouldRemoveSubChunks();
+					if (shouldRemoveSubChunks && entity && entity->generated) {
 						std::scoped_lock lock(subChunksMutex);
 						for (auto* subChunk : subChunks) {
 							subChunk->Remove(true);
 						}
 					} else {
-						if (ShouldRemoveSubChunks()) {
+						if (shouldRemoveSubChunks) {
 							std::scoped_lock lock(subChunksMutex);
 							for (auto* subChunk : subChunks) if (subChunk->meshEnqueuedForGeneration) {
 								ChunkGeneratorCancel(subChunk, true);
 							}
 						}
-						if (!obj || !obj->IsGenerated()) {
+						if (!entity || !entity->generated) {
 							// std::scoped_lock lock(stateMutex);
 							if (!meshGenerated && !meshGenerating) {
 								ChunkGeneratorEnqueue(this);
@@ -836,12 +838,15 @@ struct PlanetTerrain {
 			{
 				// std::scoped_lock lock(stateMutex);
 				RefreshDistanceFromCamera();
-				if (meshGenerated && obj && obj->IsGenerated()) {
+				if (meshGenerated && entity && entity->generated) {
 					if (render) {
-						obj->Enable();
-						obj->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
+						auto transform = entity->transform.Lock();
+						if (transform && transform->data) {
+							transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
+						}
+						entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_CAST_SHADOWS | GEOMETRY_ATTR_REFLECTION_VISIBLE | GEOMETRY_ATTR_SOLID;
 					} else {
-						obj->Disable();
+						entity->rayTracingMask = 0;
 					}
 				}
 			}
@@ -867,14 +872,14 @@ struct PlanetTerrain {
 	static std::mutex chunkGeneratorQueueMutex;
 	static std::condition_variable chunkGeneratorEventVar;
 	static std::atomic<bool> chunkGeneratorActive;
-	static void StartChunkGenerator() {
+	static void StartChunkGenerator(Device* device) {
 		if (chunkGeneratorActive) return;
 		chunkGeneratorActive = true;
 		uint32_t nbThreads = std::max((uint32_t)1, std::thread::hardware_concurrency() - 4);
 		chunkGeneratorThreads.reserve(nbThreads);
 		LOG_VERBOSE("Using " << nbThreads << " threads to render planet terrain")
 		for (int i = 0; i < nbThreads; ++i) {
-			chunkGeneratorThreads.emplace_back([threadIndex=i](){
+			chunkGeneratorThreads.emplace_back([threadIndex=i, device](){
 				
 				// CPU Affinity
 				if (std::thread::hardware_concurrency() > 4) UNSET_CPU_AFFINITY(0, 1, std::thread::hardware_concurrency()/2, std::thread::hardware_concurrency()/2+1)
@@ -910,7 +915,7 @@ struct PlanetTerrain {
 					}
 					std::lock_guard lock(chunk->generatorMutex);
 					if (chunk->meshGenerating) {
-						chunk->Generate();
+						chunk->Generate(device);
 						chunk->meshGenerating = false;
 					}
 				}
