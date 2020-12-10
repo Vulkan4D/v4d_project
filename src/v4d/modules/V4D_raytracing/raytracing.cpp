@@ -1059,6 +1059,10 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 				// Update and Assign transform
 				if (auto transform = entity->transform.Lock(); transform && transform->data) {
+					transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
+					transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
+					transform->dirtyOnDevice = true;
+					
 					if (entity->blas) {
 						int index = nbRayTracingInstances++;
 						rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
@@ -1067,10 +1071,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
 						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
 						rayTracingInstanceBuffer[index].transform = glm::transpose(transform->data->modelView);
-						
-						transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
-						transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
-						transform->dirtyOnDevice = true;
 					}
 					
 					// Light Source
