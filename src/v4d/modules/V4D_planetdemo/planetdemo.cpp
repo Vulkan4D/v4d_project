@@ -7,7 +7,7 @@ using namespace v4d::scene;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
-const double distanceFromChunkToGenerateCollider = 2000;
+const double distanceFromChunkToGenerateCollider = 10'000;
 
 std::shared_ptr<RenderableGeometryEntity> sun = nullptr;
 std::shared_ptr<RenderableGeometryEntity> sun2 = nullptr;
@@ -34,17 +34,6 @@ const glm::dvec3 sun2Position = {1.296e+11,-6.496e+10, 0};
 #pragma region Terrain generator
 
 PlanetTerrain* terrain = nullptr;
-
-struct TerrainChunkPushConstant {
-	int planetIndex;
-	int chunkGeometryIndex;
-	float solidRadius;
-	int vertexSubdivisionsPerChunk;
-	glm::vec2 uvMult;
-	glm::vec2 uvOffset;
-	alignas(16) glm::ivec3 chunkPosition;
-	alignas(4) int face;
-} terrainChunkPushConstant;
 
 class TerrainGenerator {
 	V4D_MODULE_CLASS_HEADER(TerrainGenerator
@@ -166,38 +155,44 @@ bool bumpMapsGenerated = false;
 
 #pragma endregion
 
-void ComputeChunkVertices(PlanetTerrain::Chunk* chunk) {
+std::map<uint32_t, bool> physicsIDs {};
+
+void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 	if (chunk->active) {
 		{// subChunks
 			std::scoped_lock lock(chunk->subChunksMutex);
 			for (auto* subChunk : chunk->subChunks) {
-				ComputeChunkVertices(subChunk);
+				RefreshChunk(subChunk);
 			}
 		}
 		if (chunk->entity) {
 			if (chunk->computedLevel == 1) {
 				auto lock = RenderableGeometryEntity::GetLock();
 				chunk->computedLevel = 2;
-				chunk->entity->generator = [](auto* entity){
-					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_CAST_SHADOWS | GEOMETRY_ATTR_REFLECTION_VISIBLE | GEOMETRY_ATTR_SOLID;
-				};
+				chunk->entity->generator = [](auto* entity){};
 			} else if (chunk->computedLevel == 2) {
-				if (chunk->entity->physics->colliderType == PhysicsInfo::ColliderType::NONE) {
+				if (!chunk->colliderActive) {
 					if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
 						auto physics = chunk->entity->physics.Lock();
 						if (physics) {
-							physics->colliderType = PhysicsInfo::ColliderType::MESH;
 							physics->rigidbodyType = PhysicsInfo::RigidBodyType::STATIC;
+							physics->colliderType = PhysicsInfo::ColliderType::MESH;
 							physics->colliderDirty = true;
 							physics->physicsDirty = true;
+							chunk->colliderActive = true;
+							physicsIDs[physics->uniqueId] = true;
 						}
 					}
-				} else if (chunk->entity->physics->colliderType != PhysicsInfo::ColliderType::NONE) {
-					if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*1.5) {
+				} else {
+					if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*2.0) {
 						auto physics = chunk->entity->physics.Lock();
 						if (physics) {
+							physics->rigidbodyType = PhysicsInfo::RigidBodyType::NONE;
 							physics->colliderType = PhysicsInfo::ColliderType::NONE;
 							physics->physicsDirty = true;
+							physics->colliderDirty = true;
+							chunk->colliderActive = false;
+							physicsIDs[physics->uniqueId] = false;
 						}
 					}
 				}
@@ -367,6 +362,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				chunk->BeforeRender();
 			}
 			
+			
+			
+			scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
+			for (auto* chunk : terrain->chunks) {
+				RefreshChunk(chunk);
+			}
+			
+			
 		}
 	}
 	
@@ -384,20 +387,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryFrameCompute, VkCommandBuffer commandBuffer) {
-		// for each planet
-			if (terrain) {
-				scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
-				
-				// planet.GenerateMaps(renderingDevice, commandBuffer);
-				terrainChunkPushConstant.planetIndex = 0;
-				terrainChunkPushConstant.solidRadius = float(terrain->solidRadius);
-				terrainChunkPushConstant.vertexSubdivisionsPerChunk = PlanetTerrain::vertexSubdivisionsPerChunk;
-				std::lock_guard lock(terrain->chunksMutex);
-				for (auto* chunk : terrain->chunks) {
-					ComputeChunkVertices(chunk);
-				}
-			}
-		//
+		// // for each planet
+		// 	if (terrain) {
+		// 		scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
+		// 		std::lock_guard lock(terrain->chunksMutex);
+		// 		for (auto* chunk : terrain->chunks) {
+		// 			RefreshChunk(chunk);
+		// 		}
+		// 	}
+		// //
 	}
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
@@ -458,6 +456,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			//
 		#endif
 	}
+	
 	V4D_MODULE_FUNC(void, DrawUiDebug2) {
 		// #ifdef _DEBUG
 			#ifdef _ENABLE_IMGUI
@@ -476,6 +475,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
 					}
 				}
+				
+				ImGui::Separator();
+				int nbPhysicsComponents = 0;
+				RenderableGeometryEntity::physicsComponents.ForEach_LockEntities([&nbPhysicsComponents](int32_t, auto& p){
+					if (physicsIDs[p.uniqueId]) nbPhysicsComponents++;
+				});
+				ImGui::Text("Active physics components: %d", nbPhysicsComponents);
 			#endif
 		// #endif
 	}

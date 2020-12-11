@@ -123,6 +123,7 @@ struct PlanetTerrain {
 		std::atomic<bool> meshEnqueuedForGeneration = false;
 		std::atomic<bool> meshGenerating = false;
 		std::atomic<bool> meshGenerated = false;
+		std::atomic<bool> colliderActive = false;
 
 		// std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
@@ -132,6 +133,7 @@ struct PlanetTerrain {
 		std::vector<Chunk*> subChunks {};
 		std::shared_ptr<RenderableGeometryEntity> entity = nullptr;
 		std::recursive_mutex generatorMutex;
+		std::vector<uint32_t> colliderIndices {};
 		#pragma endregion
 		
 		bool IsLastLevel() {
@@ -277,31 +279,32 @@ struct PlanetTerrain {
 			if (!meshGenerating) return;
 			if (!planet->scene) return;
 	
-			uint32_t* meshIndices;
-			glm::vec3* vertexPositions;
-			glm::vec3* vertexNormals;
-			glm::vec4* vertexColors;
-			glm::vec2* vertexUVs;
+			// uint32_t* meshIndices;
+			// glm::vec3* vertexPositions;
+			// glm::vec3* vertexNormals;
+			// glm::vec4* vertexColors;
+			// glm::vec2* vertexUVs;
 			
-			{// Prepare object for mesh generation
-				auto lock = RenderableGeometryEntity::GetLock();
+			// Prepare object for mesh generation
+			auto entityLock = RenderableGeometryEntity::GetLock();
 				if (entity) entity->Destroy();
 				entity = RenderableGeometryEntity::Create(THIS_MODULE, 0, 0);
 				entity->Prepare(device, "V4D_planetdemo.planet_terrain");
 				entity->rayTracingMask = 0;
+				entity->Add_physics();
 				entity->Add_meshIndices();
 				entity->Add_meshVertexPosition();
 				entity->Add_meshVertexNormal();
 				entity->Add_meshVertexColor();
 				entity->Add_meshVertexUV();
-				entity->Add_physics();
-				meshIndices = (uint32_t*) entity->meshIndices->AllocateBuffersCount(device, nbIndicesPerChunk);
-				vertexPositions = (glm::vec3*) entity->meshVertexPosition->AllocateBuffersCount(device, nbVerticesPerChunk);
-				vertexNormals = (glm::vec3*) entity->meshVertexNormal->AllocateBuffersCount(device, nbVerticesPerChunk);
-				vertexColors = (glm::vec4*) entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
-				vertexUVs = (glm::vec2*) entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
+			auto buffersWriteLock = entity->GetBuffersWriteLock();
+				auto meshIndices = entity->meshIndices->AllocateBuffersCount(device, nbIndicesPerChunk);
+				auto vertexPositions = entity->meshVertexPosition->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexNormals = entity->meshVertexNormal->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexColors = entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexUVs = entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
 				entity->generator = [](auto* entity){entity->generated = false;};
-			}
+			entityLock.unlock();
 		
 			#ifdef PLANET_CHUNK_CACHE_ENABLE
 			// Cache file
@@ -314,7 +317,7 @@ struct PlanetTerrain {
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexNormal)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexColor)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexUV)
-								+ 24 * sizeof(Mesh::Index) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
+								+ 24 * sizeof(uint32_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
 								+ sizeof(topLeftPosLowest)
 								+ sizeof(lowestAltitude)
 								+ sizeof(topRightPosLowest)
@@ -335,8 +338,7 @@ struct PlanetTerrain {
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
-						{auto physics = entity->physics.Lock();
-						cacheFile >> physics->colliderMeshIndices;}
+						cacheFile >> colliderIndices;
 						cacheFile >> lowestAltitude;
 						cacheFile >> highestAltitude;
 						cacheFile >> topLeftPosLowest;
@@ -446,8 +448,7 @@ struct PlanetTerrain {
 						const int lm = (tl + bl) / 2;
 						const int rm = (tr + br) / 2;
 						const int mm = (tl + br) / 2;
-						auto physics = entity->physics.Lock();
-						physics->colliderMeshIndices = {
+						colliderIndices = {
 							// minimum (one quad, two triangles)
 								// tl,bl,br,  tl,br,tr,
 							// medium (4 quads, 8 triangles)
@@ -473,8 +474,8 @@ struct PlanetTerrain {
 									uint32_t topRightIndex = topLeftIndex+1;
 									uint32_t bottomLeftIndex = (vertexSubdivisionsPerChunk+1) * (genRow+1) + genCol;
 									
-									tangentX = glm::normalize(vertexPositions[topRightIndex] - vertexPositions[currentIndex]);
-									tangentY = glm::normalize(vertexPositions[currentIndex] - vertexPositions[bottomLeftIndex]);
+									tangentX = glm::normalize(glm::vec3(vertexPositions[topRightIndex]) - glm::vec3(vertexPositions[currentIndex]));
+									tangentY = glm::normalize(glm::vec3(vertexPositions[currentIndex]) - glm::vec3(vertexPositions[bottomLeftIndex]));
 									
 								} else if (genCol == vertexSubdivisionsPerChunk && genRow == vertexSubdivisionsPerChunk) {
 									// For right-most bottom-most vertex (generate bottom-most right-most)
@@ -495,8 +496,8 @@ struct PlanetTerrain {
 										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(topRightPos - vertexPositions[currentIndex]);
-									tangentY = glm::normalize(vertexPositions[currentIndex] - bottomLeftPos);
+									tangentX = glm::normalize(topRightPos - glm::vec3(vertexPositions[currentIndex]));
+									tangentY = glm::normalize(glm::vec3(vertexPositions[currentIndex]) - bottomLeftPos);
 									
 								} else if (genCol == vertexSubdivisionsPerChunk) {
 									// For others in right col (generate top right)
@@ -510,8 +511,8 @@ struct PlanetTerrain {
 										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(topRightPos - vertexPositions[currentIndex]);
-									tangentY = glm::normalize(vertexPositions[currentIndex] - vertexPositions[bottomRightIndex]);
+									tangentX = glm::normalize(topRightPos - glm::vec3(vertexPositions[currentIndex]));
+									tangentY = glm::normalize(glm::vec3(vertexPositions[currentIndex]) - glm::vec3(vertexPositions[bottomRightIndex]));
 									
 								} else if (genRow == vertexSubdivisionsPerChunk) {
 									// For others in bottom row (generate bottom left)
@@ -524,8 +525,8 @@ struct PlanetTerrain {
 										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
 									}
 
-									tangentX = glm::normalize(vertexPositions[currentIndex+1] - vertexPositions[currentIndex]);
-									tangentY = glm::normalize((vertexPositions[currentIndex] - bottomLeftPos));
+									tangentX = glm::normalize(glm::vec3(vertexPositions[currentIndex+1]) - glm::vec3(vertexPositions[currentIndex]));
+									tangentY = glm::normalize(glm::vec3(vertexPositions[currentIndex]) - bottomLeftPos);
 								}
 								
 								tangentX *= (float)rightSign;
@@ -550,7 +551,7 @@ struct PlanetTerrain {
 						auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign, meshIndices, vertexPositions, vertexNormals, vertexColors, vertexUVs](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 							int skirtIndex = genVertexIndex++;
 							{
-								vertexPositions[skirtIndex] = vertexPositions[pointIndex] - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0));
+								vertexPositions[skirtIndex] = glm::vec3(vertexPositions[pointIndex]) - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0));
 							}
 							vertexNormals[skirtIndex] = vertexNormals[pointIndex];
 							vertexColors[skirtIndex] = vertexColors[pointIndex];
@@ -641,8 +642,7 @@ struct PlanetTerrain {
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
-						{auto physics = entity->physics.Lock();
-						cacheFile << physics->colliderMeshIndices;}
+						cacheFile << colliderIndices;
 						cacheFile << lowestAltitude;
 						cacheFile << highestAltitude;
 						cacheFile << topLeftPosLowest;
@@ -660,13 +660,19 @@ struct PlanetTerrain {
 				#endif
 			}
 			
-			computedLevel = 1;
-			meshGenerated = true;
-		
 			// #ifdef _DEBUG
 				planet->totalChunkTimeNb++;
 				planet->totalChunkTime += (float)timer.GetElapsedMilliseconds();
 			// #endif
+			
+			// Add physics component and assign collider mesh
+			auto physics = entity->physics.Lock();
+			if (!physics) return;
+			physics->colliderMeshIndices = colliderIndices;
+			
+			computedLevel = 1;
+			meshGenerated = true;
+			colliderActive = false;
 		}
 		
 		void AddSubChunks() {
@@ -750,8 +756,10 @@ struct PlanetTerrain {
 				render = false;
 				computedLevel = 0;
 				meshGenerated = false;
+				colliderActive = false;
 			}
 			if (entity) {
+				entity->Remove_physics();
 				entity->Destroy();
 				entity = nullptr;
 			}
@@ -787,7 +795,7 @@ struct PlanetTerrain {
 			bool allSubchunksRendered = false;
 			
 			active = chunkVisibleByAngle;
-			render = active && meshGenerated && entity && entity->generated;
+			render = active && meshGenerated && entity;
 			
 			if (active) {
 				if (ShouldAddSubChunks()) {
@@ -838,12 +846,14 @@ struct PlanetTerrain {
 			{
 				// std::scoped_lock lock(stateMutex);
 				RefreshDistanceFromCamera();
+				if (meshGenerated && entity) {
+					auto transform = entity->transform.Lock();
+					if (transform && transform->data) {
+						transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
+					}
+				}
 				if (meshGenerated && entity && entity->generated) {
 					if (render) {
-						auto transform = entity->transform.Lock();
-						if (transform && transform->data) {
-							transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
-						}
 						entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_CAST_SHADOWS | GEOMETRY_ATTR_REFLECTION_VISIBLE | GEOMETRY_ATTR_SOLID;
 					} else {
 						entity->rayTracingMask = 0;
