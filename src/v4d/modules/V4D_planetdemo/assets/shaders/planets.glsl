@@ -45,14 +45,6 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 
 layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 
-// #include "noise.glsl"
-
-vec4 GetBumpMap(vec2 uv) {
-	return vec4(0,0,1,0)
-	 + texture(bumpMap[0], uv)/2.0
-	;
-}
-
 #############################################################
 #shader bump.altitude.map.comp
 void main() {
@@ -95,6 +87,15 @@ void main() {
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
 
+layout(buffer_reference, std430, buffer_reference_align = 16) buffer CustomData {
+	vec2 uvMult;
+	vec2 uvOffset;
+};
+
+vec4 GetBumpMap(vec2 uv) {
+	return vec4(0,0,1,0) + texture(bumpMap[0], uv) / 2.0;
+}
+
 hitAttributeEXT vec3 hitAttribs;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
@@ -129,12 +130,14 @@ void main() {
 		+ GetVertexUV(i2) * barycentricCoords.z
 	) : vec2(0);
 	
-	vec3 viewSpaceNormal = GetModelNormalViewMatrix() * normal;
+	vec3 viewSpaceNormal = normalize(GetModelNormalViewMatrix() * normal);
 	vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, viewSpaceNormal));
 	vec3 tangentY = normalize(cross(viewSpaceNormal, tangentX));
 	mat3 TBN = mat3(tangentX, tangentY, viewSpaceNormal); // viewSpace TBN
 	vec4 bump = GetBumpMap(uv);
 	normal = normalize(TBN * bump.xyz);
+	
+	// CustomData customData = CustomData(GetCustomData());
 	
 	ray.albedo = color.rgb;
 	ray.normal = normal;

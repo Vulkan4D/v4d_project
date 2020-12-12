@@ -155,8 +155,6 @@ bool bumpMapsGenerated = false;
 
 #pragma endregion
 
-std::map<uint32_t, bool> physicsIDs {};
-
 void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 	if (chunk->active) {
 		{// subChunks
@@ -180,7 +178,6 @@ void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 							physics->colliderDirty = true;
 							physics->physicsDirty = true;
 							chunk->colliderActive = true;
-							physicsIDs[physics->uniqueId] = true;
 						}
 					}
 				} else {
@@ -192,7 +189,6 @@ void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 							physics->physicsDirty = true;
 							physics->colliderDirty = true;
 							chunk->colliderActive = false;
-							physicsIDs[physics->uniqueId] = false;
 						}
 					}
 				}
@@ -475,13 +471,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::Text("AvgChunkTime: %d ms", (int)std::round(float(terrain->totalChunkTime)/terrain->totalChunkTimeNb));
 					}
 				}
-				
-				ImGui::Separator();
-				int nbPhysicsComponents = 0;
-				RenderableGeometryEntity::physicsComponents.ForEach_LockEntities([&nbPhysicsComponents](int32_t, auto& p){
-					if (physicsIDs[p.uniqueId]) nbPhysicsComponents++;
-				});
-				ImGui::Text("Active physics components: %d", nbPhysicsComponents);
 			#endif
 		// #endif
 	}

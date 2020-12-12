@@ -395,13 +395,4 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	// #endif
 	
-	V4D_MODULE_FUNC(void, DrawUiDebug2) {
-		// #ifdef _DEBUG
-			#ifdef _ENABLE_IMGUI
-				ImGui::Separator();
-				ImGui::Text("Physics colliders: %d", physicsObjects.size());
-			#endif
-		// #endif
-	}
-	
 };

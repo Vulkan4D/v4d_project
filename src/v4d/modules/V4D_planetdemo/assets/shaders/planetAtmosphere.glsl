@@ -157,11 +157,12 @@ void main() {
 				vec3 posLightNDC = posLightClipSpace.xyz/posLightClipSpace.w;
 				vec3 posLightScreenSpace = posLightNDC * vec3(0.5, 0.5, 0) + vec3(0.5, 0.5, -posLightViewSpace.z);
 				
-				// // Sun shafts
-				// if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
-				// 	float depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
-				// 	if (depth > lightRayTravelDepthMax) decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
-				// }
+				// Sun shafts
+				if (rayStartAltitude < -dist_epsilon && RAYMARCH_LIGHT_STEPS > 1 && posLightScreenSpace.x > 0 && posLightScreenSpace.x < 1 && posLightScreenSpace.y > 0 && posLightScreenSpace.y < 1 && posLightScreenSpace.z > 0) {
+					float depth = texture(tex_img_depth, posLightScreenSpace.xy).r;
+					if (depth > lightRayTravelDepthMax) 
+						decay += 1.0/float(RAYMARCH_LIGHT_STEPS);
+				}
 				
 				lightRayOpticalDepth += lightRayDensity;
 				lightRayDist += lightRayStepSize;

@@ -342,19 +342,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		scene = _s;
 		
 		// Cornell boxes
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				entity->Prepare(r->renderingDevice, "default");
 				CreateCornellBox(entity);
 			};
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				entity->Prepare(r->renderingDevice, "default");
 				CreateCornellBox(entity);
 			};
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				entity->Prepare(r->renderingDevice, "default");
@@ -362,7 +362,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			};
 			
 		// Ball
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {5,250,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				float radius = 2;
@@ -376,7 +376,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			};
 			
 		// Cube
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-5,250,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				entity->Prepare(r->renderingDevice, "aabb_cube");
@@ -389,7 +389,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			};
 			
 		// Light sources
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				float radius = 200;
@@ -403,7 +403,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 				entity->physics->SetSphereCollider(radius);
 			};
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,11}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				float radius = 20;
@@ -417,7 +417,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 				entity->physics->SetSphereCollider(radius);
 			};
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {2,260,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				float radius = 0.5f;
@@ -433,7 +433,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			};
 		
 		// Ground
-		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/, 0/*customData*/)
+		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,0,-200}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity){
 				entity->Prepare(r->renderingDevice, "default");
@@ -475,7 +475,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
 				entity->generator = [](RenderableGeometryEntity* entity){
@@ -488,7 +488,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
@@ -502,7 +502,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);

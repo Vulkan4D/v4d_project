@@ -288,7 +288,7 @@ struct PlanetTerrain {
 			// Prepare object for mesh generation
 			auto entityLock = RenderableGeometryEntity::GetLock();
 				if (entity) entity->Destroy();
-				entity = RenderableGeometryEntity::Create(THIS_MODULE, 0, 0);
+				entity = RenderableGeometryEntity::Create(THIS_MODULE);
 				entity->Prepare(device, "V4D_planetdemo.planet_terrain");
 				entity->rayTracingMask = 0;
 				entity->Add_physics();
@@ -297,13 +297,16 @@ struct PlanetTerrain {
 				entity->Add_meshVertexNormal();
 				entity->Add_meshVertexColor();
 				entity->Add_meshVertexUV();
+				entity->Add_customData();
 			auto buffersWriteLock = entity->GetBuffersWriteLock();
 				auto meshIndices = entity->meshIndices->AllocateBuffersCount(device, nbIndicesPerChunk);
 				auto vertexPositions = entity->meshVertexPosition->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexNormals = entity->meshVertexNormal->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexColors = entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexUVs = entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
+				entity->customData->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 				entity->generator = [](auto* entity){entity->generated = false;};
+				entity->transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
 			entityLock.unlock();
 		
 			#ifdef PLANET_CHUNK_CACHE_ENABLE
@@ -388,8 +391,8 @@ struct PlanetTerrain {
 							
 							// UV
 							vertexUVs[currentIndex] = glm::vec2(
-								(rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol) * uvMult + uvOffsetX,
-								(topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow) * uvMult + uvOffsetY
+								(rightSign < 0 ? (vertexSubdivisionsPerChunk-genCol) : genCol),
+								(topSign < 0 ? (vertexSubdivisionsPerChunk-genRow) : genRow)
 							) / float(vertexSubdivisionsPerChunk);
 							
 							// Normal
@@ -846,12 +849,6 @@ struct PlanetTerrain {
 			{
 				// std::scoped_lock lock(stateMutex);
 				RefreshDistanceFromCamera();
-				if (meshGenerated && entity) {
-					auto transform = entity->transform.Lock();
-					if (transform && transform->data) {
-						transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
-					}
-				}
 				if (meshGenerated && entity && entity->generated) {
 					if (render) {
 						entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE | GEOMETRY_ATTR_CAST_SHADOWS | GEOMETRY_ATTR_REFLECTION_VISIBLE | GEOMETRY_ATTR_SOLID;

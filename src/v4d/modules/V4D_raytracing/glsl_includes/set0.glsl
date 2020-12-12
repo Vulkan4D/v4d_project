@@ -126,6 +126,9 @@ layout(set = 0, binding = 0) uniform Camera {
 	mat3 GetModelNormalViewMatrix() {
 		return mat3(ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).normalView);
 	}
+	uint64_t GetCustomData() {
+		return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].customData;
+	}
 	
 	#ifdef RAY_TRACING
 		vec3 DoubleSidedNormals(in vec3 viewSpaceNormal) {

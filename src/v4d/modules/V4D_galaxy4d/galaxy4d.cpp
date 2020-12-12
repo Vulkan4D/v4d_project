@@ -230,7 +230,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
 				entity->generator = [](RenderableGeometryEntity* entity){
@@ -244,7 +244,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
@@ -258,7 +258,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
@@ -274,7 +274,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::Drone:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id, 0/*customData*/);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f);
 				entity->generator = [](RenderableGeometryEntity* entity){
