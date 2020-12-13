@@ -1,65 +1,62 @@
 #pragma once
 
+#include <v4d.h>
+
 class TmpBlock {
-	v4d::scene::Scene* scene;
-	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
+	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr;
 	
 public:
-	Block* block = nullptr;
+	Block block;
 	float boundingDistance = 1.0;
 	glm::vec4 wireframeColor {0.5f, 0.5f, 0.5f, 0.5f};
 
-	TmpBlock(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) : scene(scene) {
-		sceneObject = scene->AddObjectInstance();
-		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-			if (block) {
-				auto geom = obj->AddGeometry("transparent", Block::MAX_VERTICES_SIMPLE, Block::MAX_INDICES_SIMPLE);
-				
-				geom->renderWireframe = true;
-				geom->wireframeColor = wireframeColor;
-				geom->wireframeThickness = 5.0f;
-				
-				auto[vertexCount, indexCount] = block->GenerateSimpleGeometry(geom->GetVertexPtr(), geom->GetIndexPtr(), 0, 0.3);
-				geom->Shrink(vertexCount, indexCount);
-				
-				for (int i = 0; i < geom->vertexCount; ++i) {
-					auto* vert = geom->GetVertexPtr(i);
-					geom->boundingDistance = glm::max(geom->boundingDistance, glm::length(vert->pos));
-					geom->boundingBoxSize = glm::max(glm::abs(vert->pos), geom->boundingBoxSize);
-				}
-				boundingDistance = geom->boundingDistance;
-				geom->isDirty = true;
+	TmpBlock(Block b) : block(b) {
+		entity = RenderableGeometryEntity::Create(THIS_MODULE);
+		entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
+			entity->Prepare(device, "V4D_buildsystem.block");
+			entity->rayTracingMask = 0;
+			
+			entity->Add_meshIndices();
+			entity->Add_meshVertexPosition();
+			entity->Add_meshVertexNormal();
+			entity->Add_meshVertexColor();
+			entity->Add_customData();
+			
+			std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES);
+			std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES);
+			std::vector<Mesh::VertexNormal> vertexNormals (Block::MAX_VERTICES);
+			std::vector<Mesh::VertexColor> vertexColors (Block::MAX_VERTICES);
+			std::vector<uint32_t> customData (Block::MAX_VERTICES);
+			
+			auto[vertexCount, indexCount] = block.GenerateSimpleGeometry(meshIndices.data(), vertexPositions.data(), vertexNormals.data(), vertexColors.data(), customData.data(), 0, 0.3);
+			
+			for (int i = 0; i < vertexCount; ++i) {
+				auto vert = vertexPositions[i];
+				boundingDistance = glm::max(boundingDistance, glm::length(glm::vec3(vert)));
 			}
-		}, position, angle, axis);
+			
+			entity->meshIndices->AllocateBuffers(device, meshIndices.data(), indexCount);
+			entity->meshVertexPosition->AllocateBuffers(device, vertexPositions.data(), vertexCount);
+			entity->meshVertexNormal->AllocateBuffers(device, vertexNormals.data(), vertexCount);
+			entity->meshVertexColor->AllocateBuffers(device, vertexColors.data(), vertexCount);
+			entity->customData->AllocateBuffers(device, (float*)customData.data(), vertexCount);
+			
+			entity->raster_transparent = true;
+			entity->raster_wireframe = 5.0f;
+			entity->raster_wireframe_color = wireframeColor;
+		};
 	}
 	
 	~TmpBlock() {
-		ClearBlock();
-		if (sceneObject) scene->RemoveObjectInstance(sceneObject);
+		if (entity) entity->Destroy();
 	}
 	
-	Block& SetBlock(SHAPE shape) {
-		ClearBlock();
-		block = new Block(shape);
-		return *block;
-	}
-	
-	void ResetGeometry() {
-		sceneObject->ClearGeometries();
-	}
-	
-	void ClearBlock() {
-		if (block) delete block;
-	}
-
 	void SetWorldTransform(glm::dmat4 t) {
-		if (sceneObject) {
-			sceneObject->SetWorldTransform(t);
-		}
+		entity->SetWorldTransform(t);
 	}
 	
 	glm::dmat4 GetWorldTransform() const {
-		return sceneObject->GetWorldTransform();
+		return entity->GetWorldTransform();
 	}
 	
 };

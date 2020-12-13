@@ -305,7 +305,7 @@ struct PlanetTerrain {
 				auto vertexColors = entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexUVs = entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
 				entity->customData->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
-				entity->generator = [](auto* entity){entity->generated = false;};
+				entity->generator = [](auto* entity, Device*){entity->generated = false;};
 				entity->transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
 			entityLock.unlock();
 		

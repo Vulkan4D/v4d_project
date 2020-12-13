@@ -2,6 +2,8 @@
 
 #include <unordered_set>
 
+using namespace v4d::graphics;
+
 class Block {
 public:
 	static constexpr int MAX_POINTS = 8;
@@ -149,7 +151,10 @@ protected:
 	
 	struct FaceVertex {
 		uint8_t vertexIndex;
-		v4d::scene::Geometry::VertexBuffer_T* vertexData;
+		Mesh::VertexPosition* vertexPosition;
+		Mesh::VertexNormal* vertexNormal;
+		Mesh::VertexColor* vertexColor;
+		uint32_t* customData;
 	};
 	
 	uint8_t GetColorIndex(uint8_t i) const {
@@ -787,10 +792,13 @@ public:
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateSimpleGeometry(
-		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
-		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
+		Mesh::Index* outputIndices,
+		Mesh::VertexPosition* outputVerticesPosition,
+		Mesh::VertexNormal* outputVerticesNormal,
+		Mesh::VertexColor* outputVerticesColor,
+		uint32_t* outputCustomData,
 		uint vertexIndexOffset = 0,
-		float alpha = 1.0
+		float alpha = 1.0f
 	) {
 		uint vertexCount = 0, indexCount = 0;
 		auto points = GetPointsPositions();
@@ -813,7 +821,10 @@ public:
 				} catch (...) {
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
-					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
+					faceVertex->vertexPosition = &outputVerticesPosition[faceVertex->vertexIndex];
+					faceVertex->vertexNormal = &outputVerticesNormal[faceVertex->vertexIndex];
+					faceVertex->vertexColor = &outputVerticesColor[faceVertex->vertexIndex];
+					faceVertex->customData = &outputCustomData[faceVertex->vertexIndex];
 					PackedBlockCustomData customData;{
 						customData.blockIndex = data.index;
 						customData.faceIndex = faceIndex;
@@ -828,11 +839,11 @@ public:
 						case 6: customData.materialId = data.face6Material;break;
 						// case 7: customData.materialId = data.structureMaterial;break; //TODO
 					}
-					faceVertex->vertexData->customData = customData.packed;
-					faceVertex->vertexData->pos = points[pointIndex] + GetPosition();
-					faceVertex->vertexData->normal = faceNormal;
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
-					faceVertex->vertexData->SetColor({color.r, color.g, color.b, alpha});
+					*faceVertex->vertexPosition = points[pointIndex] + GetPosition();
+					*faceVertex->vertexNormal = faceNormal;
+					*faceVertex->vertexColor = glm::vec4{color.r, color.g, color.b, alpha};
+					*faceVertex->customData = customData.packed;
 				}
 				outputIndices[indexCount++] = vertexIndexOffset + faceVertex->vertexIndex;
 			}
@@ -845,8 +856,11 @@ public:
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateGeometry(
-		v4d::scene::Geometry::VertexBuffer_T* outputVertices, 
-		v4d::scene::Geometry::IndexBuffer_T* outputIndices,
+		Mesh::Index* outputIndices,
+		Mesh::VertexPosition* outputVerticesPosition,
+		Mesh::VertexNormal* outputVerticesNormal,
+		Mesh::VertexColor* outputVerticesColor,
+		uint32_t* outputCustomData,
 		uint vertexIndexOffset = 0
 	) {
 		uint vertexCount = 0, indexCount = 0;
@@ -875,7 +889,10 @@ public:
 				} catch (...) {
 					faceVertex = &faceVertices[faceVerticesIndex];
 					faceVertex->vertexIndex = vertexCount++;
-					faceVertex->vertexData = &outputVertices[faceVertex->vertexIndex];
+					faceVertex->vertexPosition = &outputVerticesPosition[faceVertex->vertexIndex];
+					faceVertex->vertexNormal = &outputVerticesNormal[faceVertex->vertexIndex];
+					faceVertex->vertexColor = &outputVerticesColor[faceVertex->vertexIndex];
+					faceVertex->customData = &outputCustomData[faceVertex->vertexIndex];
 					PackedBlockCustomData customData;{
 						customData.blockIndex = data.index;
 						customData.faceIndex = faceIndex;
@@ -889,7 +906,6 @@ public:
 						case 5: customData.materialId = data.face5Material;break;
 						case 6: customData.materialId = data.face6Material;break;
 					}
-					faceVertex->vertexData->customData = customData.packed;
 					
 					auto pt = points[pointIndex];
 					
@@ -900,16 +916,18 @@ public:
 						else if (face.facedirs.size() > 1) pt += faceNormal * bevelSize / 4.0f;
 					}
 					
-					faceVertex->vertexData->pos = pt + GetPosition();
-					faceVertex->vertexData->normal = faceNormal;
 					auto colorIndex = GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex);
 					auto color = COLORS[colorIndex];
-					faceVertex->vertexData->SetColor({color.r, color.g, color.b, colorIndex? 1:0});
+					
+					*faceVertex->vertexPosition = pt + GetPosition();
+					*faceVertex->vertexNormal = faceNormal;
+					*faceVertex->vertexColor = glm::vec4{color.r, color.g, color.b, colorIndex? 1:0};
+					*faceVertex->customData = customData.packed;
 					
 					if (cornerVertices[pointIndex].size() < 3) {
-						cornerVertices[pointIndex].emplace(glm::round(faceVertex->vertexData->pos * 100.0f) / 100.0f);
+						cornerVertices[pointIndex].emplace(glm::round(glm::vec3(*faceVertex->vertexPosition) * 100.0f) / 100.0f);
 					} else {
-						extraCornerVertices[pointIndex].emplace_back(faceIndex, faceVertex->vertexData->pos);
+						extraCornerVertices[pointIndex].emplace_back(faceIndex, *faceVertex->vertexPosition);
 					}
 				}
 				outputIndices[indexCount++] = vertexIndexOffset + faceVertex->vertexIndex;
@@ -918,21 +936,21 @@ public:
 		}
 		
 		if (addBevels) {
-			auto addStructureTriangle = [&outputVertices, &outputIndices, &vertexCount, &indexCount, vertexIndexOffset, this](const auto& vertices){
+			auto addStructureTriangle = [&outputVerticesPosition, &outputVerticesNormal, &outputVerticesColor, &outputCustomData, &outputIndices, &vertexCount, &indexCount, vertexIndexOffset, this](const auto& vertices){
 				assert(vertices.size() == 3 || vertices.size() == 4);
 				size_t index = vertexCount;
-				for (auto& vertexPos : vertices) outputVertices[vertexCount++].pos = vertexPos;
-				glm::vec3 faceNormal = glm::normalize(glm::cross(outputVertices[index+1].pos - outputVertices[index+2].pos, outputVertices[index+1].pos - outputVertices[index+0].pos));
-				if (glm::dot(faceNormal, glm::normalize(outputVertices[index].pos - GetPosition())) < 0) faceNormal *= -1;
+				for (auto& vertexPos : vertices) outputVerticesPosition[vertexCount++] = vertexPos;
+				glm::vec3 faceNormal = glm::normalize(glm::cross(glm::vec3(outputVerticesPosition[index+1]) - glm::vec3(outputVerticesPosition[index+2]), glm::vec3(outputVerticesPosition[index+1]) - glm::vec3(outputVerticesPosition[index+0])));
+				if (glm::dot(faceNormal, glm::normalize(glm::vec3(outputVerticesPosition[index]) - GetPosition())) < 0) faceNormal *= -1;
 				PackedBlockCustomData customData;{
 					customData.blockIndex = data.index;
 					customData.faceIndex = 7; // 7 is for structure
 					customData.materialId = data.structureMaterial;
 				}
 				for (int i = 0; i < vertices.size(); ++i) {
-					outputVertices[index+i].customData = customData.packed;
-					outputVertices[index+i].normal = faceNormal;
-					outputVertices[index+i].SetColor(glm::vec4(COLORS[BLOCK_COLOR_GREY], 1));
+					outputCustomData[index+i] = customData.packed;
+					outputVerticesNormal[index+i] = faceNormal;
+					outputVerticesColor[index+i] = glm::vec4(COLORS[BLOCK_COLOR_GREY], 1);
 				}
 				outputIndices[indexCount++] = vertexIndexOffset + index + 0;
 				outputIndices[indexCount++] = vertexIndexOffset + index + 1;
@@ -950,8 +968,8 @@ public:
 					if (extraCornerVertices.count(corner)) {
 						for (auto&[faceIndex, vert0] : extraCornerVertices[corner]) {
 							auto&[face1, face2] = GetAdjacentFaces(faceIndex, corner);
-							auto vert1 = faceVertices[(face1 << 4) | corner].vertexData->pos;
-							auto vert2 = faceVertices[(face2 << 4) | corner].vertexData->pos;
+							auto vert1 = *faceVertices[(face1 << 4) | corner].vertexPosition;
+							auto vert2 = *faceVertices[(face2 << 4) | corner].vertexPosition;
 							addStructureTriangle(std::vector<glm::vec3>{vert0, vert1, vert2});
 						}
 					}
@@ -959,10 +977,10 @@ public:
 			}
 			// Edges
 			for (auto& line : GetLines()) {
-				auto vert0 = faceVertices[(line.face1 << 4) | line.point1].vertexData->pos;
-				auto vert1 = faceVertices[(line.face1 << 4) | line.point2].vertexData->pos;
-				auto vert2 = faceVertices[(line.face2 << 4) | line.point1].vertexData->pos;
-				auto vert3 = faceVertices[(line.face2 << 4) | line.point2].vertexData->pos;
+				auto vert0 = *faceVertices[(line.face1 << 4) | line.point1].vertexPosition;
+				auto vert1 = *faceVertices[(line.face1 << 4) | line.point2].vertexPosition;
+				auto vert2 = *faceVertices[(line.face2 << 4) | line.point1].vertexPosition;
+				auto vert3 = *faceVertices[(line.face2 << 4) | line.point2].vertexPosition;
 				addStructureTriangle(std::vector<glm::vec3>{vert0, vert1, vert2, vert3});
 			}
 		}

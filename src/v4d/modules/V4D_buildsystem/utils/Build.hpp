@@ -1,10 +1,9 @@
 #pragma once
 
 class Build {
-	v4d::scene::ObjectInstancePtr sceneObject = nullptr;
+	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr;
 	std::vector<Block> blocks {};
 	mutable std::mutex blocksMutex;
-	std::weak_ptr<v4d::scene::Geometry> geometryWeakPtr;
 	
 public:
 	v4d::scene::NetworkGameObject::Id networkId;
@@ -12,44 +11,55 @@ public:
 	Build(v4d::scene::NetworkGameObject::Id networkId) : networkId(networkId) {}
 	
 	~Build() {
-		ClearBlocks();
+		if (entity) entity->Destroy();
+		std::lock_guard lock(blocksMutex);
+		blocks.clear();
 	}
 	
-	v4d::scene::ObjectInstancePtr AddToScene(v4d::scene::Scene* scene, glm::dvec3 position = {0, 0, 0}, double angle = (0.0), glm::dvec3 axis = {0, 0, 1}) {
+	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> CreateEntity(glm::dmat4 initialTransform = glm::dmat4(1)) {
 		std::lock_guard lock(blocksMutex);
-		sceneObject = scene->AddObjectInstance();
-		sceneObject->Configure([this](v4d::scene::ObjectInstance* obj){
-			std::lock_guard lock(blocksMutex);
-			if (blocks.size() > 0) {
-				obj->Lock();
-				{
-					auto geometry = geometryWeakPtr.lock();
-					if (!geometry) {
-						geometryWeakPtr = geometry = obj->AddGeometry("block", Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
-					} else {
-						geometry->Reset(Block::MAX_VERTICES*blocks.size(), Block::MAX_INDICES*blocks.size());
-					}
-					
-					uint nextVertex = 0;
-					uint nextIndex = 0;
-					for (int i = 0; i < blocks.size(); ++i) {
-						auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(geometry->GetVertexPtr(nextVertex), geometry->GetIndexPtr(nextIndex), nextVertex);
-						nextVertex += vertexCount;
-						nextIndex += indexCount;
-					}
-					geometry->Shrink(nextVertex, nextIndex);
-					
-					for (int i = 0; i < geometry->vertexCount; ++i) {
-						auto* vert = geometry->GetVertexPtr(i);
-						geometry->boundingDistance = glm::max(geometry->boundingDistance, glm::length(vert->pos));
-						geometry->boundingBoxSize = glm::max(glm::abs(vert->pos), geometry->boundingBoxSize);
-					}
-					geometry->isDirty = true;
+		if (entity) {
+			entity->Destroy();
+			entity = nullptr;
+		}
+		if (blocks.size() > 0) {
+			entity = RenderableGeometryEntity::Create(THIS_MODULE, networkId);
+			entity->Add_physics(v4d::scene::PhysicsInfo::RigidBodyType::STATIC, 1.0f);
+			entity->generator = [this, initialTransform](RenderableGeometryEntity* entity, Device* device){
+				entity->Prepare(device, "V4D_buildsystem.block");
+				entity->SetInitialTransform(initialTransform);
+				
+				entity->Add_meshIndices();
+				entity->Add_meshVertexPosition();
+				entity->Add_meshVertexNormal();
+				entity->Add_meshVertexColor();
+				entity->Add_customData();
+				
+				std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES * blocks.size());
+				std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES * blocks.size());
+				std::vector<Mesh::VertexNormal> vertexNormals (Block::MAX_VERTICES * blocks.size());
+				std::vector<Mesh::VertexColor> vertexColors (Block::MAX_VERTICES * blocks.size());
+				std::vector<uint32_t> customData (Block::MAX_VERTICES * blocks.size());
+				
+				uint nextVertex = 0;
+				uint nextIndex = 0;
+				for (int i = 0; i < blocks.size(); ++i) {
+					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(meshIndices.data(), vertexPositions.data(), vertexNormals.data(), vertexColors.data(), customData.data(), nextVertex);
+					nextVertex += vertexCount;
+					nextIndex += indexCount;
 				}
-				obj->Unlock();
-			}
-		}, position, angle, axis);
-		return sceneObject;
+				
+				entity->meshIndices->AllocateBuffers(device, meshIndices.data(), nextIndex);
+				entity->meshVertexPosition->AllocateBuffers(device, vertexPositions.data(), nextVertex);
+				entity->meshVertexNormal->AllocateBuffers(device, vertexNormals.data(), nextVertex);
+				entity->meshVertexColor->AllocateBuffers(device, vertexColors.data(), nextVertex);
+				entity->customData->AllocateBuffers(device, (float*)customData.data(), nextVertex);
+				
+				entity->physics->SetMeshCollider();
+			};
+			
+		}
+		return entity;
 	}
 	
 	static bool IsBlockAdditionValid(const std::vector<Block>& existingBlocks, const Block& newBlock) {
@@ -68,31 +78,30 @@ public:
 		return blocks;
 	}
 	
-	void ResetGeometry() {
-		if (sceneObject) {
-			sceneObject->ResetGeometries();
+	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> SwapBlocksAndRebuild(std::vector<Block>& otherBlocks) {
+		std::lock_guard lock(blocksMutex);
+		blocks.swap(otherBlocks);
+		if (entity) {
+			glm::dmat4 worldTransform;
+			auto transform = entity->transform.Lock();
+			if (transform && transform->data) {
+				worldTransform = transform->data->worldTransform;
+			} else {
+				worldTransform = entity->initialTransform;
+			}
+			return entity = CreateEntity(worldTransform);
 		}
+		return nullptr;
 	}
 	
-	void SwapBlocksVector(std::vector<Block>& other) {
-		std::lock_guard lock(blocksMutex);
-		blocks.swap(other);
-		ResetGeometry();
-	}
-
-	void ClearBlocks() {
-		std::lock_guard lock(blocksMutex);
-		blocks.clear();
-	}
-
 	void SetWorldTransform(glm::dmat4 t) {
-		if (sceneObject) {
-			sceneObject->SetWorldTransform(t);
+		if (entity) {
+			entity->SetWorldTransform(t);
 		}
 	}
 	
 	glm::dmat4 GetWorldTransform() const {
-		return sceneObject->GetWorldTransform();
+		return entity->GetWorldTransform();
 	}
 	
 };

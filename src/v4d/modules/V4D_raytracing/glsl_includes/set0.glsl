@@ -73,6 +73,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	
 	#if defined(SHADER_VERT) || defined(SHADER_FRAG)
 		layout(std430, push_constant) uniform RasterPushConstant{
+			vec4 wireframeColor;
 			int instanceCustomIndexValue;
 		};
 		#define INSTANCE_CUSTOM_INDEX_VALUE instanceCustomIndexValue

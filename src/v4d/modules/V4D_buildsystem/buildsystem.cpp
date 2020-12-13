@@ -3,7 +3,7 @@
 #include "actions.hh"
 #include "common.hh"
 #include "../V4D_flycam/common.hh"
-#include "../V4D_hybrid/Texture2D.hpp"
+#include "../V4D_raytracing/Texture2D.hpp"
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 
 using namespace v4d::scene;
@@ -64,17 +64,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* s) {
 		scene = s;
 		buildInterface.scene = scene;
-		
-		static const int maxObjectsInMemory = 10; // 256 objects = 229 Mb
-		static const int maxBlocksInMemory = maxObjectsInMemory * 1024;
-		v4d::scene::Geometry::globalBuffers.objectBuffer.Extend(maxObjectsInMemory);
-		v4d::scene::Geometry::globalBuffers.geometryBuffer.Extend(maxObjectsInMemory);
-		v4d::scene::Geometry::globalBuffers.vertexBuffer.Extend(maxBlocksInMemory * Block::MAX_VERTICES);
-		v4d::scene::Geometry::globalBuffers.indexBuffer.Extend(maxBlocksInMemory * Block::MAX_INDICES);
 	}
-	V4D_MODULE_FUNC(void, UnloadScene) {
-		buildInterface.UnloadScene();
-	}
+	
 	V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
 		switch (obj->type) {
@@ -97,9 +88,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
 		switch (obj->type) {
 			case OBJECT_TYPE::Build:{
-				obj->objectInstance = cachedData.builds[obj->id]->AddToScene(scene);
-				obj->objectInstance->AssignToModule(THIS_MODULE, obj->id);
-				obj->objectInstance->rigidbodyType = ObjectInstance::RigidBodyType::DYNAMIC;
+				obj->renderableGeometryEntityInstance = cachedData.builds[obj->id]->CreateEntity();
 			}break;
 		}
 	}
@@ -122,7 +111,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			auto& build = cachedData.builds.at(obj->id);
 			if (build) {
 				auto& blocks = cachedData.buildBlocks.at(obj->id);
-				build->SwapBlocksVector(blocks);
+				obj->renderableGeometryEntityInstance = build->SwapBlocksAndRebuild(blocks);
 			}
 		} catch(...){}
 	}
@@ -133,6 +122,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
 		r = _r;
+		buildInterface.device = r->renderingDevice;
 	}
 	
 	V4D_MODULE_FUNC(void, CreateVulkanResources2, v4d::graphics::vulkan::Device* device) {
@@ -153,6 +143,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			blocks_tex[i].DestroyImage(device);
 		}
+		
+		buildInterface.Reset();
 	}
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
@@ -253,15 +245,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
-		
-		// Blocks shader
-		auto* rasterVisibilityPipelineLayout = mainRenderModule->GetPipelineLayout("pl_visibility_raster");
-		blockShader = new RasterShaderPipeline(*rasterVisibilityPipelineLayout, {
-			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.vert"),
-			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.frag"),
-		});
-		mainRenderModule->AddShader("sg_visibility", blockShader);
-		
 		// Crosshair shader
 		auto* overlayPipelineLayout = mainRenderModule->GetPipelineLayout("pl_overlay");
 		crosshairShader = new RasterShaderPipeline(*overlayPipelineLayout, {
@@ -272,21 +255,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		auto* shaderBindingTableVisibility = mainRenderModule->GetShaderBindingTable("sbt_visibility");
-		auto* shaderBindingTableLighting = mainRenderModule->GetShaderBindingTable("sbt_lighting");
+		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
 		
 		// Blocks
-		Geometry::geometryRenderTypes["block"].sbtOffset = 
-			shaderBindingTableVisibility->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.rchit"));
-			shaderBindingTableLighting->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.rchit"));
-		Geometry::geometryRenderTypes["block"].rasterShader = blockShader;
-		blockShader->AddVertexInputBinding(sizeof(Geometry::VertexBuffer_T), VK_VERTEX_INPUT_RATE_VERTEX, Geometry::VertexBuffer_T::GetInputAttributes());
-		blockShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
-		#ifdef V4D_RENDERER_RAYTRACING_USE_DEVICE_LOCAL_VERTEX_INDEX_BUFFERS
-			blockShader->SetData(&Geometry::globalBuffers.vertexBuffer.deviceLocalBuffer, &Geometry::globalBuffers.indexBuffer.deviceLocalBuffer, 0);
-		#else
-			blockShader->SetData(&Geometry::globalBuffers.vertexBuffer, &Geometry::globalBuffers.indexBuffer, 0);
-		#endif
+		RenderableGeometryEntity::sbtOffsets["V4D_buildsystem.block"] = 
+			shaderBindingTable->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.rchit"));
 		
 		// Crosshair
 		crosshairShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
@@ -544,8 +517,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				case GLFW_MOUSE_BUTTON_1:
 					// Left Click
 					if (buildInterface.selectedBlockType != -1 && buildInterface.isValid) {
-						if (buildInterface.tmpBlock && buildInterface.tmpBlock->block) {
-							auto block = *buildInterface.tmpBlock->block;
+						if (buildInterface.tmpBlock) {
+							auto block = buildInterface.tmpBlock->block;
 							auto parent = buildInterface.tmpBuildParent;
 							
 							block.SetColor(BLOCK_COLOR_GREY);

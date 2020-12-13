@@ -137,8 +137,6 @@ ComputeShaderPipeline
 	bumpMapsNormalsGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.normals.map.comp"}
 ;
 
-RasterShaderPipeline* planetTerrainRasterShader = nullptr;
-
 struct MapGenPushConstant {
 	int planetIndex;
 	float planetHeightVariation;
@@ -167,7 +165,7 @@ void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 			if (chunk->computedLevel == 1) {
 				auto lock = RenderableGeometryEntity::GetLock();
 				chunk->computedLevel = 2;
-				chunk->entity->generator = [](auto* entity){};
+				chunk->entity->generator = [](RenderableGeometryEntity*, Device*){};
 			} else if (chunk->computedLevel == 2) {
 				if (!chunk->colliderActive) {
 					if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
@@ -210,7 +208,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ModuleUnload) {
 		if (planetAtmosphereShader) delete planetAtmosphereShader;
-		if (planetTerrainRasterShader) delete planetTerrainRasterShader;
 	}
 	
 	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
@@ -227,29 +224,29 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// Light source
 		sun = RenderableGeometryEntity::Create(THIS_MODULE);
 		sun->SetInitialTransform(glm::translate(glm::dmat4(1), sun1Position));
-		sun->generator = [](auto* entity){
+		sun->generator = [](auto* entity, Device* device){
 			float lightIntensity = 1e24f;
 			float radius = 700000000;
-			entity->Prepare(renderingDevice, "aabb_sphere.light");
+			entity->Prepare(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 			entity->Add_proceduralVertexAABB();
-			entity->proceduralVertexAABB->AllocateBuffers(renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 			entity->Add_meshVertexColor();
-			entity->meshVertexColor->AllocateBuffers(renderingDevice, {glm::vec4{lightIntensity}});
+			entity->meshVertexColor->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun1Position;
 		
 		sun2 = RenderableGeometryEntity::Create(THIS_MODULE);
 		sun2->SetInitialTransform(glm::translate(glm::dmat4(1), sun2Position));
-		sun2->generator = [](auto* entity){
+		sun2->generator = [](auto* entity, Device* device){
 			float lightIntensity = 5e22f;
 			float radius = 700000000;
-			entity->Prepare(renderingDevice, "aabb_sphere.light");
+			entity->Prepare(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 			entity->Add_proceduralVertexAABB();
-			entity->proceduralVertexAABB->AllocateBuffers(renderingDevice, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 			entity->Add_meshVertexColor();
-			entity->meshVertexColor->AllocateBuffers(renderingDevice, {glm::vec4{lightIntensity}});
+			entity->meshVertexColor->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun2Position;
 		

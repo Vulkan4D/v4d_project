@@ -193,6 +193,7 @@ std::array<std::map<int32_t, std::shared_ptr<RenderableGeometryEntity>>, Rendere
 	RenderPass fogRenderPass;
 	
 	struct RasterPushConstant {
+		glm::vec4 wireframeColor = {1,1,1,1};
 		int32_t instanceCustomIndexValue;
 	};
 	
@@ -739,7 +740,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					} else {
 						s->SetData(3);
 					}
-					RasterPushConstant pushConstant {entity->GetIndex()};
+					RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
 					s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 				}
 			});
@@ -757,8 +758,11 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					} else {
 						s->SetData(3);
 					}
-					RasterPushConstant pushConstant {entity->GetIndex()};
-					s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+					RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
+					s->Bind(r->renderingDevice, commandBuffer);
+					s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+					r->renderingDevice->CmdSetLineWidth(commandBuffer, entity->raster_wireframe);
+					s->Render(r->renderingDevice, commandBuffer, 1);
 				}
 			});
 		}
@@ -1082,8 +1086,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 						});
 					}
 				
-				} else {
-					LOG_ERROR("An entity is missing a transform component")
 				}
 			}
 			

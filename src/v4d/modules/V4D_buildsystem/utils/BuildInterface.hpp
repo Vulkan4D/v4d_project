@@ -1,9 +1,9 @@
 #pragma once
-#include <set>
-
+#include <v4d.h>
 
 struct BuildInterface {
 	v4d::scene::Scene* scene = nullptr;
+	v4d::graphics::vulkan::Device* device = nullptr;
 	int selectedBlockType = -1;
 	float blockSize[NB_BLOCKS][3] = {
 		{1.0f, 1.0f, 1.0f},
@@ -56,35 +56,32 @@ struct BuildInterface {
 		}
 		
 		void Refresh(BuildInterface* buildInterface) {
-			buildInterface->scene->Lock();{
-				this->highPrecisionGrid = buildInterface->highPrecisionGrid;
-				this->createMode = buildInterface->createMode;
-				
-				if (buildInterface->hitBlock.has_value() && buildInterface->hitBuild) {
-					build = buildInterface->hitBuild;
-				} else {
-					build.reset();
-				}
-				
-				hasHit = buildInterface->hitBlock.has_value();
-				if (hasHit) {
-					objId = buildInterface->hitBlock->objId;
-					customData0 = buildInterface->hitBlock->customData0;
-					hitPositionOnBuild = buildInterface->hitBlock->position;
-					if (highPrecisionGrid) {
-						gridPos = glm::round(buildInterface->hitBlock->position*10.001f)/10.0f;
-					} else {
-						gridPos = glm::round(buildInterface->hitBlock->position*1.001f);
-					}
-				} else {
-					objId = 0;
-					customData0 = 0;
-				}
-				
-				// Get parent hit build (if any)
-				buildInterface->tmpBuildParent = (buildInterface->hitBlock.has_value() && buildInterface->hitBuild)? buildInterface->hitBuild : nullptr;
+			this->highPrecisionGrid = buildInterface->highPrecisionGrid;
+			this->createMode = buildInterface->createMode;
 			
-			}buildInterface->scene->Unlock();
+			if (buildInterface->hitBlock.has_value() && buildInterface->hitBuild) {
+				build = buildInterface->hitBuild;
+			} else {
+				build.reset();
+			}
+			
+			hasHit = buildInterface->hitBlock.has_value();
+			if (hasHit) {
+				objId = buildInterface->hitBlock->objId;
+				customData0 = buildInterface->hitBlock->customData0;
+				hitPositionOnBuild = buildInterface->hitBlock->position;
+				if (highPrecisionGrid) {
+					gridPos = glm::round(buildInterface->hitBlock->position*10.001f)/10.0f;
+				} else {
+					gridPos = glm::round(buildInterface->hitBlock->position*1.001f);
+				}
+			} else {
+				objId = 0;
+				customData0 = 0;
+			}
+			
+			// Get parent hit build (if any)
+			buildInterface->tmpBuildParent = (buildInterface->hitBlock.has_value() && buildInterface->hitBuild)? buildInterface->hitBuild : nullptr;
 		}
 		
 	} cachedHitBlock;
@@ -101,19 +98,26 @@ struct BuildInterface {
 			isDirty = false;
 			RemakeTmpBlock();
 		} else {
-			if (scene && scene->cameraParent && tmpBlock) {
-				scene->Lock();
-					if (tmpBuildParent) {
-						tmpBlock->SetWorldTransform(tmpBuildParent->GetWorldTransform());
-					} else {
-						double angle = 20;
-						glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
-						glm::dvec3 position = {0.0, 0.0, tmpBlock->boundingDistance*-3.0f};
-						tmpBlock->SetWorldTransform(glm::rotate(glm::translate(scene->cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
-					}
-				scene->Unlock();
+			auto cameraParent = scene->cameraParent.lock();
+			if (scene && cameraParent && tmpBlock) {
+				if (tmpBuildParent) {
+					tmpBlock->SetWorldTransform(tmpBuildParent->GetWorldTransform());
+				} else {
+					double angle = 20;
+					glm::dvec3 axis = glm::normalize(glm::dvec3{1,-1,-0.3});
+					glm::dvec3 position = {0.0, 0.0, tmpBlock->boundingDistance*-3.0f};
+					tmpBlock->SetWorldTransform(glm::rotate(glm::translate(cameraParent->GetWorldTransform(), position), glm::radians(angle), axis));
+				}
 			}
 		}
+	}
+	
+	void Reset() {
+		std::lock_guard lock(mu);
+		delete tmpBlock;
+		tmpBlock = nullptr;
+		tmpBuildParent = nullptr;
+		hitBuild = nullptr;
 	}
 	
 	int/* score = number of points that are touching with points from the hit face, + 1 or 2 for a good fit */
@@ -174,24 +178,20 @@ struct BuildInterface {
 	
 	void RemakeTmpBlock() {
 		std::lock_guard lock(mu);
-		float tmpBlockBoundingDistance = 1.0;
-		scene->Lock();
 		{
 			cachedHitBlock.Refresh(this);
 			if (tmpBlock) {
-				tmpBlockBoundingDistance = tmpBlock->boundingDistance;
 				delete tmpBlock;
 				tmpBlock = nullptr;
 			}
 			if (selectedBlockType != -1) {
 				
-				// Create a tmp build
-				tmpBlock = new TmpBlock(scene);
-				
 				// Create a block in the tmp build and assign selected orientation and size
-				Block& block = tmpBlock->SetBlock((SHAPE)selectedBlockType);
+				Block block((SHAPE)selectedBlockType);
 				block.SetOrientation(blockRotation);
 				block.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
+				
+				glm::vec4 wireframeColor;
 				
 				if (createMode) {
 					// We are not aiming at a parent build, create a new build
@@ -229,30 +229,26 @@ struct BuildInterface {
 						block.SetColor(BLOCK_COLOR_GREEN);
 						
 					} else {
-						delete tmpBlock;
-						tmpBlock = nullptr;
-						goto Exit;
+						return;
 					}
 				}
 				
 				VALID:
 					isValid = true;
-					tmpBlock->wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f};
+					wireframeColor = {0.0f, 1.0f, 0.0f, 0.5f};
 					goto FINALLY;
 				
 				INVALID:
 					block.SetColor(BLOCK_COLOR_RED);
-					tmpBlock->wireframeColor = {1.0f, 0.0f, 0.0f, 1.0f};
+					wireframeColor = {1.0f, 0.0f, 0.0f, 1.0f};
 					isValid = false;
 					
 				FINALLY:
-					tmpBlock->boundingDistance = tmpBlockBoundingDistance;
-					tmpBlock->ResetGeometry();
+					tmpBlock = new TmpBlock(block);
+					tmpBlock->wireframeColor = wireframeColor;
 					UpdateTmpBlock();
 			}
 		}
-		Exit:
-		scene->Unlock();
 	}
 	
 	glm::dmat4 GetTmpBuildWorldTransform() const {
@@ -363,10 +359,4 @@ struct BuildInterface {
 		return true;
 	}
 	
-	void UnloadScene() {
-		std::lock_guard lock(mu);
-		if (tmpBlock) delete tmpBlock;
-		tmpBuildParent = nullptr;
-		hitBuild = nullptr;
-	}
 };

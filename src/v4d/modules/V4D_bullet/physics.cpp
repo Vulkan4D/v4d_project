@@ -142,24 +142,38 @@ struct PhysicsObject : btMotionState {
 							auto* mesh = new btTriangleMesh();
 							globalTriangleMeshes.push_back(mesh);
 							
-							auto generateColliderMeshFunc = [&physics, &mesh](v4d::graphics::Mesh::VertexPosition* vertices){
-								for (int i = 0; i < physics->colliderMeshIndices.size(); i+=3) {
-									btVector3 v0(vertices[physics->colliderMeshIndices[i]].x, vertices[physics->colliderMeshIndices[i]].y, vertices[physics->colliderMeshIndices[i]].z);
-									btVector3 v1(vertices[physics->colliderMeshIndices[i+1]].x, vertices[physics->colliderMeshIndices[i+1]].y, vertices[physics->colliderMeshIndices[i+1]].z);
-									btVector3 v2(vertices[physics->colliderMeshIndices[i+2]].x, vertices[physics->colliderMeshIndices[i+2]].y, vertices[physics->colliderMeshIndices[i+2]].z);
+							auto generateColliderMeshFunc = [&physics, &mesh](v4d::graphics::Mesh::VertexPosition* vertices, v4d::graphics::Mesh::Index* indices, uint32_t indexCount){
+								for (int i = 0; i < indexCount; i+=3) {
+									btVector3 v0(vertices[indices[i]].x, vertices[indices[i]].y, vertices[indices[i]].z);
+									btVector3 v1(vertices[indices[i+1]].x, vertices[indices[i+1]].y, vertices[indices[i+1]].z);
+									btVector3 v2(vertices[indices[i+2]].x, vertices[indices[i+2]].y, vertices[indices[i+2]].z);
 									mesh->addTriangle(v0, v1, v2, true);
 								}
 							};
 							
+							// Generate collider mesh using custom physics mesh, or fallback on renderer components
 							if (physics->colliderMeshVertices.size() > 0){
-								generateColliderMeshFunc(physics->colliderMeshVertices.data());
+								generateColliderMeshFunc(physics->colliderMeshVertices.data(), physics->colliderMeshIndices.data(), physics->colliderMeshIndices.size());
 							} else if (entity->meshVertexPosition) {
 								auto meshVertexPositions = entity->meshVertexPosition.Lock();
-								if (meshVertexPositions) {
-									generateColliderMeshFunc(meshVertexPositions->data);
-								} else {LOG_ERROR("Could not lock meshVertexPosition for generating the mesh collider")}
+								if (meshVertexPositions && meshVertexPositions->data && meshVertexPositions->count > 0) {
+									if (physics->colliderMeshIndices.size() > 0) {
+										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices.data(), physics->colliderMeshIndices.size());
+									} else if (entity->meshIndices) {
+										auto meshVertexIndices = entity->meshIndices.Lock();
+										if (meshVertexIndices && meshVertexIndices->data && meshVertexIndices->count > 0) {
+											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, meshVertexIndices->count);
+										} else {
+											LOG_ERROR("Empty or Unallocated meshIndices for generating the mesh collider")
+										}
+									} else {
+										LOG_ERROR("Missing meshIndices component for mesh collider")
+									}
+								} else {
+									LOG_ERROR("Empty or Unallocated meshVertexPosition for generating the mesh collider")
+								}
 							} else {
-								LOG_ERROR("Missing mesh collider")
+								LOG_ERROR("Missing meshVertexPosition component for mesh collider")
 							}
 							try {
 								collisionShape = new btBvhTriangleMeshShape(mesh, true);
