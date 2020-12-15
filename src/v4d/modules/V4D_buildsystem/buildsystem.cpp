@@ -112,6 +112,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (build) {
 				auto& blocks = cachedData.buildBlocks.at(obj->id);
 				obj->renderableGeometryEntityInstance = build->SwapBlocksAndRebuild(blocks);
+				obj->posInit = false;
 			}
 		} catch(...){}
 	}
@@ -229,19 +230,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
-		std::lock_guard lock(buildInterface.mu);
 		buildInterface.UpdateTmpBlock();
-		buildInterface.hitBlock = std::nullopt;
-		buildInterface.hitBuild = nullptr;
 	}
 	
-	V4D_MODULE_FUNC(void, OnRendererRayCastHit, v4d::graphics::RenderRayCastHit hit) {
+	V4D_MODULE_FUNC(void, OnRendererRayCastHit, v4d::graphics::RayCast hit) {
 		std::scoped_lock lock(buildInterface.mu, cachedData.objectMapsMutex);
 		try {
 			auto build = cachedData.builds.at(hit.objId);
 			buildInterface.hitBuild = build;
 			buildInterface.hitBlock = hit;
 		} catch(...){}
+	}
+	V4D_MODULE_FUNC(void, OnRendererRayCastOut, v4d::graphics::RayCast) {
+		std::scoped_lock lock(buildInterface.mu);
+		buildInterface.hitBlock = std::nullopt;
+		buildInterface.hitBuild = nullptr;
 	}
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
@@ -441,30 +444,37 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				case GLFW_KEY_0:
 					buildInterface.selectedBlockType = -1;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_1:
 					buildInterface.selectedBlockType = 0;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_2:
 					buildInterface.selectedBlockType = 1;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_3:
 					buildInterface.selectedBlockType = 2;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_4:
 					buildInterface.selectedBlockType = 3;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_5:
 					buildInterface.selectedBlockType = 4;
 					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
 					break;
 				case GLFW_KEY_6:
 					buildInterface.selectedBlockType = -1;
 					buildInterface.paintMode = true;
+					buildInterface.isDirty = true;
 					break;
 					
 				case GLFW_KEY_X: // delete block
@@ -472,7 +482,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						auto hitBuild = buildInterface.cachedHitBlock.build.lock();
 						if (hitBuild) {
 							PackedBlockCustomData customData;
-							customData.packed = buildInterface.cachedHitBlock.customData0;
+							customData.packed = buildInterface.cachedHitBlock.customData;
 							auto parentBlock = hitBuild->GetBlock(customData.blockIndex);
 							if (parentBlock.has_value()) {
 								v4d::data::WriteOnlyStream stream(32);
@@ -484,22 +494,26 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							}
 						}
 					}
+					buildInterface.isDirty = true;
 					break;
 			}
-			buildInterface.isDirty = true;
 		}
 		
 		// Shift key for higher precision grid
 		if (key == GLFW_KEY_LEFT_SHIFT) {
-			if (action != GLFW_RELEASE) buildInterface.highPrecisionGrid = true;
-			else buildInterface.highPrecisionGrid = false;
-			buildInterface.isDirty = true;
+			bool highPrecisionGrid = (action != GLFW_RELEASE);
+			if (buildInterface.highPrecisionGrid != highPrecisionGrid) {
+				buildInterface.highPrecisionGrid = highPrecisionGrid;
+				buildInterface.isDirty = true;
+			}
 		}
 		// C key for create mode
 		if (key == GLFW_KEY_C) {
-			if (action != GLFW_RELEASE) buildInterface.createMode = true;
-			else buildInterface.createMode = false;
-			buildInterface.isDirty = true;
+			bool createMode = (action != GLFW_RELEASE);
+			if (buildInterface.createMode != createMode) {
+				buildInterface.createMode = createMode;
+				buildInterface.isDirty = true;
+			}
 		}
 		
 		playerView->canChangeVelocity = buildInterface.selectedBlockType == -1 && !buildInterface.paintMode;
@@ -549,7 +563,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						auto hitBuild = buildInterface.cachedHitBlock.build.lock();
 						if (hitBuild) {
 							PackedBlockCustomData customData;
-							customData.packed = buildInterface.cachedHitBlock.customData0;
+							customData.packed = buildInterface.cachedHitBlock.customData;
 							auto parentBlock = hitBuild->GetBlock(customData.blockIndex);
 							if (parentBlock.has_value()) {
 								if (buildInterface.paintModeVertexGradients) {

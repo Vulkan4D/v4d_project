@@ -208,8 +208,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				try {
 					std::lock_guard lock(clientSideObjects->mutex);
 					auto obj = clientSideObjects->objects.at(id);
-					scene->cameraParent = obj->renderableGeometryEntityInstance;
 					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+						scene->cameraParent = entity;
 						entity->rayTracingMask &= ~GEOMETRY_ATTR_PRIMARY_VISIBLE;
 					}
 					playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
@@ -232,55 +232,44 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Player:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
-				// entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC); //TODO use impulses to move around for current player physics to work
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Prepare(device, "aabb_cube");
+					entity->Allocate(device, "aabb_cube");
 					entity->rayTracingMask = 0; // 0 makes it invisible
-					entity->Add_proceduralVertexAABB();
-					entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-0.5), glm::vec3(0.5)}});
-					entity->Add_meshVertexColor();
-					entity->meshVertexColor->AllocateBuffers(device, {{0.0f,1.0f,0.5f, 1.0f}});
-					// entity->physics->SetBoxCollider(glm::vec3{0.5f});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-0.5), glm::vec3(0.5)}});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.0f,1.0f,0.5f, 1.0f}});
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Prepare(device, "aabb_sphere");
-					entity->Add_proceduralVertexAABB();
-					entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor();
-					entity->meshVertexColor->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
-					entity->physics->SetSphereCollider(radius);
+					entity->Allocate(device, "aabb_sphere");
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Prepare(device, "aabb_sphere.light");
+					entity->Allocate(device, "aabb_sphere.light");
 					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
-					entity->Add_proceduralVertexAABB();
-					entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor();
-					entity->meshVertexColor->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
-					entity->physics->SetSphereCollider(radius);
 				};
 			}break;
 			case OBJECT_TYPE::Drone:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f);
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Prepare(device, "default");
+					entity->Allocate(device, "default");
 					droneModel.Generate(device, entity);
-					entity->physics->SetSphereCollider(0.4f);
 				};
 			}break;
 		}

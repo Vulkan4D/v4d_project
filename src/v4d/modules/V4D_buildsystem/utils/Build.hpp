@@ -3,7 +3,7 @@
 class Build {
 	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr;
 	std::vector<Block> blocks {};
-	mutable std::mutex blocksMutex;
+	mutable std::recursive_mutex blocksMutex;
 	
 public:
 	v4d::scene::NetworkGameObject::Id networkId;
@@ -16,7 +16,7 @@ public:
 		blocks.clear();
 	}
 	
-	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> CreateEntity(glm::dmat4 initialTransform = glm::dmat4(1)) {
+	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> CreateEntity() {
 		std::lock_guard lock(blocksMutex);
 		if (entity) {
 			entity->Destroy();
@@ -25,15 +25,9 @@ public:
 		if (blocks.size() > 0) {
 			entity = RenderableGeometryEntity::Create(THIS_MODULE, networkId);
 			entity->Add_physics(v4d::scene::PhysicsInfo::RigidBodyType::STATIC, 1.0f);
-			entity->generator = [this, initialTransform](RenderableGeometryEntity* entity, Device* device){
-				entity->Prepare(device, "V4D_buildsystem.block");
-				entity->SetInitialTransform(initialTransform);
-				
-				entity->Add_meshIndices();
-				entity->Add_meshVertexPosition();
-				entity->Add_meshVertexNormal();
-				entity->Add_meshVertexColor();
-				entity->Add_customData();
+			entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
+				std::lock_guard lock(blocksMutex);
+				entity->Allocate(device, "V4D_buildsystem.block");
 				
 				std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES * blocks.size());
 				std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES * blocks.size());
@@ -44,20 +38,19 @@ public:
 				uint nextVertex = 0;
 				uint nextIndex = 0;
 				for (int i = 0; i < blocks.size(); ++i) {
-					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(meshIndices.data(), vertexPositions.data(), vertexNormals.data(), vertexColors.data(), customData.data(), nextVertex);
+					auto[vertexCount, indexCount] = blocks[i].GenerateGeometry(&meshIndices.data()[nextIndex], &vertexPositions.data()[nextVertex], &vertexNormals.data()[nextVertex], &vertexColors.data()[nextVertex], &customData.data()[nextVertex], nextVertex);
 					nextVertex += vertexCount;
 					nextIndex += indexCount;
 				}
 				
-				entity->meshIndices->AllocateBuffers(device, meshIndices.data(), nextIndex);
-				entity->meshVertexPosition->AllocateBuffers(device, vertexPositions.data(), nextVertex);
-				entity->meshVertexNormal->AllocateBuffers(device, vertexNormals.data(), nextVertex);
-				entity->meshVertexColor->AllocateBuffers(device, vertexColors.data(), nextVertex);
-				entity->customData->AllocateBuffers(device, (float*)customData.data(), nextVertex);
+				entity->Add_meshIndices()->AllocateBuffers(device, meshIndices.data(), nextIndex);
+				entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), nextVertex);
+				entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), nextVertex);
+				entity->Add_meshVertexColor()->AllocateBuffers(device, vertexColors.data(), nextVertex);
+				entity->Add_customData()->AllocateBuffers(device, (float*)customData.data(), nextVertex);
 				
-				entity->physics->SetMeshCollider();
+				entity->Add_physics()->SetMeshCollider();
 			};
-			
 		}
 		return entity;
 	}
@@ -82,14 +75,8 @@ public:
 		std::lock_guard lock(blocksMutex);
 		blocks.swap(otherBlocks);
 		if (entity) {
-			glm::dmat4 worldTransform;
-			auto transform = entity->transform.Lock();
-			if (transform && transform->data) {
-				worldTransform = transform->data->worldTransform;
-			} else {
-				worldTransform = entity->initialTransform;
-			}
-			return entity = CreateEntity(worldTransform);
+			CreateEntity();
+			return entity;
 		}
 		return nullptr;
 	}

@@ -118,6 +118,7 @@ struct PhysicsObject : btMotionState {
 	void Update() {
 		auto entity = entityInstance.lock();if(!entity)return;
 		auto physics = entity->physics.Lock();if(!physics)return;
+		if (entity->GetIndex() == -1) return;
 		physics->physicsDirty = false;
 		
 		{// Update Center Of Mass
@@ -165,15 +166,19 @@ struct PhysicsObject : btMotionState {
 											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, meshVertexIndices->count);
 										} else {
 											LOG_ERROR("Empty or Unallocated meshIndices for generating the mesh collider")
+											break;
 										}
 									} else {
 										LOG_ERROR("Missing meshIndices component for mesh collider")
+										break;
 									}
 								} else {
 									LOG_ERROR("Empty or Unallocated meshVertexPosition for generating the mesh collider")
+									break;
 								}
 							} else {
 								LOG_ERROR("Missing meshVertexPosition component for mesh collider")
+								break;
 							}
 							try {
 								collisionShape = new btBvhTriangleMeshShape(mesh, true);
@@ -348,8 +353,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			} catch(...) {
 				auto entity = v4d::graphics::RenderableGeometryEntity::Get(entityInstanceIndex);
 				if (!entity) return;
-				if (entity->physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::NONE) return;
-				if (entity->physics->colliderType == v4d::scene::PhysicsInfo::ColliderType::NONE) return;
+				assert(entity->GetIndex() == entityInstanceIndex);
+				if (physics.rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::NONE) return;
+				if (physics.colliderType == v4d::scene::PhysicsInfo::ColliderType::NONE) return;
 				physicsObj = (physicsObjects[physics.uniqueId] = new PhysicsObject(entity));
 			}
 			

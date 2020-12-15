@@ -4,6 +4,7 @@
 
 class TmpBlock {
 	std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr;
+	mutable std::recursive_mutex blocksMutex;
 	
 public:
 	Block block;
@@ -11,16 +12,20 @@ public:
 	glm::vec4 wireframeColor {0.5f, 0.5f, 0.5f, 0.5f};
 
 	TmpBlock(Block b) : block(b) {
+		std::lock_guard lock(blocksMutex);
 		entity = RenderableGeometryEntity::Create(THIS_MODULE);
 		entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
-			entity->Prepare(device, "V4D_buildsystem.block");
+			std::lock_guard lock(blocksMutex);
+			if (entity->GetIndex() == -1) {
+				entity->generated = false;
+				LOG_ERROR("Entity generator executed for destroyed entity")
+				return;
+			}
+			entity->Allocate(device);
 			entity->rayTracingMask = 0;
-			
-			entity->Add_meshIndices();
-			entity->Add_meshVertexPosition();
-			entity->Add_meshVertexNormal();
-			entity->Add_meshVertexColor();
-			entity->Add_customData();
+			entity->raster_transparent = true;
+			entity->raster_wireframe = 5.0f;
+			entity->raster_wireframe_color = wireframeColor;
 			
 			std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES);
 			std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES);
@@ -35,20 +40,19 @@ public:
 				boundingDistance = glm::max(boundingDistance, glm::length(glm::vec3(vert)));
 			}
 			
-			entity->meshIndices->AllocateBuffers(device, meshIndices.data(), indexCount);
-			entity->meshVertexPosition->AllocateBuffers(device, vertexPositions.data(), vertexCount);
-			entity->meshVertexNormal->AllocateBuffers(device, vertexNormals.data(), vertexCount);
-			entity->meshVertexColor->AllocateBuffers(device, vertexColors.data(), vertexCount);
-			entity->customData->AllocateBuffers(device, (float*)customData.data(), vertexCount);
-			
-			entity->raster_transparent = true;
-			entity->raster_wireframe = 5.0f;
-			entity->raster_wireframe_color = wireframeColor;
+			entity->Add_meshIndices()->AllocateBuffers(device, meshIndices.data(), indexCount); 
+			entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), vertexCount);
+			entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), vertexCount);
+			entity->Add_meshVertexColor()->AllocateBuffers(device, vertexColors.data(), vertexCount);
+			entity->Add_customData()->AllocateBuffers(device, (float*)customData.data(), vertexCount);
 		};
 	}
 	
 	~TmpBlock() {
-		if (entity) entity->Destroy();
+		std::lock_guard lock(blocksMutex);
+		if (entity) {
+			entity->Destroy();
+		}
 	}
 	
 	void SetWorldTransform(glm::dmat4 t) {

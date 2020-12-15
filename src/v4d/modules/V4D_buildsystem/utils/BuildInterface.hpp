@@ -25,13 +25,13 @@ struct BuildInterface {
 	mutable std::recursive_mutex mu;
 	
 	// RayCast hit block
-	std::optional<v4d::graphics::RenderRayCastHit> hitBlock = std::nullopt;
+	std::optional<v4d::graphics::RayCast> hitBlock = std::nullopt;
 	std::shared_ptr<Build> hitBuild = nullptr;
 	std::shared_ptr<Build> tmpBuildParent = nullptr;
 	struct {
 		bool hasHit = false;
 		uint32_t objId = 0;
-		uint32_t customData0 = 0;
+		uint32_t customData = 0;
 		glm::vec3 hitPositionOnBuild = {0,0,0};
 		glm::vec3 gridPos = {0,0,0};
 		bool highPrecisionGrid = false;
@@ -45,11 +45,11 @@ struct BuildInterface {
 				if (this->highPrecisionGrid != buildInterface->highPrecisionGrid) return true;
 				if (this->createMode != buildInterface->createMode) return true;
 				if (objId != buildInterface->hitBlock->objId) return true;
-				if (customData0 != buildInterface->hitBlock->customData0) return true;
+				if (customData != (uint32_t)buildInterface->hitBlock->raycastCustomData) return true;
 				if (highPrecisionGrid) {
-					if (gridPos != glm::round(buildInterface->hitBlock->position*10.001f)/10.0f) return true;
+					if (gridPos != glm::round(buildInterface->hitBlock->localSpaceHitPosition*10.001f)/10.0f) return true;
 				} else {
-					if (gridPos != glm::round(buildInterface->hitBlock->position*1.001f)) return true;
+					if (gridPos != glm::round(buildInterface->hitBlock->localSpaceHitPosition*1.001f)) return true;
 				}
 			}
 			return false;
@@ -68,16 +68,16 @@ struct BuildInterface {
 			hasHit = buildInterface->hitBlock.has_value();
 			if (hasHit) {
 				objId = buildInterface->hitBlock->objId;
-				customData0 = buildInterface->hitBlock->customData0;
-				hitPositionOnBuild = buildInterface->hitBlock->position;
+				customData = (uint32_t)buildInterface->hitBlock->raycastCustomData;
+				hitPositionOnBuild = buildInterface->hitBlock->localSpaceHitPosition;
 				if (highPrecisionGrid) {
-					gridPos = glm::round(buildInterface->hitBlock->position*10.001f)/10.0f;
+					gridPos = glm::round(buildInterface->hitBlock->localSpaceHitPosition*10.001f)/10.0f;
 				} else {
-					gridPos = glm::round(buildInterface->hitBlock->position*1.001f);
+					gridPos = glm::round(buildInterface->hitBlock->localSpaceHitPosition*1.001f);
 				}
 			} else {
 				objId = 0;
-				customData0 = 0;
+				customData = 0;
 			}
 			
 			// Get parent hit build (if any)
@@ -202,7 +202,7 @@ struct BuildInterface {
 						
 						// Get hit block&face info from raycast's custom data
 						PackedBlockCustomData customData;
-						customData.packed = cachedHitBlock.customData0;
+						customData.packed = cachedHitBlock.customData;
 						auto parentBlock = tmpBuildParent->GetBlock(customData.blockIndex);
 						if (!parentBlock.has_value())
 							goto INVALID;
@@ -307,43 +307,43 @@ struct BuildInterface {
 		
 		std::lock_guard lock(mu);
 		
-		// Get hit block&face info from raycast's custom data
-		PackedBlockCustomData customData;
-		customData.packed = cachedHitBlock.customData0;
-		std::optional<Block> parentBlock = std::nullopt;
-		if (tmpBuildParent && customData.faceIndex != 7 && (parentBlock = tmpBuildParent->GetBlock(customData.blockIndex)).has_value()) {
-			std::vector<int> rotations {};{
-				rotations.reserve(uniqueOrientations.size());
-				for (auto& o : uniqueOrientations) rotations.push_back(o);
-			}
-			auto parentFace = parentBlock->GetFace(customData.faceIndex);
-			Block testBlock((SHAPE)selectedBlockType);{
-				testBlock.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
-			}
+		// // Get hit block&face info from raycast's custom data
+		// PackedBlockCustomData customData;
+		// customData.packed = cachedHitBlock.customData;
+		// std::optional<Block> parentBlock = std::nullopt;
+		// if (tmpBuildParent && customData.faceIndex != 7 && (parentBlock = tmpBuildParent->GetBlock(customData.blockIndex)).has_value()) {
+		// 	std::vector<int> rotations {};{
+		// 		rotations.reserve(uniqueOrientations.size());
+		// 		for (auto& o : uniqueOrientations) rotations.push_back(o);
+		// 	}
+		// 	auto parentFace = parentBlock->GetFace(customData.faceIndex);
+		// 	Block testBlock((SHAPE)selectedBlockType);{
+		// 		testBlock.SetSize({blockSize[selectedBlockType][0], blockSize[selectedBlockType][1], blockSize[selectedBlockType][2]});
+		// 	}
 			
-			// Sort rotations according to which makes the most sense
-			std::sort(rotations.begin(), rotations.end(), [&testBlock, &parentFace, &parentBlock, this](int a, int b){
-				int aTouches = TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, a, cachedHitBlock.gridPos);
-				int bTouches = TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, b, cachedHitBlock.gridPos);
-				if (aTouches == bTouches) return a < b;
-				return aTouches > bTouches;
-			});
+		// 	// Sort rotations according to which makes the most sense
+		// 	std::sort(rotations.begin(), rotations.end(), [&testBlock, &parentFace, &parentBlock, this](int a, int b){
+		// 		int aTouches = TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, a, cachedHitBlock.gridPos);
+		// 		int bTouches = TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, b, cachedHitBlock.gridPos);
+		// 		if (aTouches == bTouches) return a < b;
+		// 		return aTouches > bTouches;
+		// 	});
 			
-			// Set next or previous point from the sorted list
-			auto it = std::find(rotations.begin(), rotations.end(), blockRotation);
-			if (increment > 0) {
-				if (it == rotations.end()) blockRotation = rotations.front();
-				else blockRotation = *++it;
-			} else {
-				if (it == rotations.begin()) blockRotation = rotations.back();
-				else blockRotation = *--it;
-			}
+		// 	// Set next or previous point from the sorted list
+		// 	auto it = std::find(rotations.begin(), rotations.end(), blockRotation);
+		// 	if (increment > 0) {
+		// 		if (it == rotations.end()) blockRotation = rotations.front();
+		// 		else blockRotation = *++it;
+		// 	} else {
+		// 		if (it == rotations.begin()) blockRotation = rotations.back();
+		// 		else blockRotation = *--it;
+		// 	}
 			
-			if (!TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, blockRotation, cachedHitBlock.gridPos)) {
-				return false;
-			}
+		// 	if (!TestAddBlockOrientationAndPosition(testBlock, tmpBuildParent.get(), parentBlock.value(), parentFace, blockRotation, cachedHitBlock.gridPos)) {
+		// 		return false;
+		// 	}
 			
-		} else {
+		// } else {
 			// Set next or previous point from the unique list
 			if (increment > 0) {
 				auto it = uniqueOrientations.upper_bound(blockRotation);
@@ -354,7 +354,7 @@ struct BuildInterface {
 				if (it == uniqueOrientations.begin()) it = uniqueOrientations.end();
 				blockRotation = *--it;
 			}
-		}
+		// }
 		
 		return true;
 	}

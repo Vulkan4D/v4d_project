@@ -24,6 +24,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	dvec3 viewUp; //TODO remove if not needed
 	double zfar;
 	dmat4 viewMatrix;
+	dmat4 rawProjectionMatrix;
 	dmat4 projectionMatrix;
 	dmat4 historyViewMatrix;
 	mat4 reprojectionMatrix;
@@ -43,7 +44,7 @@ layout(set = 0, binding = 0) uniform Camera {
 #endif
 
 // RenderableEntityInstances
-#if !defined(NO_GLOBAL_BUFFERS) && (defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT) || defined(SHADER_VERT) || defined(SHADER_FRAG))
+#if !defined(NO_GLOBAL_BUFFERS) && (defined(SHADER_RGEN) || defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT) || defined(SHADER_VERT) || defined(SHADER_FRAG))
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer Indices { uint indices[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexPositions { float vertexPositions[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer ProceduralVerticesAABB { float proceduralVerticesAABB[]; };
@@ -83,55 +84,69 @@ layout(set = 0, binding = 0) uniform Camera {
 			#define PRIMITIVE_ID_VALUE gl_PrimitiveID
 		#endif
 	#else
-		#define INSTANCE_CUSTOM_INDEX_VALUE gl_InstanceCustomIndexEXT
-		#define PRIMITIVE_ID_VALUE gl_PrimitiveID
+		#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT)
+			#define INSTANCE_CUSTOM_INDEX_VALUE gl_InstanceCustomIndexEXT
+			#define PRIMITIVE_ID_VALUE gl_PrimitiveID
+		#endif
 	#endif
 
-	uint GetIndex(uint n) {
-		return Indices(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].indices).indices[3 * PRIMITIVE_ID_VALUE + n];
-	}
-	vec3 GetVertexPosition(uint index) {
-		VertexPositions vertexPositions = VertexPositions(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
-		return vec3(vertexPositions.vertexPositions[index*3], vertexPositions.vertexPositions[index*3+1], vertexPositions.vertexPositions[index*3+2]);
-	}
-	vec3 GetProceduralVertexAABB_min(uint index) {
-		ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
-		return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6], proceduralVerticesAABB.proceduralVerticesAABB[index*6+1], proceduralVerticesAABB.proceduralVerticesAABB[index*6+2]);
-	}
-	vec3 GetProceduralVertexAABB_max(uint index) {
-		ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
-		return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6+3], proceduralVerticesAABB.proceduralVerticesAABB[index*6+4], proceduralVerticesAABB.proceduralVerticesAABB[index*6+5]);
-	}
-	vec3 GetVertexNormal(uint index) {
-		VertexNormals vertexNormals = VertexNormals(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexNormals);
-		return vec3(vertexNormals.vertexNormals[index*3], vertexNormals.vertexNormals[index*3+1], vertexNormals.vertexNormals[index*3+2]);
-	}
-	bool HasVertexColor() {
-		return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors != 0;
-	}
-	vec4 GetVertexColor(uint index) {
-		return VertexColors(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors).vertexColors[index];
-	}
-	bool HasVertexUV() {
-		return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs != 0;
-	}
-	vec2 GetVertexUV(uint index) {
-		return VertexUVs(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs).vertexUVs[index];
-	}
-	dmat4 GetModelMatrix() {
-		return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).worldTransform;
-	}
-	mat4 GetModelViewMatrix() {
-		return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).modelView;
-	}
-	mat3 GetModelNormalViewMatrix() {
-		return mat3(ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).normalView);
-	}
-	uint64_t GetCustomData() {
-		return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].customData;
-	}
+	#if defined(SHADER_RGEN)
+		RenderableEntityInstance GetRenderableEntityInstance(uint instanceCustomIndex) {
+			return renderableEntityInstances[instanceCustomIndex];
+		}
+		mat4 GetModelViewMatrix(uint instanceCustomIndex) {
+			return ModelTransform(renderableEntityInstances[instanceCustomIndex].modelTransform).modelView;
+		}
+		mat3 GetModelNormalViewMatrix(uint instanceCustomIndex) {
+			return mat3(ModelTransform(renderableEntityInstances[instanceCustomIndex].modelTransform).normalView);
+		}
+	#else
+		uint GetIndex(uint n) {
+			return Indices(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].indices).indices[3 * PRIMITIVE_ID_VALUE + n];
+		}
+		vec3 GetVertexPosition(uint index) {
+			VertexPositions vertexPositions = VertexPositions(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			return vec3(vertexPositions.vertexPositions[index*3], vertexPositions.vertexPositions[index*3+1], vertexPositions.vertexPositions[index*3+2]);
+		}
+		vec3 GetProceduralVertexAABB_min(uint index) {
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6], proceduralVerticesAABB.proceduralVerticesAABB[index*6+1], proceduralVerticesAABB.proceduralVerticesAABB[index*6+2]);
+		}
+		vec3 GetProceduralVertexAABB_max(uint index) {
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6+3], proceduralVerticesAABB.proceduralVerticesAABB[index*6+4], proceduralVerticesAABB.proceduralVerticesAABB[index*6+5]);
+		}
+		vec3 GetVertexNormal(uint index) {
+			VertexNormals vertexNormals = VertexNormals(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexNormals);
+			return vec3(vertexNormals.vertexNormals[index*3], vertexNormals.vertexNormals[index*3+1], vertexNormals.vertexNormals[index*3+2]);
+		}
+		bool HasVertexColor() {
+			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors != 0;
+		}
+		vec4 GetVertexColor(uint index) {
+			return VertexColors(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors).vertexColors[index];
+		}
+		bool HasVertexUV() {
+			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs != 0;
+		}
+		vec2 GetVertexUV(uint index) {
+			return VertexUVs(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs).vertexUVs[index];
+		}
+		dmat4 GetModelMatrix() {
+			return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).worldTransform;
+		}
+		mat4 GetModelViewMatrix() {
+			return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).modelView;
+		}
+		mat3 GetModelNormalViewMatrix() {
+			return mat3(ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).normalView);
+		}
+		uint64_t GetCustomData() {
+			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].customData;
+		}
+	#endif
 	
-	#ifdef RAY_TRACING
+	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT)
 		vec3 DoubleSidedNormals(in vec3 viewSpaceNormal) {
 			return -sign(dot(viewSpaceNormal, gl_WorldRayDirectionEXT)) * viewSpaceNormal;
 		}
@@ -163,7 +178,7 @@ bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0;
 
 #ifdef RAY_TRACING
 
-	// 64 bytes
+	// 80 bytes
 	struct RayTracingPayload {
 		vec3 albedo;
 		vec3 normal;
@@ -173,6 +188,9 @@ bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0;
 		float metallic;
 		float roughness;
 		float distance;
+		uint instanceCustomIndex;
+		uint primitiveID;
+		uint64_t raycastCustomData;
 	};
 	
 #endif

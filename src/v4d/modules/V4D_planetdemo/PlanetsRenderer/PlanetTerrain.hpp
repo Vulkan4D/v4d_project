@@ -289,24 +289,18 @@ struct PlanetTerrain {
 			auto entityLock = RenderableGeometryEntity::GetLock();
 				if (entity) entity->Destroy();
 				entity = RenderableGeometryEntity::Create(THIS_MODULE);
-				entity->Prepare(device, "V4D_planetdemo.planet_terrain");
+				entity->Allocate(device, "V4D_planetdemo.planet_terrain");
 				entity->rayTracingMask = 0;
 				entity->Add_physics();
-				entity->Add_meshIndices();
-				entity->Add_meshVertexPosition();
-				entity->Add_meshVertexNormal();
-				entity->Add_meshVertexColor();
-				entity->Add_meshVertexUV();
-				entity->Add_customData();
 			auto buffersWriteLock = entity->GetBuffersWriteLock();
-				auto meshIndices = entity->meshIndices->AllocateBuffersCount(device, nbIndicesPerChunk);
-				auto vertexPositions = entity->meshVertexPosition->AllocateBuffersCount(device, nbVerticesPerChunk);
-				auto vertexNormals = entity->meshVertexNormal->AllocateBuffersCount(device, nbVerticesPerChunk);
-				auto vertexColors = entity->meshVertexColor->AllocateBuffersCount(device, nbVerticesPerChunk);
-				auto vertexUVs = entity->meshVertexUV->AllocateBuffersCount(device, nbVerticesPerChunk);
-				entity->customData->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
+				auto meshIndices = entity->Add_meshIndices()->AllocateBuffersCount(device, nbIndicesPerChunk);
+				auto vertexPositions = entity->Add_meshVertexPosition()->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexNormals = entity->Add_meshVertexNormal()->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexColors = entity->Add_meshVertexColor()->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexUVs = entity->Add_meshVertexUV()->AllocateBuffersCount(device, nbVerticesPerChunk);
+				entity->Add_customData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 				entity->generator = [](auto* entity, Device*){entity->generated = false;};
-				entity->transform->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
+				entity->transform.Lock()->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
 			entityLock.unlock();
 		
 			#ifdef PLANET_CHUNK_CACHE_ENABLE

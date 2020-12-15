@@ -7,6 +7,14 @@
 
 layout(set = 1, binding = 0, rgba16f) uniform image2D img_lit;
 layout(set = 1, binding = 1, r32f) uniform image2D img_depth;
+layout(set = 1, binding = 2) buffer writeonly RayCast {
+	uint64_t moduleVen;
+	uint64_t moduleId;
+	uint64_t objId;
+	uint64_t raycastCustomData;
+	vec4 localSpaceHitPositionAndDistance; // w component is distance
+	vec4 localSpaceHitSurfaceNormal; // w component is unused
+} rayCast;
 
 layout(location = 0) rayPayloadEXT RayTracingPayload ray;
 layout(location = 1) rayPayloadEXT bool shadowed;
@@ -17,15 +25,39 @@ const int MAX_BOUNCES = 10; // 0 is infinite
 
 void main() {
 	const ivec2 imgCoords = ivec2(gl_LaunchIDEXT.xy);
+	const ivec2 pixelInMiddleOfScreen = ivec2(gl_LaunchSizeEXT.xy) / 2;
+	const bool isMiddleOfScreen = (imgCoords == pixelInMiddleOfScreen);
 	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 d = pixelCenter/vec2(gl_LaunchSizeEXT.xy) * 2.0 - 1.0;
 	const vec3 origin = vec3(0);
-	const vec3 direction = normalize(vec4(inverse(camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
+	const vec3 direction = normalize(vec4(inverse(isMiddleOfScreen? camera.rawProjectionMatrix : camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
 	vec3 litColor = vec3(0);
 	int bounces = 0;
 
 	// Trace Primary Rays
 	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
+	
+	// Store raycast info
+	if (isMiddleOfScreen) {
+		if (ray.distance > 0) {
+			// write obj info in hit raycast
+			RenderableEntityInstance entity = GetRenderableEntityInstance(ray.instanceCustomIndex);
+			rayCast.moduleVen = entity.moduleVen;
+			rayCast.moduleId = entity.moduleId;
+			rayCast.objId = entity.objId;
+			rayCast.raycastCustomData = ray.raycastCustomData;
+			rayCast.localSpaceHitPositionAndDistance = vec4((inverse(GetModelViewMatrix(ray.instanceCustomIndex)) * vec4(ray.position, 1)).xyz, ray.distance);
+			rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(ray.instanceCustomIndex)) * ray.normal), 0);
+		} else {
+			// write empty hit raycast
+			rayCast.moduleVen = 0;
+			rayCast.moduleId = 0;
+			rayCast.objId = 0;
+			rayCast.raycastCustomData = 0;
+			rayCast.localSpaceHitPositionAndDistance = vec4(0);
+			rayCast.localSpaceHitSurfaceNormal = vec4(0);
+		}
+	}
 	
 	// Store depth and distance
 	float primaryRayDistance = ray.distance;

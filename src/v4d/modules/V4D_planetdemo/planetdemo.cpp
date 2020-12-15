@@ -227,12 +227,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		sun->generator = [](auto* entity, Device* device){
 			float lightIntensity = 1e24f;
 			float radius = 700000000;
-			entity->Prepare(device, "aabb_sphere.light");
+			entity->Allocate(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
-			entity->Add_proceduralVertexAABB();
-			entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColor();
-			entity->meshVertexColor->AllocateBuffers(device, {glm::vec4{lightIntensity}});
+			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->Add_meshVertexColor()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun1Position;
 		
@@ -241,12 +239,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		sun2->generator = [](auto* entity, Device* device){
 			float lightIntensity = 5e22f;
 			float radius = 700000000;
-			entity->Prepare(device, "aabb_sphere.light");
+			entity->Allocate(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
-			entity->Add_proceduralVertexAABB();
-			entity->proceduralVertexAABB->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColor();
-			entity->meshVertexColor->AllocateBuffers(device, {glm::vec4{lightIntensity}});
+			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+			entity->Add_meshVertexColor()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun2Position;
 		
@@ -281,12 +277,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				planetAtmosphereShader->planets.clear();
 				planetAtmosphereShader->lightSources.clear();
 			}
-		}
-		if (sun) {
-			sun->FreeComponentsBuffers();
-		}
-		if (sun2) {
-			sun2->FreeComponentsBuffers();
 		}
 	}
 	
@@ -400,7 +390,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if (terrain->atmosphere.radius > 0) {
 						ImGui::Separator();
 						ImGui::Text("Atmosphere");
-						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 1.0f);
+						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 10.0f);
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
 					}

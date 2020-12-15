@@ -147,5 +147,8 @@ void main() {
 	ray.metallic = -0.07;
 	ray.roughness = 0.7;
 	ray.distance = gl_HitTEXT;
+	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
+	ray.primitiveID = gl_PrimitiveID;
+	ray.raycastCustomData = GetCustomData();
 }
 

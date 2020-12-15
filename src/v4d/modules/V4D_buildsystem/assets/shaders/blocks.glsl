@@ -52,6 +52,10 @@ vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNor
 #############################################################
 #shader rchit
 
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer CustomData {
+	uint packed[];
+};
+
 hitAttributeEXT vec3 hitAttribs;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
@@ -98,4 +102,7 @@ void main() {
 	ray.metallic = 0.7;
 	ray.roughness = 0.1;
 	ray.distance = gl_HitTEXT;
+	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
+	ray.primitiveID = gl_PrimitiveID;
+	ray.raycastCustomData = uint64_t(CustomData(GetCustomData()).packed[i0]);
 }

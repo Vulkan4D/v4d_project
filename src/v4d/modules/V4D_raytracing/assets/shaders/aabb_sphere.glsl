@@ -55,6 +55,9 @@ void main() {
 	ray.metallic = 0.8;
 	ray.roughness = 0.1;
 	ray.distance = gl_HitTEXT;
+	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
+	ray.primitiveID = gl_PrimitiveID;
+	ray.raycastCustomData = GetCustomData();
 }
 
 
@@ -76,4 +79,7 @@ void main() {
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 	ray.distance = gl_HitTEXT;
+	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
+	ray.primitiveID = gl_PrimitiveID;
+	ray.raycastCustomData = GetCustomData();
 }
