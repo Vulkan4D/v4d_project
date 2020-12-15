@@ -21,6 +21,8 @@ std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serve
 ServerSideObjects serverSideObjects {};
 ClientSideObjects clientSideObjects {};
 
+float interpolationSpeed = 15.0;
+
 V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int which) {
@@ -61,8 +63,18 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
+	V4D_MODULE_FUNC(void, GameLoopUpdate, double deltaTime) {
+		// Update gameObject Positions on client-side
+		std::lock_guard lock(clientSideObjects.mutex);
+		for (auto& [objID, obj] : clientSideObjects.objects) {
+			if (obj->active && !obj->physicsControl && obj->posInit) {
+				obj->SmoothlyInterpolateGameObjectTransform(deltaTime * interpolationSpeed);
+			}
+		}
+	}
+	
 	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
-		// Erase inactive gameObjects
+		// Erase inactive gameObjects on server-side
 		std::lock_guard lock(serverSideObjects.mutex);
 		std::vector<uint32_t> objectsToRemove {};
 		for (auto& [objID, obj] : serverSideObjects.objects) {
@@ -73,6 +85,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		for (auto id : objectsToRemove) {
 			serverSideObjects.objects.erase(id);
 		}
+	}
+	
+	V4D_MODULE_FUNC(void, DrawUi2) {
+		#ifdef _ENABLE_IMGUI
+			ImGui::SliderFloat("Network interpolation smooth speed", &interpolationSpeed, 0.0f, 30.0f);
+		#endif
 	}
 	
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
@@ -197,10 +215,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod) {
 							if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream);
 						}
-						obj->UpdateGameObjectTransform();
+						
 					}
 				} catch(std::exception& err) {
-					LOG_ERROR("Server ReceiveAction SYNC_OBJECT_TRANSFORM : " << err.what())
+					// LOG_ERROR("Server ReceiveAction SYNC_OBJECT_TRANSFORM : " << err.what())
 				}
 			}break;
 			
@@ -219,21 +237,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		std::lock_guard lock(clientSideObjects.mutex);
 		for (auto&[objID, obj] : clientSideObjects.objects) {
 			if (obj->physicsControl) {
-				obj->ReverseUpdateGameObjectTransform();
-				stream->Begin();
-					*stream << SYNC_OBJECT_TRANSFORM;
-					*stream << obj->id;
-					*stream << obj->GetIteration();
-					*stream << obj->GetNetworkTransform();
-					
-					auto mod = V4D_Mod::GetModule(obj->moduleID.String());
-					
-					tmpStream.ClearWriteBuffer();
-					if (mod && mod->SendStreamCustomGameObjectTransformData) mod->SendStreamCustomGameObjectTransformData(obj, tmpStream);
-					DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Client::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
-					stream->WriteStream(tmpStream);
-					
-				stream->End();
+				if (obj->ReverseUpdateGameObjectTransform()) {
+					stream->Begin();
+						*stream << SYNC_OBJECT_TRANSFORM;
+						*stream << obj->id;
+						*stream << obj->GetIteration();
+						*stream << obj->GetNetworkTransform();
+						
+						auto mod = V4D_Mod::GetModule(obj->moduleID.String());
+						
+						tmpStream.ClearWriteBuffer();
+						if (mod && mod->SendStreamCustomGameObjectTransformData) mod->SendStreamCustomGameObjectTransformData(obj, tmpStream);
+						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Client::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
+						stream->WriteStream(tmpStream);
+						
+					stream->End();
+				}
 			}
 		}
 	}

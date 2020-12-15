@@ -35,6 +35,7 @@ public:
 			
 			auto[vertexCount, indexCount] = block.GenerateSimpleGeometry(meshIndices.data(), vertexPositions.data(), vertexNormals.data(), vertexColors.data(), customData.data(), 0, 0.3);
 			
+			boundingDistance = 1;
 			for (int i = 0; i < vertexCount; ++i) {
 				auto vert = vertexPositions[i];
 				boundingDistance = glm::max(boundingDistance, glm::length(glm::vec3(vert)));

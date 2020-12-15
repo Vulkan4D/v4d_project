@@ -152,7 +152,7 @@ namespace app {
 											ModuleID moduleID(mod->ModuleName());
 											if (currentBurstSocket->GetSocketType() == v4d::io::UDP) {
 												
-												// Protection against attackers pretending to be the server over UDP... 
+												//TODO Protection against attackers pretending to be the server over UDP... 
 													// currentBurstSocket->WriteEncrypted<std::string>(&client->aes, client->token);
 													// currentBurstSocket->WriteEncrypted<uint64_t>(&client->aes, ++BurstCache::burstIncrementsFromServer[client->id]);
 											
@@ -172,7 +172,7 @@ namespace app {
 									}
 								});
 								
-								LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
+								LIMIT_FRAMERATE(std::min(app::settings->bursts_server_max_send_fps, (double)APP_NETWORKING_SERVER_SEND_MAX_BURST_STREAMS_PER_SECOND))
 							}
 								
 							LOG_ERROR("Server SendBursts thread STOPPED for client " << client->id)

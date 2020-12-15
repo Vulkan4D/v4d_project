@@ -29,12 +29,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		{std::lock_guard lock(player.mu);
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
 		}
-		if (auto parent = scene->cameraParent.lock(); parent && parent->transform) {
-			parent->transform.Do([](auto& t){
-				if (t.data) {
-					t->worldTransform = glm::inverse(scene->camera.viewMatrix);
-				}
-			});
+		if (auto parent = scene->cameraParent.lock(); parent) {
+			parent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix));
 		}
 	}
 	

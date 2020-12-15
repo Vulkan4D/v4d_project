@@ -180,7 +180,9 @@ struct BuildInterface {
 		std::lock_guard lock(mu);
 		{
 			cachedHitBlock.Refresh(this);
+			double boundingDistance = 1;
 			if (tmpBlock) {
+				boundingDistance = tmpBlock->boundingDistance;
 				delete tmpBlock;
 				tmpBlock = nullptr;
 			}
@@ -246,6 +248,7 @@ struct BuildInterface {
 				FINALLY:
 					tmpBlock = new TmpBlock(block);
 					tmpBlock->wireframeColor = wireframeColor;
+					tmpBlock->boundingDistance = boundingDistance;
 					UpdateTmpBlock();
 			}
 		}

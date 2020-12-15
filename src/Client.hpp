@@ -226,7 +226,7 @@ namespace app {
 								}
 							});
 							
-							LIMIT_FRAMERATE(APP_NETWORKING_MAX_BURST_STREAMS_PER_SECOND)
+							LIMIT_FRAMERATE(std::min(app::settings->bursts_client_max_send_fps, (double)APP_NETWORKING_CLIENT_SEND_MAX_BURST_STREAMS_PER_SECOND))
 						}
 						
 					}THREAD_END(true)
@@ -245,7 +245,7 @@ namespace app {
 							if (socket->IsUDP()) {
 								socket->ResetReadBuffer();
 								
-								// Protection against attackers pretending to be the server over UDP... 
+								//TODO Protection against attackers pretending to be the server over UDP... 
 									// static uint64_t serverIncrement = 0;
 									// std::string token = socket->ReadEncrypted<std::string>(&aes);
 									// uint64_t increment = socket->ReadEncrypted<uint64_t>(&aes);

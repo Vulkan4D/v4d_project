@@ -52,11 +52,10 @@ public:
 			int i = 0;
 			for (auto& entity : lightSources) {
 				if (entity->generated) {
-					auto transform = entity->transform.Lock();
 					auto lightSource = entity->lightSource.Lock();
-					if (transform && transform->data && lightSource) {
+					if (lightSource) {
 						auto planetViewSpacePosition = glm::dvec3(planetAtmospherePushConstant.modelViewMatrix[3]);
-						glm::dvec3 lightSourceViewSpacePosition = transform->data->modelView[3];
+						glm::dvec3 lightSourceViewSpacePosition = (camera->viewMatrix * entity->GetWorldTransform())[3];
 						double lightDist = glm::distance(lightSourceViewSpacePosition, planetViewSpacePosition);
 						planetAtmospherePushConstant.suns[i] = CompactSunInfo(
 							// Sun direction is from planet center to sun, in view space

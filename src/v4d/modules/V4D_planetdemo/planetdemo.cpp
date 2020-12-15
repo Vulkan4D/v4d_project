@@ -398,9 +398,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ImGui::Separator();
 					ImGui::Text("Sun1");
 					if (sun && sun->generated) {
-						auto transform = sun->transform.Lock();
 						auto lightSource = sun->lightSource.Lock();
-						if (transform && transform->data && lightSource) {
+						if (lightSource) {
 							static glm::vec3 sunPosition = glm::normalize(sun1Position);
 							static double sunDistance = glm::distance(sun1Position, terrain->absolutePosition);
 							static float intensity = std::log10(lightSource->intensity);
@@ -411,16 +410,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							ImGui::ColorEdit3("Color1", (float*)&color);
 							lightSource->color = color;
 							lightSource->intensity = std::pow(10.0f, intensity);
-							transform->data->worldTransform = glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance);
+							sun->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition)) * sunDistance));
 						}
 					}
 					
 					ImGui::Separator();
 					ImGui::Text("Sun2");
 					if (sun2 && sun2->generated) {
-						auto transform = sun2->transform.Lock();
 						auto lightSource = sun2->lightSource.Lock();
-						if (transform && transform->data && lightSource) {
+						if (lightSource) {
 							static glm::vec3 sunPosition2 = glm::normalize(sun2Position);
 							static double sunDistance2 = glm::distance(sun2Position, terrain->absolutePosition);
 							static float intensity2 = std::log10(lightSource->intensity);
@@ -431,7 +429,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							ImGui::ColorEdit3("Color2", (float*)&color2);
 							lightSource->color = color2;
 							lightSource->intensity = std::pow(10.0f, intensity2);
-							transform->data->worldTransform = glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2);
+							sun2->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2));
 						}
 					}
 					

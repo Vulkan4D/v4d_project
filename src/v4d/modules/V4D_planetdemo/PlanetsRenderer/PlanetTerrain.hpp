@@ -300,7 +300,7 @@ struct PlanetTerrain {
 				auto vertexUVs = entity->Add_meshVertexUV()->AllocateBuffersCount(device, nbVerticesPerChunk);
 				entity->Add_customData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 				entity->generator = [](auto* entity, Device*){entity->generated = false;};
-				entity->transform.Lock()->data->worldTransform = planet->matrix * glm::translate(glm::dmat4(1), centerPos);
+				entity->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
 			entityLock.unlock();
 		
 			#ifdef PLANET_CHUNK_CACHE_ENABLE

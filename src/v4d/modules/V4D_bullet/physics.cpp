@@ -103,16 +103,14 @@ struct PhysicsObject : btMotionState {
 	}
 	
 	virtual void getWorldTransform(btTransform& centerOfMassWorldTrans) const override {
-		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1 || !entity->transform)return;
-		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
-		centerOfMassWorldTrans = GlmToBullet(transform->data->worldTransform) * centerOfMassOffset.inverse();
+		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1)return;
+		centerOfMassWorldTrans = GlmToBullet(entity->GetWorldTransform()) * centerOfMassOffset.inverse();
 	}
 
 	//Bullet only calls the update of worldtransform for active objects
 	virtual void setWorldTransform(const btTransform& centerOfMassWorldTrans) override {
-		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1 || !entity->transform)return;
-		auto transform = entity->transform.Lock();if(!transform || !transform->data)return;
-		transform->data->worldTransform = BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset);
+		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1)return;
+		entity->SetWorldTransform(BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset));
 	}
 	
 	void Update() {
@@ -187,8 +185,7 @@ struct PhysicsObject : btMotionState {
 							}
 						}break;
 						case v4d::scene::PhysicsInfo::ColliderType::STATIC_PLANE:{
-							auto transform = entity->transform.Lock();
-							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), transform->data->worldTransform[3].z);
+							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), entity->GetWorldTransform()[3].z);
 						}break;
 						// case v4d::scene::PhysicsInfo::ColliderType::HEIGHTFIELD:
 						// 	collisionShape = 
@@ -325,7 +322,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		for (auto it = physicsObjects.begin(); it != physicsObjects.end();) {
 			auto&[i, physicsObj] = *it;
 			auto e = physicsObj->entityInstance.lock();
-			if (!e || e->GetIndex() == -1 || !e->physics || !e->transform) {
+			if (!e || e->GetIndex() == -1 || !e->physics) {
 				goto Delete;
 			}
 			{

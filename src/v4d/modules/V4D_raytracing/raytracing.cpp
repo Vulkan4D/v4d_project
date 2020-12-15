@@ -1039,6 +1039,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					// Update and Assign transform
 					if (auto transform = entity->transform.Lock(); transform && transform->data) {
+						transform->data->worldTransform = entity->worldTransform;
 						transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
 						transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
 						transform->dirtyOnDevice = true;
@@ -1052,16 +1053,15 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 							rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
 							rayTracingInstanceBuffer[index].transform = glm::transpose(transform->data->modelView);
 						}
-						
-						// Light Source
-						if (nbActiveLights < MAX_ACTIVE_LIGHTS) {
-							entity->lightSource.Do([&nbActiveLights, &transform](auto& lightSource){
-								lightSourcesBuffer[nbActiveLights] = lightSource;
-								lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * transform->data->worldTransform * glm::dvec4(glm::dvec3(lightSource.position), 1));
-								++nbActiveLights;
-							});
-						}
+					}
 					
+					// Light Source
+					if (nbActiveLights < MAX_ACTIVE_LIGHTS) {
+						entity->lightSource.Do([&nbActiveLights, &entity](auto& lightSource){
+							lightSourcesBuffer[nbActiveLights] = lightSource;
+							lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * entity->worldTransform * glm::dvec4(glm::dvec3(lightSource.position), 1));
+							++nbActiveLights;
+						});
 					}
 				}
 				

@@ -22,6 +22,8 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 	// Networking
 	int default_server_port = 0;
 	bool bursts_force_tcp = false;
+	double bursts_server_max_send_fps = 15;
+	double bursts_client_max_send_fps = 25;
 	
 private:
 	void ReadConfig() override {
@@ -33,6 +35,8 @@ private:
 		#endif
 		CONFIGFILE_READ_FROM_INI_WRITE("networking", default_server_port)
 		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_force_tcp)
+		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_server_max_send_fps)
+		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_client_max_send_fps)
 		
 		LOGGER_INSTANCE->SetVerbose(log_verbose);
 	}
@@ -45,5 +49,7 @@ private:
 		#endif
 		CONFIGFILE_WRITE_TO_INI("networking", default_server_port)
 		CONFIGFILE_WRITE_TO_INI("networking", bursts_force_tcp)
+		CONFIGFILE_WRITE_TO_INI("networking", bursts_server_max_send_fps)
+		CONFIGFILE_WRITE_TO_INI("networking", bursts_client_max_send_fps)
 	}
 };
