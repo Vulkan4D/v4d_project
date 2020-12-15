@@ -33,6 +33,8 @@ PlayerView* playerView = nullptr;
 Scene* scene = nullptr;
 Renderer* r = nullptr;
 
+bool playerVisible = true;
+
 void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 	std::lock_guard lock(clientActionQueueMutex);
 	clientActionQueue.emplace(stream);
@@ -225,6 +227,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma endregion
 	
+	#pragma region Rendering
+	
+	V4D_MODULE_FUNC(void, DrawUi2) {
+		#ifdef _ENABLE_IMGUI
+			ImGui::Checkbox("Player visible", &playerVisible);
+		#endif
+	}
+	
+	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
+		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
+			cameraParent->rayTracingMask = playerVisible? GEOMETRY_ATTR_CAST_SHADOWS|GEOMETRY_ATTR_REFLECTION_VISIBLE|GEOMETRY_ATTR_SOLID : 0;
+		}
+	}
+	
+	#pragma endregion
+	
 	#pragma region GameObjects
 	
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
@@ -232,11 +250,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Player:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_cube");
-					entity->rayTracingMask = 0; // 0 makes it invisible
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-0.5), glm::vec3(0.5)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.0f,1.0f,0.5f, 1.0f}});
+					entity->Allocate(device, "default");
+					droneModel.Generate(device, entity);
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
