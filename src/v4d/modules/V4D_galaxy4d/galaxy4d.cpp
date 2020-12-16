@@ -151,8 +151,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Launch drone
 					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
 					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					drone->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
-					drone->isDynamic = true;
+					drone->isDynamic = false;
+					drone->physicsClientID = client->id;
+				}
+				else if (key == "glass") {
+					auto dir = stream->Read<DVector3>();
+					std::lock_guard lock(serverSideObjects->mutex);
+					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Glass);
+					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					drone->isDynamic = false;
 					drone->physicsClientID = client->id;
 				}
 				else if (key == "clear") {
@@ -289,6 +296,35 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					droneModel.Generate(device, entity);
 				};
 			}break;
+			case OBJECT_TYPE::Glass:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				obj->renderableGeometryEntityInstance = entity;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
+				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
+					entity->Allocate(device, "glass");
+					entity->Add_meshVertexPosition()->AllocateBuffers(device, {
+						{-2.0,-2.0, 0.0},
+						{ 2.0,-2.0, 0.0},
+						{ 2.0, 2.0, 0.0},
+						{-2.0, 2.0, 0.0},
+					});
+					entity->Add_meshVertexNormal()->AllocateBuffers(device, {
+						{ 0.0, 0.0, 1.0},
+						{ 0.0, 0.0, 1.0},
+						{ 0.0, 0.0, 1.0},
+						{ 0.0, 0.0, 1.0},
+					});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {
+						{1.0, 1.0, 1.0, 0.01},
+						{1.0, 1.0, 1.0, 0.01},
+						{1.0, 1.0, 1.0, 0.01},
+						{1.0, 1.0, 1.0, 0.01},
+					});
+					entity->Add_meshIndices()->AllocateBuffers(device, {
+						0, 1, 2, 2, 3, 0,
+					});
+				};
+			}break;
 		}
 	}
 	
@@ -333,6 +369,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("drone");
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+					ClientEnqueueAction(stream);
+				}break;
+				case GLFW_KEY_G:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("glass");
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;

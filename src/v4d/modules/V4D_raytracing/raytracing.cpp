@@ -319,6 +319,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
 		RenderableGeometryEntity::sbtOffsets["default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
+		RenderableGeometryEntity::sbtOffsets["glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/glass.rchit"));
 		RenderableGeometryEntity::sbtOffsets["aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rint"));
 		RenderableGeometryEntity::sbtOffsets["aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
 		RenderableGeometryEntity::sbtOffsets["aabb_sphere.light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));

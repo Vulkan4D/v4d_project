@@ -81,14 +81,17 @@ void main() {
 	switch (camera.renderMode) {
 		case RENDER_MODE_STANDARD:
 			
-			litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
-			
-			// // Refraction
-			// if (ray.refractionIndex >= 1.0) {
-			// 	vec3 glassColor = ray.albedo;
-			// 	float glassRoughness = ray.roughness;
-			// 	//TODO
-			// }
+			// Refraction
+			if (ray.refractionIndex >= 1.0) {
+				vec3 glassColor = ray.albedo;
+				float glassRoughness = ray.roughness;
+				vec3 glassNormal = ray.normal;
+				vec3 glassRefractionDirection = refract(direction, glassNormal, ray.refractionIndex);
+				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, ray.position, float(camera.znear), glassRefractionDirection, float(camera.zfar), 0);
+				litColor = mix(ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission, glassColor, glassRoughness);
+			} else {
+				litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+			}
 			
 			// Reflections
 			float reflectivity = min(0.9, ray.metallic);

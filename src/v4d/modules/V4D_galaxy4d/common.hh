@@ -5,4 +5,5 @@ namespace OBJECT_TYPE {
 	const uint32_t Ball = 1;
 	const uint32_t Light = 2;
 	const uint32_t Drone = 3;
+	const uint32_t Glass = 4;
 }
