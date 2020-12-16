@@ -47,18 +47,13 @@ layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
+	WriteRayPayload(ray);
 	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
 	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereGeomPositionAttr));
-	ray.emission = vec3(0);
-	ray.position = hitPoint;
 	// ray.refractionIndex = 1.5;
 	// ray.nextRayStartOffset = 1.0;
 	ray.metallic = 0.8;
 	ray.roughness = 0.1;
-	ray.distance = gl_HitTEXT;
-	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-	ray.primitiveID = gl_PrimitiveID;
-	ray.raycastCustomData = GetCustomData();
 }
 
 
@@ -72,15 +67,10 @@ layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
+	WriteRayPayload(ray);
 	ray.albedo = vec3(0);
 	ray.normal = normalize(hitPoint - sphereGeomPositionAttr);
 	ray.emission = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.position = hitPoint;
-	ray.refractionIndex = 0.0;
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
-	ray.distance = gl_HitTEXT;
-	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-	ray.primitiveID = gl_PrimitiveID;
-	ray.raycastCustomData = GetCustomData();
 }

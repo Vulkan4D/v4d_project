@@ -39,16 +39,11 @@ void main() {
 	// 	+ GetVertexUV(i2) * barycentricCoords.z
 	// ) : vec2(0);
 	
+	WriteRayPayload(ray);
 	ray.albedo = color.rgb;
 	ray.alpha = color.a;
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	ray.emission = vec3(0);
-	ray.position = hitPoint;
 	ray.refractionIndex = 1.1;
-	ray.metallic = 0.3;
-	ray.roughness = 0.1;
-	ray.distance = gl_HitTEXT;
-	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-	ray.primitiveID = gl_PrimitiveID;
-	ray.raycastCustomData = GetCustomData();
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
 }

@@ -34,7 +34,6 @@ hitAttributeEXT vec3 aabbGeomLocalPositionAttr;
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
 void main() {
-	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	vec3 hitPointObj = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 	
 	// Calculate normal for a cube (will most likely NOT work with any non-uniform cuboid)
@@ -50,15 +49,9 @@ void main() {
 			)
 	);
 	
+	WriteRayPayload(ray);
 	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
 	ray.normal = normal;
-	ray.emission = vec3(0);
-	ray.position = hitPoint;
-	ray.refractionIndex = 0.0;
 	ray.metallic = 0.5;
 	ray.roughness = 0.1;
-	ray.distance = gl_HitTEXT;
-	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-	ray.primitiveID = gl_PrimitiveID;
-	ray.raycastCustomData = GetCustomData();
 }

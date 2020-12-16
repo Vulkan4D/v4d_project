@@ -28,6 +28,8 @@ vec3 fresnelSchlick(float HdotV, vec3 baseReflectivity) {
 }
 
 vec3 ApplyPBRShading(vec3 origin, vec3 hitPoint, vec3 albedo, vec3 normal, vec3 bump, float roughness, float metallic) {
+	if (roughness == 0.0) return albedo;
+	
 	vec3 color = vec3(0);
 	
 	// PBR lighting

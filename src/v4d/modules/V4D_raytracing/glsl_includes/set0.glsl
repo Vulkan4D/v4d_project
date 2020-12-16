@@ -38,6 +38,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	uint renderMode;
 	float renderDebugScaling;
 	int maxBounces; // -1 = infinite bounces
+	uint frameCount;
 	
 } camera;
 
@@ -191,21 +192,38 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 
 	// 92 bytes
 	struct RayTracingPayload {
+		// mandatory
 		vec3 albedo;
 		vec3 normal;
+		float metallic;
+		float roughness;
+		// optional
 		vec3 emission;
 		vec3 position;
 		float refractionIndex;
-		float metallic;
-		float roughness;
 		float distance;
 		uint instanceCustomIndex;
 		uint primitiveID;
-		uint64_t raycastCustomData;
-		uint medium;
 		float alpha;
-		float nextRayStartOffset;
+		uint64_t raycastCustomData;
+		// float nextRayStartOffset;
+		// uint medium;
 	};
+	
+	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
+		void WriteRayPayload(inout RayTracingPayload ray) {
+			// ray.medium = MEDIUM_SOLID;
+			// ray.nextRayStartOffset = 0;
+			ray.position = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+			ray.emission = vec3(0);
+			ray.alpha = 1.0;
+			ray.refractionIndex = 0.0;
+			ray.distance = gl_HitTEXT;
+			ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
+			ray.primitiveID = gl_PrimitiveID;
+			ray.raycastCustomData = GetCustomData();
+		}
+	#endif
 	
 #endif
 

@@ -984,6 +984,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			scene->camera.height = r->swapChain->extent.height;
 			scene->camera.RefreshProjectionMatrix();
 			scene->camera.time = float(v4d::Timer::GetCurrentTimestamp() - 1587838909.0);
+			scene->camera.frameCount++;
 			scene->camera.renderOptions = RENDER_OPTIONS::Get();
 			scene->camera.debugOptions = DEBUG_OPTIONS::Get();
 		}

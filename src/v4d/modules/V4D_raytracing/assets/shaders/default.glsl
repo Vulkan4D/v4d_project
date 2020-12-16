@@ -10,8 +10,6 @@ hitAttributeEXT vec3 hitAttribs;
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
 void main() {
-	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	
 	uint i0 = GetIndex(0);
 	uint i1 = GetIndex(1);
 	uint i2 = GetIndex(2);
@@ -39,15 +37,9 @@ void main() {
 	// 	+ GetVertexUV(i2) * barycentricCoords.z
 	// ) : vec2(0);
 	
+	WriteRayPayload(ray);
 	ray.albedo = color.rgb;
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	ray.emission = vec3(0);
-	ray.position = hitPoint;
-	ray.refractionIndex = 0.0;
 	ray.metallic = 0.5;
 	ray.roughness = 0.1;
-	ray.distance = gl_HitTEXT;
-	ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-	ray.primitiveID = gl_PrimitiveID;
-	ray.raycastCustomData = GetCustomData();
 }

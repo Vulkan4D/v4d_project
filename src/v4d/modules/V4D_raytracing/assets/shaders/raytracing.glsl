@@ -106,8 +106,6 @@ void main() {
 	float depth = ray.distance==0?0:clamp(GetFragDepthFromViewSpacePosition(ray.position), 0, 1);
 	imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
 	
-	bool preferRefraction = true;//int(camera.time*100) % 2 > 0;
-	
 	// Other Render Modes
 	switch (camera.renderMode) {
 		case RENDER_MODE_STANDARD:
@@ -121,42 +119,30 @@ void main() {
 			if (primaryRayDistance == 0) break;
 		
 			litColor = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+			float attenuation = 1;
 			
 			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
 			
 				reflectivity *= min(0.95, ray.metallic); // this prevents infinite loop
-				opacity += min(0.01, ray.alpha); // this prevents infinite loop
+				opacity = min(1, opacity + max(0.01, ray.alpha)); // this prevents infinite loop
 				
 				// Prepare next ray for either reflection or refraction
 				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
 				bool reflection = Reflections && reflectivity > 0.01;
-				if (refraction && reflection) {// Pick either randomly, not both
-					if (preferRefraction) {
-						refraction = true;
-						reflection = false;
-					} else {
-						refraction = false;
-						reflection = true;
-					}
-				}
-				if (reflection) {
-					rayOrigin = ray.position + normalize(ray.normal) * ray.nextRayStartOffset;
-					rayDirection = reflect(normalize(ray.position), normalize(ray.normal));
-					rayMinDistance = GetOptimalBounceStartDistance(primaryRayDistance);
-					rayMaxDistance = float(camera.zfar);
-					rayMask = RAY_TRACE_MASK_REFLECTION;
-				} else if (refraction) {
-					rayOrigin = ray.position + normalize(ray.normal) * ray.nextRayStartOffset;
+				if (refraction) {
+					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
 					rayDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = 0xff;
+				} else if (reflection) {
+					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
+					rayDirection = reflect(normalize(ray.position), normalize(ray.normal));
+					rayMinDistance = GetOptimalBounceStartDistance(primaryRayDistance);
+					rayMaxDistance = float(camera.zfar);
+					rayMask = RAY_TRACE_MASK_REFLECTION;
 				} else break;
 				
-				ray.refractionIndex = 0;
-				ray.metallic = 0;
-				ray.alpha = 1;
-				ray.nextRayStartOffset = 0;
 				traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
 				vec3 color;
 				if (ray.distance == 0) {
@@ -165,14 +151,18 @@ void main() {
 					color = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
 				}
 				
-				if (reflection) {
+				if (refraction) {
+					litColor = mix(color*litColor, litColor, opacity);
+					attenuation *= (1-opacity);
+				} else if (reflection) {
 					litColor = mix(litColor, color*litColor, reflectivity);
-				} else if (refraction) {
-					litColor = mix(color, litColor, opacity);
+					attenuation *= reflectivity;
 				}
 				
 				if (ray.distance == 0) break;
 			}
+			
+			litColor *= attenuation;
 			break;
 		case RENDER_MODE_NORMALS:
 			litColor = vec3(ray.normal*camera.renderDebugScaling);
