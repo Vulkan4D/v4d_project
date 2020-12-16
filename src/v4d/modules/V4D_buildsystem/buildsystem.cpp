@@ -150,7 +150,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		ImGui::SetNextWindowPos({20, 150}, ImGuiCond_FirstUseEver); // or ImGuiCond_Once
-		ImGui::SetNextWindowSize({460, 160}, ImGuiCond_Once);
+		ImGui::SetNextWindowSize({460, 160}, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Build System");
 		auto activeColor = ImVec4{0,1,0, 1.0};
 		auto inactiveColor = ImVec4{1,1,1, 0.6};

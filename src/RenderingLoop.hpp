@@ -31,8 +31,8 @@ namespace app {
 					ImGui::NewFrame();
 					
 					// Main info UI
-					ImGui::SetNextWindowPos({20,0});
-					ImGui::SetNextWindowSizeConstraints({400, 140}, {400, 140});
+					ImGui::SetNextWindowPos({20,0}, ImGuiCond_FirstUseEver);
+					ImGui::SetNextWindowSize({400, 140}, ImGuiCond_FirstUseEver);
 					ImGui::Begin("Vulkan4D: Renderer (Incubator)");
 					#ifdef V4D_DEMO_DEBUG_FULL_FRAMERATE
 						ImGui::Text("Primary rendering : %.1f / %d FPS (%d ms)", app::primaryAvgFrameRate, (int)std::round(1000.0/app::primaryFrameTime), (int)std::round(app::primaryFrameTime));
@@ -78,7 +78,7 @@ namespace app {
 					#endif
 					
 					ImGui::End();
-					ImGui::SetNextWindowPos({425,0});
+					ImGui::SetNextWindowPos({425,0}, ImGuiCond_FirstUseEver);
 			#endif
 					
 			if (showOtherUI) {

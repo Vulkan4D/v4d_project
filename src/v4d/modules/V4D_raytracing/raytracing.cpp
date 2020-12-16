@@ -1,5 +1,5 @@
 #define _V4D_MODULE
-#define V4D_HYBRID_RENDERER_MODULE
+#define V4D_RAYTRACING_RENDERER_MODULE
 
 #include <v4d.h>
 #include "Texture2D.hpp"
@@ -654,7 +654,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	void RunTXAA() {
 		// TXAA
-		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS) {
+		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS && !DEBUG_OPTIONS::WIREFRAME) {
 			static unsigned long frameCount = 0;
 			static const glm::dvec2 samples8[8] = {
 				glm::dvec2(-7.0, 1.0) / 8.0,
@@ -724,36 +724,36 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				if (entity->raster_transparent) {
 					auto meshVertexPosition = entity->meshVertexPosition.Lock();
 					auto meshIndices = entity->meshIndices.Lock();
-					if (meshVertexPosition && meshIndices) {
-						s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-					} else if (meshVertexPosition) {
-						s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
-					} else {
-						s->SetData(3);
+					if (meshVertexPosition) {
+						if (meshIndices) {
+							s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+						} else {
+							s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+						}
+						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
+						s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 					}
-					RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
-					s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 				}
 			});
 		}
 		for (auto* s : shaderGroups["sg_wireframe"]) {
 			// Wireframe
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if (entity->raster_wireframe) {
+				if ((entity->raster_wireframe || DEBUG_OPTIONS::WIREFRAME) && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)) {
 					auto meshVertexPosition = entity->meshVertexPosition.Lock();
 					auto meshIndices = entity->meshIndices.Lock();
-					if (meshVertexPosition && meshIndices) {
-						s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-					} else if (meshVertexPosition) {
-						s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
-					} else {
-						s->SetData(3);
+					if (meshVertexPosition) {
+						if (meshIndices) {
+							s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
+						} else {
+							s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+						}
+						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
+						s->Bind(r->renderingDevice, commandBuffer);
+						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::min(1.0f, entity->raster_wireframe));
+						s->Render(r->renderingDevice, commandBuffer, 1);
 					}
-					RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
-					s->Bind(r->renderingDevice, commandBuffer);
-					s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-					r->renderingDevice->CmdSetLineWidth(commandBuffer, entity->raster_wireframe);
-					s->Render(r->renderingDevice, commandBuffer, 1);
 				}
 			});
 		}
@@ -1848,22 +1848,61 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SetNextWindowSize({340, 150}, ImGuiCond_FirstUseEver);
 			ImGui::Begin("Settings and Modules");
 			// #ifdef _DEBUG
+				ImGui::Checkbox("Debug Wireframe", &DEBUG_OPTIONS::WIREFRAME);
 				ImGui::Checkbox("Debug Physics", &DEBUG_OPTIONS::PHYSICS);
-				ImGui::Checkbox("Debug Normals", &DEBUG_OPTIONS::NORMALS);
+				{
+					const char* items[] = {
+						"NOTHING",
+						"STANDARD",
+						"NORMALS",
+						"ALBEDO",
+						"EMISSION",
+						"DEPTH",
+						"DISTANCE",
+						"METALLIC",
+						"ROUGNESS",
+						"REFRACTION",
+					};
+					static const char* currentItem = "STANDARD";
+					if (ImGui::BeginCombo("Render mode", currentItem)) {
+						for (int n = 0; n < IM_ARRAYSIZE(items); ++n) {
+							bool isSelected = (currentItem == items[n]);
+							if (ImGui::Selectable(items[n], isSelected)) {
+								currentItem = items[n];
+								scene->camera.renderMode = n;
+							}
+							if (isSelected) {
+								ImGui::SetItemDefaultFocus();
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+				if (scene->camera.renderMode > RENDER_MODE_STANDARD) {
+					ImGui::SliderFloat("RenderMode Scaling", &scene->camera.renderDebugScaling, 0.1f, 2.0f);
+					if (scene->camera.renderMode == RENDER_MODE_DISTANCE) {
+						float maxDistance = glm::pow(10.0f, scene->camera.renderDebugScaling*4);
+						std::string distanceStr = std::to_string(glm::round(maxDistance)) + " meters";
+						if (maxDistance > 3000) {
+							distanceStr = std::to_string(glm::round(maxDistance/1000*10)/10) + " km";
+						}
+						ImGui::Text((std::string("White is >= ") + distanceStr).c_str());
+					}
+				}
 			// #endif
-			if (r->rayTracingPipelineFeatures.rayTracingPipeline) {
+			if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
 				ImGui::Checkbox("Ray-traced reflections", &RENDER_OPTIONS::REFLECTIONS);
-			} else {
-				ImGui::Text("Ray-Tracing unavailable, using rasterization");
+				ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
+				if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
+					ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+				}
+				ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
+				ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
+				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
+				ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
+				ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
+				ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 			}
-			ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
-			ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
-			ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
-			ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
-			ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
-			ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
-			ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
-			ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 		#endif
 		// Modules
 		V4D_Mod::ForEachSortedModule([](auto* mod){

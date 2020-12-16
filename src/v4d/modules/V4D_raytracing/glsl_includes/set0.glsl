@@ -35,6 +35,9 @@ layout(set = 0, binding = 0) uniform Camera {
 	float gamma;
 	float time;
 	
+	uint renderMode;
+	float renderDebugScaling;
+	
 } camera;
 
 // Ray-Tracing descriptor sets
@@ -167,13 +170,14 @@ layout(set = 0, binding = 4) uniform sampler2D tex_img_metalNormal;
 
 
 // Render Options
+bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
 bool DebugPhysics = (camera.debugOptions & DEBUG_OPTION_PHYSICS)!=0;
-bool DebugNormals = (camera.debugOptions & DEBUG_OPTION_NORMALS)!=0;
-bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && !DebugPhysics;
-bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0;
-bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0;
-bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0;
-bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0;
+bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && camera.renderMode == RENDER_MODE_STANDARD && !DebugPhysics && !DebugWireframe;
+bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
+bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
+bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
+bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
+
 
 
 #ifdef RAY_TRACING

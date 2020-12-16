@@ -8,13 +8,26 @@
 #define RENDER_OPTION_REFLECTIONS 1<< 4
 
 // maximum of 32 debug options
-#define DEBUG_OPTION_NORMALS 1<< 0
+#define DEBUG_OPTION_WIREFRAME 1<< 0
 #define DEBUG_OPTION_PHYSICS 1<< 1
 
+// Limits
 #define MAX_ACTIVE_LIGHTS 16
 
+// Render modes
+#define RENDER_MODE_NOTHING 0
+#define RENDER_MODE_STANDARD 1
+#define RENDER_MODE_NORMALS 2
+#define RENDER_MODE_ALBEDO 3
+#define RENDER_MODE_EMISSION 4
+#define RENDER_MODE_DEPTH 5
+#define RENDER_MODE_DISTANCE 6
+#define RENDER_MODE_METALLIC 7
+#define RENDER_MODE_ROUGNESS 8
+#define RENDER_MODE_REFRACTION 9
+
 // C++ Only, within this module only
-#ifdef V4D_HYBRID_RENDERER_MODULE
+#ifdef V4D_RAYTRACING_RENDERER_MODULE
 namespace RENDER_OPTIONS {
 	bool HARD_SHADOWS = true;
 	bool TXAA = true;
@@ -33,13 +46,13 @@ namespace RENDER_OPTIONS {
 	}
 }
 namespace DEBUG_OPTIONS {
+	bool WIREFRAME = false;
 	bool PHYSICS = false;
-	bool NORMALS = false;
 	
 	uint32_t Get() {
 		uint32_t flags = 0;
+		if (WIREFRAME) flags |= DEBUG_OPTION_WIREFRAME;
 		if (PHYSICS) flags |= DEBUG_OPTION_PHYSICS;
-		if (NORMALS) flags |= DEBUG_OPTION_NORMALS;
 		return flags;
 	}
 }

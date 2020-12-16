@@ -65,6 +65,8 @@ const float minStepSize = 100.0; // meters
 #define G 0.9 // sun glow
 
 void main() {
+	if (camera.renderMode != RENDER_MODE_STANDARD) discard;
+	
 	vec4 unpackedAtmosphereColor = UnpackVec4FromUint(planetAtmosphere.color);
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);
 	float atmosphereAmbient = unpackedAtmosphereColor.a;
