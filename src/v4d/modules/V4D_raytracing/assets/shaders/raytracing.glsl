@@ -19,9 +19,37 @@ layout(set = 1, binding = 2) buffer writeonly RayCast {
 layout(location = 0) rayPayloadEXT RayTracingPayload ray;
 layout(location = 1) rayPayloadEXT bool shadowed;
 
-const int MAX_BOUNCES = 10; // 0 is infinite
-
 #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
+
+vec4 SampleBackground(vec3 direction) {
+	return vec4(0.5);
+}
+
+
+float linstep(float low, float high, float value){
+	return clamp((value-low)/(high-low), 0.0, 1.0);
+}
+float fade(float low, float high, float value){
+	float mid = (low+high)*0.5;
+	float range = (high-low)*0.5;
+	float x = 1.0 - clamp(abs(mid-value)/range, 0.0, 1.0);
+	return smoothstep(0.0, 1.0, x);
+}
+vec3 getHeatMap(float intensity){
+	vec3 blue = vec3(0.0, 0.0, 1.0);
+	vec3 cyan = vec3(0.0, 1.0, 1.0);
+	vec3 green = vec3(0.0, 1.0, 0.0);
+	vec3 yellow = vec3(1.0, 1.0, 0.0);
+	vec3 red = vec3(1.0, 0.0, 0.0);
+	vec3 color = (
+		fade(-0.25, 0.25, intensity)*blue +
+		fade(0.0, 0.5, intensity)*cyan +
+		fade(0.25, 0.75, intensity)*green +
+		fade(0.5, 1.0, intensity)*yellow +
+		smoothstep(0.75, 1.0, intensity)*red
+	);
+	return color;
+}
 
 void main() {
 	const ivec2 imgCoords = ivec2(gl_LaunchIDEXT.xy);
@@ -29,13 +57,20 @@ void main() {
 	const bool isMiddleOfScreen = (imgCoords == pixelInMiddleOfScreen);
 	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 d = pixelCenter/vec2(gl_LaunchSizeEXT.xy) * 2.0 - 1.0;
-	const vec3 origin = vec3(0);
-	const vec3 direction = normalize(vec4(inverse(isMiddleOfScreen? camera.rawProjectionMatrix : camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
+	
 	vec3 litColor = vec3(0);
+	float opacity = 0;
+	float reflectivity = 1.0;
 	int bounces = 0;
+	
+	vec3 rayOrigin = vec3(0);
+	vec3 rayDirection = normalize(vec4(inverse(isMiddleOfScreen? camera.rawProjectionMatrix : camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
+	uint rayMask = RAY_TRACE_MASK_PRIMARY;
+	float rayMinDistance = float(camera.znear);
+	float rayMaxDistance = float(camera.zfar);
 
 	// Trace Primary Ray
-	traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, origin, float(camera.znear), direction, float(camera.zfar), 0);
+	traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
 	
 	// Store raycast info
 	if (isMiddleOfScreen) {
@@ -71,81 +106,122 @@ void main() {
 	float depth = ray.distance==0?0:clamp(GetFragDepthFromViewSpacePosition(ray.position), 0, 1);
 	imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
 	
-	// Store background when primary ray missed
-	if (primaryRayDistance == 0) {
-		imageStore(img_lit, imgCoords, vec4(0)); //TODO sample Galaxy Background
-		return;
-	}
-
+	bool preferRefraction = true;//int(camera.time*100) % 2 > 0;
+	
 	// Other Render Modes
 	switch (camera.renderMode) {
 		case RENDER_MODE_STANDARD:
-			
-			// Refraction
-			if (ray.refractionIndex >= 1.0) {
-				vec3 glassColor = ray.albedo;
-				float glassRoughness = ray.roughness;
-				vec3 glassNormal = ray.normal;
-				vec3 glassRefractionDirection = refract(direction, glassNormal, ray.refractionIndex);
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_PRIMARY, 0, 0, 0, ray.position, float(camera.znear), glassRefractionDirection, float(camera.zfar), 0);
-				litColor = mix(ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission, glassColor, glassRoughness);
-			} else {
-				litColor = ApplyPBRShading(origin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+			// Store background when primary ray missed
+			if (primaryRayDistance == 0) {
+				litColor = SampleBackground(rayDirection).rgb;
+				break;
 			}
+			// Fallthrough
+		case RENDER_MODE_BOUNCES:
+			if (primaryRayDistance == 0) break;
+		
+			litColor = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
 			
-			// Reflections
-			float reflectivity = min(0.9, ray.metallic);
-			vec3 reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
-			vec3 viewDirection = normalize(ray.position);
-			vec3 surfaceNormal = normalize(ray.normal);
-			while (Reflections && reflectivity > 0.01) {
-				vec3 reflectDirection = reflect(viewDirection, surfaceNormal);
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, RAY_TRACE_MASK_REFLECTION, 0, 0, 0, reflectionOrigin, GetOptimalBounceStartDistance(primaryRayDistance), reflectDirection, float(camera.zfar), 0);
-				if (ray.distance > 0) {
-					vec3 reflectColor = ApplyPBRShading(reflectionOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
-					litColor = mix(litColor, reflectColor*litColor, reflectivity);
-					reflectivity *= min(0.9, ray.metallic);
-					if (reflectivity > 0) {
-						reflectionOrigin = ray.position + ray.normal * GetOptimalBounceStartDistance(primaryRayDistance);
-						viewDirection = normalize(ray.position);
-						surfaceNormal = normalize(ray.normal);
+			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
+			
+				reflectivity *= min(0.95, ray.metallic); // this prevents infinite loop
+				opacity += min(0.01, ray.alpha); // this prevents infinite loop
+				
+				// Prepare next ray for either reflection or refraction
+				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
+				bool reflection = Reflections && reflectivity > 0.01;
+				if (refraction && reflection) {// Pick either randomly, not both
+					if (preferRefraction) {
+						refraction = true;
+						reflection = false;
+					} else {
+						refraction = false;
+						reflection = true;
 					}
-				} else {
-					litColor = mix(litColor, litColor*vec3(0.5)/* fake atmosphere color (temporary) */, reflectivity);
-					reflectivity = 0;
 				}
-				if (MAX_BOUNCES > 0 && ++bounces > MAX_BOUNCES) break;
+				if (reflection) {
+					rayOrigin = ray.position + normalize(ray.normal) * ray.nextRayStartOffset;
+					rayDirection = reflect(normalize(ray.position), normalize(ray.normal));
+					rayMinDistance = GetOptimalBounceStartDistance(primaryRayDistance);
+					rayMaxDistance = float(camera.zfar);
+					rayMask = RAY_TRACE_MASK_REFLECTION;
+				} else if (refraction) {
+					rayOrigin = ray.position + normalize(ray.normal) * ray.nextRayStartOffset;
+					rayDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
+					rayMinDistance = float(camera.znear);
+					rayMaxDistance = float(camera.zfar);
+					rayMask = 0xff;
+				} else break;
+				
+				ray.refractionIndex = 0;
+				ray.metallic = 0;
+				ray.alpha = 1;
+				ray.nextRayStartOffset = 0;
+				traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+				vec3 color;
+				if (ray.distance == 0) {
+					color = SampleBackground(rayDirection).rgb;
+				} else {
+					color = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+				}
+				
+				if (reflection) {
+					litColor = mix(litColor, color*litColor, reflectivity);
+				} else if (refraction) {
+					litColor = mix(color, litColor, opacity);
+				}
+				
+				if (ray.distance == 0) break;
 			}
-			
-			// Store final color
-			imageStore(img_lit, imgCoords, vec4(litColor,1));
-			
 			break;
 		case RENDER_MODE_NORMALS:
-			imageStore(img_lit, imgCoords, vec4(ray.normal*camera.renderDebugScaling,1));
+			litColor = vec3(ray.normal*camera.renderDebugScaling);
+			if (primaryRayDistance == 0) litColor = vec3(0);
+			opacity = 1;
 			break;
 		case RENDER_MODE_ALBEDO:
-			imageStore(img_lit, imgCoords, vec4(ray.albedo*camera.renderDebugScaling,1));
+			litColor = vec3(ray.albedo*camera.renderDebugScaling);
+			if (primaryRayDistance == 0) litColor = vec3(0);
+			opacity = 1;
 			break;
 		case RENDER_MODE_EMISSION:
-			imageStore(img_lit, imgCoords, vec4(ray.emission*camera.renderDebugScaling,1));
+			litColor = vec3(ray.emission*camera.renderDebugScaling);
+			if (primaryRayDistance == 0) litColor = vec3(0);
+			opacity = 1;
 			break;
 		case RENDER_MODE_DEPTH:
-			imageStore(img_lit, imgCoords, vec4(vec3(depth*pow(10, camera.renderDebugScaling*6)),1));
+			litColor = vec3(depth*pow(10, camera.renderDebugScaling*6));
+			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
+			opacity = 1;
 			break;
 		case RENDER_MODE_DISTANCE:
-			imageStore(img_lit, imgCoords, vec4(vec3(ray.distance/pow(10, camera.renderDebugScaling*4)),1));
+			litColor = vec3(ray.distance/pow(10, camera.renderDebugScaling*4));
+			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
+			opacity = 1;
 			break;
 		case RENDER_MODE_METALLIC:
-			imageStore(img_lit, imgCoords, vec4(vec3(ray.metallic*camera.renderDebugScaling),1));
+			litColor = vec3(ray.metallic*camera.renderDebugScaling);
+			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
+			opacity = 1;
 			break;
 		case RENDER_MODE_ROUGNESS:
-			imageStore(img_lit, imgCoords, vec4(ray.roughness >=0 ? vec3(ray.roughness*camera.renderDebugScaling) : vec3(-ray.roughness*camera.renderDebugScaling,0,0),1));
+			litColor = ray.roughness >=0 ? vec3(ray.roughness*camera.renderDebugScaling) : vec3(-ray.roughness*camera.renderDebugScaling,0,0);
+			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
+			opacity = 1;
 			break;
 		case RENDER_MODE_REFRACTION:
-			imageStore(img_lit, imgCoords, vec4(vec3(ray.refractionIndex*camera.renderDebugScaling/2),1));
+			litColor = vec3(ray.refractionIndex*camera.renderDebugScaling/2);
+			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
+			opacity = 1;
 			break;
 	}
+	if (camera.renderMode == RENDER_MODE_BOUNCES) {
+		litColor = bounces==0? vec3(0) : getHeatMap(float(bounces-1)/(camera.renderDebugScaling*5));
+		opacity = 1;
+	}
+	
+	// Store final color
+	imageStore(img_lit, imgCoords, vec4(litColor, opacity));
 }
 
 

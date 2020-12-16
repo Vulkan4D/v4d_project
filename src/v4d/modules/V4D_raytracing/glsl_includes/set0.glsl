@@ -37,6 +37,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	
 	uint renderMode;
 	float renderDebugScaling;
+	int maxBounces; // -1 = infinite bounces
 	
 } camera;
 
@@ -176,13 +177,19 @@ bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && camera.renderMode 
 bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
 bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
 bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
-bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
+bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0 && (camera.renderMode == RENDER_MODE_STANDARD || camera.renderMode == RENDER_MODE_BOUNCES);
+bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camera.renderMode == RENDER_MODE_STANDARD || camera.renderMode == RENDER_MODE_BOUNCES);
 
 
 
 #ifdef RAY_TRACING
 
-	// 80 bytes
+	#define MEDIUM_SOLID 0
+	#define MEDIUM_WATER 1
+	#define MEDIUM_FOG 2
+	#define MEDIUM_ATMOSPHERE 3
+
+	// 92 bytes
 	struct RayTracingPayload {
 		vec3 albedo;
 		vec3 normal;
@@ -195,6 +202,9 @@ bool Reflections = (camera.renderOptions & RENDER_OPTION_REFLECTIONS)!=0 && came
 		uint instanceCustomIndex;
 		uint primitiveID;
 		uint64_t raycastCustomData;
+		uint medium;
+		float alpha;
+		float nextRayStartOffset;
 	};
 	
 #endif

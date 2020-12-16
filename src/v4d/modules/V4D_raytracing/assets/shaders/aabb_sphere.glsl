@@ -48,10 +48,11 @@ void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
 	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.normal = normalize(hitPoint - sphereGeomPositionAttr);
+	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereGeomPositionAttr));
 	ray.emission = vec3(0);
 	ray.position = hitPoint;
-	ray.refractionIndex = 0.0;
+	// ray.refractionIndex = 1.5;
+	// ray.nextRayStartOffset = 1.0;
 	ray.metallic = 0.8;
 	ray.roughness = 0.1;
 	ray.distance = gl_HitTEXT;

@@ -40,6 +40,7 @@ void main() {
 	// ) : vec2(0);
 	
 	ray.albedo = color.rgb;
+	ray.alpha = color.a;
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
 	ray.emission = vec3(0);
 	ray.position = hitPoint;

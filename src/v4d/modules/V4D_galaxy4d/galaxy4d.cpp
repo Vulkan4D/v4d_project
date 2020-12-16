@@ -302,6 +302,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "glass");
+					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE|GEOMETRY_ATTR_SOLID;
 					entity->Add_meshVertexPosition()->AllocateBuffers(device, {
 						{-2.0,-2.0, 0.0},
 						{ 2.0,-2.0, 0.0},
@@ -315,10 +316,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						{ 0.0, 0.0, 1.0},
 					});
 					entity->Add_meshVertexColor()->AllocateBuffers(device, {
-						{1.0, 1.0, 1.0, 0.01},
-						{1.0, 1.0, 1.0, 0.01},
-						{1.0, 1.0, 1.0, 0.01},
-						{1.0, 1.0, 1.0, 0.01},
+						{1.0, 1.0, 1.0, 0.05},
+						{1.0, 1.0, 1.0, 0.05},
+						{1.0, 1.0, 1.0, 0.05},
+						{1.0, 1.0, 1.0, 0.05},
 					});
 					entity->Add_meshIndices()->AllocateBuffers(device, {
 						0, 1, 2, 2, 3, 0,
@@ -351,13 +352,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
-				// case GLFW_KEY_N:{
-				// 	v4d::data::WriteOnlyStream stream(32);
-				// 		stream << networking::action::TEST_OBJ;
-				// 		stream << std::string("balls");
-				// 		stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
-				// 	ClientEnqueueAction(stream);
-				// }break;
+				case GLFW_KEY_N:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("balls");
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+					ClientEnqueueAction(stream);
+				}break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;

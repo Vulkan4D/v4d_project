@@ -740,7 +740,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		for (auto* s : shaderGroups["sg_wireframe"]) {
 			// Wireframe
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if ((entity->raster_wireframe || DEBUG_OPTIONS::WIREFRAME) && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)) {
+				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)))) {
 					auto meshVertexPosition = entity->meshVertexPosition.Lock();
 					auto meshIndices = entity->meshIndices.Lock();
 					if (meshVertexPosition) {
@@ -752,7 +752,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
 						s->Bind(r->renderingDevice, commandBuffer);
 						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::min(1.0f, entity->raster_wireframe));
+						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
 						s->Render(r->renderingDevice, commandBuffer, 1);
 					}
 				}
@@ -1863,6 +1863,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						"METALLIC",
 						"ROUGNESS",
 						"REFRACTION",
+						"BOUNCES",
 					};
 					static const char* currentItem = "STANDARD";
 					if (ImGui::BeginCombo("Render mode", currentItem)) {
@@ -1889,20 +1890,27 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						}
 						ImGui::Text((std::string("White is >= ") + distanceStr).c_str());
 					}
+					if (scene->camera.renderMode == RENDER_MODE_BOUNCES) {
+						ImGui::Text((std::string("Red is >= ") + std::to_string((int)glm::ceil(scene->camera.renderDebugScaling*5)) + " bounces").c_str());
+					}
 				}
 			// #endif
-			if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
-				ImGui::Checkbox("Ray-traced reflections", &RENDER_OPTIONS::REFLECTIONS);
+			if (scene->camera.renderMode == RENDER_MODE_STANDARD || scene->camera.renderMode == RENDER_MODE_BOUNCES) {
 				ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
-				if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
-					ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+				ImGui::Checkbox("Ray-traced reflections", &RENDER_OPTIONS::REFLECTIONS);
+				ImGui::Checkbox("Ray-traced refraction", &RENDER_OPTIONS::REFRACTION);
+				ImGui::SliderInt("Light Bounces", &scene->camera.maxBounces, -1, 10); // -1 = infinite bounces
+				if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
+					if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
+						ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+					}
+					ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
+					ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
+					ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
+					ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
+					ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
+					ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 				}
-				ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
-				ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
-				ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
-				ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
-				ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
-				ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
 			}
 		#endif
 		// Modules
