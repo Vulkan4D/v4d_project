@@ -206,14 +206,14 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 		uint primitiveID;
 		float alpha;
 		uint64_t raycastCustomData;
-		// float nextRayStartOffset;
+		float nextRayStartOffset;
 		// uint medium;
 	};
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
 		void WriteRayPayload(inout RayTracingPayload ray) {
 			// ray.medium = MEDIUM_SOLID;
-			// ray.nextRayStartOffset = 0;
+			ray.nextRayStartOffset = 0;
 			ray.position = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 			ray.emission = vec3(0);
 			ray.alpha = 1.0;

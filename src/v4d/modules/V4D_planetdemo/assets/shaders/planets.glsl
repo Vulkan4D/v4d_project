@@ -93,7 +93,7 @@ layout(buffer_reference, std430, buffer_reference_align = 16) buffer CustomData 
 };
 
 vec4 GetBumpMap(vec2 uv) {
-	return vec4(0,0,1,0) + texture(bumpMap[0], uv) / 2.0;
+	return vec4(0,0,1,0) + texture(bumpMap[0], uv / 2) / 2.0;
 }
 
 hitAttributeEXT vec3 hitAttribs;

@@ -9,6 +9,7 @@ namespace OBJECT_TYPE {
 	const uint32_t Player = 0;
 	const uint32_t Ball = 1;
 	const uint32_t Light = 2;
+	const uint32_t GlassBall = 3;
 }
 
 namespace networking::action {
@@ -250,6 +251,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
+				else if (key == "glassBall") {
+					auto dir = stream->Read<DVector3>();
+					std::lock_guard lock(serverSideObjects->mutex);
+					// Launch ball
+					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					ball->isDynamic = true;
+					ball->physicsClientID = client->id;
+				}
 				else if (key == "balls") {
 					std::lock_guard lock(serverSideObjects->mutex);
 					auto dir = stream->Read<DVector3>();
@@ -481,6 +492,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
 				};
 			}break;
+			case OBJECT_TYPE::GlassBall:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 0.5f;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
+				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
+					entity->Allocate(device, "aabb_sphere.glass");
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+				};
+			}break;
 			case OBJECT_TYPE::Light:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
@@ -517,6 +539,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("ball");
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+					ClientEnqueueAction(stream);
+				}break;
+				case GLFW_KEY_H:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("glassBall");
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;

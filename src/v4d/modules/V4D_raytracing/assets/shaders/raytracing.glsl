@@ -22,7 +22,7 @@ layout(location = 1) rayPayloadEXT bool shadowed;
 #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
 
 vec4 SampleBackground(vec3 direction) {
-	return vec4(0.5);
+	return vec4(0.5,0.5,0.7,1);
 }
 
 
@@ -122,6 +122,7 @@ void main() {
 			
 			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
 			
+				vec3 rayAlbedo = ray.albedo;
 				float reflectionStrength = min(0.95, ray.metallic);
 				vec3 reflectorAlbedo = ray.albedo;
 				opacity = min(1, opacity + max(0.01, ray.alpha)); // this prevents infinite loop
@@ -129,15 +130,23 @@ void main() {
 				// Prepare next ray for either reflection or refraction
 				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
 				bool reflection = Reflections && reflectionStrength > 0.01;
+				vec3 refractionDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
+				vec3 reflectionDirection = reflect(rayDirection, ray.normal);
+				if (refraction && refractionDirection == vec3(0)) {
+					refraction = false;
+					reflection = true;
+					reflectionStrength = 0.95;
+					reflectionDirection = reflect(rayDirection, -ray.normal);
+				}
 				if (refraction) {
-					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
-					rayDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
+					rayOrigin = ray.position - normalize(ray.normal) * ray.nextRayStartOffset;
+					rayDirection = refractionDirection;
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = 0xff;
 				} else if (reflection) {
-					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
-					rayDirection = reflect(rayDirection, normalize(ray.normal));
+					rayOrigin = ray.position;
+					rayDirection = reflectionDirection;
 					rayMinDistance = GetOptimalBounceStartDistance(primaryRayDistance);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = RAY_TRACE_MASK_REFLECTION;
@@ -152,10 +161,10 @@ void main() {
 				}
 				
 				if (refraction) {
-					litColor = mix(color*litColor, litColor, opacity);
+					litColor = mix(color*litColor, rayAlbedo, opacity);
 					attenuation *= (1-opacity);
 				} else if (reflection) {
-					litColor = mix(litColor, color*litColor, reflectionStrength);
+					litColor = mix(litColor, mix(litColor, color*rayAlbedo, 0.5), reflectionStrength);
 					attenuation *= reflectionStrength;
 				}
 				

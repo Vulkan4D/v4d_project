@@ -5,7 +5,7 @@
 #############################################################
 #shader rint
 
-hitAttributeEXT vec3 sphereGeomPositionAttr;
+hitAttributeEXT vec4 sphereAttr; // center position and thickness
 
 void main() {
 	vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
@@ -30,7 +30,7 @@ void main() {
 		const float t2 = (-b + discriminantSqrt) / a;
 
 		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
-			sphereGeomPositionAttr = spherePosition;
+			sphereAttr = vec4(spherePosition, abs(t2 - t1));
 			reportIntersectionEXT((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
 		}
 	}
@@ -40,7 +40,7 @@ void main() {
 #############################################################
 #shader rchit
 
-hitAttributeEXT vec3 sphereGeomPositionAttr;
+hitAttributeEXT vec4 sphereAttr;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
@@ -49,18 +49,37 @@ void main() {
 	
 	WriteRayPayload(ray);
 	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereGeomPositionAttr));
-	// ray.refractionIndex = 1.5;
-	// ray.nextRayStartOffset = 1.0;
+	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
 	ray.metallic = 0.8;
 	ray.roughness = 0.1;
 }
 
 
 #############################################################
+#shader glass.rchit
+
+hitAttributeEXT vec4 sphereAttr;
+
+layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+
+void main() {
+	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+	
+	WriteRayPayload(ray);
+	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
+	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
+	ray.metallic = 0.0;
+	ray.roughness = 0.0;
+	ray.alpha = 0.001;
+	ray.refractionIndex = 1.1;
+	ray.nextRayStartOffset = sphereAttr.w;
+}
+
+
+#############################################################
 #shader light.rchit
 
-hitAttributeEXT vec3 sphereGeomPositionAttr;
+hitAttributeEXT vec4 sphereAttr;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
@@ -69,7 +88,7 @@ void main() {
 	
 	WriteRayPayload(ray);
 	ray.albedo = vec3(0);
-	ray.normal = normalize(hitPoint - sphereGeomPositionAttr);
+	ray.normal = normalize(hitPoint - sphereAttr.xyz);
 	ray.emission = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;

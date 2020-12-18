@@ -7,7 +7,8 @@
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
-ObjModelLoader droneModel {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
+ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
+// GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
 
 using namespace v4d::scene;
 using namespace v4d::networking;
@@ -68,7 +69,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 		
-		droneModel.Load();
+		if (!cake.Load()) {
+			LOG_ERROR("Failed to load cake model")
+		}
 	}
 	
 	V4D_MODULE_FUNC(void, ServerIncomingClient, IncomingClientPtr client) {
@@ -118,6 +121,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
+					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					ball->isDynamic = true;
+					ball->physicsClientID = client->id;
+				}
+				else if (key == "glassBall") {
+					auto dir = stream->Read<DVector3>();
+					std::lock_guard lock(serverSideObjects->mutex);
+					// Launch ball
+					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
@@ -258,10 +271,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
-				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "default");
-					droneModel.Generate(device, entity);
-				};
+				entity->generator = cake;
 			}break;
 			case OBJECT_TYPE::Ball:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
@@ -270,6 +280,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere");
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+				};
+			}break;
+			case OBJECT_TYPE::GlassBall:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 0.5f;
+				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
+				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
+					entity->Allocate(device, "aabb_sphere.glass");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
 				};
@@ -291,10 +312,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
-				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "default");
-					droneModel.Generate(device, entity);
-				};
+				entity->generator = cake;
 			}break;
 			case OBJECT_TYPE::Glass:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
@@ -349,6 +367,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("ball");
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+					ClientEnqueueAction(stream);
+				}break;
+				case GLFW_KEY_H:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("glassBall");
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
