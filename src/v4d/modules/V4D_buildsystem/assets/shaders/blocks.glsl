@@ -36,7 +36,7 @@ vec3 TriplanarBlending(vec3 norm) {
 vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNormal, vec3 blending, float distance) {
 	uvec2 texSize = textureSize(normalTex, 0).st;
 	float resolutionRatio = min(texSize.s, texSize.t) / min(camera.width, camera.height);
-	float lod = pow(distance, 0.5) * resolutionRatio * 2;
+	float lod = pow(distance, 0.5) * resolutionRatio;
 	vec3 tnormalX = textureLod(normalTex, coords.zy, lod).xyz * 2 - 1;
 	vec3 tnormalY = textureLod(normalTex, coords.xz, lod).xyz * 2 - 1;
 	vec3 tnormalZ = textureLod(normalTex, coords.xy, lod).xyz * 2 - 1;

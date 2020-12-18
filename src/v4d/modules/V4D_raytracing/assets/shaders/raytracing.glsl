@@ -164,7 +164,7 @@ void main() {
 					litColor = mix(color*litColor, rayAlbedo, opacity);
 					attenuation *= (1-opacity);
 				} else if (reflection) {
-					litColor = mix(litColor, mix(litColor, color*rayAlbedo, 0.5), reflectionStrength);
+					litColor = mix(litColor, color*mix(litColor, rayAlbedo, 0.7), reflectionStrength);
 					attenuation *= reflectionStrength;
 				}
 				
