@@ -33,10 +33,13 @@ vec3 TriplanarBlending(vec3 norm) {
 // 	float zaxis = texture( tex, coords.xy).a;
 // 	return xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
 // }
-vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNormal, vec3 blending) {
-	vec3 tnormalX = texture( normalTex, coords.zy).xyz * 2 - 1;
-	vec3 tnormalY = texture( normalTex, coords.xz).xyz * 2 - 1;
-	vec3 tnormalZ = texture( normalTex, coords.xy).xyz * 2 - 1;
+vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNormal, vec3 blending, float distance) {
+	uvec2 texSize = textureSize(normalTex, 0).st;
+	float resolutionRatio = min(texSize.s, texSize.t) / min(camera.width, camera.height);
+	float lod = pow(distance, 0.5) * resolutionRatio;
+	vec3 tnormalX = textureLod(normalTex, coords.zy, lod).xyz * 2 - 1;
+	vec3 tnormalY = textureLod(normalTex, coords.xz, lod).xyz * 2 - 1;
+	vec3 tnormalZ = textureLod(normalTex, coords.xy, lod).xyz * 2 - 1;
 	tnormalX = vec3(0, tnormalX.yx);
 	tnormalY = vec3(tnormalY.x, 0, tnormalY.y);
 	tnormalZ = vec3(tnormalZ.xy, 0);
@@ -90,7 +93,9 @@ void main() {
 	
 	
 	vec3 blending = TriplanarBlending(normal);
-	normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending);
+	normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending, gl_HitTEXT);
+	normal += TriplanarLocalNormalMap(tex_img_metalNormal, pos/200, normal, blending, gl_HitTEXT/200)/2;
+	normal = normalize(normal);
 	
 	WriteRayPayload(ray);
 	ray.albedo = color.rgb;

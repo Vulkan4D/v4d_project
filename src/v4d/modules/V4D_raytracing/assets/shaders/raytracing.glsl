@@ -60,7 +60,6 @@ void main() {
 	
 	vec3 litColor = vec3(0);
 	float opacity = 0;
-	float reflectivity = 1.0;
 	int bounces = 0;
 	
 	vec3 rayOrigin = vec3(0);
@@ -123,12 +122,13 @@ void main() {
 			
 			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
 			
-				reflectivity *= min(0.95, ray.metallic); // this prevents infinite loop
+				float reflectionStrength = min(0.95, ray.metallic);
+				vec3 reflectorAlbedo = ray.albedo;
 				opacity = min(1, opacity + max(0.01, ray.alpha)); // this prevents infinite loop
 				
 				// Prepare next ray for either reflection or refraction
 				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
-				bool reflection = Reflections && reflectivity > 0.01;
+				bool reflection = Reflections && reflectionStrength > 0.01;
 				if (refraction) {
 					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
 					rayDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
@@ -137,7 +137,7 @@ void main() {
 					rayMask = 0xff;
 				} else if (reflection) {
 					rayOrigin = ray.position ;//+ normalize(ray.normal) * ray.nextRayStartOffset;
-					rayDirection = reflect(normalize(ray.position), normalize(ray.normal));
+					rayDirection = reflect(rayDirection, normalize(ray.normal));
 					rayMinDistance = GetOptimalBounceStartDistance(primaryRayDistance);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = RAY_TRACE_MASK_REFLECTION;
@@ -155,10 +155,11 @@ void main() {
 					litColor = mix(color*litColor, litColor, opacity);
 					attenuation *= (1-opacity);
 				} else if (reflection) {
-					litColor = mix(litColor, color*litColor, reflectivity);
-					attenuation *= reflectivity;
+					litColor = mix(litColor, color*litColor, reflectionStrength);
+					attenuation *= reflectionStrength;
 				}
 				
+				if (attenuation < 0.01) break;
 				if (ray.distance == 0) break;
 			}
 			
