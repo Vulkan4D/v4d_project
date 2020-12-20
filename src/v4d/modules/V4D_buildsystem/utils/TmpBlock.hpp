@@ -27,10 +27,10 @@ public:
 			entity->raster_wireframe = 5.0f;
 			entity->raster_wireframe_color = wireframeColor;
 			
-			std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES);
+			std::vector<Mesh::Index32> meshIndices (Block::MAX_INDICES);
 			std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES);
 			std::vector<Mesh::VertexNormal> vertexNormals (Block::MAX_VERTICES);
-			std::vector<Mesh::VertexColor> vertexColors (Block::MAX_VERTICES);
+			std::vector<Mesh::VertexColor<uint8_t>> vertexColors (Block::MAX_VERTICES);
 			std::vector<uint32_t> customData (Block::MAX_VERTICES);
 			
 			auto[vertexCount, indexCount] = block.GenerateSimpleGeometry(meshIndices.data(), vertexPositions.data(), vertexNormals.data(), vertexColors.data(), customData.data(), 0, 0.3);
@@ -41,11 +41,11 @@ public:
 				boundingDistance = glm::max(boundingDistance, glm::length(glm::vec3(vert)));
 			}
 			
-			entity->Add_meshIndices()->AllocateBuffers(device, meshIndices.data(), indexCount); 
+			entity->Add_meshIndices32()->AllocateBuffers(device, meshIndices.data(), indexCount); 
 			entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), vertexCount);
 			entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), vertexCount);
-			entity->Add_meshVertexColor()->AllocateBuffers(device, vertexColors.data(), vertexCount);
-			entity->Add_customData()->AllocateBuffers(device, (float*)customData.data(), vertexCount);
+			entity->Add_meshVertexColorU8()->AllocateBuffers(device, vertexColors.data(), vertexCount);
+			entity->Add_meshCustomData()->AllocateBuffers(device, (float*)customData.data(), vertexCount);
 		};
 	}
 	

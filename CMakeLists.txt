@@ -58,6 +58,10 @@ endif()
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-missing-field-initializers")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-type-limits")
 	
+# Remove compiler Warnings from tinygltfloader...
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-ignored-qualifiers")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-switch")
+	
 # Address Sanitizer
 if(ADDRESS_SANITIZER)
 	if(WIN32)

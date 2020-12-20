@@ -153,7 +153,7 @@ protected:
 		uint8_t vertexIndex;
 		Mesh::VertexPosition* vertexPosition;
 		Mesh::VertexNormal* vertexNormal;
-		Mesh::VertexColor* vertexColor;
+		Mesh::VertexColor<uint8_t>* vertexColor;
 		uint32_t* customData;
 	};
 	
@@ -792,10 +792,10 @@ public:
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateSimpleGeometry(
-		Mesh::Index* outputIndices,
+		Mesh::Index32* outputIndices,
 		Mesh::VertexPosition* outputVerticesPosition,
 		Mesh::VertexNormal* outputVerticesNormal,
-		Mesh::VertexColor* outputVerticesColor,
+		Mesh::VertexColor<uint8_t>* outputVerticesColor,
 		uint32_t* outputCustomData,
 		uint vertexIndexOffset = 0,
 		float alpha = 1.0f
@@ -842,7 +842,7 @@ public:
 					auto color = COLORS[GetColorIndex(data.useVertexColorGradients? pointIndex : faceIndex)];
 					*faceVertex->vertexPosition = points[pointIndex] + GetPosition();
 					*faceVertex->vertexNormal = faceNormal;
-					*faceVertex->vertexColor = glm::vec4{color.r, color.g, color.b, alpha};
+					*faceVertex->vertexColor = glm::u8vec4(glm::vec4{color.r, color.g, color.b, alpha}*255.0f);
 					*faceVertex->customData = customData.packed;
 				}
 				outputIndices[indexCount++] = vertexIndexOffset + faceVertex->vertexIndex;
@@ -856,10 +856,10 @@ public:
 	
 	std::tuple<uint/* vertexCount */, uint/* indexCount */> 
 	GenerateGeometry(
-		Mesh::Index* outputIndices,
+		Mesh::Index32* outputIndices,
 		Mesh::VertexPosition* outputVerticesPosition,
 		Mesh::VertexNormal* outputVerticesNormal,
-		Mesh::VertexColor* outputVerticesColor,
+		Mesh::VertexColor<uint8_t>* outputVerticesColor,
 		uint32_t* outputCustomData,
 		uint vertexIndexOffset = 0
 	) {
@@ -921,7 +921,7 @@ public:
 					
 					*faceVertex->vertexPosition = pt + GetPosition();
 					*faceVertex->vertexNormal = faceNormal;
-					*faceVertex->vertexColor = glm::vec4{color.r, color.g, color.b, colorIndex? 1:0};
+					*faceVertex->vertexColor = glm::u8vec4(glm::vec4{color.r, color.g, color.b, colorIndex? 1:0} * 255.0f);
 					*faceVertex->customData = customData.packed;
 					
 					if (cornerVertices[pointIndex].size() < 3) {
@@ -950,7 +950,7 @@ public:
 				for (int i = 0; i < vertices.size(); ++i) {
 					outputCustomData[index+i] = customData.packed;
 					outputVerticesNormal[index+i] = faceNormal;
-					outputVerticesColor[index+i] = glm::vec4(COLORS[BLOCK_COLOR_GREY], 1);
+					outputVerticesColor[index+i] = glm::u8vec4(glm::vec4(COLORS[BLOCK_COLOR_GREY], 1) * 255.0f);
 				}
 				outputIndices[indexCount++] = vertexIndexOffset + index + 0;
 				outputIndices[indexCount++] = vertexIndexOffset + index + 1;

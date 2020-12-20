@@ -50,10 +50,10 @@ void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 }
 
 void CreateCornellBox(RenderableGeometryEntity* entity, Device* device) {
-	auto meshIndices = entity->Add_meshIndices();
+	auto meshIndices = entity->Add_meshIndices16();
 	auto meshVertexPosition = entity->Add_meshVertexPosition();
 	auto meshVertexNormal = entity->Add_meshVertexNormal();
-	auto meshVertexColor = entity->Add_meshVertexColor();
+	auto meshVertexColor = entity->Add_meshVertexColorU8();
 	auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
 	
 	meshIndices->AllocateBuffers(device, {
@@ -144,40 +144,40 @@ void CreateCornellBox(RenderableGeometryEntity* entity, Device* device) {
 	
 	meshVertexColor->AllocateBuffers(device, {
 		//
-		{1.0, 0.0, 0.0, 1.0},
-		{0.0, 1.0, 0.0, 1.0},
-		{0.0, 0.0, 1.0, 1.0},
-		{0.0, 1.0, 1.0, 1.0},
+		{255, 0, 0, 255},
+		{0, 255, 0, 255},
+		{0, 0, 255, 255},
+		{0, 255, 255, 255},
 		//
-		{1.0, 0.0, 0.0, 1.0},
-		{0.0, 1.0, 0.0, 1.0},
-		{0.0, 0.0, 1.0, 1.0},
-		{0.0, 1.0, 1.0, 1.0},
+		{255, 0, 0, 255},
+		{0, 255, 0, 255},
+		{0, 0, 255, 255},
+		{0, 255, 255, 255},
 		// bottom white
-		{1.0,1.0,1.0, 1.0},
-		{1.0,1.0,1.0, 1.0},
-		{1.0,1.0,1.0, 1.0},
-		{1.0,1.0,1.0, 1.0},
+		{255,255,255, 255},
+		{255,255,255, 255},
+		{255,255,255, 255},
+		{255,255,255, 255},
 		// top yellow
-		{1.0,1.0,0.0, 1.0},
-		{1.0,1.0,0.0, 1.0},
-		{1.0,1.0,0.0, 1.0},
-		{1.0,1.0,0.0, 1.0},
+		{255,255,0, 255},
+		{255,255,0, 255},
+		{255,255,0, 255},
+		{255,255,0, 255},
 		// left red
-		{1.0,0.0,0.0, 0.5},
-		{1.0,0.0,0.0, 0.5},
-		{1.0,0.0,0.0, 0.5},
-		{1.0,0.0,0.0, 0.5},
+		{255,0,0, 255},
+		{255,0,0, 255},
+		{255,0,0, 255},
+		{255,0,0, 255},
 		// back blue
-		{0.0,0.0,1.0, 1.0},
-		{0.0,0.0,1.0, 1.0},
-		{0.0,0.0,1.0, 1.0},
-		{0.0,0.0,1.0, 1.0},
+		{0,0,255, 255},
+		{0,0,255, 255},
+		{0,0,255, 255},
+		{0,0,255, 255},
 		// right green
-		{0.0,1.0,0.0, 1.0},
-		{0.0,1.0,0.0, 1.0},
-		{0.0,1.0,0.0, 1.0},
-		{0.0,1.0,0.0, 1.0},
+		{0,255,0, 255},
+		{0,255,0, 255},
+		{0,255,0, 255},
+		{0,255,0, 255},
 	});
 	
 	physics->SetMeshCollider(meshIndices->data, meshIndices->count);
@@ -382,7 +382,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 2;
 				entity->Allocate(device, "aabb_sphere");
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-				entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.7f,0.7f,0.7f,1.0f}});
+				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{180,180,180,255}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetSphereCollider(radius);
 			};
 			
@@ -392,7 +392,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
 				entity->Allocate(device, "aabb_cube");
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-2), glm::vec3(2)}});
-				entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.8f,0.0f,0.0f,1.0f}});
+				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{204,0,0,255}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetBoxCollider(glm::vec3(2));
 			};
 			
@@ -404,7 +404,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Allocate(device, "aabb_sphere.light");
 				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-				entity->Add_meshVertexColor()->AllocateBuffers(device, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
+				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
 				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 1000000000.0f);
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetSphereCollider(radius);
 			};
@@ -415,7 +415,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Allocate(device, "aabb_sphere.light");
 				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-				entity->Add_meshVertexColor()->AllocateBuffers(device, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
+				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
 				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000000.0f);
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetSphereCollider(radius);
 			};
@@ -426,7 +426,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Allocate(device, "aabb_sphere.light");
 				entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-				entity->Add_meshVertexColor()->AllocateBuffers(device, {{10000.0f,10000.0f,10000.0f,10000.0f}});
+				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{10000.0f,10000.0f,10000.0f,10000.0f}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetSphereCollider(radius);
 				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 10000.0f);
 			};
@@ -438,8 +438,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Allocate(device, "default");
 				entity->Add_meshVertexPosition();
 				entity->Add_meshVertexNormal();
-				entity->Add_meshVertexColor();
-				entity->Add_meshIndices();
+				entity->Add_meshVertexColorU8();
+				entity->Add_meshIndices16();
 				auto meshVertexPosition = entity->meshVertexPosition.Lock();
 				meshVertexPosition->AllocateBuffers(device, {
 					{-1000.0,-1000.0, 0.0},
@@ -454,14 +454,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					{ 0.0, 0.0, 1.0},
 					{ 0.0, 0.0, 1.0},
 				});
-				auto meshVertexColor = entity->meshVertexColor.Lock();
+				auto meshVertexColor = entity->meshVertexColorU8.Lock();
 				meshVertexColor->AllocateBuffers(device, {
-					{1.0,1.0,1.0, 1.0},
-					{1.0,1.0,1.0, 1.0},
-					{1.0,1.0,1.0, 1.0},
-					{1.0,1.0,1.0, 1.0},
+					{255,255,255, 255},
+					{255,255,255, 255},
+					{255,255,255, 255},
+					{255,255,255, 255},
 				});
-				auto meshIndices = entity->meshIndices.Lock();
+				auto meshIndices = entity->meshIndices16.Lock();
 				meshIndices->AllocateBuffers(device, {
 					0, 1, 2, 2, 3, 0,
 				});
@@ -478,7 +478,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_cube");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-0.5), glm::vec3(0.5)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.0f,1.0f,0.5f, 1.0f}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{0,255,127, 255}});
 				};
 			}break;
 			case OBJECT_TYPE::Ball:{
@@ -489,7 +489,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
 			}break;
 			case OBJECT_TYPE::GlassBall:{
@@ -500,7 +500,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere.glass");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
@@ -512,7 +512,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Allocate(device, "aabb_sphere.light");
 					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
 				};
 			}break;

@@ -13,7 +13,7 @@ using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Limits
-	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 80 bytes each
+	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 160 bytes each
 #pragma endregion
 
 // Application
@@ -35,7 +35,7 @@ std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos 
 std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
 
 #pragma region Buffers
-	StagingBuffer<Mesh::ModelInfo, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
+	StagingBuffer<Mesh::RenderableEntityInstance, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
 	StagingBuffer<Camera> cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
 	StagingBuffer<RenderableGeometryEntity::LightSource, MAX_ACTIVE_LIGHTS> lightSourcesBuffer {};
 	StagingBuffer<RayTracingBLASInstance, RAY_TRACING_TLAS_MAX_INSTANCES> rayTracingInstanceBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR};
@@ -186,7 +186,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	
 	struct RasterPushConstant {
 		glm::vec4 wireframeColor = {1,1,1,1};
-		int32_t instanceCustomIndexValue;
+		int32_t instanceCustomIndexValue = 0;
+		uint32_t geometryIndex = 0;
 	};
 	
 #pragma endregion
@@ -357,8 +358,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			return;
 		}
 		std::lock_guard lock(rayTracingInstanceMutex);
-		static const VkAccelerationStructureBuildRangeInfoKHR* topLevelAccelerationStructureGeometriesOffsets = &topLevelAccelerationStructure.buildRangeInfo;
 		topLevelAccelerationStructure.SetInstanceCount(nbRayTracingInstances);
+		const VkAccelerationStructureBuildRangeInfoKHR* const topLevelAccelerationStructureGeometriesOffsets = topLevelAccelerationStructure.buildRangeInfo.data();
 		device->CmdBuildAccelerationStructuresKHR(commandBuffer, 1, &topLevelAccelerationStructure.buildGeometryInfo, &topLevelAccelerationStructureGeometriesOffsets);
 	}
 	
@@ -725,15 +726,26 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
 				if (entity->raster_transparent) {
 					auto meshVertexPosition = entity->meshVertexPosition.Lock();
-					auto meshIndices = entity->meshIndices.Lock();
-					if (meshVertexPosition) {
-						if (meshIndices) {
-							s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-						} else {
-							s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+					VkBuffer meshIndicesBuffer = VK_NULL_HANDLE;
+					{
+						auto meshIndices16 = entity->meshIndices16.Lock();
+						if (meshIndices16) {
+							meshIndicesBuffer = meshIndices16->deviceBuffer;
+						} else if (auto meshIndices32 = entity->meshIndices32.Lock(); meshIndices32) {
+							meshIndicesBuffer = meshIndices32->deviceBuffer;
 						}
-						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
-						s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+					}
+					if (meshVertexPosition) {
+						uint32_t i = 0;
+						for (auto& geometry : entity->geometries) {
+							if (meshIndicesBuffer && geometry.indexCount) {
+								s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndicesBuffer, 0, geometry.indexCount);
+							} else {
+								s->SetData(meshVertexPosition->deviceBuffer, geometry.vertexCount);
+							}
+							RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+							s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+						}
 					}
 				}
 			});
@@ -743,18 +755,32 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
 				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)))) {
 					auto meshVertexPosition = entity->meshVertexPosition.Lock();
-					auto meshIndices = entity->meshIndices.Lock();
 					if (meshVertexPosition) {
-						if (meshIndices) {
-							s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndices->deviceBuffer, 0, meshIndices->count);
-						} else {
-							s->SetData(meshVertexPosition->deviceBuffer, meshVertexPosition->count);
+						VkBuffer meshIndicesBuffer = VK_NULL_HANDLE;
+						{
+							auto meshIndices16 = entity->meshIndices16.Lock();
+							if (meshIndices16) {
+								meshIndicesBuffer = meshIndices16->deviceBuffer;
+							} else if (auto meshIndices32 = entity->meshIndices32.Lock(); meshIndices32) {
+								meshIndicesBuffer = meshIndices32->deviceBuffer;
+							}
 						}
-						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex()};
-						s->Bind(r->renderingDevice, commandBuffer);
-						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
-						s->Render(r->renderingDevice, commandBuffer, 1);
+						if (meshVertexPosition) {
+							uint32_t i = 0;
+							for (auto& geometry : entity->geometries) {
+								if (meshIndicesBuffer && geometry.indexCount) {
+									s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndicesBuffer, 0, geometry.indexCount);
+								} else {
+									s->SetData(meshVertexPosition->deviceBuffer, geometry.vertexCount);
+								}
+								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+								s->Bind(r->renderingDevice, commandBuffer);
+								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+								s->Render(r->renderingDevice, commandBuffer, 1);
+							}
+						}
 					}
 				}
 			});
@@ -1028,34 +1054,29 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				if (entity->generated && !entity->blas && entity->rayTracingMask && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
 					entity->blas = std::make_shared<Blas>();
 					if (entity->meshVertexPosition) {
-						entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometryData);
+						entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometriesAccelerationStructureInfo);
 					} else {
-						entity->blas->AssignBottomLevelProceduralVertex(r->renderingDevice, entity->geometryData);
+						entity->blas->AssignBottomLevelProceduralVertex(r->renderingDevice, entity->geometriesAccelerationStructureInfo);
 					}
 					entity->blas->CreateAndAllocate(r->renderingDevice);
 					blasQueueBuildGeometryInfos.push_back(entity->blas->buildGeometryInfo);
-					blasQueueBuildRangeInfos.push_back(&entity->blas->buildRangeInfo);
+					blasQueueBuildRangeInfos.push_back(entity->blas->buildRangeInfo.data());
 					entity->blas->built = true;
 				}
 				
 				// add BLAS instance to TLAS
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					// Update and Assign transform
-					if (auto transform = entity->transform.Lock(); transform && transform->data) {
-						transform->data->worldTransform = entity->worldTransform;
-						transform->data->modelView = scene->camera.viewMatrix * transform->data->worldTransform;
-						transform->data->normalView = glm::transpose(glm::inverse(glm::mat3(transform->data->modelView)));
-						transform->dirtyOnDevice = true;
-						
-						if (entity->blas) {
-							int index = nbRayTracingInstances++;
-							rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
-							rayTracingInstanceBuffer[index].accelerationStructureReference = entity->blas->deviceAddress;
-							rayTracingInstanceBuffer[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
-							rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
-							rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
-							rayTracingInstanceBuffer[index].transform = glm::transpose(transform->data->modelView);
-						}
+					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->worldTransform;
+					
+					if (entity->blas) {
+						int index = nbRayTracingInstances++;
+						rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
+						rayTracingInstanceBuffer[index].accelerationStructureReference = entity->blas->deviceAddress;
+						rayTracingInstanceBuffer[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
+						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
+						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
+						rayTracingInstanceBuffer[index].transform = glm::transpose(entity->entityInstanceInfo.modelViewTransform);
 					}
 					
 					// Light Source
@@ -1068,7 +1089,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					}
 				}
 				
-				renderableEntityInstanceBuffer[entity->GetIndex()] = entity->modelInfo;
+				renderableEntityInstanceBuffer[entity->GetIndex()] = entity->entityInstanceInfo;
 				currentRenderableEntities[r->currentFrameInFlight].push_back(entity);
 			});
 			// Lights
@@ -1310,6 +1331,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
 			r->deviceFeatures.shaderFloat64 = VK_TRUE;
 			r->deviceFeatures.shaderInt64 = VK_TRUE;
+			r->deviceFeatures.shaderInt16 = VK_TRUE;
 			r->deviceFeatures.depthClamp = VK_TRUE;
 			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
 			r->deviceFeatures.geometryShader = VK_TRUE;
@@ -1318,7 +1340,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
 				r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
+				r->EnableVulkan12DeviceFeatures()->shaderFloat16 = VK_TRUE;
+				r->EnableVulkan12DeviceFeatures()->shaderInt8 = VK_TRUE;
 				r->EnableVulkan12DeviceFeatures()->descriptorIndexing = VK_TRUE;
+				r->EnableVulkan12DeviceFeatures()->storageBuffer8BitAccess = VK_TRUE;
 				r->EnableAccelerationStructureFeatures()->accelerationStructure = VK_TRUE;
 				r->EnableAccelerationStructureFeatures()->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
 				r->EnableRayTracingPipelineFeatures()->rayTracingPipeline = VK_TRUE;
@@ -1693,7 +1718,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 
 	V4D_MODULE_FUNC(void, RenderUpdate) {
 		
-		uint64_t timeout = 1000UL * 1000 * 1000 * 10; // 10 seconds
+		uint64_t timeout = 1000UL * 1000 * 1000 * 1; // 1 second
 
 		// Get an image from the swapchain
 		uint imageIndex;

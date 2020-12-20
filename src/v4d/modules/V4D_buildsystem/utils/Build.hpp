@@ -29,10 +29,10 @@ public:
 				std::lock_guard lock(blocksMutex);
 				entity->Allocate(device, "V4D_buildsystem.block");
 				
-				std::vector<Mesh::Index> meshIndices (Block::MAX_INDICES * blocks.size());
+				std::vector<Mesh::Index32> meshIndices (Block::MAX_INDICES * blocks.size());
 				std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES * blocks.size());
 				std::vector<Mesh::VertexNormal> vertexNormals (Block::MAX_VERTICES * blocks.size());
-				std::vector<Mesh::VertexColor> vertexColors (Block::MAX_VERTICES * blocks.size());
+				std::vector<Mesh::VertexColor<uint8_t>> vertexColors (Block::MAX_VERTICES * blocks.size());
 				std::vector<uint32_t> customData (Block::MAX_VERTICES * blocks.size());
 				
 				uint nextVertex = 0;
@@ -43,11 +43,11 @@ public:
 					nextIndex += indexCount;
 				}
 				
-				entity->Add_meshIndices()->AllocateBuffers(device, meshIndices.data(), nextIndex);
+				entity->Add_meshIndices32()->AllocateBuffers(device, meshIndices.data(), nextIndex);
 				entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), nextVertex);
 				entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), nextVertex);
-				entity->Add_meshVertexColor()->AllocateBuffers(device, vertexColors.data(), nextVertex);
-				entity->Add_customData()->AllocateBuffers(device, (float*)customData.data(), nextVertex);
+				entity->Add_meshVertexColorU8()->AllocateBuffers(device, vertexColors.data(), nextVertex);
+				entity->Add_meshCustomData()->AllocateBuffers(device, (float*)customData.data(), nextVertex);
 				
 				entity->Add_physics()->SetMeshCollider();
 			};

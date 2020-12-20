@@ -4,6 +4,9 @@
 
 #extension GL_EXT_buffer_reference : enable
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
 
 #include "core.glsl"
@@ -50,29 +53,39 @@ layout(set = 0, binding = 0) uniform Camera {
 
 // RenderableEntityInstances
 #if !defined(NO_GLOBAL_BUFFERS) && (defined(SHADER_RGEN) || defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT) || defined(SHADER_VERT) || defined(SHADER_FRAG))
-	layout(buffer_reference, std430, buffer_reference_align = 4) buffer Indices { uint indices[]; };
+	layout(buffer_reference, std430, buffer_reference_align = 2) buffer Indices16 { uint16_t indices16[]; };
+	layout(buffer_reference, std430, buffer_reference_align = 4) buffer Indices32 { uint32_t indices32[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexPositions { float vertexPositions[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer ProceduralVerticesAABB { float proceduralVerticesAABB[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexNormals { float vertexNormals[]; };
-	layout(buffer_reference, std430, buffer_reference_align = 16) buffer VertexColors { vec4 vertexColors[]; };
+	layout(buffer_reference, std430, buffer_reference_align = 4) buffer VertexColorsU8 { u8vec4 vertexColorsU8[]; };
+	layout(buffer_reference, std430, buffer_reference_align = 8) buffer VertexColorsU16 { u16vec4 vertexColorsU16[]; };
+	layout(buffer_reference, std430, buffer_reference_align = 16) buffer VertexColorsF32 { vec4 vertexColorsF32[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 8) buffer VertexUVs { vec2 vertexUVs[]; };
-	layout(buffer_reference, std430, buffer_reference_align = 16) buffer ModelTransform {
-		dmat4 worldTransform;
-		mat4 modelView;
-		mat4 normalView;
+	// 144 bytes
+	struct GeometryInfo {
+		mat4 transform;
+		uint64_t indices16;
+		uint64_t indices32;
+		uint64_t vertexPositions;
+		uint64_t vertexNormals;
+		uint64_t vertexColorsU8;
+		uint64_t vertexColorsU16;
+		uint64_t vertexColorsF32;
+		uint64_t vertexUVs;
+		uint64_t customData;
+		uint64_t material;
 	};
-	
+	layout(buffer_reference, std430, buffer_reference_align = 16) buffer Geometries {
+		GeometryInfo geometries[];
+	};
+	// 96 bytes
 	struct RenderableEntityInstance {
+		mat4 modelViewTransform;
 		uint64_t moduleVen;
 		uint64_t moduleId;
 		uint64_t objId;
-		uint64_t customData;
-		uint64_t indices;
-		uint64_t vertexPositions;
-		uint64_t vertexNormals;
-		uint64_t vertexColors;
-		uint64_t vertexUVs;
-		uint64_t modelTransform;
+		uint64_t geometries;
 	};
 	
 	layout(set = 0, binding = 2) buffer RenderableEntityInstances { RenderableEntityInstance renderableEntityInstances[]; };
@@ -81,8 +94,10 @@ layout(set = 0, binding = 0) uniform Camera {
 		layout(std430, push_constant) uniform RasterPushConstant{
 			vec4 wireframeColor;
 			int instanceCustomIndexValue;
+			uint geometryIndex;
 		};
 		#define INSTANCE_CUSTOM_INDEX_VALUE instanceCustomIndexValue
+		#define GEOMETRY_INDEX_VALUE geometryIndex
 		#if defined(SHADER_VERT)
 			#define PRIMITIVE_ID_VALUE gl_VertexIndex
 		#else
@@ -91,63 +106,97 @@ layout(set = 0, binding = 0) uniform Camera {
 	#else
 		#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT)
 			#define INSTANCE_CUSTOM_INDEX_VALUE gl_InstanceCustomIndexEXT
+			#define GEOMETRY_INDEX_VALUE gl_GeometryIndexEXT
 			#define PRIMITIVE_ID_VALUE gl_PrimitiveID
 		#endif
 	#endif
 
 	#if defined(SHADER_RGEN)
-		RenderableEntityInstance GetRenderableEntityInstance(uint instanceCustomIndex) {
-			return renderableEntityInstances[instanceCustomIndex];
+		RenderableEntityInstance GetRenderableEntityInstance(uint entityInstanceIndex) {
+			return renderableEntityInstances[entityInstanceIndex];
 		}
-		mat4 GetModelViewMatrix(uint instanceCustomIndex) {
-			return ModelTransform(renderableEntityInstances[instanceCustomIndex].modelTransform).modelView;
+		GeometryInfo GetGeometry(uint entityInstanceIndex, uint geometryIndex) {
+			return Geometries(GetRenderableEntityInstance(entityInstanceIndex).geometries).geometries[geometryIndex];
 		}
-		mat3 GetModelNormalViewMatrix(uint instanceCustomIndex) {
-			return mat3(ModelTransform(renderableEntityInstances[instanceCustomIndex].modelTransform).normalView);
+		mat4 GetModelViewMatrix(uint entityInstanceIndex, uint geometryIndex) {
+			return GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform * GetGeometry(entityInstanceIndex, geometryIndex).transform;
+		}
+		mat3 GetModelNormalViewMatrix(uint entityInstanceIndex, uint geometryIndex) {
+			return transpose(inverse(mat3(GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform * GetGeometry(entityInstanceIndex, geometryIndex).transform)));
 		}
 	#else
+		RenderableEntityInstance GetRenderableEntityInstance() {
+			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE];
+		}
+		GeometryInfo GetGeometry() {
+			return Geometries(GetRenderableEntityInstance().geometries).geometries[GEOMETRY_INDEX_VALUE];
+		}
+		mat4 GetModelViewMatrix() {
+			return GetRenderableEntityInstance().modelViewTransform * mat4(transpose(mat3x4(GetGeometry().transform)));
+		}
+		mat3 GetModelNormalViewMatrix() {
+			return transpose(inverse(mat3(GetRenderableEntityInstance().modelViewTransform * mat4(transpose(mat3x4(GetGeometry().transform))))));
+		}
 		uint GetIndex(uint n) {
-			return Indices(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].indices).indices[3 * PRIMITIVE_ID_VALUE + n];
+			return GetGeometry().indices16 != 0? 
+				uint(Indices16(GetGeometry().indices16).indices16[3 * PRIMITIVE_ID_VALUE + n])
+				: (GetGeometry().indices32 != 0? 
+					Indices32(GetGeometry().indices32).indices32[3 * PRIMITIVE_ID_VALUE + n]
+					: (3 * PRIMITIVE_ID_VALUE + n)
+				)
+			;
 		}
 		vec3 GetVertexPosition(uint index) {
-			VertexPositions vertexPositions = VertexPositions(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			VertexPositions vertexPositions = VertexPositions(GetGeometry().vertexPositions);
 			return vec3(vertexPositions.vertexPositions[index*3], vertexPositions.vertexPositions[index*3+1], vertexPositions.vertexPositions[index*3+2]);
 		}
 		vec3 GetProceduralVertexAABB_min(uint index) {
-			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			if (GetGeometry().vertexPositions == 0) return vec3(0);
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(GetGeometry().vertexPositions);
 			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6], proceduralVerticesAABB.proceduralVerticesAABB[index*6+1], proceduralVerticesAABB.proceduralVerticesAABB[index*6+2]);
 		}
 		vec3 GetProceduralVertexAABB_max(uint index) {
-			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexPositions);
+			if (GetGeometry().vertexPositions == 0) return vec3(0);
+			ProceduralVerticesAABB proceduralVerticesAABB = ProceduralVerticesAABB(GetGeometry().vertexPositions);
 			return vec3(proceduralVerticesAABB.proceduralVerticesAABB[index*6+3], proceduralVerticesAABB.proceduralVerticesAABB[index*6+4], proceduralVerticesAABB.proceduralVerticesAABB[index*6+5]);
 		}
 		vec3 GetVertexNormal(uint index) {
-			VertexNormals vertexNormals = VertexNormals(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexNormals);
+			if (GetGeometry().vertexNormals == 0) return vec3(0);
+			VertexNormals vertexNormals = VertexNormals(GetGeometry().vertexNormals);
 			return vec3(vertexNormals.vertexNormals[index*3], vertexNormals.vertexNormals[index*3+1], vertexNormals.vertexNormals[index*3+2]);
 		}
+		bool HasVertexColorU8() {
+			return GetGeometry().vertexColorsU8 != 0;
+		}
+		u8vec4 GetVertexColorU8(uint index) {
+			return VertexColorsU8(GetGeometry().vertexColorsU8).vertexColorsU8[index];
+		}
+		bool HasVertexColorU16() {
+			return GetGeometry().vertexColorsU16 != 0;
+		}
+		u16vec4 GetVertexColorU16(uint index) {
+			return VertexColorsU16(GetGeometry().vertexColorsU16).vertexColorsU16[index];
+		}
+		bool HasVertexColorF32() {
+			return GetGeometry().vertexColorsF32 != 0;
+		}
+		vec4 GetVertexColorF32(uint index) {
+			return VertexColorsF32(GetGeometry().vertexColorsF32).vertexColorsF32[index];
+		}
 		bool HasVertexColor() {
-			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors != 0;
+			return HasVertexColorU8() || HasVertexColorU16() || HasVertexColorF32();
 		}
 		vec4 GetVertexColor(uint index) {
-			return VertexColors(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexColors).vertexColors[index];
+			return HasVertexColorF32()? GetVertexColorF32(index) : (HasVertexColorU16()? vec4(GetVertexColorU16(index))/65535 : ( HasVertexColorU8()? vec4(GetVertexColorU8(index))/255 : vec4(0) ));
 		}
 		bool HasVertexUV() {
-			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs != 0;
+			return GetGeometry().vertexUVs != 0;
 		}
 		vec2 GetVertexUV(uint index) {
-			return VertexUVs(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].vertexUVs).vertexUVs[index];
-		}
-		dmat4 GetModelMatrix() {
-			return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).worldTransform;
-		}
-		mat4 GetModelViewMatrix() {
-			return ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).modelView;
-		}
-		mat3 GetModelNormalViewMatrix() {
-			return mat3(ModelTransform(renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].modelTransform).normalView);
+			return VertexUVs(GetGeometry().vertexUVs).vertexUVs[index];
 		}
 		uint64_t GetCustomData() {
-			return renderableEntityInstances[INSTANCE_CUSTOM_INDEX_VALUE].customData;
+			return GetGeometry().customData;
 		}
 	#endif
 	
@@ -190,7 +239,7 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 	#define MEDIUM_FOG 2
 	#define MEDIUM_ATMOSPHERE 3
 
-	// 92 bytes
+
 	struct RayTracingPayload {
 		// mandatory
 		vec3 albedo;
@@ -202,11 +251,12 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 		vec3 position;
 		float refractionIndex;
 		float distance;
-		uint instanceCustomIndex;
+		uint entityInstanceIndex;
 		uint primitiveID;
 		float alpha;
 		uint64_t raycastCustomData;
 		float nextRayStartOffset;
+		uint geometryIndex;
 		// uint medium;
 	};
 	
@@ -219,8 +269,9 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 			ray.alpha = 1.0;
 			ray.refractionIndex = 0.0;
 			ray.distance = gl_HitTEXT;
-			ray.instanceCustomIndex = gl_InstanceCustomIndexEXT;
-			ray.primitiveID = gl_PrimitiveID;
+			ray.entityInstanceIndex = INSTANCE_CUSTOM_INDEX_VALUE;
+			ray.primitiveID = PRIMITIVE_ID_VALUE;
+			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
 			ray.raycastCustomData = GetCustomData();
 		}
 	#endif

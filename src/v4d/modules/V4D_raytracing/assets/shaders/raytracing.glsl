@@ -75,13 +75,13 @@ void main() {
 	if (isMiddleOfScreen) {
 		if (ray.distance > 0) {
 			// write obj info in hit raycast
-			RenderableEntityInstance entity = GetRenderableEntityInstance(ray.instanceCustomIndex);
+			RenderableEntityInstance entity = GetRenderableEntityInstance(ray.entityInstanceIndex);
 			rayCast.moduleVen = entity.moduleVen;
 			rayCast.moduleId = entity.moduleId;
 			rayCast.objId = entity.objId;
 			rayCast.raycastCustomData = ray.raycastCustomData;
-			rayCast.localSpaceHitPositionAndDistance = vec4((inverse(GetModelViewMatrix(ray.instanceCustomIndex)) * vec4(ray.position, 1)).xyz, ray.distance);
-			rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(ray.instanceCustomIndex)) * ray.normal), 0);
+			rayCast.localSpaceHitPositionAndDistance = vec4((inverse(GetModelViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * vec4(ray.position, 1)).xyz, ray.distance);
+			rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * ray.normal), 0);
 		} else {
 			// write empty hit raycast
 			rayCast.moduleVen = 0;

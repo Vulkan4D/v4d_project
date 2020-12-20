@@ -141,7 +141,7 @@ struct PhysicsObject : btMotionState {
 							auto* mesh = new btTriangleMesh();
 							globalTriangleMeshes.push_back(mesh);
 							
-							auto generateColliderMeshFunc = [&physics, &mesh](v4d::graphics::Mesh::VertexPosition* vertices, v4d::graphics::Mesh::Index* indices, uint32_t indexCount){
+							auto generateColliderMeshFunc = [&physics, &mesh](v4d::graphics::Mesh::VertexPosition* vertices, auto* indices, uint32_t indexCount){
 								for (int i = 0; i < indexCount; i+=3) {
 									btVector3 v0(vertices[indices[i]].x, vertices[indices[i]].y, vertices[indices[i]].z);
 									btVector3 v1(vertices[indices[i+1]].x, vertices[indices[i+1]].y, vertices[indices[i+1]].z);
@@ -151,19 +151,36 @@ struct PhysicsObject : btMotionState {
 							};
 							
 							// Generate collider mesh using custom physics mesh, or fallback on renderer components
-							if (physics->colliderMeshVertices.size() > 0){
-								generateColliderMeshFunc(physics->colliderMeshVertices.data(), physics->colliderMeshIndices.data(), physics->colliderMeshIndices.size());
-							} else if (entity->meshVertexPosition) {
+							if (physics->colliderMeshVertices.size() > 0) {
+								if (physics->colliderMeshIndices16.size() > 0) {
+									generateColliderMeshFunc(physics->colliderMeshVertices.data(), physics->colliderMeshIndices16.data(), physics->colliderMeshIndices16.size());
+								} else if (physics->colliderMeshIndices32.size() > 0) {
+									generateColliderMeshFunc(physics->colliderMeshVertices.data(), physics->colliderMeshIndices32.data(), physics->colliderMeshIndices32.size());
+								} else {
+									LOG_ERROR("Empty colliderMeshVertices for generating the mesh collider")
+									break;
+								}
+							} else if (entity->meshVertexPosition && entity->geometries.size() > 0) {
 								auto meshVertexPositions = entity->meshVertexPosition.Lock();
-								if (meshVertexPositions && meshVertexPositions->data && meshVertexPositions->count > 0) {
-									if (physics->colliderMeshIndices.size() > 0) {
-										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices.data(), physics->colliderMeshIndices.size());
-									} else if (entity->meshIndices) {
-										auto meshVertexIndices = entity->meshIndices.Lock();
-										if (meshVertexIndices && meshVertexIndices->data && meshVertexIndices->count > 0) {
-											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, meshVertexIndices->count);
+								if (meshVertexPositions && meshVertexPositions->data && entity->geometries[0].vertexCount > 0) {
+									if (physics->colliderMeshIndices16.size() > 0) {
+										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices16.data(), physics->colliderMeshIndices16.size());
+									} else if (physics->colliderMeshIndices32.size() > 0) {
+										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices32.data(), physics->colliderMeshIndices32.size());
+									} else if (entity->meshIndices16) {
+										auto meshVertexIndices = entity->meshIndices16.Lock();
+										if (meshVertexIndices && meshVertexIndices->data && entity->geometries[0].indexCount > 0) {
+											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->geometries[0].indexCount);
 										} else {
-											LOG_ERROR("Empty or Unallocated meshIndices for generating the mesh collider")
+											LOG_ERROR("Empty or Unallocated meshIndices16 for generating the mesh collider")
+											break;
+										}
+									} else if (entity->meshIndices32) {
+										auto meshVertexIndices = entity->meshIndices32.Lock();
+										if (meshVertexIndices && meshVertexIndices->data && entity->geometries[0].indexCount > 0) {
+											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->geometries[0].indexCount);
+										} else {
+											LOG_ERROR("Empty or Unallocated meshIndices32 for generating the mesh collider")
 											break;
 										}
 									} else {

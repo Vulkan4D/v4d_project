@@ -7,8 +7,8 @@
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
-ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
-// GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
+// ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
+GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
 
 using namespace v4d::scene;
 using namespace v4d::networking;
@@ -281,7 +281,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
 			}break;
 			case OBJECT_TYPE::GlassBall:{
@@ -292,7 +292,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere.glass");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{0.5f,0.5f,0.5f,1.0f}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
@@ -304,7 +304,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Allocate(device, "aabb_sphere.light");
 					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
 				};
 			}break;
@@ -333,13 +333,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						{ 0.0, 0.0, 1.0},
 						{ 0.0, 0.0, 1.0},
 					});
-					entity->Add_meshVertexColor()->AllocateBuffers(device, {
-						{1.0, 1.0, 1.0, 0.05},
-						{1.0, 1.0, 1.0, 0.05},
-						{1.0, 1.0, 1.0, 0.05},
-						{1.0, 1.0, 1.0, 0.05},
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
 					});
-					entity->Add_meshIndices()->AllocateBuffers(device, {
+					entity->Add_meshIndices16()->AllocateBuffers(device, {
 						0, 1, 2, 2, 3, 0,
 					});
 				};

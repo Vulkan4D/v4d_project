@@ -133,7 +133,7 @@ struct PlanetTerrain {
 		std::vector<Chunk*> subChunks {};
 		std::shared_ptr<RenderableGeometryEntity> entity = nullptr;
 		std::recursive_mutex generatorMutex;
-		std::vector<uint32_t> colliderIndices {};
+		std::vector<uint16_t> colliderIndices {};
 		#pragma endregion
 		
 		bool IsLastLevel() {
@@ -293,12 +293,12 @@ struct PlanetTerrain {
 				entity->rayTracingMask = 0;
 				entity->Add_physics();
 			auto buffersWriteLock = entity->GetBuffersWriteLock();
-				auto meshIndices = entity->Add_meshIndices()->AllocateBuffersCount(device, nbIndicesPerChunk);
+				auto meshIndices = entity->Add_meshIndices16()->AllocateBuffersCount(device, nbIndicesPerChunk);
 				auto vertexPositions = entity->Add_meshVertexPosition()->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexNormals = entity->Add_meshVertexNormal()->AllocateBuffersCount(device, nbVerticesPerChunk);
-				auto vertexColors = entity->Add_meshVertexColor()->AllocateBuffersCount(device, nbVerticesPerChunk);
+				auto vertexColors = entity->Add_meshVertexColorF32()->AllocateBuffersCount(device, nbVerticesPerChunk);
 				auto vertexUVs = entity->Add_meshVertexUV()->AllocateBuffersCount(device, nbVerticesPerChunk);
-				entity->Add_customData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
+				entity->Add_meshCustomData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 				entity->generator = [](auto* entity, Device*){entity->generated = false;};
 				entity->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
 			entityLock.unlock();
@@ -309,12 +309,12 @@ struct PlanetTerrain {
 			v4d::io::BinaryFileStream cacheFile (std::string(V4D_MODULE_CACHE_PATH(THIS_MODULE, "chunks/")) + chunkId + ".binary", 1024*1024);
 			constexpr size_t cacheFileSize 
 								= sizeof(CHUNK_CACHE_VERSION)
-								+ nbIndicesPerChunk * sizeof(Mesh::Index)
+								+ nbIndicesPerChunk * sizeof(Mesh::Index16)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexPosition)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexNormal)
-								+ nbVerticesPerChunk * sizeof(Mesh::VertexColor)
+								+ nbVerticesPerChunk * sizeof(Mesh::VertexColor<glm::f32>)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexUV)
-								+ 24 * sizeof(uint32_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
+								+ 24 * sizeof(uint16_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
 								+ sizeof(topLeftPosLowest)
 								+ sizeof(lowestAltitude)
 								+ sizeof(topRightPosLowest)
@@ -330,10 +330,10 @@ struct PlanetTerrain {
 			if (cacheFile.GetSize() == cacheFileSize && cacheFile.Read<uint32_t>() == CHUNK_CACHE_VERSION) {
 				{// Load from cache file
 					cacheFile.LockReadWrite();
-						cacheFile.ReadBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index16));
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexPositions), nbVerticesPerChunk*sizeof(Mesh::VertexPosition));
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
-						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
+						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor<glm::f32>));
 						cacheFile.ReadBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
 						cacheFile >> colliderIndices;
 						cacheFile >> lowestAltitude;
@@ -634,10 +634,10 @@ struct PlanetTerrain {
 					cacheFile.LockReadWrite();
 					cacheFile.Truncate();
 					cacheFile << CHUNK_CACHE_VERSION;
-						cacheFile.WriteBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(meshIndices), nbIndicesPerChunk*sizeof(Mesh::Index16));
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexPositions), nbVerticesPerChunk*sizeof(Mesh::VertexPosition));
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexNormals), nbVerticesPerChunk*sizeof(Mesh::VertexNormal));
-						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor));
+						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexColors), nbVerticesPerChunk*sizeof(Mesh::VertexColor<glm::f32>));
 						cacheFile.WriteBytes(reinterpret_cast<byte*>(vertexUVs), nbVerticesPerChunk*sizeof(Mesh::VertexUV));
 						cacheFile << colliderIndices;
 						cacheFile << lowestAltitude;
@@ -665,7 +665,7 @@ struct PlanetTerrain {
 			// Add physics component and assign collider mesh
 			auto physics = entity->physics.Lock();
 			if (!physics) return;
-			physics->colliderMeshIndices = colliderIndices;
+			physics->colliderMeshIndices16 = colliderIndices;
 			
 			computedLevel = 1;
 			meshGenerated = true;

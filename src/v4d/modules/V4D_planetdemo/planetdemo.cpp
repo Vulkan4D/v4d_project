@@ -230,7 +230,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			entity->Allocate(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColor()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
+			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun1Position;
 		
@@ -242,7 +242,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			entity->Allocate(device, "aabb_sphere.light");
 			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
 			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColor()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
+			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
 		}, sun2Position;
 		
