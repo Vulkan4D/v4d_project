@@ -99,9 +99,9 @@ layout(set = 0, binding = 0) uniform Camera {
 		#define INSTANCE_CUSTOM_INDEX_VALUE instanceCustomIndexValue
 		#define GEOMETRY_INDEX_VALUE geometryIndex
 		#if defined(SHADER_VERT)
-			#define PRIMITIVE_ID_VALUE gl_VertexIndex
+			#define PRIMITIVE_ID_VALUE gl_VertexIndex/3
 		#else
-			#define PRIMITIVE_ID_VALUE gl_PrimitiveID
+			#define PRIMITIVE_ID_VALUE gl_PrimitiveID /*TODO must test and fix this*/
 		#endif
 	#else
 		#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT) || defined(SHADER_RINT)
@@ -142,7 +142,7 @@ layout(set = 0, binding = 0) uniform Camera {
 				uint(Indices16(GetGeometry().indices16).indices16[3 * PRIMITIVE_ID_VALUE + n])
 				: (GetGeometry().indices32 != 0? 
 					Indices32(GetGeometry().indices32).indices32[3 * PRIMITIVE_ID_VALUE + n]
-					: (3 * PRIMITIVE_ID_VALUE + n)
+					: (3 * PRIMITIVE_ID_VALUE + n) /*TODO must test and fix this*/
 				)
 			;
 		}

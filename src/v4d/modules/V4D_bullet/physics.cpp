@@ -160,25 +160,25 @@ struct PhysicsObject : btMotionState {
 									LOG_ERROR("Empty colliderMeshVertices for generating the mesh collider")
 									break;
 								}
-							} else if (entity->meshVertexPosition && entity->geometries.size() > 0) {
+							} else if (entity->meshVertexPosition && entity->sharedGeometryData && entity->sharedGeometryData->geometries.size() > 0) {
 								auto meshVertexPositions = entity->meshVertexPosition.Lock();
-								if (meshVertexPositions && meshVertexPositions->data && entity->geometries[0].vertexCount > 0) {
+								if (meshVertexPositions && meshVertexPositions->data && entity->sharedGeometryData->geometries[0].vertexCount > 0) {
 									if (physics->colliderMeshIndices16.size() > 0) {
 										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices16.data(), physics->colliderMeshIndices16.size());
 									} else if (physics->colliderMeshIndices32.size() > 0) {
 										generateColliderMeshFunc(meshVertexPositions->data, physics->colliderMeshIndices32.data(), physics->colliderMeshIndices32.size());
 									} else if (entity->meshIndices16) {
 										auto meshVertexIndices = entity->meshIndices16.Lock();
-										if (meshVertexIndices && meshVertexIndices->data && entity->geometries[0].indexCount > 0) {
-											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->geometries[0].indexCount);
+										if (meshVertexIndices && meshVertexIndices->data && entity->sharedGeometryData->geometries[0].indexCount > 0) {
+											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->sharedGeometryData->geometries[0].indexCount);
 										} else {
 											LOG_ERROR("Empty or Unallocated meshIndices16 for generating the mesh collider")
 											break;
 										}
 									} else if (entity->meshIndices32) {
 										auto meshVertexIndices = entity->meshIndices32.Lock();
-										if (meshVertexIndices && meshVertexIndices->data && entity->geometries[0].indexCount > 0) {
-											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->geometries[0].indexCount);
+										if (meshVertexIndices && meshVertexIndices->data && entity->sharedGeometryData->geometries[0].indexCount > 0) {
+											generateColliderMeshFunc(meshVertexPositions->data, meshVertexIndices->data, entity->sharedGeometryData->geometries[0].indexCount);
 										} else {
 											LOG_ERROR("Empty or Unallocated meshIndices32 for generating the mesh collider")
 											break;

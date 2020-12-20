@@ -725,26 +725,18 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			// Transparent
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
 				if (entity->raster_transparent) {
-					auto meshVertexPosition = entity->meshVertexPosition.Lock();
-					VkBuffer meshIndicesBuffer = VK_NULL_HANDLE;
-					{
-						auto meshIndices16 = entity->meshIndices16.Lock();
-						if (meshIndices16) {
-							meshIndicesBuffer = meshIndices16->deviceBuffer;
-						} else if (auto meshIndices32 = entity->meshIndices32.Lock(); meshIndices32) {
-							meshIndicesBuffer = meshIndices32->deviceBuffer;
-						}
-					}
-					if (meshVertexPosition) {
-						uint32_t i = 0;
-						for (auto& geometry : entity->geometries) {
-							if (meshIndicesBuffer && geometry.indexCount) {
-								s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndicesBuffer, 0, geometry.indexCount);
-							} else {
-								s->SetData(meshVertexPosition->deviceBuffer, geometry.vertexCount);
-							}
-							RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
-							s->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+					uint32_t i = 0;
+					for (auto& geometry : entity->sharedGeometryData->geometries) {
+						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+						s->Bind(r->renderingDevice, commandBuffer);
+						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+						if (geometry.vertexCount > 0) {
+							r->renderingDevice->CmdDraw(commandBuffer,
+								geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
+								1, // instanceCount
+								0, // firstVertex (defines the lowest value of gl_VertexIndex)
+								0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+							);
 						}
 					}
 				}
@@ -754,32 +746,20 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			// Wireframe
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
 				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)))) {
-					auto meshVertexPosition = entity->meshVertexPosition.Lock();
-					if (meshVertexPosition) {
-						VkBuffer meshIndicesBuffer = VK_NULL_HANDLE;
-						{
-							auto meshIndices16 = entity->meshIndices16.Lock();
-							if (meshIndices16) {
-								meshIndicesBuffer = meshIndices16->deviceBuffer;
-							} else if (auto meshIndices32 = entity->meshIndices32.Lock(); meshIndices32) {
-								meshIndicesBuffer = meshIndices32->deviceBuffer;
-							}
-						}
-						if (meshVertexPosition) {
-							uint32_t i = 0;
-							for (auto& geometry : entity->geometries) {
-								if (meshIndicesBuffer && geometry.indexCount) {
-									s->SetData(meshVertexPosition->deviceBuffer, 0, meshIndicesBuffer, 0, geometry.indexCount);
-								} else {
-									s->SetData(meshVertexPosition->deviceBuffer, geometry.vertexCount);
-								}
-								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
-								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
-								s->Bind(r->renderingDevice, commandBuffer);
-								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
-								s->Render(r->renderingDevice, commandBuffer, 1);
-							}
+					uint32_t i = 0;
+					for (auto& geometry : entity->sharedGeometryData->geometries) {
+						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+						s->Bind(r->renderingDevice, commandBuffer);
+						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+						if (geometry.vertexCount > 0) {
+							r->renderingDevice->CmdDraw(commandBuffer,
+								geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
+								1, // instanceCount
+								0, // firstVertex (defines the lowest value of gl_VertexIndex)
+								0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+							);
 						}
 					}
 				}
@@ -1051,17 +1031,16 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					entity->Generate(r->renderingDevice);
 				}
 				
-				if (entity->generated && !entity->blas && entity->rayTracingMask && (entity->meshVertexPosition || entity->proceduralVertexAABB)) {
-					entity->blas = std::make_shared<Blas>();
+				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && entity->rayTracingMask) {
 					if (entity->meshVertexPosition) {
-						entity->blas->AssignBottomLevelGeometry(r->renderingDevice, entity->geometriesAccelerationStructureInfo);
+						entity->sharedGeometryData->blas.AssignBottomLevelGeometry(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
 					} else {
-						entity->blas->AssignBottomLevelProceduralVertex(r->renderingDevice, entity->geometriesAccelerationStructureInfo);
+						entity->sharedGeometryData->blas.AssignBottomLevelProceduralVertex(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
 					}
-					entity->blas->CreateAndAllocate(r->renderingDevice);
-					blasQueueBuildGeometryInfos.push_back(entity->blas->buildGeometryInfo);
-					blasQueueBuildRangeInfos.push_back(entity->blas->buildRangeInfo.data());
-					entity->blas->built = true;
+					entity->sharedGeometryData->blas.CreateAndAllocate(r->renderingDevice);
+					blasQueueBuildGeometryInfos.push_back(entity->sharedGeometryData->blas.buildGeometryInfo);
+					blasQueueBuildRangeInfos.push_back(entity->sharedGeometryData->blas.buildRangeInfo.data());
+					entity->sharedGeometryData->blas.built = true;
 				}
 				
 				// add BLAS instance to TLAS
@@ -1069,10 +1048,10 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					// Update and Assign transform
 					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->worldTransform;
 					
-					if (entity->blas) {
+					if (entity->sharedGeometryData && entity->sharedGeometryData->blas.built) {
 						int index = nbRayTracingInstances++;
 						rayTracingInstanceBuffer[index].instanceCustomIndex = entity->GetIndex();
-						rayTracingInstanceBuffer[index].accelerationStructureReference = entity->blas->deviceAddress;
+						rayTracingInstanceBuffer[index].accelerationStructureReference = entity->sharedGeometryData->blas.deviceAddress;
 						rayTracingInstanceBuffer[index].instanceShaderBindingTableRecordOffset = entity->sbtOffset;
 						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
 						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;

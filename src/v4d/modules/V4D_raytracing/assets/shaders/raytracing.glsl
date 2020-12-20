@@ -119,10 +119,13 @@ void main() {
 		
 			litColor = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
 			float attenuation = 1;
+		
+			vec3 rayAlbedo = vec3(1);
 			
 			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
 			
-				vec3 rayAlbedo = ray.albedo;
+				rayAlbedo *= ray.albedo;
+			
 				float reflectionStrength = min(0.95, ray.metallic);
 				vec3 reflectorAlbedo = ray.albedo;
 				opacity = min(1, opacity + max(0.01, ray.alpha)); // this prevents infinite loop

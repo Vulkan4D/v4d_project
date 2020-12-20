@@ -11,9 +11,10 @@ struct V2F {
 layout(location = 0) out V2F v2f;
 
 void main() {
-	v2f.color = GetVertexColor(gl_VertexIndex);
-	v2f.normal = GetModelNormalViewMatrix() * GetVertexNormal(gl_VertexIndex);
-	gl_Position = mat4(camera.projectionMatrix) * vec4((GetModelViewMatrix() * vec4(GetVertexPosition(gl_VertexIndex), 1)).xyz, 1);
+	uint index = GetIndex(0);
+	v2f.color = GetVertexColor(index);
+	v2f.normal = GetModelNormalViewMatrix() * GetVertexNormal(index);
+	gl_Position = mat4(camera.projectionMatrix) * vec4((GetModelViewMatrix() * vec4(GetVertexPosition(index), 1)).xyz, 1);
 }
 
 
