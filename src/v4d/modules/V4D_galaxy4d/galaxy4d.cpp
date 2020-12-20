@@ -7,8 +7,8 @@
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
-// ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
-GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
+ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
+// GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
 
 using namespace v4d::scene;
 using namespace v4d::networking;
@@ -68,10 +68,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
-		
-		if (!cake.Load()) {
-			LOG_ERROR("Failed to load cake model")
-		}
 	}
 	
 	V4D_MODULE_FUNC(void, ServerIncomingClient, IncomingClientPtr client) {
@@ -270,7 +266,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Player:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
 				entity->generator = cake;
 			}break;
 			case OBJECT_TYPE::Ball:{
@@ -311,7 +306,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Drone:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetSphereCollider(0.4f);
 				entity->generator = cake;
 			}break;
 			case OBJECT_TYPE::Glass:{
