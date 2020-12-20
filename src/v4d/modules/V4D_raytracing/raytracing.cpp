@@ -724,7 +724,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		for (auto* s : shaderGroups["sg_transparent"]) {
 			// Transparent
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if (entity->raster_transparent) {
+				if (entity->raster_transparent && entity->sharedGeometryData) {
 					uint32_t i = 0;
 					for (auto& geometry : entity->sharedGeometryData->geometries) {
 						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
@@ -745,7 +745,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		for (auto* s : shaderGroups["sg_wireframe"]) {
 			// Wireframe
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE)))) {
+				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE))) && entity->sharedGeometryData) {
 					uint32_t i = 0;
 					for (auto& geometry : entity->sharedGeometryData->geometries) {
 						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};

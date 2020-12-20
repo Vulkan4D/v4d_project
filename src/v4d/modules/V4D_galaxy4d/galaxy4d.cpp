@@ -7,8 +7,7 @@
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
-ObjModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.obj"), V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources")};
-// GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
+GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
 
 using namespace v4d::scene;
 using namespace v4d::networking;
