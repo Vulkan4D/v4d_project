@@ -70,8 +70,8 @@ void main() {
 	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
-	ray.alpha = 0.001;
-	ray.refractionIndex = 1.1;
+	ray.opacity = 0.001;
+	ray.indexOfRefraction = 1.1;
 	ray.nextRayStartOffset = sphereAttr.w;
 }
 

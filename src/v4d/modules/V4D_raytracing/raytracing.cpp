@@ -35,7 +35,7 @@ std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos 
 std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
 
 #pragma region Buffers
-	StagingBuffer<Mesh::RenderableEntityInstance, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
+	StagingBuffer<RenderableGeometryEntity::RenderableEntityInstance, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
 	StagingBuffer<Camera> cameraUniformBuffer {VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT};
 	StagingBuffer<RenderableGeometryEntity::LightSource, MAX_ACTIVE_LIGHTS> lightSourcesBuffer {};
 	StagingBuffer<RayTracingBLASInstance, RAY_TRACING_TLAS_MAX_INSTANCES> rayTracingInstanceBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR};

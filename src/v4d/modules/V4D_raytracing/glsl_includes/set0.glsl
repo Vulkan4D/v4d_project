@@ -62,7 +62,21 @@ layout(set = 0, binding = 0) uniform Camera {
 	layout(buffer_reference, std430, buffer_reference_align = 8) buffer VertexColorsU16 { u16vec4 vertexColorsU16[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 16) buffer VertexColorsF32 { vec4 vertexColorsF32[]; };
 	layout(buffer_reference, std430, buffer_reference_align = 8) buffer VertexUVs { vec2 vertexUVs[]; };
-	// 144 bytes
+	// 32 bytes
+	struct Material {
+		uint8_t type;
+		uint8_t metallic;
+		uint8_t roughness;
+		uint8_t indexOfRefraction;
+		u8vec4 baseColor;
+		u8vec4 rim;
+		float emission;
+		uint8_t normalMap;
+		uint8_t albedoMap;
+		uint8_t metallicMap;
+		uint8_t roughnessMap;
+	};
+	// 160 bytes
 	struct GeometryInfo {
 		mat4 transform;
 		uint64_t indices16;
@@ -74,7 +88,8 @@ layout(set = 0, binding = 0) uniform Camera {
 		uint64_t vertexColorsF32;
 		uint64_t vertexUVs;
 		uint64_t customData;
-		uint64_t material;
+		uint32_t _extra;
+		Material material;
 	};
 	layout(buffer_reference, std430, buffer_reference_align = 16) buffer Geometries {
 		GeometryInfo geometries[];
@@ -249,14 +264,15 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 		// optional
 		vec3 emission;
 		vec3 position;
-		float refractionIndex;
+		float indexOfRefraction;
 		float distance;
 		uint entityInstanceIndex;
 		uint primitiveID;
-		float alpha;
+		float opacity;
 		uint64_t raycastCustomData;
 		float nextRayStartOffset;
 		uint geometryIndex;
+		vec4 rim;
 		// uint medium;
 	};
 	
@@ -266,13 +282,14 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 			ray.nextRayStartOffset = 0;
 			ray.position = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 			ray.emission = vec3(0);
-			ray.alpha = 1.0;
-			ray.refractionIndex = 0.0;
+			ray.opacity = 1.0;
+			ray.indexOfRefraction = 0.0;
 			ray.distance = gl_HitTEXT;
 			ray.entityInstanceIndex = INSTANCE_CUSTOM_INDEX_VALUE;
 			ray.primitiveID = PRIMITIVE_ID_VALUE;
 			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
 			ray.raycastCustomData = GetCustomData();
+			ray.rim = vec4(0);
 		}
 	#endif
 	

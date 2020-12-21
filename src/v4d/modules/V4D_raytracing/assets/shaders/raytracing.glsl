@@ -91,7 +91,7 @@ void main() {
 		case RENDER_MODE_BOUNCES:
 			if (primaryRayDistance == 0) break;
 		
-			litColor = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+			litColor = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, ray.rim) + ray.emission;
 			float attenuation = 1;
 		
 			vec3 rayAlbedo = vec3(1);
@@ -102,27 +102,29 @@ void main() {
 				float NdotV = max(dot(ray.normal,normalize(rayOrigin - ray.position)), 0.000001);
 				float reflectionStrength = min(0.95, max(0, ray.metallic));
 				vec3 baseReflectivity = rayAlbedo * mix(fresnelSchlick(NdotV, mix(vec3(0.04), ray.albedo, reflectionStrength)), vec3(reflectionStrength*ray.albedo), max(0, ray.roughness));
+				float fresnelReflectionAmount = FresnelReflectAmount(1.0, ray.indexOfRefraction, ray.normal, rayDirection, reflectionStrength);
 				
 				rayAlbedo *= ray.albedo;
+				vec3 rayNormal = ray.normal;
 				
 				// Prepare next ray for either reflection or refraction
-				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
+				bool refraction = Refraction && ray.opacity < 1.0 && opacity < 0.99;
 				bool reflection = Reflections && reflectionStrength > 0.01;
-				vec3 refractionDirection = refract(rayDirection, ray.normal, ray.refractionIndex);
-				vec3 reflectionDirection = reflect(rayDirection, ray.normal);
+				vec3 refractionDirection = refract(rayDirection, rayNormal, ray.indexOfRefraction);
+				vec3 reflectionDirection = reflect(rayDirection, rayNormal);
 				if (refraction && refractionDirection == vec3(0)) {
 					refraction = false;
 					reflection = true;
 					reflectionStrength = 0.95;
-					reflectionDirection = reflect(rayDirection, -ray.normal);
+					reflectionDirection = reflect(rayDirection, -rayNormal);
 				}
 				if (refraction) {
-					rayOrigin = ray.position - normalize(ray.normal) * ray.nextRayStartOffset;
+					rayOrigin = ray.position - rayNormal * ray.nextRayStartOffset;
 					rayDirection = refractionDirection;
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = 0xff;
-					opacity = min(1, opacity + max(0.01, ray.alpha));
+					opacity = min(1, opacity + max(0.01, ray.opacity));
 				} else if (reflection) {
 					rayOrigin = ray.position;
 					rayDirection = reflectionDirection;
@@ -136,14 +138,14 @@ void main() {
 				if (ray.distance == 0) {
 					color = SampleBackground(rayDirection).rgb;
 				} else {
-					color = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic) + ray.emission;
+					color = ApplyPBRShading(rayOrigin, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, ray.rim) + ray.emission;
 				}
 				
 				if (refraction) {
 					litColor = mix(color*litColor, rayAlbedo, opacity);
 					attenuation *= (1-opacity);
 				} else if (reflection) {
-					litColor = mix(litColor, color*baseReflectivity, reflectionStrength);
+					litColor = mix(litColor, color*baseReflectivity, fresnelReflectionAmount);
 					attenuation *= reflectionStrength;
 				}
 				
@@ -189,7 +191,7 @@ void main() {
 			opacity = 1;
 			break;
 		case RENDER_MODE_REFRACTION:
-			litColor = vec3(ray.refractionIndex*camera.renderDebugScaling/2);
+			litColor = vec3(ray.indexOfRefraction*camera.renderDebugScaling/2);
 			if (primaryRayDistance == 0) litColor = vec3(1,0,1);
 			opacity = 1;
 			break;

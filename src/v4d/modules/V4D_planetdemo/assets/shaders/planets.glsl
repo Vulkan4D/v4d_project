@@ -138,7 +138,8 @@ void main() {
 	WriteRayPayload(ray);
 	ray.albedo = color.rgb;
 	ray.normal = normal;
-	ray.metallic = -0.07;
+	ray.metallic = 0;
+	ray.rim = vec4(1,1,1, 0.1);
 	ray.roughness = 0.7;
 }
 

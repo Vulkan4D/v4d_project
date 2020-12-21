@@ -41,9 +41,9 @@ void main() {
 	
 	WriteRayPayload(ray);
 	ray.albedo = color.rgb;
-	ray.alpha = color.a;
+	ray.opacity = color.a;
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	ray.refractionIndex = 1.1;
+	ray.indexOfRefraction = 1.1;
 	ray.metallic = 0.0;
 	ray.roughness = 0.0;
 }

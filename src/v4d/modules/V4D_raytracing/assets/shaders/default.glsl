@@ -32,33 +32,44 @@ void main() {
 	// 	+ GetVertexUV(i2) * barycentricCoords.z
 	// ) : vec2(0);
 	
+	// Material
+	Material material = GetGeometry().material;
+	
 	WriteRayPayload(ray);
 	
-	uint64_t material = GetGeometry().material;
-	float mat_metallic = float(uint8_t(material)) / 255.0;
-	float mat_roughness = float(uint8_t(material>>8)) / 255.0;
-	float mat_albedo_r = float(uint8_t(material>>16)) / 255.0;
-	float mat_albedo_g = float(uint8_t(material>>24)) / 255.0;
-	float mat_albedo_b = float(uint8_t(material>>32)) / 255.0;
-	float mat_emission_r = float(uint8_t(material>>40)) / 255.0;
-	float mat_emission_g = float(uint8_t(material>>48)) / 255.0;
-	float mat_emission_b = float(uint8_t(material>>56)) / 255.0;
+	// BaseColor
+	ray.albedo = vec3(material.baseColor.rgb) / 255.0;
 	if (HasVertexColor()) {
-		ray.albedo = (
+		ray.albedo *= 
 			+ GetVertexColor(i0).rgb * barycentricCoords.x
 			+ GetVertexColor(i1).rgb * barycentricCoords.y
 			+ GetVertexColor(i2).rgb * barycentricCoords.z
-		) * vec3(mat_albedo_r, mat_albedo_g, mat_albedo_b);
-	} else {
-		ray.albedo = vec3(mat_albedo_r, mat_albedo_g, mat_albedo_b);
+		;
 	}
-	ray.emission = vec3(mat_emission_r, mat_emission_g, mat_emission_b) * 10.0;
+	
+	// Glass
+	ray.opacity = float(material.baseColor.a) / 255.0;
+	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
+	
+	// Normal
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	if (length(ray.emission) > 0) {
+	
+	// Emission
+	if (material.emission > 0) {
 		ray.metallic = 0;
 		ray.roughness = 0;
+		ray.emission = ray.albedo * material.emission;
 	} else {
-		ray.metallic = mat_metallic;
-		ray.roughness = mat_roughness;
+		// PBR
+		ray.metallic = float(material.metallic) / 255.0;
+		ray.roughness = float(material.roughness) / 255.0;
+		// Rim
+		ray.rim = vec4(material.rim) / 255.0;
 	}
+	
+	//TODO maps
+	// material.normalMap
+	// material.albedoMap
+	// material.metallicMap
+	// material.roughnessMap
 }
