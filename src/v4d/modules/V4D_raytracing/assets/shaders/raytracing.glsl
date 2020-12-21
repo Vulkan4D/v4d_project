@@ -25,32 +25,6 @@ vec4 SampleBackground(vec3 direction) {
 	return vec4(0.5,0.5,0.7,1);
 }
 
-
-float linstep(float low, float high, float value){
-	return clamp((value-low)/(high-low), 0.0, 1.0);
-}
-float fade(float low, float high, float value){
-	float mid = (low+high)*0.5;
-	float range = (high-low)*0.5;
-	float x = 1.0 - clamp(abs(mid-value)/range, 0.0, 1.0);
-	return smoothstep(0.0, 1.0, x);
-}
-vec3 getHeatMap(float intensity){
-	vec3 blue = vec3(0.0, 0.0, 1.0);
-	vec3 cyan = vec3(0.0, 1.0, 1.0);
-	vec3 green = vec3(0.0, 1.0, 0.0);
-	vec3 yellow = vec3(1.0, 1.0, 0.0);
-	vec3 red = vec3(1.0, 0.0, 0.0);
-	vec3 color = (
-		fade(-0.25, 0.25, intensity)*blue +
-		fade(0.0, 0.5, intensity)*cyan +
-		fade(0.25, 0.75, intensity)*green +
-		fade(0.5, 1.0, intensity)*yellow +
-		smoothstep(0.75, 1.0, intensity)*red
-	);
-	return color;
-}
-
 void main() {
 	const ivec2 imgCoords = ivec2(gl_LaunchIDEXT.xy);
 	const ivec2 pixelInMiddleOfScreen = ivec2(gl_LaunchSizeEXT.xy) / 2;
@@ -123,12 +97,13 @@ void main() {
 			vec3 rayAlbedo = vec3(1);
 			
 			while (bounces++ < camera.maxBounces || camera.maxBounces == -1) { // camera.maxBounces(-1) = infinite bounces
-			
+				
+				// Fresnel effect
+				float NdotV = max(dot(ray.normal,normalize(rayOrigin - ray.position)), 0.000001);
+				float reflectionStrength = min(0.95, max(0, ray.metallic));
+				vec3 baseReflectivity = rayAlbedo * mix(fresnelSchlick(NdotV, mix(vec3(0.04), ray.albedo, reflectionStrength)), vec3(reflectionStrength*ray.albedo), max(0, ray.roughness));
+				
 				rayAlbedo *= ray.albedo;
-			
-				float reflectionStrength = min(0.95, ray.metallic);
-				vec3 reflectorAlbedo = ray.albedo;
-				opacity = min(1, opacity + max(0.01, ray.alpha)); // this prevents infinite loop
 				
 				// Prepare next ray for either reflection or refraction
 				bool refraction = Refraction && ray.refractionIndex >= 1.0 && opacity < 0.99;
@@ -147,6 +122,7 @@ void main() {
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = 0xff;
+					opacity = min(1, opacity + max(0.01, ray.alpha));
 				} else if (reflection) {
 					rayOrigin = ray.position;
 					rayDirection = reflectionDirection;
@@ -167,7 +143,7 @@ void main() {
 					litColor = mix(color*litColor, rayAlbedo, opacity);
 					attenuation *= (1-opacity);
 				} else if (reflection) {
-					litColor = mix(litColor, color*mix(litColor, rayAlbedo, 0.7), reflectionStrength);
+					litColor = mix(litColor, color*baseReflectivity, reflectionStrength);
 					attenuation *= reflectionStrength;
 				}
 				

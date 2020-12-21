@@ -1031,8 +1031,8 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					entity->Generate(r->renderingDevice);
 				}
 				
-				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && entity->rayTracingMask) {
-					if (entity->meshVertexPosition) {
+				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && (entity->sharedGeometryData->isRayTracedTriangles || entity->sharedGeometryData->isRayTracedProceduralAABB)) {
+					if (entity->sharedGeometryData->isRayTracedTriangles) {
 						entity->sharedGeometryData->blas.AssignBottomLevelGeometry(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
 					} else {
 						entity->sharedGeometryData->blas.AssignBottomLevelProceduralVertex(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
@@ -1897,7 +1897,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::Text((std::string("White is >= ") + distanceStr).c_str());
 					}
 					if (scene->camera.renderMode == RENDER_MODE_BOUNCES) {
-						ImGui::Text((std::string("Red is >= ") + std::to_string((int)glm::ceil(scene->camera.renderDebugScaling*5)) + " bounces").c_str());
+						ImGui::Text((std::string("White is >= ") + std::to_string((int)glm::ceil(scene->camera.renderDebugScaling*5)) + " bounces").c_str());
 					}
 				}
 			// #endif
