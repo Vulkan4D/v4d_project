@@ -9,6 +9,19 @@ hitAttributeEXT vec3 hitAttribs;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
+struct ProceduralTextureCall {
+	vec3 albedo;
+	vec3 normal;
+	float metallic;
+	float roughness;
+	float opacity;
+	// input-only
+	vec3 localHitPosition;
+	float distance;
+	float factor;
+};
+layout(location = 0) callableDataEXT ProceduralTextureCall tex;
+
 void main() {
 	uint i0 = GetIndex(0);
 	uint i1 = GetIndex(1);
@@ -51,25 +64,34 @@ void main() {
 	ray.opacity = float(material.baseColor.a) / 255.0;
 	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
 	
-	// Normal
-	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	
 	// Emission
 	if (material.emission > 0) {
 		ray.metallic = 0;
 		ray.roughness = 0;
 		ray.emission = ray.albedo * material.emission;
 	} else {
-		// PBR
-		ray.metallic = float(material.metallic) / 255.0;
-		ray.roughness = float(material.roughness) / 255.0;
 		// Rim
 		ray.rim = vec4(material.rim) / 255.0;
+		
+		// PBR Textures
+		tex.albedo = ray.albedo;
+		tex.normal = normal;
+		tex.metallic = float(material.metallic) / 255.0;
+		tex.roughness = float(material.roughness) / 255.0;
+		tex.opacity = ray.opacity;
+		tex.localHitPosition = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
+		tex.distance = gl_HitTEXT; //TODO use total distance instead, from new ray payload param
+		for (int i = 0; i < 8; ++i) if (material.texFactors[i] > 0) {
+			tex.factor = material.texFactors[i];
+			executeCallableEXT(material.textures[i], 0);
+		}
+		ray.albedo = tex.albedo;
+		normal = tex.normal;
+		ray.metallic = tex.metallic;
+		ray.roughness = tex.roughness;
+		ray.opacity = tex.opacity;
 	}
 	
-	//TODO maps
-	// material.normalMap
-	// material.albedoMap
-	// material.metallicMap
-	// material.roughnessMap
+	// Normal
+	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
 }

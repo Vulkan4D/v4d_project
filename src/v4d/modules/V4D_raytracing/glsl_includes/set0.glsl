@@ -71,10 +71,8 @@ layout(set = 0, binding = 0) uniform Camera {
 		u8vec4 baseColor;
 		u8vec4 rim;
 		float emission;
-		uint8_t normalMap;
-		uint8_t albedoMap;
-		uint8_t metallicMap;
-		uint8_t roughnessMap;
+		uint8_t textures[8];
+		uint8_t texFactors[8];
 	};
 	// 160 bytes
 	struct GeometryInfo {
@@ -88,7 +86,7 @@ layout(set = 0, binding = 0) uniform Camera {
 		uint64_t vertexColorsF32;
 		uint64_t vertexUVs;
 		uint64_t customData;
-		uint32_t _extra;
+		uint64_t extra;
 		Material material;
 	};
 	layout(buffer_reference, std430, buffer_reference_align = 16) buffer Geometries {

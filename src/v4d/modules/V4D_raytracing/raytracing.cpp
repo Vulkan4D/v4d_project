@@ -4,6 +4,7 @@
 #include <v4d.h>
 #include "Texture2D.hpp"
 #include "camera_options.hh"
+#include "substances.hh"
 
 #include "../V4D_flycam/common.hh"
 
@@ -317,14 +318,39 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void ConfigureRayTracingShaders() {
+		// Ray Miss shaders
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
-		RenderableGeometryEntity::sbtOffsets["default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
-		RenderableGeometryEntity::sbtOffsets["glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/glass.rchit"));
-		RenderableGeometryEntity::sbtOffsets["aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rint"));
-		RenderableGeometryEntity::sbtOffsets["aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
-		RenderableGeometryEntity::sbtOffsets["aabb_sphere.glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.glass.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
-		RenderableGeometryEntity::sbtOffsets["aabb_sphere.light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		
+		// Ray Hit shaders
+		Renderer::sbtOffsets["hit:default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
+		Renderer::sbtOffsets["hit:glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/glass.rchit"));
+		Renderer::sbtOffsets["hit:aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rint"));
+		Renderer::sbtOffsets["hit:aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		Renderer::sbtOffsets["hit:aabb_sphere.glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.glass.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		Renderer::sbtOffsets["hit:aabb_sphere.light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		
+		// Callable shaders
+		Renderer::sbtOffsets["call:tex_noisy"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
+		Renderer::sbtOffsets["call:tex_grainy"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
+		Renderer::sbtOffsets["call:tex_bumped"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));
+		Renderer::sbtOffsets["call:tex_brushed"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_brushed.rcall"));
+		Renderer::sbtOffsets["call:tex_hammered"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_hammered.rcall"));
+		Renderer::sbtOffsets["call:tex_polished"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_polished.rcall"));
+		Renderer::sbtOffsets["call:tex_galvanized"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_galvanized.rcall"));
+		Renderer::sbtOffsets["call:tex_perforated"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_perforated.rcall"));
+		Renderer::sbtOffsets["call:tex_diamond"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_diamond.rcall"));
+		Renderer::sbtOffsets["call:tex_carbon_fiber"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_carbon_fiber.rcall"));
+		Renderer::sbtOffsets["call:tex_ceramic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_ceramic.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_iron"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_iron.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_copper"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_copper.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_aluminum"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_aluminum.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_silver"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_silver.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_metal"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_metal.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_plastic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_plastic.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_glass"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_glass.rcall"));
+		Renderer::sbtOffsets["call:tex_cracked_rubber"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_rubber.rcall"));
+		Renderer::sbtOffsets["call:tex_cracked_ceramic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_ceramic.rcall"));
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -1028,7 +1054,60 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				
 				if (!entity->generated) {
 					// Generate/Load
-					entity->Generate(r->renderingDevice);
+					if (entity->Generate(r->renderingDevice)) {
+						if (entity->sbtOffset == Renderer::sbtOffsets["hit:default"]) {
+							if (auto geometriesData = entity->meshGeometries.Lock(); geometriesData && geometriesData->data) {
+								int i = 0;
+								for (RenderableGeometryEntity::Geometry& geom : entity->sharedGeometryData->geometries) if (geom.materialName != "") {
+									// Override material
+									std::stringstream materialStr {std::string(geom.materialName)};
+									std::string mat, variant;
+									materialStr >> mat;
+									materialStr >> variant;
+									try {
+										auto& substance = Substance::substances.at(mat);
+										if (glm::vec3(substance.color) != glm::vec3{1,1,1}) {
+											geom.material.baseColor = substance.color*255.0f;
+										}
+										geom.material.metallic = substance.metallic*255.0;
+										geom.material.roughness = substance.roughness*255.0;
+										geom.material.indexOfRefraction = substance.IOR*50;
+										geom.material.rim = substance.rim*255.0f;
+										if (variant != "" && Renderer::sbtOffsets.count(std::string("call:tex_")+std::string(variant))) {
+											geom.material.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
+											geom.material.texFactors[0] = 1;
+										} else if (substance.baseMap != "") {
+											geom.material.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
+											geom.material.texFactors[0] = 1;
+											if (variant != "") {
+												LOG_WARN("Unknown variant '" << variant << "'")
+											}
+										}
+										if (substance.agingMap != "" && substance.agingFactor > 0) {
+											geom.material.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
+											geom.material.texFactors[1] = substance.agingFactor;
+										}
+										if (substance.oxydationMap != "" && substance.oxydationFactor > 0) {
+											geom.material.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
+											geom.material.texFactors[2] = substance.oxydationFactor;
+										}
+										if (substance.wearAndTearMap != "" && substance.wearAndTearFactor > 0) {
+											geom.material.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
+											geom.material.texFactors[3] = substance.wearAndTearFactor;
+										}
+										if (substance.burnMap != "" && substance.burnFactor > 0) {
+											geom.material.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
+											geom.material.texFactors[4] = substance.burnFactor;
+										}
+									} catch(...) {
+										LOG_WARN("Unknown material '" << mat << "'")
+										continue;
+									}
+									geometriesData->data[i++].material = geom.material;
+								}
+							}
+						}
+					}
 				}
 				
 				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && (entity->sharedGeometryData->isRayTracedTriangles || entity->sharedGeometryData->isRayTracedProceduralAABB)) {
@@ -1351,12 +1430,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
 		{r->descriptorSets["set0"] = &set0;
-			set0.AddBinding_uniformBuffer(0, cameraUniformBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
-			set0.AddBinding_accelerationStructure(1, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
-			set0.AddBinding_storageBuffer(2, renderableEntityInstanceBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
-			set0.AddBinding_storageBuffer(3, lightSourcesBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
+			set0.AddBinding_uniformBuffer(0, cameraUniformBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
+			set0.AddBinding_accelerationStructure(1, &topLevelAccelerationStructure.accelerationStructure, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
+			set0.AddBinding_storageBuffer(2, renderableEntityInstanceBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
+			set0.AddBinding_storageBuffer(3, lightSourcesBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 			
-			set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT);
+			set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_raytracing"] = &set1_raytracing;

@@ -487,7 +487,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
 		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
 		
-		RenderableGeometryEntity::sbtOffsets["V4D_planetdemo.planet_terrain"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Renderer::sbtOffsets["hit:V4D_planetdemo.planet_terrain"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
 		
 		// Atmosphere
 		if (planetAtmosphereShader) {

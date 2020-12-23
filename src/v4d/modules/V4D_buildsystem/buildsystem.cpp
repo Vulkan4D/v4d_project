@@ -261,7 +261,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
 		
 		// Blocks
-		RenderableGeometryEntity::sbtOffsets["V4D_buildsystem.block"] = 
+		Renderer::sbtOffsets["hit:V4D_buildsystem.block"] = 
 			shaderBindingTable->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.rchit"));
 		
 		// Crosshair
