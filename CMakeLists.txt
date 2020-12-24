@@ -30,6 +30,7 @@ include("${V4D_PROJECT_DIR}/src/v4d/core/global_build_config.cmake")
 # Compiler Warnings
 if(WIN32)
 	set(BUILD_FLAGS "${BUILD_FLAGS} -W -Wno-cast-function-type")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -W -Wno-attribute-warning")
 else()
 	# Warnings		https://gcc.gnu.org/onlinedocs/gcc-9.2.0/gcc/Warning-Options.html
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wall")
@@ -57,10 +58,14 @@ endif()
 # Remove compiler Warnings from VMA...
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-missing-field-initializers")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-type-limits")
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-unused-variable")
 	
 # Remove compiler Warnings from tinygltfloader...
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-ignored-qualifiers")
 	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-switch")
+	
+# Remove compiler Warnings from bullet...
+	set(BUILD_FLAGS "${BUILD_FLAGS} -Wno-stringop-overflow")
 	
 # Address Sanitizer
 if(ADDRESS_SANITIZER)

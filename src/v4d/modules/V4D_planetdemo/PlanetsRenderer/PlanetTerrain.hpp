@@ -28,14 +28,14 @@ struct PlanetTerrain {
 	glm::dmat4 matrix {1};
 	
 	#pragma region Graphics configuration
-	static const int chunkSubdivisionsPerFace = 1;
-	static const int vertexSubdivisionsPerChunk = 100; // low=40, medium=100, high=180,   extreme=250
-	static constexpr float chunkSubdivisionDistanceFactor = 1.0f;
-	static constexpr float targetVertexSeparationInMeters = 0.1f; // approximative vertex separation in meters for the most precise level of detail
+	static const int chunkSubdivisionsPerFace = 5;
+	static const int vertexSubdivisionsPerChunk = 64; // low=64, high=128
+	static float chunkSubdivisionDistanceFactor; // low=0.5, normal=1.0, medium=1.5, high=4.0
+	static constexpr float targetVertexSeparationInMeters = 0.02f; // approximative vertex separation in meters for the most precise level of detail
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
-	static constexpr int CHUNK_CACHE_VERSION = 3;
+	static constexpr int CHUNK_CACHE_VERSION = 4;
 	static const bool useSkirts = true;
 	#pragma endregion
 
@@ -215,7 +215,7 @@ struct PlanetTerrain {
 		uint32_t bottomRightVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk + vertexSubdivisionsPerChunk;
 		
 		std::string GetChunkId() const {
-			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)centerPos.x) + "_" + std::to_string((int64_t)centerPos.y) + "_" + std::to_string((int64_t)centerPos.z);
+			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)glm::round(topLeftPos.x*100.0)) + "_" + std::to_string((int64_t)glm::round(topLeftPos.y*100.0)) + "_" + std::to_string((int64_t)glm::round(topLeftPos.z*100.0));
 		}
 		
 		void Generate(Device* device) {
@@ -548,7 +548,7 @@ struct PlanetTerrain {
 						auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign, meshIndices, vertexPositions, vertexNormals, vertexColors, vertexUVs](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 							int skirtIndex = genVertexIndex++;
 							{
-								vertexPositions[skirtIndex] = glm::vec3(vertexPositions[pointIndex]) - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 2.0));
+								vertexPositions[skirtIndex] = glm::vec3(vertexPositions[pointIndex]) - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 4.0));
 							}
 							vertexNormals[skirtIndex] = vertexNormals[pointIndex];
 							vertexColors[skirtIndex] = vertexColors[pointIndex];
@@ -1134,6 +1134,6 @@ std::vector<std::thread> PlanetTerrain::chunkGeneratorThreads {};
 std::mutex PlanetTerrain::chunkGeneratorQueueMutex {};
 std::condition_variable PlanetTerrain::chunkGeneratorEventVar {};
 std::atomic<bool> PlanetTerrain::chunkGeneratorActive = false;
-
+float PlanetTerrain::chunkSubdivisionDistanceFactor = 1.0;
 double (*PlanetTerrain::generatorFunction)(glm::dvec3* const) = nullptr;
 glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;

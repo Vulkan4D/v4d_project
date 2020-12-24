@@ -7,7 +7,7 @@ using namespace v4d::scene;
 using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
-const double distanceFromChunkToGenerateCollider = 10'000;
+const double distanceFromChunkToGenerateCollider = 1'000;
 
 std::shared_ptr<RenderableGeometryEntity> sun = nullptr;
 std::shared_ptr<RenderableGeometryEntity> sun2 = nullptr;
@@ -17,6 +17,7 @@ Scene* scene = nullptr;
 Renderer* r = nullptr;
 V4D_Mod* mainRenderModule = nullptr;
 PlayerView* playerView = nullptr;
+bool automaticChunkSubdivisionDistanceFactor = true;
 
 #pragma region Planet
 
@@ -333,6 +334,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			auto terrainHeightAtThisPosition = terrain->GetHeightMap(glm::normalize(terrain->cameraPos), 0.5);
 			terrain->cameraAltitudeAboveTerrain = glm::length(terrain->cameraPos) - terrainHeightAtThisPosition;
 			
+			if (automaticChunkSubdivisionDistanceFactor) {
+				PlanetTerrain::chunkSubdivisionDistanceFactor = glm::mix(1.0, 4.0, glm::pow(glm::clamp(terrain->cameraAltitudeAboveTerrain / (terrain->solidRadius / 8), 0.0, 1.0), 0.25));
+			}
+			
 			// Player Constraints (velocity and altitude)
 			playerView->camSpeed = glm::min(20'000.0, glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain)/2.0, 2.0))));
 			double playerRadius = 0.3;
@@ -393,6 +398,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 10.0f);
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
+						ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
+						ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
 					}
 					
 					ImGui::Separator();
