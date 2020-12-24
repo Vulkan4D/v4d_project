@@ -35,7 +35,7 @@ struct PlanetTerrain {
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
-	static constexpr int CHUNK_CACHE_VERSION = 4;
+	static constexpr int CHUNK_CACHE_VERSION = 5;
 	static const bool useSkirts = true;
 	#pragma endregion
 
@@ -87,6 +87,8 @@ struct PlanetTerrain {
 		glm::dvec3 center {0};
 		
 		// true positions on planet
+		glm::dmat4 transform {1};
+		glm::dmat4 inverseTransform {1};
 		glm::dvec3 centerPos {0};
 		glm::dvec3 topLeftPos {0};
 		glm::dvec3 topRightPos {0};
@@ -98,10 +100,10 @@ struct PlanetTerrain {
 		glm::dvec3 topRightPosLowest {0};
 		glm::dvec3 bottomLeftPosLowest {0};
 		glm::dvec3 bottomRightPosLowest {0};
-		glm::dvec3 topLeftPosHighest {0};
-		glm::dvec3 topRightPosHighest {0};
-		glm::dvec3 bottomLeftPosHighest {0};
-		glm::dvec3 bottomRightPosHighest {0};
+		// glm::dvec3 topLeftPosHighest {0};
+		// glm::dvec3 topRightPosHighest {0};
+		// glm::dvec3 bottomLeftPosHighest {0};
+		// glm::dvec3 bottomRightPosHighest {0};
 		
 		float uvMult = 1;
 		float uvOffsetX = 0;
@@ -181,7 +183,7 @@ struct PlanetTerrain {
 			
 			centerPos = CubeToSphere::Spherify(center, face);
 			heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
-			centerPos = glm::round(centerPos * heightAtCenter);
+			centerPos = glm::round(centerPos * heightAtCenter * 10.0) / 10.0;
 			
 			topLeftPos = CubeToSphere::Spherify(topLeft, face);
 			topLeftPos *= planet->GetHeightMap(topLeftPos, triangleSize);
@@ -197,12 +199,15 @@ struct PlanetTerrain {
 			bottomLeftPosLowest = glm::normalize(bottomLeftPos) * lowestAltitude;
 			bottomRightPosLowest = glm::normalize(bottomRightPos) * lowestAltitude;
 			
-			topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
-			topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
-			bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
-			bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
+			// topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
+			// topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
+			// bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
+			// bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
 		
 			RefreshDistanceFromCamera();
+			
+			inverseTransform = glm::lookAt(centerPos, (topLeftPos + topRightPos)/2.0, glm::cross(glm::normalize(topRightPos-topLeftPos), glm::normalize(bottomLeftPos-topLeftPos)));
+			transform = glm::inverse(inverseTransform);
 		}
 		
 		~Chunk() {
@@ -215,7 +220,7 @@ struct PlanetTerrain {
 		uint32_t bottomRightVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk + vertexSubdivisionsPerChunk;
 		
 		std::string GetChunkId() const {
-			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)glm::round(topLeftPos.x*100.0)) + "_" + std::to_string((int64_t)glm::round(topLeftPos.y*100.0)) + "_" + std::to_string((int64_t)glm::round(topLeftPos.z*100.0));
+			return std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)glm::round(centerPos.x*10.0)) + "_" + std::to_string((int64_t)glm::round(centerPos.y*10.0)) + "_" + std::to_string((int64_t)glm::round(centerPos.z*10.0));
 		}
 		
 		void Generate(Device* device) {
@@ -300,7 +305,7 @@ struct PlanetTerrain {
 				auto vertexUVs = entity->Add_meshVertexUV()->AllocateBuffersCount(device, nbVerticesPerChunk);
 				entity->Add_meshCustomData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 				entity->generator = [](auto* entity, Device*){entity->generated = false;};
-				entity->SetWorldTransform(planet->matrix * glm::translate(glm::dmat4(1), centerPos));
+				entity->SetWorldTransform(planet->matrix * transform);
 			entityLock.unlock();
 		
 			#ifdef PLANET_CHUNK_CACHE_ENABLE
@@ -315,16 +320,16 @@ struct PlanetTerrain {
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexColor<glm::f32>)
 								+ nbVerticesPerChunk * sizeof(Mesh::VertexUV)
 								+ 24 * sizeof(uint16_t) + sizeof(uint8_t) // geometry->simplifiedMeshIndices
-								+ sizeof(topLeftPosLowest)
 								+ sizeof(lowestAltitude)
+								+ sizeof(highestAltitude)
+								+ sizeof(topLeftPosLowest)
 								+ sizeof(topRightPosLowest)
 								+ sizeof(bottomLeftPosLowest)
 								+ sizeof(bottomRightPosLowest)
-								+ sizeof(topLeftPosHighest)
-								+ sizeof(highestAltitude)
-								+ sizeof(topRightPosHighest)
-								+ sizeof(bottomLeftPosHighest)
-								+ sizeof(bottomRightPosHighest)
+								// + sizeof(topLeftPosHighest)
+								// + sizeof(topRightPosHighest)
+								// + sizeof(bottomLeftPosHighest)
+								// + sizeof(bottomRightPosHighest)
 								+ sizeof(boundingDistance)
 			;
 			if (cacheFile.GetSize() == cacheFileSize && cacheFile.Read<uint32_t>() == CHUNK_CACHE_VERSION) {
@@ -342,10 +347,10 @@ struct PlanetTerrain {
 						cacheFile >> topRightPosLowest;
 						cacheFile >> bottomLeftPosLowest;
 						cacheFile >> bottomRightPosLowest;
-						cacheFile >> topLeftPosHighest;
-						cacheFile >> topRightPosHighest;
-						cacheFile >> bottomLeftPosHighest;
-						cacheFile >> bottomRightPosHighest;
+						// cacheFile >> topLeftPosHighest;
+						// cacheFile >> topRightPosHighest;
+						// cacheFile >> bottomLeftPosHighest;
+						// cacheFile >> bottomRightPosHighest;
 						cacheFile >> boundingDistance;
 					cacheFile.UnlockReadWrite();
 				}
@@ -375,7 +380,7 @@ struct PlanetTerrain {
 							// position
 							glm::dvec3 pos = CubeToSphere::Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
 							double altitude = planet->GetHeightMap(pos, triangleSize);
-							glm::dvec3 posOnChunk = pos * altitude - centerPos;
+							glm::dvec3 posOnChunk = inverseTransform * glm::dvec4(pos * altitude, 1);
 							vertexPositions[currentIndex] = glm::vec3(posOnChunk);
 							
 							// Color
@@ -482,7 +487,7 @@ struct PlanetTerrain {
 										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
 										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+										bottomLeftPos = inverseTransform * glm::dvec4{pos * planet->GetHeightMap(pos, triangleSize), 1};
 									}
 
 									glm::vec3 topRightPos {0};
@@ -490,7 +495,7 @@ struct PlanetTerrain {
 										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
 										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
 										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+										topRightPos = inverseTransform * glm::dvec4{pos * planet->GetHeightMap(pos, triangleSize), 1};
 									}
 
 									tangentX = glm::normalize(topRightPos - glm::vec3(vertexPositions[currentIndex]));
@@ -505,7 +510,7 @@ struct PlanetTerrain {
 										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow)/vertexSubdivisionsPerChunk);
 										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol+1)/vertexSubdivisionsPerChunk);
 										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-										topRightPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+										topRightPos = inverseTransform * glm::dvec4{pos * planet->GetHeightMap(pos, triangleSize), 1};
 									}
 
 									tangentX = glm::normalize(topRightPos - glm::vec3(vertexPositions[currentIndex]));
@@ -519,7 +524,7 @@ struct PlanetTerrain {
 										glm::dvec3 topOffset = glm::mix(topLeft - center, bottomLeft - center, double(genRow+1)/vertexSubdivisionsPerChunk);
 										glm::dvec3 rightOffset = glm::mix(topLeft - center, topRight - center, double(genCol)/vertexSubdivisionsPerChunk);
 										glm::dvec3 pos = Spherify(center + topDir*topOffset + rightDir*rightOffset, face);
-										bottomLeftPos = {pos * planet->GetHeightMap(pos, triangleSize) - centerPos};
+										bottomLeftPos = inverseTransform * glm::dvec4{pos * planet->GetHeightMap(pos, triangleSize), 1};
 									}
 
 									tangentX = glm::normalize(glm::vec3(vertexPositions[currentIndex+1]) - glm::vec3(vertexPositions[currentIndex]));
@@ -621,10 +626,10 @@ struct PlanetTerrain {
 						bottomLeftPosLowest = glm::normalize(bottomLeftPos) * lowestAltitude;
 						bottomRightPosLowest = glm::normalize(bottomRightPos) * lowestAltitude;
 						
-						topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
-						topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
-						bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
-						bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
+						// topLeftPosHighest = glm::normalize(topLeftPos) * highestAltitude;
+						// topRightPosHighest = glm::normalize(topRightPos) * highestAltitude;
+						// bottomLeftPosHighest = glm::normalize(bottomLeftPos) * highestAltitude;
+						// bottomRightPosHighest = glm::normalize(bottomRightPos) * highestAltitude;
 					}
 					
 				}
@@ -646,10 +651,10 @@ struct PlanetTerrain {
 						cacheFile << topRightPosLowest;
 						cacheFile << bottomLeftPosLowest;
 						cacheFile << bottomRightPosLowest;
-						cacheFile << topLeftPosHighest;
-						cacheFile << topRightPosHighest;
-						cacheFile << bottomLeftPosHighest;
-						cacheFile << bottomRightPosHighest;
+						// cacheFile << topLeftPosHighest;
+						// cacheFile << topRightPosHighest;
+						// cacheFile << bottomLeftPosHighest;
+						// cacheFile << bottomRightPosHighest;
 						cacheFile << boundingDistance;
 					cacheFile.Flush();
 					cacheFile.UnlockReadWrite();
