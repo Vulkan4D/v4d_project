@@ -89,10 +89,10 @@ namespace TerrainGeneratorLib {
 		// for each planet
 			if (terrain) {
 				std::scoped_lock lock(terrain->planetMutex);
-				#ifdef _DEBUG
+				// #ifdef _DEBUG
 					terrain->totalChunkTimeNb = 0;
 					terrain->totalChunkTime = 0;
-				#endif
+				// #endif
 				terrain->RemoveBaseChunks();
 				terrain->AddBaseChunks();
 			}
@@ -229,7 +229,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			float lightIntensity = 1e24f;
 			float radius = 700000000;
 			entity->Allocate(device, "aabb_sphere.light");
-			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+			entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
@@ -241,7 +241,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			float lightIntensity = 5e22f;
 			float radius = 700000000;
 			entity->Allocate(device, "aabb_sphere.light");
-			entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+			entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
 			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
@@ -352,7 +352,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			
 			
+			// Gravity
 			scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
+			scene->camera.gravityVector = (glm::transpose(inverse(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(terrain->cameraPos)) * -9.8f;
+			
+			
 			for (auto* chunk : terrain->chunks) {
 				RefreshChunk(chunk);
 			}
@@ -398,6 +402,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 10.0f);
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
+						ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
 						ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
 						ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
 					}
@@ -495,6 +500,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
 		
 		Renderer::sbtOffsets["hit:V4D_planetdemo.planet_terrain"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
+		Renderer::sbtOffsets["hit:V4D_planetdemo.planet_terrain.aabb"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.aabb.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.terrain.aabb.rint");
 		
 		// Atmosphere
 		if (planetAtmosphereShader) {

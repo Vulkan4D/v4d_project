@@ -124,12 +124,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				else if (key == "glassBall") {
 					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(serverSideObjects->mutex);
-					// Launch ball
+					// Launch glass ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
+				}
+				else if (key == "TerrainDigSphere") {
+					auto dir = stream->Read<DVector3>();
+					std::lock_guard lock(serverSideObjects->mutex);
+					// Dig in terrain
+					auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
+					digSphere->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 4.0) * playerObj->GetTransform());
+					digSphere->isDynamic = false;
 				}
 				else if (key == "balls") {
 					std::lock_guard lock(serverSideObjects->mutex);
@@ -227,7 +235,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto obj = clientSideObjects->objects.at(id);
 					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
 						scene->cameraParent = entity;
-						entity->rayTracingMask &= ~GEOMETRY_ATTR_PRIMARY_VISIBLE;
 					}
 					playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
 				} catch (std::exception& err) {
@@ -244,6 +251,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma region Rendering
 	
+	V4D_MODULE_FUNC(void, ConfigureShaders) {
+		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
+		Renderer::sbtOffsets["hit:V4D_galaxy4d.terrain.dig.sphere"] = sbt_raytracing->AddHitShader("modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rchit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rahit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rint");
+		Renderer::sbtOffsets["hit:V4D_galaxy4d.terrain.dig.sphere.1"] = sbt_raytracing->AddHitShader("modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.1.rchit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.1.rahit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rint");
+	}
+	
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::Checkbox("Player visible", &playerVisible);
@@ -252,7 +265,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
-			cameraParent->rayTracingMask = playerVisible? GEOMETRY_ATTR_CAST_SHADOWS|GEOMETRY_ATTR_REFLECTION_VISIBLE|GEOMETRY_ATTR_SOLID : 0;
+			cameraParent->rayTracingMask = playerVisible? RAY_TRACED_ENTITY_DEFAULT : 0;
 		}
 	}
 	
@@ -266,6 +279,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				entity->generator = cake;
+				entity->Remove_physics();
 			}break;
 			case OBJECT_TYPE::Ball:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
@@ -289,6 +303,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
 			}break;
+			case OBJECT_TYPE::TerrainDigSphere:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN_NEGATE;
+				obj->renderableGeometryEntityInstance = entity;
+				float radius = 2.0f;
+				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
+					entity->Allocate(device, "V4D_galaxy4d.terrain.dig.sphere");
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+				};
+			}break;
 			case OBJECT_TYPE::Light:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
@@ -296,7 +320,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "aabb_sphere.light");
-					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE;
+					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
@@ -313,7 +337,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "glass");
-					entity->rayTracingMask = GEOMETRY_ATTR_PRIMARY_VISIBLE|GEOMETRY_ATTR_REFLECTION_VISIBLE|GEOMETRY_ATTR_SOLID;
+					entity->rayTracingMask = RAY_TRACED_ENTITY_TRANSPARENT;
 					entity->Add_meshVertexPosition()->AllocateBuffers(device, {
 						{-2.0,-2.0, 0.0},
 						{ 2.0,-2.0, 0.0},
@@ -367,6 +391,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("glassBall");
+						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+					ClientEnqueueAction(stream);
+				}break;
+				case GLFW_KEY_O:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("TerrainDigSphere");
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;

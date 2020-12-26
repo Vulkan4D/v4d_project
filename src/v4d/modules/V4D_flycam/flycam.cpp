@@ -30,7 +30,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
 		}
 		if (auto parent = scene->cameraParent.lock(); parent) {
-			parent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix));
+			parent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix) * glm::inverse(parent->cameraOffset));
 		}
 	}
 	

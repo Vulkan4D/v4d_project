@@ -321,6 +321,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		// Ray Miss shaders
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
 		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
+		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.void.rmiss"));
 		
 		// Ray Hit shaders
 		Renderer::sbtOffsets["hit:default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
@@ -771,7 +772,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		for (auto* s : shaderGroups["sg_wireframe"]) {
 			// Wireframe
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && (entity->rayTracingMask&GEOMETRY_ATTR_PRIMARY_VISIBLE))) && entity->sharedGeometryData) {
+				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && entity->rayTracingMask)) && entity->sharedGeometryData) {
 					uint32_t i = 0;
 					for (auto& geometry : entity->sharedGeometryData->geometries) {
 						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
@@ -1776,7 +1777,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 
 	V4D_MODULE_FUNC(void, RenderUpdate) {
 		
-		uint64_t timeout = 1000UL * 1000 * 1000 * 1; // 1 second
+		uint64_t timeout = 1000UL * 1000 * 1000;
 
 		// Get an image from the swapchain
 		uint imageIndex;

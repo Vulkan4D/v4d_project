@@ -43,6 +43,8 @@ layout(set = 0, binding = 0) uniform Camera {
 	int maxBounces; // -1 = infinite bounces
 	uint frameCount;
 	
+	vec3 gravityVector;
+	
 } camera;
 
 // Ray-Tracing descriptor sets
@@ -247,11 +249,7 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 
 #ifdef RAY_TRACING
 
-	#define MEDIUM_SOLID 0
-	#define MEDIUM_WATER 1
-	#define MEDIUM_FOG 2
-	#define MEDIUM_ATMOSPHERE 3
-
+	#define RAY_PAYLOAD_MAX_IGNORED_INSTANCES 16
 
 	struct RayTracingPayload {
 		// mandatory
@@ -264,20 +262,39 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 		vec3 position;
 		float indexOfRefraction;
 		float distance;
-		uint entityInstanceIndex;
-		uint primitiveID;
+		int entityInstanceIndex;
+		int primitiveID;
 		float opacity;
 		uint64_t raycastCustomData;
-		float nextRayStartOffset;
-		uint geometryIndex;
+		// float nextRayStartOffset;
+		// float nextRayEndOffset;
+		int geometryIndex;
 		vec4 rim;
-		// uint medium;
+		bool passthrough;
+		int recursions;
 	};
+
+	void InitRayPayload(inout RayTracingPayload ray) {
+		// ray.nextRayStartOffset = 0;
+		// ray.nextRayEndOffset = 0;
+		ray.position = vec3(0);
+		ray.emission = vec3(0);
+		ray.opacity = 1.0;
+		ray.indexOfRefraction = 0.0;
+		ray.distance = 0;
+		ray.entityInstanceIndex = -1;
+		ray.primitiveID = -1;
+		ray.geometryIndex = -1;
+		ray.raycastCustomData = 0;
+		ray.rim = vec4(0);
+		ray.passthrough = false;
+		ray.recursions = 0;
+	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
 		void WriteRayPayload(inout RayTracingPayload ray) {
-			// ray.medium = MEDIUM_SOLID;
-			ray.nextRayStartOffset = 0;
+			// ray.nextRayStartOffset = 0;
+			// ray.nextRayEndOffset = 0;
 			ray.position = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 			ray.emission = vec3(0);
 			ray.opacity = 1.0;
@@ -288,6 +305,7 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
 			ray.raycastCustomData = GetCustomData();
 			ray.rim = vec4(0);
+			ray.passthrough = false;
 		}
 	#endif
 	

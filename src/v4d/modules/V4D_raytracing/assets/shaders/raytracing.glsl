@@ -38,16 +38,19 @@ void main() {
 	
 	vec3 rayOrigin = vec3(0);
 	vec3 rayDirection = normalize(vec4(inverse(isMiddleOfScreen? camera.rawProjectionMatrix : camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
-	uint rayMask = RAY_TRACE_MASK_PRIMARY;
+	uint rayMask = RAY_TRACE_MASK_VISIBLE;
 	float rayMinDistance = float(camera.znear);
 	float rayMaxDistance = float(camera.zfar);
 
 	// Trace Primary Ray
-	traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+	InitRayPayload(ray);
+	do {
+		traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+	} while (ray.passthrough && ray.recursions++ < 100 && length(rayOrigin += rayDirection*ray.distance) > 0);
 	
 	// Store raycast info
 	if (isMiddleOfScreen) {
-		if (ray.distance > 0) {
+		if (ray.distance > 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1) {
 			// write obj info in hit raycast
 			RenderableEntityInstance entity = GetRenderableEntityInstance(ray.entityInstanceIndex);
 			rayCast.moduleVen = entity.moduleVen;
@@ -119,7 +122,7 @@ void main() {
 					reflectionDirection = reflect(rayDirection, -rayNormal);
 				}
 				if (refraction) {
-					rayOrigin = ray.position - rayNormal * ray.nextRayStartOffset;
+					rayOrigin = ray.position - rayNormal /* ray.nextRayStartOffset*/;
 					rayDirection = refractionDirection;
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
@@ -133,7 +136,9 @@ void main() {
 					rayMask = RAY_TRACE_MASK_REFLECTION;
 				} else break;
 				
-				traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+				do {
+					traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+				} while (ray.passthrough && ray.recursions++ < 100 && length(rayOrigin += rayDirection*ray.distance) > 0);
 				vec3 color;
 				if (ray.distance == 0) {
 					color = SampleBackground(rayDirection).rgb;
@@ -213,6 +218,11 @@ layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
 void main() {
 	ray.distance = 0;
+	ray.entityInstanceIndex = -1;
+	ray.primitiveID = -1;
+	ray.geometryIndex = -1;
+	ray.raycastCustomData = 0;
+	ray.passthrough = false;
 }
 
 
@@ -224,4 +234,10 @@ layout(location = 1) rayPayloadInEXT bool shadowed;
 void main() {
 	shadowed = false;
 }
+
+
+#############################################################
+#shader void.rmiss
+
+void main() {}
 

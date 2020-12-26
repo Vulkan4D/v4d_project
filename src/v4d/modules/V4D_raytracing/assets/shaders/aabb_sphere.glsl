@@ -72,7 +72,7 @@ void main() {
 	ray.roughness = 0.0;
 	ray.opacity = 0.001;
 	ray.indexOfRefraction = 1.1;
-	ray.nextRayStartOffset = sphereAttr.w;
+	// ray.nextRayStartOffset = sphereAttr.w;
 }
 
 
