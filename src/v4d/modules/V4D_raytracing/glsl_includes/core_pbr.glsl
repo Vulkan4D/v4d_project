@@ -70,6 +70,7 @@ vec3 ApplyPBRShading(vec3 origin, vec3 hitPoint, vec3 albedo, vec3 normal, vec3 
 			vec3 L = normalize(light.position - hitPoint);
 			
 			if (length(radiance) > radianceThreshold) {
+				#ifndef DISABLE_SHADOWS
 				if (HardShadows) {
 					shadowed = true;
 					if (dot(L, normal) > 0) {
@@ -78,6 +79,7 @@ vec3 ApplyPBRShading(vec3 origin, vec3 hitPoint, vec3 albedo, vec3 normal, vec3 
 					}
 				}
 				if (!HardShadows || !shadowed)
+				#endif
 				{
 					// cook-torrance BRDF
 					vec3 H = normalize(V + L);

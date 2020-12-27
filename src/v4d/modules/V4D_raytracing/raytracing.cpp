@@ -1048,7 +1048,6 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			blasQueueBuildRangeInfos.clear();
 			nbRayTracingInstances = 0;
 			int nbActiveLights = 0;
-			RenderableGeometryEntity::CleanupOnThisThread();
 			currentRenderableEntities[r->currentFrameInFlight].clear();
 			// Entities
 			RenderableGeometryEntity::ForEach([&nbActiveLights](auto entity){
@@ -1155,6 +1154,8 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
 				lightSourcesBuffer[i].Reset();
 			}
+			
+			RenderableGeometryEntity::CleanupOnThisThread();
 		}
 	}
 

@@ -338,13 +338,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				PlanetTerrain::chunkSubdivisionDistanceFactor = glm::mix(1.0, 4.0, glm::pow(glm::clamp(terrain->cameraAltitudeAboveTerrain / (terrain->solidRadius / 8), 0.0, 1.0), 0.25));
 			}
 			
-			// Player Constraints (velocity and altitude)
-			playerView->camSpeed = glm::min(20'000.0, glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain)/2.0, 2.0))));
-			double playerRadius = 0.3;
-			if (terrain->cameraAltitudeAboveTerrain < playerRadius) {
-				playerView->worldPosition = scene->camera.worldPosition = terrain->matrix * glm::dvec4(glm::normalize(terrain->cameraPos) * (terrainHeightAtThisPosition + playerRadius), 1);
-				scene->camera.RefreshViewMatrix();
-			}
+			// // Player Constraints (velocity and altitude)
+			// playerView->camSpeed = glm::min(20'000.0, glm::min(playerView->camSpeed, glm::round(glm::max(glm::abs(terrain->cameraAltitudeAboveTerrain)/2.0, 2.0))));
+			// double playerRadius = 0.3;
+			// if (terrain->cameraAltitudeAboveTerrain < playerRadius) {
+			// 	playerView->worldPosition = scene->camera.worldPosition = terrain->matrix * glm::dvec4(glm::normalize(terrain->cameraPos) * (terrainHeightAtThisPosition + playerRadius), 1);
+			// 	scene->camera.RefreshViewMatrix();
+			// }
 			
 			for (auto* chunk : terrain->chunks) {
 				chunk->BeforeRender();

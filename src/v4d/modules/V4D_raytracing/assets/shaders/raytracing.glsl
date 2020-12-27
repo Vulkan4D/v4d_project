@@ -46,7 +46,7 @@ void main() {
 	InitRayPayload(ray);
 	do {
 		traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
-	} while (ray.passthrough && ray.recursions++ < 100 && length(rayOrigin += rayDirection*ray.distance) > 0);
+	} while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 	
 	// Store raycast info
 	if (isMiddleOfScreen) {
@@ -138,7 +138,7 @@ void main() {
 				
 				do {
 					traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
-				} while (ray.passthrough && ray.recursions++ < 100 && length(rayOrigin += rayDirection*ray.distance) > 0);
+				} while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 				vec3 color;
 				if (ray.distance == 0) {
 					color = SampleBackground(rayDirection).rgb;

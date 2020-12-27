@@ -127,6 +127,10 @@ namespace app {
 			#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 				// Low-Priority Rendering Loop
 				thread2 = std::thread{[&]{
+					
+					if (std::thread::hardware_concurrency() > 4) UNSET_CPU_AFFINITY(0, 1, std::thread::hardware_concurrency()/2, std::thread::hardware_concurrency()/2+1)
+					else SET_CPU_AFFINITY(0)
+					
 					while (loopCheckRunning()) {
 						CALCULATE_AVG_FRAMERATE(app::secondaryAvgFrameRate)
 						if (!loopCheckRunning()) break;

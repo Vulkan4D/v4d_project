@@ -35,6 +35,16 @@ Renderer* r = nullptr;
 
 bool playerVisible = true;
 
+float terrainNegationSphereRadiusPower = 1;
+
+struct TerrainDigSphere {
+	float radius;
+	void operator() (RenderableGeometryEntity* entity, Device* device){
+		entity->Allocate(device, "V4D_galaxy4d.terrain.dig.sphere");
+		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+	}
+};
+
 void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 	std::lock_guard lock(clientActionQueueMutex);
 	clientActionQueue.emplace(stream);
@@ -133,9 +143,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				}
 				else if (key == "TerrainDigSphere") {
 					auto dir = stream->Read<DVector3>();
+					float radius = stream->Read<float>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Dig in terrain
 					auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
+					digSphere->entityData = radius;
 					digSphere->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 4.0) * playerObj->GetTransform());
 					digSphere->isDynamic = false;
 				}
@@ -192,6 +204,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
+	V4D_MODULE_FUNC(void, SendStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {
+		if (obj->type == OBJECT_TYPE::TerrainDigSphere) {
+			try {
+				float radius = std::any_cast<float>(obj->entityData);
+				// Data over network
+				stream.Write(radius);
+			} catch(std::bad_any_cast& e){}
+		}
+	}
+	
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		{std::scoped_lock lock(serverSideObjects->mutex, serverActionQueueMutex);
 			auto& actionQueue = serverActionQueuePerClient[client->id];
@@ -208,6 +230,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	#pragma endregion
 	
 	#pragma region Client
+	
+	V4D_MODULE_FUNC(void, ReceiveStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {
+		if (obj->type == OBJECT_TYPE::TerrainDigSphere) {
+			// Data over network
+			obj->entityData = stream.Read<float>();
+		}
+	}
 	
 	V4D_MODULE_FUNC(void, ClientSendActions, v4d::io::SocketPtr stream) {
 		std::lock_guard lock(clientActionQueueMutex);
@@ -260,6 +289,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::Checkbox("Player visible", &playerVisible);
+			ImGui::SliderFloat("Terrain dig sphere radius (10 to the power of)", &terrainNegationSphereRadiusPower, 0.0f, 7.0f);
 		#endif
 	}
 	
@@ -273,6 +303,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma region GameObjects
 	
+	V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
+		switch (obj->type) {
+			case OBJECT_TYPE::TerrainDigSphere:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN_NEGATE;
+				obj->renderableGeometryEntityInstance = entity;
+				obj->entityData = 0.0f;
+			}break;
+		}
+	}
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
@@ -304,14 +344,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				};
 			}break;
 			case OBJECT_TYPE::TerrainDigSphere:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
-				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN_NEGATE;
-				obj->renderableGeometryEntityInstance = entity;
-				float radius = 2.0f;
-				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_galaxy4d.terrain.dig.sphere");
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-				};
+				if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+					try {
+						float radius = std::any_cast<float>(obj->entityData);
+						entity->generator = TerrainDigSphere{radius};
+					} catch(std::bad_any_cast& e){}
+				}
 			}break;
 			case OBJECT_TYPE::Light:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
@@ -395,10 +433,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_O:{
-					v4d::data::WriteOnlyStream stream(32);
+					v4d::data::WriteOnlyStream stream(64);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("TerrainDigSphere");
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << std::pow(10.0f, terrainNegationSphereRadiusPower);
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_N:{

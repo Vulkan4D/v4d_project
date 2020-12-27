@@ -5,13 +5,21 @@ struct RayPayloadTerrainNegateSphere1 {
 	vec3 normal;
 	float t1;
 	float t2;
+	float radius;
+	uint64_t entityInstanceIndex;
 	bool hit;
+};
+
+struct SphereAttr {
+	vec3 insideFaceNormal;
+	float radius;
+	float t2;
 };
 
 #############################################################
 #shader rint
 
-hitAttributeEXT vec4 sphereAttr; // inside normal and t2
+hitAttributeEXT SphereAttr sphereAttr;
 
 void main() {
 	vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
@@ -35,7 +43,9 @@ void main() {
 		const float t1 = (-b - discriminantSqrt) / a;
 		const float t2 = (-b + discriminantSqrt) / a;
 		vec3 endPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * t2;
-		sphereAttr = vec4(normalize(spherePosition - endPoint), t2);
+		sphereAttr.insideFaceNormal = normalize(spherePosition - endPoint);
+		sphereAttr.radius = sphereRadius;
+		sphereAttr.t2 = t2;
 		
 		// Outside of sphere
 		if (tMin <= t1 && t1 < tMax) {
@@ -53,35 +63,41 @@ void main() {
 #############################################################
 #shader rchit
 
-hitAttributeEXT vec4 sphereAttr;
+#define DISABLE_SHADOWS
+#include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
+
+hitAttributeEXT SphereAttr sphereAttr;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 layout(location = 1) rayPayloadEXT RayPayloadTerrainNegateSphere1 ray1;
 
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	vec3 endPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * sphereAttr.w;
+	vec3 endPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * sphereAttr.t2;
 	
 	// Find all touching negate spheres along that ray and get the maximum distance up to the last sphere's furthest point
-	ray1.normal = sphereAttr.xyz;
+	ray1.normal = sphereAttr.insideFaceNormal;
 	ray1.t1 = 0;
-	ray1.t2 = sphereAttr.w - gl_HitTEXT;
+	ray1.t2 = sphereAttr.t2 - gl_HitTEXT;
+	ray1.radius = sphereAttr.radius;
+	ray1.entityInstanceIndex = gl_InstanceCustomIndexEXT;
 	int loop = 0;
 	for (;;) {
 		ray1.hit = false;
-		traceRayEXT(topLevelAS, 0, RAY_TRACED_ENTITY_TERRAIN_NEGATE, 1, 0, 2, hitPoint, ray1.t1 + float(camera.znear), gl_WorldRayDirectionEXT, ray1.t2, 1);
+		traceRayEXT(topLevelAS, 0, RAY_TRACED_ENTITY_TERRAIN_NEGATE, 1, 0, 2, hitPoint, ray1.t1 + 0.01, gl_WorldRayDirectionEXT, ray1.t2, 1);
 		if (!ray1.hit) break;
-		if (loop++>20) {
-			WriteRayPayload(ray);
-			ray.albedo += vec3(1,0,0);
-			ray.normal = vec3(0);
-			ray.metallic = 0;
-			ray.roughness = 0;
-			return;
+		if (loop++>100) {
+			// WriteRayPayload(ray);
+			// ray.albedo += vec3(0);
+			// ray.normal = vec3(0);
+			// ray.metallic = 0;
+			// ray.roughness = 0;
+			break;
 		}
 	}
 	vec3 normal = ray1.normal;
 	float hitDepthTotal = ray1.t2;
+	float sphereRadius = ray1.radius;
 	endPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * (gl_HitTEXT + hitDepthTotal);
 	// we now have the total distance to the last sphere's furthest point stored in hitDepthTotal and the last hit sphere's normal at that position
 	
@@ -91,21 +107,21 @@ void main() {
 	if (ray.distance != 0) return; // we found a geometry, just exit here to draw it on screen.
 
 	// Find out if we are above or below ground level by tracing a terrain-seeking ray upwards
-	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT, RAY_TRACED_ENTITY_TERRAIN, 0, 0, 0, endPoint, float(camera.znear), normalize(-camera.gravityVector), 10000, 0);
+	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT, RAY_TRACED_ENTITY_TERRAIN, 0, 0, 0, endPoint, float(camera.znear), normalize(-camera.gravityVector), 20000000, 0);
 	if (ray.distance == 0) {
 		// we are above ground, trace a standard ray and exit here
-		if (ray.recursions++ > 30) {
-			WriteRayPayload(ray);
-			ray.albedo += vec3(0,0,1);
-			ray.normal = vec3(0);
-			ray.metallic = 0;
-			ray.roughness = 0;
-			return;
-		}
+		// if (ray.recursions++ > 200) {
+		// 	// WriteRayPayload(ray);
+		// 	// ray.albedo += vec3(0);
+		// 	// ray.normal = vec3(0);
+		// 	// ray.metallic = 0;
+		// 	// ray.roughness = 0;
+		// 	return;
+		// }
 		ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
 		// traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, 0, 0, 0, endPoint, float(camera.znear), gl_WorldRayDirectionEXT, float(camera.zfar), 0);
 		ray.passthrough = true;
-		ray.distance = gl_HitTEXT + hitDepthTotal;
+		ray.distance = gl_HitTEXT + hitDepthTotal + float(camera.znear);
 		return;
 	}
 	
@@ -113,26 +129,31 @@ void main() {
 	
 	float undergroundDepth = ray.distance;
 	
-	ray.albedo *= vec3(0.1/undergroundDepth);
-	// ray.metallic = 0;
-	// ray.roughness = 0;
-	
-	ray.normal = normalize(mix(ray.normal, normal, 0.5));
+	ray.metallic = 0;
+	ray.position = endPoint;
+	ray.normal = normalize(mix(ray.normal, normal, 0.7));
 	ray.distance = gl_HitTEXT + hitDepthTotal;
+	
+	// Override shading
+	ray.albedo = ApplyPBRShading(gl_WorldRayOriginEXT, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, vec4(0));
+	ray.albedo *= pow(1-clamp(linearStep(0, sphereRadius*3, undergroundDepth), 0, 1), 10);
+	ray.roughness = 0;
 }
 
 
 #############################################################
 #shader 1.rchit
 
-hitAttributeEXT vec4 sphereAttr;
+hitAttributeEXT SphereAttr sphereAttr;
 
 layout(location = 1) rayPayloadInEXT RayPayloadTerrainNegateSphere1 ray1;
 
 void main() {
-	ray1.normal = sphereAttr.xyz;
+	ray1.normal = sphereAttr.insideFaceNormal;
 	ray1.t1 = gl_HitTEXT;
-	ray1.t2 = sphereAttr.w;
+	ray1.t2 = sphereAttr.t2;
+	ray1.radius = sphereAttr.radius;
+	ray1.entityInstanceIndex = gl_InstanceCustomIndexEXT;
 	ray1.hit = true;
 }
 
@@ -140,7 +161,7 @@ void main() {
 #############################################################
 #shader rahit
 
-// hitAttributeEXT vec4 sphereAttr;
+// hitAttributeEXT SphereAttr sphereAttr;
 
 layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 
@@ -154,10 +175,15 @@ void main() {
 #############################################################
 #shader 1.rahit
 
-// hitAttributeEXT vec4 sphereAttr;
+hitAttributeEXT SphereAttr sphereAttr;
+
+layout(location = 1) rayPayloadInEXT RayPayloadTerrainNegateSphere1 ray1;
 
 void main() {
-	if (gl_HitKindEXT == 1) {
+	if (ray1.entityInstanceIndex == gl_InstanceCustomIndexEXT) {
+		ignoreIntersectionEXT;
+	}
+	if (gl_HitKindEXT == 1 && sphereAttr.t2 < ray1.t2) {
 		ignoreIntersectionEXT;
 	}
 }

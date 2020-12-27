@@ -1006,6 +1006,7 @@ struct PlanetTerrain {
 									// || glm::dot(glm::normalize(planet->cameraPos - topRightPosHighest), glm::normalize(topRightPosHighest)) > angleThreshold
 									// || glm::dot(glm::normalize(planet->cameraPos - bottomLeftPosHighest), glm::normalize(bottomLeftPosHighest)) > angleThreshold
 									// || glm::dot(glm::normalize(planet->cameraPos - bottomRightPosHighest), glm::normalize(bottomRightPosHighest)) > angleThreshold
+								// || true
 			;
 			
 			bool allSubchunksRendered = false;
