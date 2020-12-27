@@ -119,13 +119,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			case TEST_OBJ:{
 				auto key = stream->Read<std::string>();
-				NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 				
 				if (key == "ball") {
 					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
@@ -136,6 +136,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch glass ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
@@ -144,12 +145,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				else if (key == "TerrainDigSphere") {
 					auto dir = stream->Read<DVector3>();
 					float radius = stream->Read<float>();
+					glm::dvec3 pos = glm::dvec3{dir.x, dir.y, dir.z} * double(radius)/2.0;
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
+					auto transform = glm::translate(playerObj->GetTransform(), pos);
+					glm::i32vec4 sphereHash = glm::i32vec4{glm::round(transform[3].x*20), glm::round(transform[3].y*20), glm::round(transform[3].z*20), glm::round(radius)};
+					static std::unordered_set<glm::i32vec4> existingSpheres {};
 					std::lock_guard lock(serverSideObjects->mutex);
-					// Dig in terrain
-					auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
-					digSphere->entityData = radius;
-					digSphere->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 4.0) * playerObj->GetTransform());
-					digSphere->isDynamic = false;
+					if (!existingSpheres.count(sphereHash)) {
+						existingSpheres.emplace(sphereHash);
+						// Dig in terrain
+						auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
+						digSphere->entityData = radius;
+						digSphere->SetTransform(transform);
+						digSphere->isDynamic = false;
+					}
 				}
 				else if (key == "balls") {
 					std::lock_guard lock(serverSideObjects->mutex);
@@ -157,6 +166,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
+						NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 						ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
@@ -168,6 +178,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch light
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Light);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
@@ -178,6 +189,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch drone
 					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					drone->isDynamic = false;
 					drone->physicsClientID = client->id;
@@ -186,12 +198,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto dir = stream->Read<DVector3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Glass);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					drone->isDynamic = false;
 					drone->physicsClientID = client->id;
 				}
 				else if (key == "clear") {
 					std::lock_guard lock(serverSideObjects->mutex);
+					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					for (auto& [objID, obj] : serverSideObjects->objects) if (obj->physicsClientID == client->id && obj->id != playerObj->id) {
 						obj->active = false;
 					}

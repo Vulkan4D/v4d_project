@@ -402,9 +402,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 10.0f);
 						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
 						ImGui::Separator();
-						ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
-						ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
-						ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
+						// ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
+						// ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
+						// ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
+						ImGui::SliderFloat("Terrain near detail resolution", &PlanetTerrain::targetVertexSeparationInMeters, 0.02f, 0.5f);
 					}
 					
 					ImGui::Separator();

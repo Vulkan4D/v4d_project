@@ -31,7 +31,7 @@ struct PlanetTerrain {
 	static const int chunkSubdivisionsPerFace = 5;
 	static const int vertexSubdivisionsPerChunk = 64; // low=64, high=128
 	static float chunkSubdivisionDistanceFactor; // low=0.5, normal=1.0, medium=1.5, high=4.0
-	static constexpr float targetVertexSeparationInMeters = 0.02f; // approximative vertex separation in meters for the most precise level of detail
+	static float targetVertexSeparationInMeters; // approximative vertex separation in meters for the most precise level of detail (minimum is 0.02 = 2 cm)
 	static constexpr double garbageCollectionInterval = 20; // seconds
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
@@ -153,7 +153,7 @@ struct PlanetTerrain {
 		}
 		
 		bool ShouldRemoveSubChunks() {
-			return distanceFromCamera > chunkSubdivisionDistanceFactor*chunkSize * 1.1;
+			return distanceFromCamera > chunkSubdivisionDistanceFactor*chunkSize * 1.1 || (triangleSize < targetVertexSeparationInMeters);
 		}
 		
 		void RefreshDistanceFromCamera() {
@@ -187,7 +187,7 @@ struct PlanetTerrain {
 			
 			centerPos = CubeToSphere::Spherify(center, face);
 			heightAtCenter = planet->GetHeightMap(centerPos, triangleSize);
-			centerPos = glm::round(centerPos * heightAtCenter * 10.0) / 10.0;
+			centerPos = glm::round(centerPos * heightAtCenter);
 			
 			topLeftPos = CubeToSphere::Spherify(topLeft, face);
 			topLeftPos *= planet->GetHeightMap(topLeftPos, triangleSize);
@@ -226,7 +226,7 @@ struct PlanetTerrain {
 		uint32_t bottomRightVertexIndex = (vertexSubdivisionsPerChunk+1) * vertexSubdivisionsPerChunk + vertexSubdivisionsPerChunk;
 		
 		std::string GetChunkId() const {
-			return std::string(aabb?"aabb_":"mesh_") + std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)glm::round(centerPos.x*10.0)) + "_" + std::to_string((int64_t)glm::round(centerPos.y*10.0)) + "_" + std::to_string((int64_t)glm::round(centerPos.z*10.0));
+			return std::string(aabb?"aabb_":"mesh_") + std::to_string((uint32_t)level) + "_" + std::to_string((int64_t)glm::round(centerPos.x)) + "_" + std::to_string((int64_t)glm::round(centerPos.y)) + "_" + std::to_string((int64_t)glm::round(centerPos.z));
 		}
 		
 		void Generate(Device* device) {
@@ -1358,3 +1358,4 @@ float PlanetTerrain::chunkSubdivisionDistanceFactor = 1.0;
 double (*PlanetTerrain::generatorFunction)(glm::dvec3* const) = nullptr;
 glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;
 bool PlanetTerrain::generateAabbChunks = false;
+float PlanetTerrain::targetVertexSeparationInMeters = 0.02;
