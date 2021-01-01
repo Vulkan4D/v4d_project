@@ -358,19 +358,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "default");
+				entity->Allocate(device, "V4D_raytracing:default");
 				CreateCornellBox(entity, device);
 			};
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "default");
+				entity->Allocate(device, "V4D_raytracing:default");
 				CreateCornellBox(entity, device);
 			};
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "default");
+				entity->Allocate(device, "V4D_raytracing:default");
 				CreateCornellBox(entity, device);
 			};
 			
@@ -379,7 +379,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {5,250,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
 				float radius = 2;
-				entity->Allocate(device, "aabb_sphere");
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere");
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{180,180,180,255}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetSphereCollider(radius);
@@ -389,7 +389,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-5,250,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "aabb_cube");
+				entity->Allocate(device, "V4D_raytracing:aabb_cube");
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-2), glm::vec3(2)}});
 				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{204,0,0,255}});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetBoxCollider(glm::vec3(2));
@@ -400,7 +400,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-500,1000}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
 				float radius = 200;
-				entity->Allocate(device, "aabb_sphere.light");
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
 				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{1000000000.0f,1000000000.0f,1000000000.0f,1000000000.0f}});
@@ -411,7 +411,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {10,-2000,11}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
 				float radius = 20;
-				entity->Allocate(device, "aabb_sphere.light");
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
 				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000000.0f,100000000.0f,100000000.0f,100000000.0f}});
@@ -422,7 +422,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {2,260,-30}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
 				float radius = 0.5f;
-				entity->Allocate(device, "aabb_sphere.light");
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
 				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 				entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{10000.0f,10000.0f,10000.0f,10000.0f}});
@@ -434,7 +434,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
 			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,0,-200}), glm::radians(0.0), {0,0,1}))
 			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "default");
+				entity->Allocate(device, "V4D_raytracing:default");
 				entity->Add_meshVertexPosition();
 				entity->Add_meshVertexNormal();
 				entity->Add_meshVertexColorU8();
@@ -472,10 +472,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Player:{
-				// auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
-				// obj->renderableGeometryEntityInstance = entity;
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				obj->renderableGeometryEntityInstance = entity;
 				// entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-				// 	entity->Allocate(device, "aabb_cube");
+				// 	entity->Allocate(device, "V4D_raytracing:aabb_cube");
 				// 	entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-0.5), glm::vec3(0.5)}});
 				// 	entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{0,255,127, 255}});
 				// };
@@ -486,7 +486,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
@@ -497,9 +497,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere.glass");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,1}});
 				};
 			}break;
 			case OBJECT_TYPE::Light:{
@@ -508,7 +508,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere.light");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
 					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});

@@ -297,7 +297,7 @@ struct PlanetTerrain {
 			
 			if (aabb) {
 				
-				entity->Allocate(device, "V4D_planetdemo.planet_terrain.aabb");
+				entity->Allocate(device, "V4D_planetdemo:planet.terrain.aabb");
 				entity->rayTracingMask = 0;
 				// entity->Add_physics();
 				auto buffersWriteLock = entity->GetBuffersWriteLock();
@@ -507,7 +507,7 @@ struct PlanetTerrain {
 				}
 				
 			} else {
-				entity->Allocate(device, "V4D_planetdemo.planet_terrain");
+				entity->Allocate(device, "V4D_planetdemo:planet.terrain");
 				entity->rayTracingMask = 0;
 				entity->Add_physics();
 				auto buffersWriteLock = entity->GetBuffersWriteLock();

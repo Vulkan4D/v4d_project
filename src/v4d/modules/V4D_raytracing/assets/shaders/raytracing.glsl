@@ -16,7 +16,7 @@ layout(set = 1, binding = 2) buffer writeonly RayCast {
 	vec4 localSpaceHitSurfaceNormal; // w component is unused
 } rayCast;
 
-layout(location = 0) rayPayloadEXT RayTracingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadEXT RayTracingPayload ray;
 layout(location = 1) rayPayloadEXT bool shadowed;
 
 #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
@@ -45,7 +45,7 @@ void main() {
 	// Trace Primary Ray
 	InitRayPayload(ray);
 	do {
-		traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+		traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
 	} while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 	
 	// Store raycast info
@@ -121,13 +121,13 @@ void main() {
 					reflectionStrength = 0.95;
 					reflectionDirection = reflect(rayDirection, -rayNormal);
 				}
+				opacity = min(1, opacity + max(0.01, ray.opacity));
 				if (refraction) {
 					rayOrigin = ray.position - rayNormal /* ray.nextRayStartOffset*/;
 					rayDirection = refractionDirection;
 					rayMinDistance = float(camera.znear);
 					rayMaxDistance = float(camera.zfar);
 					rayMask = 0xff;
-					opacity = min(1, opacity + max(0.01, ray.opacity));
 				} else if (reflection) {
 					rayOrigin = ray.position;
 					rayDirection = reflectionDirection;
@@ -137,7 +137,7 @@ void main() {
 				} else break;
 				
 				do {
-					traceRayEXT(topLevelAS, 0, rayMask, 0, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, 0);
+					traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
 				} while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 				vec3 color;
 				if (ray.distance == 0) {

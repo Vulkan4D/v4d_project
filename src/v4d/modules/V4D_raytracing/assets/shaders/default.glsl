@@ -3,7 +3,7 @@
 
 
 #############################################################
-#shader rchit
+#shader rendering.rchit
 
 hitAttributeEXT vec3 hitAttribs;
 
@@ -51,17 +51,17 @@ void main() {
 	WriteRayPayload(ray);
 	
 	// BaseColor
-	ray.albedo = vec3(material.baseColor.rgb) / 255.0;
+	vec4 color = vec4(material.baseColor) / 255.0;
 	if (HasVertexColor()) {
-		ray.albedo *= 
-			+ GetVertexColor(i0).rgb * barycentricCoords.x
-			+ GetVertexColor(i1).rgb * barycentricCoords.y
-			+ GetVertexColor(i2).rgb * barycentricCoords.z
+		color *= 
+			+ GetVertexColor(i0) * barycentricCoords.x
+			+ GetVertexColor(i1) * barycentricCoords.y
+			+ GetVertexColor(i2) * barycentricCoords.z
 		;
 	}
+	ray.albedo = color.rgb;
+	ray.opacity = color.a;
 	
-	// Glass
-	ray.opacity = float(material.baseColor.a) / 255.0;
 	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
 	
 	// Emission
@@ -95,3 +95,21 @@ void main() {
 	// Normal
 	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
 }
+
+
+#############################################################
+#shader rendering.rahit
+
+void main(){}
+
+
+#############################################################
+#shader depth.rchit
+
+void main(){}
+
+
+#############################################################
+#shader spectral.rchit
+
+void main(){}

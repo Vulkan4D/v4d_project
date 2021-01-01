@@ -40,7 +40,7 @@ float terrainNegationSphereRadiusPower = 1;
 struct TerrainDigSphere {
 	float radius;
 	void operator() (RenderableGeometryEntity* entity, Device* device){
-		entity->Allocate(device, "V4D_galaxy4d.terrain.dig.sphere");
+		entity->Allocate(device, "V4D_galaxy4d:terrain.dig.sphere");
 		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 	}
 };
@@ -295,9 +295,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	#pragma region Rendering
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
-		Renderer::sbtOffsets["hit:V4D_galaxy4d.terrain.dig.sphere"] = sbt_raytracing->AddHitShader("modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rchit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rahit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rint");
-		Renderer::sbtOffsets["hit:V4D_galaxy4d.terrain.dig.sphere.1"] = sbt_raytracing->AddHitShader("modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.1.rchit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.1.rahit", "modules/V4D_galaxy4d/assets/shaders/terrain.dig.sphere.rint");
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "terrain.dig.sphere");
 	}
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
@@ -341,7 +339,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere");
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
 				};
@@ -352,9 +350,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere.glass");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material.indexOfRefraction = 1.01 * 50;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{255,255,255,1}});
 				};
 			}break;
 			case OBJECT_TYPE::TerrainDigSphere:{
@@ -371,7 +369,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "aabb_sphere.light");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
 					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
 					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
@@ -388,8 +386,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->renderableGeometryEntityInstance = entity;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "glass");
-					entity->rayTracingMask = RAY_TRACED_ENTITY_TRANSPARENT;
+					entity->Allocate(device, "V4D_raytracing:default")->material.indexOfRefraction = 1.01 * 50;
 					entity->Add_meshVertexPosition()->AllocateBuffers(device, {
 						{-2.0,-2.0, 0.0},
 						{ 2.0,-2.0, 0.0},
@@ -403,10 +400,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						{ 0.0, 0.0, 1.0},
 					});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
+						{255, 255, 255, 1},
+						{255, 255, 255, 1},
+						{255, 255, 255, 1},
+						{255, 255, 255, 1},
 					});
 					entity->Add_meshIndices16()->AllocateBuffers(device, {
 						0, 1, 2, 2, 3, 0,

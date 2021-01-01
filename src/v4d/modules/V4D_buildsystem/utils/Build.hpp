@@ -27,7 +27,7 @@ public:
 			entity->Add_physics(v4d::scene::PhysicsInfo::RigidBodyType::STATIC, 1.0f);
 			entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
 				std::lock_guard lock(blocksMutex);
-				entity->Allocate(device, "V4D_buildsystem.block");
+				entity->Allocate(device, "V4D_buildsystem:block");
 				
 				std::vector<Mesh::Index32> meshIndices (Block::MAX_INDICES * blocks.size());
 				std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES * blocks.size());

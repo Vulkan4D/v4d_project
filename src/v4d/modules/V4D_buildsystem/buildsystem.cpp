@@ -258,11 +258,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		auto* shaderBindingTable = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
-		
 		// Blocks
-		Renderer::sbtOffsets["hit:V4D_buildsystem.block"] = 
-			shaderBindingTable->AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/blocks.rchit"));
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "block");
 		
 		// Crosshair
 		crosshairShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;

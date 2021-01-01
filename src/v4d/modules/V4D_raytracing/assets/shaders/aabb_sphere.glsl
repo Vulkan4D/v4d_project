@@ -3,7 +3,7 @@
 
 
 #############################################################
-#shader rint
+#common .*rint
 
 hitAttributeEXT vec4 sphereAttr; // center position and thickness
 
@@ -36,9 +36,11 @@ void main() {
 	}
 }
 
+#shader rint
+#shader light.rint
 
 #############################################################
-#shader rchit
+#shader rendering.rchit
 
 hitAttributeEXT vec4 sphereAttr;
 
@@ -47,8 +49,15 @@ layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
+	vec4 color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) : vec4(0,0,0,1);
+	
+	// Material
+	Material material = GetGeometry().material;
+	
 	WriteRayPayload(ray);
-	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
+	ray.albedo = color.rgb;
+	ray.opacity = color.a;
+	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
 	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
 	ray.metallic = 0.8;
 	ray.roughness = 0.1;
@@ -56,28 +65,7 @@ void main() {
 
 
 #############################################################
-#shader glass.rchit
-
-hitAttributeEXT vec4 sphereAttr;
-
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
-
-void main() {
-	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	
-	WriteRayPayload(ray);
-	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
-	ray.metallic = 0.0;
-	ray.roughness = 0.0;
-	ray.opacity = 0.001;
-	ray.indexOfRefraction = 1.1;
-	// ray.nextRayStartOffset = sphereAttr.w;
-}
-
-
-#############################################################
-#shader light.rchit
+#shader light.rendering.rchit
 
 hitAttributeEXT vec4 sphereAttr;
 

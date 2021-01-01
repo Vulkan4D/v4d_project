@@ -27,7 +27,7 @@ void main() {
 
 
 #############################################################
-#shader rchit
+#shader rendering.rchit
 
 hitAttributeEXT vec3 aabbGeomLocalPositionAttr;
 
@@ -49,8 +49,11 @@ void main() {
 			)
 	);
 	
+	vec4 color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) : vec4(0,0,0,1);
+	
 	WriteRayPayload(ray);
-	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
+	ray.albedo = color.rgb;
+	ray.opacity = color.a;
 	ray.normal = normal;
 	ray.metallic = 0.5;
 	ray.roughness = 0.1;

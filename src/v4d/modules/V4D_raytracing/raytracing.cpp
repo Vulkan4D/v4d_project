@@ -14,7 +14,7 @@ using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Limits
-	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 160 bytes each
+	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 96 bytes each
 #pragma endregion
 
 // Application
@@ -48,7 +48,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Descriptor Sets
 	DescriptorSet set0;
 	DescriptorSet set1_raster;
-	DescriptorSet set1_raytracing;
+	DescriptorSet set1_rendering;
 	DescriptorSet set1_post;
 	DescriptorSet set1_thumbnail;
 	DescriptorSet set1_histogram;
@@ -74,7 +74,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Pipeline Layouts
 	PipelineLayout pl_raster;
 	PipelineLayout pl_fog_raster;
-	PipelineLayout pl_raytracing;
+	PipelineLayout pl_rendering;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
 	PipelineLayout pl_thumbnail;
@@ -84,7 +84,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Shaders
 
 	// Ray Tracing
-	ShaderBindingTable sbt_raytracing {pl_raytracing, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rgen")};
+	ShaderBindingTable sbt_rendering {pl_rendering, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rgen")};
 
 	// Transparent/Fog
 	RasterShaderPipeline shader_transparent {pl_raster, {
@@ -154,7 +154,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
 		{"pl_raster", &pl_raster},
 		{"pl_fog_raster", &pl_fog_raster},
-		{"pl_raytracing", &pl_raytracing},
+		{"pl_rendering", &pl_rendering},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
 		{"pl_thumbnail", &pl_thumbnail},
@@ -171,7 +171,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
-		{"sbt_raytracing", &sbt_raytracing},
+		{"sbt_rendering", &sbt_rendering},
 	};
 	// FrameBuffers
 	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
@@ -307,51 +307,124 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void CreateRayTracingPipeline() {
-		sbt_raytracing.CreateRayTracingPipeline(r->renderingDevice);
-		rayTracingShaderBindingTableBuffer.size = sbt_raytracing.GetSbtBufferSize(rayTracingPipelineProperties);
+		sbt_rendering.CreateRayTracingPipeline(r->renderingDevice);
+		rayTracingShaderBindingTableBuffer.size = sbt_rendering.GetSbtBufferSize(rayTracingPipelineProperties);
 		rayTracingShaderBindingTableBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
-		sbt_raytracing.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer, 0, rayTracingPipelineProperties);
+		sbt_rendering.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer, 0, rayTracingPipelineProperties);
 	}
 	void DestroyRayTracingPipeline() {
 		rayTracingShaderBindingTableBuffer.Free(r->renderingDevice);
-		sbt_raytracing.DestroyRayTracingPipeline(r->renderingDevice);
+		sbt_rendering.DestroyRayTracingPipeline(r->renderingDevice);
 	}
-	
+		
+	void AddRayTracingShader (v4d::modular::ModuleID mod, const std::string& name) {
+		std::string path = V4D_MODULE_ASSET_PATH_STR(mod.String(), "shaders/" + name);
+		
+		std::string rint { path + ".rint" };
+		
+		std::string rendering_rchit { path + ".rendering.rchit" };
+		std::string rendering_rahit { path + ".rendering.rahit" };
+		std::string rendering_rint { path + ".rendering.rint" };
+		
+		std::string depth_rchit { path + ".depth.rchit" };
+		std::string depth_rahit { path + ".depth.rahit" };
+		std::string depth_rint { path + ".depth.rint" };
+		
+		std::string spectral_rchit { path + ".spectral.rchit" };
+		std::string spectral_rahit { path + ".spectral.rahit" };
+		std::string spectral_rint { path + ".spectral.rint" };
+		
+		std::string extra_rchit { path + ".extra.rchit" };
+		std::string extra_rahit { path + ".extra.rahit" };
+		std::string extra_rint { path + ".extra.rint" };
+		
+		if (!v4d::io::FilePath::FileExists(rint)) {
+			rint = "";
+		}
+		
+		if (!v4d::io::FilePath::FileExists(rendering_rchit)) {
+			rendering_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rendering.rchit");
+		}
+		if (!v4d::io::FilePath::FileExists(rendering_rahit)) {
+			rendering_rahit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rendering.rahit");
+		}
+		if (!v4d::io::FilePath::FileExists(rendering_rint)) {
+			rendering_rint = rint;
+		}
+		
+		if (!v4d::io::FilePath::FileExists(depth_rchit)) {
+			depth_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.depth.rchit");
+		}
+		if (!v4d::io::FilePath::FileExists(depth_rahit)) {
+			depth_rahit = "";
+		}
+		if (!v4d::io::FilePath::FileExists(depth_rint)) {
+			depth_rint = rint;
+		}
+		
+		if (!v4d::io::FilePath::FileExists(spectral_rchit)) {
+			spectral_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.spectral.rchit");
+		}
+		if (!v4d::io::FilePath::FileExists(spectral_rahit)) {
+			spectral_rahit = "";
+		}
+		if (!v4d::io::FilePath::FileExists(spectral_rint)) {
+			spectral_rint = rint;
+		}
+		
+		if (!v4d::io::FilePath::FileExists(extra_rchit)) {
+			extra_rchit = "";
+		}
+		if (!v4d::io::FilePath::FileExists(extra_rahit)) {
+			extra_rahit = "";
+		}
+		if (!v4d::io::FilePath::FileExists(extra_rint)) {
+			extra_rint = rint;
+		}
+		
+		// Rendering
+		Renderer::sbtOffsets[std::string("rendering:hit:") + mod.String() + ":" + name] = 
+		/* offset / payload location 0 */ sbt_rendering.AddHitShader(rendering_rchit, rendering_rahit, rendering_rint);
+		/* offset / payload location 1 */ sbt_rendering.AddHitShader(depth_rchit, depth_rahit, depth_rint);
+		/* offset / payload location 2 */ sbt_rendering.AddHitShader(spectral_rchit, spectral_rahit, spectral_rint);
+		/* offset / payload location 3 */ sbt_rendering.AddHitShader(extra_rchit, extra_rahit, extra_rint);
+		
+		//...
+	}
+
 	void ConfigureRayTracingShaders() {
 		// Ray Miss shaders
-		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
-		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
-		sbt_raytracing.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.void.rmiss"));
+		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
+		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
+		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.void.rmiss"));
 		
-		// Ray Hit shaders
-		Renderer::sbtOffsets["hit:default"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rchit"));
-		Renderer::sbtOffsets["hit:glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/glass.rchit"));
-		Renderer::sbtOffsets["hit:aabb_cube"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_cube.rint"));
-		Renderer::sbtOffsets["hit:aabb_sphere"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
-		Renderer::sbtOffsets["hit:aabb_sphere.glass"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.glass.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
-		Renderer::sbtOffsets["hit:aabb_sphere.light"] = sbt_raytracing.AddHitShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.light.rchit"), "", V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/aabb_sphere.rint"));
+		// Ray Hit default shaders
+		AddRayTracingShader(THIS_MODULE, "default");
+		AddRayTracingShader(THIS_MODULE, "aabb_cube");
+		AddRayTracingShader(THIS_MODULE, "aabb_sphere");
+		AddRayTracingShader(THIS_MODULE, "aabb_sphere.light");
 		
 		// Callable shaders
-		Renderer::sbtOffsets["call:tex_noisy"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
-		Renderer::sbtOffsets["call:tex_grainy"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
-		Renderer::sbtOffsets["call:tex_bumped"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));
-		Renderer::sbtOffsets["call:tex_brushed"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_brushed.rcall"));
-		Renderer::sbtOffsets["call:tex_hammered"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_hammered.rcall"));
-		Renderer::sbtOffsets["call:tex_polished"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_polished.rcall"));
-		Renderer::sbtOffsets["call:tex_galvanized"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_galvanized.rcall"));
-		Renderer::sbtOffsets["call:tex_perforated"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_perforated.rcall"));
-		Renderer::sbtOffsets["call:tex_diamond"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_diamond.rcall"));
-		Renderer::sbtOffsets["call:tex_carbon_fiber"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_carbon_fiber.rcall"));
-		Renderer::sbtOffsets["call:tex_ceramic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_ceramic.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_iron"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_iron.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_copper"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_copper.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_aluminum"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_aluminum.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_silver"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_silver.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_metal"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_metal.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_plastic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_plastic.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_glass"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_glass.rcall"));
-		Renderer::sbtOffsets["call:tex_cracked_rubber"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_rubber.rcall"));
-		Renderer::sbtOffsets["call:tex_cracked_ceramic"] = sbt_raytracing.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_ceramic.rcall"));
+		Renderer::sbtOffsets["call:tex_noisy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
+		Renderer::sbtOffsets["call:tex_grainy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
+		Renderer::sbtOffsets["call:tex_bumped"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));
+		Renderer::sbtOffsets["call:tex_brushed"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_brushed.rcall"));
+		Renderer::sbtOffsets["call:tex_hammered"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_hammered.rcall"));
+		Renderer::sbtOffsets["call:tex_polished"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_polished.rcall"));
+		Renderer::sbtOffsets["call:tex_galvanized"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_galvanized.rcall"));
+		Renderer::sbtOffsets["call:tex_perforated"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_perforated.rcall"));
+		Renderer::sbtOffsets["call:tex_diamond"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_diamond.rcall"));
+		Renderer::sbtOffsets["call:tex_carbon_fiber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_carbon_fiber.rcall"));
+		Renderer::sbtOffsets["call:tex_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_ceramic.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_iron"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_iron.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_copper"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_copper.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_aluminum"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_aluminum.rcall"));
+		Renderer::sbtOffsets["call:tex_oxydation_silver"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_silver.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_metal"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_metal.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_plastic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_plastic.rcall"));
+		Renderer::sbtOffsets["call:tex_scratches_glass"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_glass.rcall"));
+		Renderer::sbtOffsets["call:tex_cracked_rubber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_rubber.rcall"));
+		Renderer::sbtOffsets["call:tex_cracked_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_ceramic.rcall"));
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -359,14 +432,14 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		int width = (int)((float)r->swapChain->extent.width);
 		int height = (int)((float)r->swapChain->extent.height);
 		
-		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_raytracing.GetPipeline());
-		sbt_raytracing.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_rendering.GetPipeline());
+		sbt_rendering.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
 			commandBuffer, 
-			sbt_raytracing.GetRayGenDeviceAddressRegion(),
-			sbt_raytracing.GetRayMissDeviceAddressRegion(),
-			sbt_raytracing.GetRayHitDeviceAddressRegion(),
-			sbt_raytracing.GetRayCallableDeviceAddressRegion(),
+			sbt_rendering.GetRayGenDeviceAddressRegion(),
+			sbt_rendering.GetRayMissDeviceAddressRegion(),
+			sbt_rendering.GetRayHitDeviceAddressRegion(),
+			sbt_rendering.GetRayCallableDeviceAddressRegion(),
 			width, height, 1
 		);
 	}
@@ -1055,7 +1128,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				if (!entity->generated) {
 					// Generate/Load
 					if (entity->Generate(r->renderingDevice)) {
-						if (entity->sbtOffset == Renderer::sbtOffsets["hit:default"]) {
+						if (entity->sbtOffset == 0) {
 							if (auto geometriesData = entity->meshGeometries.Lock(); geometriesData && geometriesData->data) {
 								int i = 0;
 								for (RenderableGeometryEntity::Geometry& geom : entity->sharedGeometryData->geometries) if (geom.materialName != "") {
@@ -1307,6 +1380,8 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 
 #pragma endregion
 
+
+
 ///////////////////////////////////////////////////////////
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -1440,10 +1515,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 		}
 		
-		{r->descriptorSets["set1_raytracing"] = &set1_raytracing;
-			set1_raytracing.AddBinding_imageView(0, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_raytracing.AddBinding_imageView(1, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_raytracing.AddBinding_storageBuffer(2, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+		{r->descriptorSets["set1_rendering"] = &set1_rendering;
+			set1_rendering.AddBinding_imageView(0, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(1, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_storageBuffer(2, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_raster"] = &set1_raster;
@@ -1478,7 +1553,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				layout->AddDescriptorSet(&set0);
 			}
 			// Add specific set 1 to specific layout lists
-			pipelineLayouts["pl_raytracing"]->AddDescriptorSet(&set1_raytracing);
+			pipelineLayouts["pl_rendering"]->AddDescriptorSet(&set1_rendering);
 			pipelineLayouts["pl_raster"]->AddDescriptorSet(&set1_raster);
 			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_raster);
 			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
@@ -1486,6 +1561,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
 			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
 		}
+	}
+	
+	V4D_MODULE_FUNC(void, AddRayTracingHitShader, v4d::modular::ModuleID mod, const std::string& name) {
+		AddRayTracingShader(mod, name);
 	}
 	
 	#pragma region Load/Upload Renderer

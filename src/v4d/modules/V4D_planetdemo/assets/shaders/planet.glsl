@@ -41,7 +41,7 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
-#common terrain.*comp|terrain.rchit
+#common terrain.*comp|terrain.rendering.rchit
 
 layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 
@@ -82,7 +82,7 @@ void main() {
 }
 
 #############################################################
-#shader terrain.rchit
+#shader terrain.rendering.rchit
 
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
@@ -191,7 +191,7 @@ void main() {
 
 
 #############################################################
-#shader terrain.aabb.rchit
+#shader terrain.aabb.rendering.rchit
 
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"

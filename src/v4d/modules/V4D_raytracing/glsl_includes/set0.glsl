@@ -250,6 +250,16 @@ bool Refraction = (camera.renderOptions & RENDER_OPTION_REFRACTION)!=0 && (camer
 #ifdef RAY_TRACING
 
 	#define RAY_PAYLOAD_MAX_IGNORED_INSTANCES 16
+	
+	#define RAY_PAYLOAD_LOCATION_RENDERING 0
+	#define RAY_PAYLOAD_LOCATION_DEPTH 1
+	#define RAY_PAYLOAD_LOCATION_SPECTRAL 2
+	#define RAY_PAYLOAD_LOCATION_EXTRA 3
+	
+	#define RAY_SBT_OFFSET_RENDERING 0
+	#define RAY_SBT_OFFSET_DEPTH 1
+	#define RAY_SBT_OFFSET_SPECTRAL 2
+	#define RAY_SBT_OFFSET_EXTRA 3
 
 	struct RayTracingPayload {
 		// mandatory

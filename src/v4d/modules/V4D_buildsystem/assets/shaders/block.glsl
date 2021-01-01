@@ -53,7 +53,7 @@ vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNor
 
 
 #############################################################
-#shader rchit
+#shader rendering.rchit
 
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer CustomData {
 	uint packed[];

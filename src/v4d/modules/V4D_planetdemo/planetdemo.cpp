@@ -134,8 +134,8 @@ namespace TerrainGeneratorLib {
 PipelineLayout planetsMapGenLayout;
 
 ComputeShaderPipeline 
-	bumpMapsAltitudeGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.altitude.map.comp"},
-	bumpMapsNormalsGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planets.bump.normals.map.comp"}
+	bumpMapsAltitudeGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planet.bump.altitude.map.comp"},
+	bumpMapsNormalsGen{planetsMapGenLayout, "modules/V4D_planetdemo/assets/shaders/planet.bump.normals.map.comp"}
 ;
 
 struct MapGenPushConstant {
@@ -474,7 +474,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
-		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_raytracing");
+		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_rendering");
 		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
@@ -498,10 +498,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		auto* sbt_raytracing = mainRenderModule->GetShaderBindingTable("sbt_raytracing");
-		
-		Renderer::sbtOffsets["hit:V4D_planetdemo.planet_terrain"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.rchit");
-		Renderer::sbtOffsets["hit:V4D_planetdemo.planet_terrain.aabb"] = sbt_raytracing->AddHitShader("modules/V4D_planetdemo/assets/shaders/planets.terrain.aabb.rchit", "", "modules/V4D_planetdemo/assets/shaders/planets.terrain.aabb.rint");
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "planet.terrain");
 		
 		// Atmosphere
 		if (planetAtmosphereShader) {
