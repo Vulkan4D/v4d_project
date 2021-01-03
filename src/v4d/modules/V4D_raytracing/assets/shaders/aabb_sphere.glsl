@@ -44,23 +44,28 @@ void main() {
 
 hitAttributeEXT vec4 sphereAttr;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = 0) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
 	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 	
 	vec4 color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) : vec4(0,0,0,1);
 	
-	// Material
-	Material material = GetGeometry().material;
-	
 	WriteRayPayload(ray);
-	ray.albedo = color.rgb;
-	ray.opacity = color.a;
-	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
-	ray.normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
-	ray.metallic = 0.8;
-	ray.roughness = 0.1;
+	ray.color = color;
+	float metallic = 0.8;
+	float roughness = 0.1;
+	vec3 normal = DoubleSidedNormals(normalize(hitPoint - sphereAttr.xyz));
+	if (metallic > 0) {
+		ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+		ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+	} else if (color.a < 1) {
+		ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+	} else {
+		ScatterLambertian(ray, roughness, normal);
+	}
+	
+	DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
 }
 
 
@@ -69,15 +74,11 @@ void main() {
 
 hitAttributeEXT vec4 sphereAttr;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = 0) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
-	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	
 	WriteRayPayload(ray);
-	ray.albedo = vec3(0);
-	ray.normal = normalize(hitPoint - sphereAttr.xyz);
-	ray.emission = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.metallic = 0.0;
-	ray.roughness = 0.0;
+	ray.color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) * GetGeometry().material.emission : vec4(0);
+	
+	DebugRay(ray, ray.color.rgb, vec3(0), GetGeometry().material.emission, 0, 0);
 }

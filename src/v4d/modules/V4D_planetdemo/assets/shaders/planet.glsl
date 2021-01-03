@@ -98,7 +98,7 @@ vec4 GetBumpMap(vec2 uv) {
 
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
 	uint i0 = GetIndex(0);
@@ -134,13 +134,14 @@ void main() {
 	mat3 TBN = mat3(tangentX, tangentY, viewSpaceNormal); // viewSpace TBN
 	vec4 bump = GetBumpMap(uv);
 	normal = normalize(TBN * bump.xyz);
+	float roughness = 0.7;
 	
 	WriteRayPayload(ray);
-	ray.albedo = color.rgb;
-	ray.normal = normal;
-	ray.metallic = 0;
-	ray.rim = vec4(1,1,1, 0.1);
-	ray.roughness = 0.7;
+	ray.color = color;
+	ScatterLambertian(ray, roughness, normal);
+	
+	
+	DebugRay(ray, color.rgb, normal, 0, 0, 0);
 }
 
 
@@ -148,68 +149,10 @@ void main() {
 #############################################################
 #shader terrain.aabb.rint
 
-#define RAY_TRACING
-#include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
-
-hitAttributeEXT vec4 aabbGeomLocalPositionAttr; // local position, radius
-
-void main() {
-	// vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
-	// vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
-	// aabbGeomLocalPositionAttr = vec4((aabb_max + aabb_min)/2, length(aabb_max - aabb_min)/2);
-	// reportIntersectionEXT(length(gl_ObjectRayOriginEXT - aabbGeomLocalPositionAttr.xyz), 0);
-	
-	
-	
-	vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
-	vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
-	vec3 spherePosition = (GetModelViewMatrix() * vec4((aabb_max + aabb_min)/2, 1)).xyz;
-	float sphereRadius = length(aabb_max - aabb_min)/2;
-	
-	const vec3 origin = gl_WorldRayOriginEXT;
-	const vec3 direction = gl_WorldRayDirectionEXT;
-	const float tMin = gl_RayTminEXT;
-	const float tMax = gl_RayTmaxEXT;
-
-	const vec3 oc = origin - spherePosition;
-	const float a = dot(direction, direction);
-	const float b = dot(oc, direction);
-	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
-	const float discriminant = b * b - a * c;
-
-	if (discriminant >= 0) {
-		const float discriminantSqrt = sqrt(discriminant);
-		const float t1 = (-b - discriminantSqrt) / a;
-		const float t2 = (-b + discriminantSqrt) / a;
-
-		if ((tMin <= t1 && t1 < tMax) || (tMin <= t2 && t2 < tMax)) {
-			aabbGeomLocalPositionAttr = vec4(spherePosition, sphereRadius);
-			reportIntersectionEXT((tMin <= t1 && t1 < tMax) ? t1 : t2, 0);
-		}
-	}
-}
+void main() {}
 
 
 #############################################################
 #shader terrain.aabb.rendering.rchit
 
-#define RAY_TRACING
-#include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
-
-hitAttributeEXT vec4 aabbGeomLocalPositionAttr;
-
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
-
-void main() {
-	vec3 hitPoint = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
-	
-	WriteRayPayload(ray);
-	vec3 normal = GetVertexNormal(gl_PrimitiveID);
-	ray.albedo = HasVertexColor()? GetVertexColor(gl_PrimitiveID).rgb : vec3(0);
-	ray.normal = normalize(GetModelNormalViewMatrix() * normal);
-	// ray.normal = DoubleSidedNormals(normalize(hitPoint - aabbGeomLocalPositionAttr.xyz));
-	ray.position += ray.normal * aabbGeomLocalPositionAttr.w;
-	ray.distance = length(ray.position);
-	ray.metallic = 0;
-	ray.roughness = 0.01;
-}
+void main() {}

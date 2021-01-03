@@ -5,8 +5,6 @@
 #define RENDER_OPTION_GAMMA_CORRECTION 1<< 1
 #define RENDER_OPTION_HDR_TONE_MAPPING 1<< 2
 #define RENDER_OPTION_HARD_SHADOWS 1<< 3
-#define RENDER_OPTION_REFLECTIONS 1<< 4
-#define RENDER_OPTION_REFRACTION 1<< 5
 
 // maximum of 32 debug options
 #define DEBUG_OPTION_WIREFRAME 1<< 0
@@ -25,7 +23,7 @@
 #define RENDER_MODE_DISTANCE 6
 #define RENDER_MODE_METALLIC 7
 #define RENDER_MODE_ROUGNESS 8
-#define RENDER_MODE_REFRACTION 9
+#define RENDER_MODE_TIME 9
 #define RENDER_MODE_BOUNCES 10
 
 // C++ Only, within this module only
@@ -35,8 +33,6 @@ namespace RENDER_OPTIONS {
 	bool TXAA = true;
 	bool HDR_TONE_MAPPING = true;
 	bool GAMMA_CORRECTION = true;
-	bool REFLECTIONS = true;
-	bool REFRACTION = true;
 	
 	uint32_t Get() {
 		uint32_t flags = 0;
@@ -44,8 +40,6 @@ namespace RENDER_OPTIONS {
 		if (TXAA) flags |= RENDER_OPTION_TXAA;
 		if (HDR_TONE_MAPPING) flags |= RENDER_OPTION_HDR_TONE_MAPPING;
 		if (GAMMA_CORRECTION) flags |= RENDER_OPTION_GAMMA_CORRECTION;
-		if (REFLECTIONS) flags |= RENDER_OPTION_REFLECTIONS;
-		if (REFRACTION) flags |= RENDER_OPTION_REFRACTION;
 		return flags;
 	}
 }

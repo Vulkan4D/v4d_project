@@ -35,41 +35,43 @@ void main() {
 		vec4 history = texture(tex_img_history, uvHistory);
 		
 		if (length(history.rgb) > 0) {
-			vec3 nearColor0 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  0)).rgb;
-			vec3 nearColor1 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0,  1)).rgb;
-			vec3 nearColor2 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  0)).rgb;
-			vec3 nearColor3 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0, -1)).rgb;
-			// vec3 nearColor4 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  1)).rgb;
-			// vec3 nearColor5 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  1)).rgb;
-			// vec3 nearColor6 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1, -1)).rgb;
-			// vec3 nearColor7 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1, -1)).rgb;
-			
-			vec3 m1 = nearColor0
-					+ nearColor1
-					+ nearColor2
-					+ nearColor3
-					// + nearColor4
-					// + nearColor5
-					// + nearColor6
-					// + nearColor7
-			;
-			vec3 m2 = nearColor0*nearColor0
-					+ nearColor1*nearColor1 
-					+ nearColor2*nearColor2
-					+ nearColor3*nearColor3
-					// + nearColor4*nearColor4
-					// + nearColor5*nearColor5
-					// + nearColor6*nearColor6
-					// + nearColor7*nearColor7
-			;
+			if (true) {
+				vec3 nearColor0 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  0)).rgb;
+				vec3 nearColor1 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0,  1)).rgb;
+				vec3 nearColor2 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  0)).rgb;
+				vec3 nearColor3 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 0, -1)).rgb;
+				// vec3 nearColor4 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1,  1)).rgb;
+				// vec3 nearColor5 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1,  1)).rgb;
+				// vec3 nearColor6 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2( 1, -1)).rgb;
+				// vec3 nearColor7 = textureLodOffset(tex_img_lit, uvCurrent, 0.0, ivec2(-1, -1)).rgb;
+				
+				vec3 m1 = nearColor0
+						+ nearColor1
+						+ nearColor2
+						+ nearColor3
+						// + nearColor4
+						// + nearColor5
+						// + nearColor6
+						// + nearColor7
+				;
+				vec3 m2 = nearColor0*nearColor0
+						+ nearColor1*nearColor1 
+						+ nearColor2*nearColor2
+						+ nearColor3*nearColor3
+						// + nearColor4*nearColor4
+						// + nearColor5*nearColor5
+						// + nearColor6*nearColor6
+						// + nearColor7*nearColor7
+				;
 
-			vec3 mu = m1 / 4.0;
-			vec3 sigma = sqrt(m2 / 4.0 - mu * mu);
+				vec3 mu = m1 / 4.0;
+				vec3 sigma = sqrt(m2 / 4.0 - mu * mu);
 
-			float variance_clipping_gamma = 1.0;
-			vec3 boxMin = mu - variance_clipping_gamma * sigma;
-			vec3 boxMax = mu + variance_clipping_gamma * sigma;
-			history.rgb = clamp(history.rgb, boxMin, boxMax);
+				float variance_clipping_gamma = 4.0;
+				vec3 boxMin = mu - variance_clipping_gamma * sigma;
+				vec3 boxMax = mu + variance_clipping_gamma * sigma;
+				history.rgb = clamp(history.rgb, boxMin, boxMax);
+			}
 			
 			float factor = 1.0/8.0;
 			// if (depth == 1.0 || depth == 0.0) factor = 1.0;

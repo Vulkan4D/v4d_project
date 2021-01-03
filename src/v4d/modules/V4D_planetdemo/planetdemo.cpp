@@ -215,10 +215,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		r = _r;
 	}
 	
-	V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
-		r->deviceFeatures.shaderStorageImageWriteWithoutFormat = VK_TRUE;
-	}
-	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 		

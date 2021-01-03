@@ -61,7 +61,7 @@ layout(buffer_reference, std430, buffer_reference_align = 4) buffer CustomData {
 
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
 	uint i0 = GetIndex(0);
@@ -95,12 +95,21 @@ void main() {
 	vec3 blending = TriplanarBlending(normal);
 	normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending, gl_HitTEXT);
 	normal += TriplanarLocalNormalMap(tex_img_metalNormal, pos/200, normal, blending, gl_HitTEXT/100)/2;
-	normal = normalize(normal);
+	normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normalize(normal)));
 	
 	WriteRayPayload(ray);
-	ray.albedo = color.rgb;
-	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
-	ray.metallic = 0.7;
-	ray.roughness = 0.1;
+	ray.color = color;
+	float metallic = 0.7;
+	float roughness = 0.1;
+	if (metallic > 0) {
+		ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+		ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+	} else if (color.a < 1) {
+		ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+	} else {
+		ScatterLambertian(ray, roughness, normal);
+	}
 	ray.raycastCustomData = uint64_t(CustomData(GetCustomData()).packed[i0]);
+	
+	DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
 }

@@ -5,9 +5,12 @@
 #############################################################
 #shader rendering.rchit
 
+// #define DISABLE_SHADOWS
+// #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
+
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
 
 struct ProceduralTextureCall {
 	vec3 albedo;
@@ -59,41 +62,46 @@ void main() {
 			+ GetVertexColor(i2) * barycentricCoords.z
 		;
 	}
-	ray.albedo = color.rgb;
-	ray.opacity = color.a;
 	
-	ray.indexOfRefraction = float(material.indexOfRefraction) / 50.0;
+	float indexOfRefraction = float(material.indexOfRefraction) / 50.0;
 	
 	// Emission
 	if (material.emission > 0) {
-		ray.metallic = 0;
-		ray.roughness = 0;
-		ray.emission = ray.albedo * material.emission;
+		ray.color = vec4(color.rgb * material.emission, color.a);
 	} else {
-		// Rim
-		ray.rim = vec4(material.rim) / 255.0;
+		// // Rim
+		// vec4 rim = vec4(material.rim) / 255.0;
 		
 		// PBR Textures
-		tex.albedo = ray.albedo;
+		tex.albedo = color.rgb;
+		tex.opacity = color.a;
 		tex.normal = normal;
 		tex.metallic = float(material.metallic) / 255.0;
 		tex.roughness = float(material.roughness) / 255.0;
-		tex.opacity = ray.opacity;
 		tex.localHitPosition = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 		tex.distance = gl_HitTEXT; //TODO use total distance instead, from new ray payload param
 		for (int i = 0; i < 8; ++i) if (material.texFactors[i] > 0) {
 			tex.factor = material.texFactors[i];
 			executeCallableEXT(material.textures[i], 0);
 		}
-		ray.albedo = tex.albedo;
-		normal = tex.normal;
-		ray.metallic = tex.metallic;
-		ray.roughness = tex.roughness;
-		ray.opacity = tex.opacity;
+		color.rgb = tex.albedo.rgb;
+		color.a = tex.opacity;
+		float metallic = tex.metallic;
+		float roughness = tex.roughness;
+		normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * tex.normal));
+
+		ray.color = color;
+		if (metallic > 0) {
+			ray.color.a = 1.0 - FresnelReflectAmount(1.0, indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+			ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+		} else if (color.a < 1) {
+			ScatterDieletric(ray, indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+		} else {
+			ScatterLambertian(ray, roughness, normal);
+		}
 	}
 	
-	// Normal
-	ray.normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normal));
+	DebugRay(ray, color.rgb, normal, material.emission, tex.metallic, tex.roughness);
 }
 
 

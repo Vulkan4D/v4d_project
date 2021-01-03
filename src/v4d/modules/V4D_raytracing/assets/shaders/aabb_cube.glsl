@@ -31,7 +31,7 @@ void main() {
 
 hitAttributeEXT vec3 aabbGeomLocalPositionAttr;
 
-layout(location = 0) rayPayloadInEXT RayTracingPayload ray;
+layout(location = 0) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
 	vec3 hitPointObj = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
@@ -52,9 +52,17 @@ void main() {
 	vec4 color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) : vec4(0,0,0,1);
 	
 	WriteRayPayload(ray);
-	ray.albedo = color.rgb;
-	ray.opacity = color.a;
-	ray.normal = normal;
-	ray.metallic = 0.5;
-	ray.roughness = 0.1;
+	ray.color = color;
+	float metallic = 0.5;
+	float roughness = 0.5;
+	if (metallic > 0) {
+		ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+		ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+	} else if (color.a < 1) {
+		ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+	} else {
+		ScatterLambertian(ray, roughness, normal);
+	}
+	
+	DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
 }

@@ -1427,9 +1427,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	#pragma region Graphics configuration / Init
 		
 		V4D_MODULE_FUNC(void, ScorePhysicalDeviceSelection, int& score, PhysicalDevice* physicalDevice) {
-			// Higher score for Ray Tracing support
-			if (physicalDevice->GetRayQueryFeatures().rayQuery) score += 1;
-			if (!physicalDevice->GetRayTracingPipelineFeatures().rayTracingPipeline) score *= 0;
+			score *= physicalDevice->deviceFeatures.rayTracingPipelineFeatures.rayTracingPipeline;
+			score *= physicalDevice->deviceFeatures.rayQueryFeatures.rayQuery;
 		}
 		
 		V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
@@ -1450,48 +1449,48 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			r->queuesInfo.emplace_back("secondary", VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 			
 			// Device Extensions
+			r->RequiredDeviceExtension(VK_KHR_SHADER_CLOCK_EXTENSION_NAME);
+			r->RequiredDeviceExtension(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
 				r->RequiredDeviceExtension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 				// RayTracing extensions
-				r->OptionalDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-				r->OptionalDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-				r->OptionalDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-				// Needed for RayTracing extensions
-				r->OptionalDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-				r->OptionalDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-				r->OptionalDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+				r->RequiredDeviceExtension(VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME);
 			}
 		}
 		
-		V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures) {
-			r->deviceFeatures.shaderFloat64 = VK_TRUE;
-			r->deviceFeatures.shaderInt64 = VK_TRUE;
-			r->deviceFeatures.shaderInt16 = VK_TRUE;
-			r->deviceFeatures.depthClamp = VK_TRUE;
-			r->deviceFeatures.fillModeNonSolid = VK_TRUE;
-			r->deviceFeatures.geometryShader = VK_TRUE;
-			r->deviceFeatures.wideLines = VK_TRUE;
+		V4D_MODULE_FUNC(void, InitVulkanDeviceFeatures, v4d::graphics::vulkan::PhysicalDevice::DeviceFeatures* deviceFeaturesToEnable, const v4d::graphics::vulkan::PhysicalDevice::DeviceFeatures* supportedDeviceFeatures) {
+			deviceFeaturesToEnable->deviceFeatures2.features.shaderFloat64 = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.shaderInt64 = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.shaderInt16 = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.depthClamp = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.fillModeNonSolid = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.geometryShader = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.wideLines = VK_TRUE;
+			
+			deviceFeaturesToEnable->shaderClockFeatures.shaderDeviceClock = VK_TRUE;
+			deviceFeaturesToEnable->_16bitStorageFeatures.storageBuffer16BitAccess = VK_TRUE;
 			
 			// Vulkan 1.2
 			if (Loader::VULKAN_API_VERSION >= VK_API_VERSION_1_2) {
-				r->EnableVulkan12DeviceFeatures()->bufferDeviceAddress = VK_TRUE;
-				r->EnableVulkan12DeviceFeatures()->shaderFloat16 = VK_TRUE;
-				r->EnableVulkan12DeviceFeatures()->shaderInt8 = VK_TRUE;
-				r->EnableVulkan12DeviceFeatures()->descriptorIndexing = VK_TRUE;
-				r->EnableVulkan12DeviceFeatures()->storageBuffer8BitAccess = VK_TRUE;
-				r->EnableAccelerationStructureFeatures()->accelerationStructure = VK_TRUE;
-				r->EnableAccelerationStructureFeatures()->descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
-				r->EnableRayTracingPipelineFeatures()->rayTracingPipeline = VK_TRUE;
-				r->EnableRayTracingPipelineFeatures()->rayTracingPipelineTraceRaysIndirect = VK_TRUE;
-				r->EnableRayQueryFeatures()->rayQuery = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.bufferDeviceAddress = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.shaderFloat16 = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.shaderInt8 = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.descriptorIndexing = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.storageBuffer8BitAccess = VK_TRUE;
+				deviceFeaturesToEnable->accelerationStructureFeatures.accelerationStructure = VK_TRUE;
+				deviceFeaturesToEnable->accelerationStructureFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
+				deviceFeaturesToEnable->rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+				deviceFeaturesToEnable->rayTracingPipelineFeatures.rayTracingPipelineTraceRaysIndirect = VK_TRUE;
+				deviceFeaturesToEnable->rayQueryFeatures.rayQuery = VK_TRUE;
 			}
 		}
 		
 		V4D_MODULE_FUNC(void, ConfigureRenderer) {
-			if (!r->rayTracingPipelineFeatures.rayTracingPipeline) {
-				throw std::runtime_error("Ray-tracing not supported");
-			}
-			LOG_SUCCESS("Ray-Tracing Supported")
 			// Query the ray tracing properties of the current implementation
 			accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
 			rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
@@ -2028,7 +2027,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						"DISTANCE",
 						"METALLIC",
 						"ROUGNESS",
-						"REFRACTION",
+						"TIME",
 						"BOUNCES",
 					};
 					static const char* currentItem = "STANDARD";
@@ -2061,11 +2060,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 			// #endif
-			if (scene->camera.renderMode == RENDER_MODE_STANDARD || scene->camera.renderMode == RENDER_MODE_BOUNCES) {
+			if (scene->camera.renderMode == RENDER_MODE_STANDARD || scene->camera.renderMode == RENDER_MODE_BOUNCES || scene->camera.renderMode == RENDER_MODE_TIME) {
 				ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
-				ImGui::Checkbox("Ray-traced reflections", &RENDER_OPTIONS::REFLECTIONS);
-				ImGui::Checkbox("Ray-traced refraction", &RENDER_OPTIONS::REFRACTION);
 				ImGui::SliderInt("Light Bounces", &scene->camera.maxBounces, -1, 10); // -1 = infinite bounces
+				ImGui::SliderFloat("Max bounce time", &scene->camera.bounceTimeBudget, 0.0f, 2.0f);
 				if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
 					if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
 						ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
