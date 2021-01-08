@@ -78,7 +78,7 @@ layout(location = 0) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
 	WriteRayPayload(ray);
-	ray.color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) * GetGeometry().material.emission : vec4(0);
+	ray.color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) /* GetGeometry().material.emission*/ : vec4(0);
 	
 	DebugRay(ray, ray.color.rgb, vec3(0), GetGeometry().material.emission, 0, 0);
 }

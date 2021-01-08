@@ -774,6 +774,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			scene->camera.projectionMatrix[2].x = subSample.x;
 			scene->camera.projectionMatrix[2].y = subSample.y;
 			// historyTxaaOffset = txaaOffset;
+			scene->camera.historyTxaaOffset = scene->camera.txaaOffset;
 			scene->camera.txaaOffset = subSample / 2.0;
 			frameCount++;
 			

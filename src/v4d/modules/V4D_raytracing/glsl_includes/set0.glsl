@@ -36,6 +36,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	dmat4 historyViewMatrix;
 	mat4 reprojectionMatrix;
 	vec2 txaaOffset;
+	vec2 historyTxaaOffset;
 	
 	float brightness;
 	float contrast;
@@ -279,7 +280,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		uint64_t raycastCustomData;
 		float totalDistance;
 		uint seed;
-		bool multiplyColor;
+		vec3 normal;
+		bool specular;
 	};
 
 	void InitRayPayload(inout RenderingPayload ray) {
@@ -293,7 +295,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.raycastCustomData = 0;
 		ray.totalDistance = 0;
 		ray.seed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), camera.frameCount);
-		ray.multiplyColor = false;
+		ray.specular = false;
 	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
@@ -305,7 +307,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			ray.primitiveID = PRIMITIVE_ID_VALUE;
 			ray.raycastCustomData = GetCustomData();
 			ray.totalDistance += gl_HitTEXT;
-			ray.multiplyColor = false;
+			ray.specular = false;
 		}
 		
 		void DebugRay(inout RenderingPayload ray, vec3 albedo, vec3 normal, float emission, float metallic, float roughness) {
@@ -372,7 +374,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 
 		void ScatterMetallic(inout RenderingPayload ray, const float roughness, const vec3 direction, const vec3 normal) {
 			ray.bounceDirection = vec4(normalize(reflect(direction, normal) + roughness*RandomInUnitSphere(ray.seed)), float(camera.zfar));
-			ray.multiplyColor = true;
+			ray.normal = normal;
 			++ray.bounces;
 		}
 		
@@ -389,15 +391,16 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			} else {
 				ray.bounceDirection = vec4(refracted, float(camera.zfar));
 			}
-			ray.multiplyColor = true;
+			ray.normal = normal;
 			++ray.bounces;
 		}
 		
 		void ScatterLambertian(inout RenderingPayload ray, const float roughness, const vec3 normal) {
-			ray.bounceDirection = vec4(normalize(normal + RandomInUnitSphere(ray.seed)), float(camera.zfar));
-			ray.multiplyColor = false;
-			ray.multiplyColor = true;
-			++ray.bounces;
+			ray.color.a = roughness;
+			ray.normal = normal;
+			ray.specular = true;
+			// ray.bounceDirection = vec4(normalize(mix(normal, RandomInUnitSphere(ray.seed), roughness)), float(camera.zfar));
+			// ++ray.bounces;
 		}
 
 	#endif

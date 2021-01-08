@@ -25,7 +25,7 @@ vec4 SampleBackground(vec3 direction) {
 	return vec4(0.5,0.5,0.7,1);
 }
 
-vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal) {
+vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal, inout uint seed) {
 	vec3 specularColor = vec3(0);
 	// PBR lighting
 	float distance = distance(rayOrigin, hitPosition);
@@ -37,7 +37,8 @@ vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal) {
 			// Calculate light radiance at distance
 			float dist = length(light.position - hitPosition);
 			vec3 radiance = light.color * light.intensity / (dist*dist);
-			vec3 L = normalize(light.position - hitPosition);
+			vec3 randomPointInLightSource = light.position + RandomInUnitSphere(seed) * light.radius;
+			vec3 L = normalize(randomPointInLightSource - hitPosition);
 			const float radianceThreshold = 1e-10;
 			if (length(radiance) > radianceThreshold) {
 				bool shadowed = false;
@@ -77,14 +78,13 @@ void main() {
 	
 	float depth = 0;
 	float primaryRayDistance = 0;
+	vec4 color = vec4(1,1,1,0);
 	
 	// Trace Rays
 	InitRayPayload(ray);
 	uint totalRaysTraced = 0;
 	do {
 		int nbBounces = ray.bounces;
-		vec4 color = ray.color;
-		bool multiplyColor = ray.multiplyColor;
 		// Trace Ray
 		traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
 		++totalRaysTraced;
@@ -93,6 +93,29 @@ void main() {
 			primaryRayDistance = ray.position.w;
 			depth = primaryRayDistance==0?0:clamp(GetFragDepthFromViewSpacePosition(ray.position.xyz), 0, 1);
 			imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
+			
+			// Store raycast info
+			if (isMiddleOfScreen) {
+				if (ray.position.w > 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1) {
+					// write obj info in hit raycast
+					RenderableEntityInstance entity = GetRenderableEntityInstance(ray.entityInstanceIndex);
+					rayCast.moduleVen = entity.moduleVen;
+					rayCast.moduleId = entity.moduleId;
+					rayCast.objId = entity.objId;
+					rayCast.raycastCustomData = ray.raycastCustomData;
+					rayCast.localSpaceHitPositionAndDistance = vec4((inverse(GetModelViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * vec4(ray.position.xyz, 1)).xyz, ray.position.w);
+					rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * ray.normal), 0);
+				} else {
+					// write empty hit raycast
+					rayCast.moduleVen = 0;
+					rayCast.moduleId = 0;
+					rayCast.objId = 0;
+					rayCast.raycastCustomData = 0;
+					rayCast.localSpaceHitPositionAndDistance = vec4(0);
+					rayCast.localSpaceHitSurfaceNormal = vec4(0);
+				}
+			}
+			
 			// Debug / Render Modes
 			switch (camera.renderMode) {
 				case RENDER_MODE_NOTHING:
@@ -143,22 +166,17 @@ void main() {
 		}
 		// miss
 		if (ray.position.w <= 0) {
-			if (multiplyColor) {
-				ray.color.rgb = mix(SampleBackground(rayDirection).rgb * color.rgb, vec3(0), color.a);
-			} else {
-				ray.color.rgb = mix(SampleBackground(rayDirection).rgb + color.rgb, vec3(0), color.a);
-			}
-			ray.color.a = 1;
+			color.rgb *= mix(SampleBackground(rayDirection).rgb, vec3(1), color.a);
+			color.a = 1;
 			break;
 		}
-		if (multiplyColor) {
-			ray.color.rgb *= mix(color.rgb, vec3(1), color.a);
-		} else {
-			ray.color.rgb += mix(color.rgb, vec3(0), color.a);
+		color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
+		if (ray.specular) {
+			color.rgb = mix(color.rgb*Specular(rayOrigin, ray.position.xyz, ray.normal, ray.seed), color.rgb, color.a);
 		}
-		ray.color.a = min(1, max(ray.color.a, color.a) + 0.1);
+		color.a = min(1, max(ray.color.a, color.a));
 		// all light has been absorbed
-		if (ray.color.a == 1) {
+		if (color.a == 1) {
 			break;
 		}
 		// no more bounce
@@ -186,7 +204,7 @@ void main() {
 	} else if (camera.renderMode == RENDER_MODE_TIME) {
 		imageStore(img_lit, imgCoords, vec4(heatmap(float(double(clockARB() - startTime) / double(camera.renderDebugScaling*1000000.0))), 1));
 	} else {
-		imageStore(img_lit, imgCoords, ray.color);
+		imageStore(img_lit, imgCoords, color);
 	}
 	
 

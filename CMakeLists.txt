@@ -95,9 +95,11 @@ if(COMPILE_GLFW)
 	set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+	set(GLFW_VULKAN_STATIC OFF CACHE BOOL "" FORCE)
 	add_subdirectory("${PROJECT_SOURCE_DIR}/src/v4d/xvk/glfw")
+	target_compile_definitions(glfw PRIVATE UNICODE WINVER=0x0A00)
 else()
-	find_package(glfw3 3.3 REQUIRED)
+	find_package(glfw3 3.3.2 REQUIRED)
 endif()
 
 

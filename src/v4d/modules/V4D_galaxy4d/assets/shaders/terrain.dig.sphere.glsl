@@ -113,6 +113,8 @@ void main() {
 		ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
 		ray.position.w = gl_HitTEXT + hitDepthTotal;
 		ray.bounceDirection = vec4(gl_WorldRayDirectionEXT, float(camera.zfar));
+		ray.color.rgb = vec3(1);
+		ray.color.a = 0;
 		return;
 	}
 	
@@ -121,7 +123,8 @@ void main() {
 	float undergroundDepth = ray.position.w;
 	
 	ray.position = vec4(endPoint, gl_HitTEXT + hitDepthTotal);
-	ScatterLambertian(ray, 0.7, normal);
+	ScatterLambertian(ray, 0.7, mix(ray.normal, normal, 0.5));
+	ray.specular = false;
 	
 	// // Override shading
 	// ray.albedo = ApplyPBRShading(gl_WorldRayOriginEXT, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, vec4(0));

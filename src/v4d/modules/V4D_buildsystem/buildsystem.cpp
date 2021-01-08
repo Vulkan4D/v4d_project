@@ -22,7 +22,10 @@ std::array<Texture2D, NB_BLOCKS> blocks_tex {
 	Texture2D {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/blocks/3.png"), STBI_rgb_alpha},
 	Texture2D {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/blocks/4.png"), STBI_rgb_alpha},
 };
+
+#ifdef _ENABLE_IMGUI
 std::array<ImTextureID, NB_BLOCKS> blocks_imGuiImg {};
+#endif
 
 Renderer* r = nullptr;
 v4d::scene::Scene* scene = nullptr;
@@ -127,106 +130,111 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, CreateVulkanResources2, v4d::graphics::vulkan::Device* device) {
-		for (auto& tex : blocks_tex) {
-			tex.AllocateAndWriteStagingMemory(device);
-			tex.CreateImage(device);
-			auto commandBuffer = device->BeginSingleTimeCommands(device->GetQueue("graphics"));
-				tex.CopyStagingBufferToImage(device, commandBuffer);
-			device->EndSingleTimeCommands(device->GetQueue("graphics"), commandBuffer);
-			tex.FreeStagingMemory(device);
-		}
+		#ifdef _ENABLE_IMGUI
+			for (auto& tex : blocks_tex) {
+				tex.AllocateAndWriteStagingMemory(device);
+				tex.CreateImage(device);
+				auto commandBuffer = device->BeginSingleTimeCommands(device->GetQueue("graphics"));
+					tex.CopyStagingBufferToImage(device, commandBuffer);
+				device->EndSingleTimeCommands(device->GetQueue("graphics"), commandBuffer);
+				tex.FreeStagingMemory(device);
+			}
+		#endif
 	}
 	V4D_MODULE_FUNC(void, DestroyVulkanResources2, v4d::graphics::vulkan::Device* device) {
-		for (int i = 0; i < NB_BLOCKS; ++i) {
-			if (blocks_imGuiImg[i]) {
-				// ImGui_ImplVulkan_RemoveTexture(blocks_imGuiImg[i]); // Descriptor pool is already destroyed here, thus this line does not work... maybe find another way, or is it even necessary to free old descriptor sets?...
-				blocks_imGuiImg[i] = nullptr;
+		#ifdef _ENABLE_IMGUI
+			for (int i = 0; i < NB_BLOCKS; ++i) {
+				if (blocks_imGuiImg[i]) {
+					// ImGui_ImplVulkan_RemoveTexture(blocks_imGuiImg[i]); // Descriptor pool is already destroyed here, thus this line does not work... maybe find another way, or is it even necessary to free old descriptor sets?...
+					blocks_imGuiImg[i] = nullptr;
+				}
+				blocks_tex[i].DestroyImage(device);
 			}
-			blocks_tex[i].DestroyImage(device);
-		}
-		
+		#endif
 		buildInterface.Reset();
 	}
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
-		ImGui::SetNextWindowPos({20, 150}, ImGuiCond_FirstUseEver); // or ImGuiCond_Once
-		ImGui::SetNextWindowSize({460, 160}, ImGuiCond_FirstUseEver);
-		ImGui::Begin("Build System");
-		auto activeColor = ImVec4{0,1,0, 1.0};
-		auto inactiveColor = ImVec4{1,1,1, 0.6};
-		
-		// Block shapes
-		for (int i = 0; i < NB_BLOCKS; ++i) {
-			if (!blocks_imGuiImg[i]) blocks_imGuiImg[i] = (ImTextureID)ImGui_ImplVulkan_AddTexture(blocks_tex[i].GetImage()->sampler, blocks_tex[i].GetImage()->view, VK_IMAGE_LAYOUT_GENERAL);
-			ImGui::SetCursorPos({float(i) * 74 + 2, 24});
-			if (ImGui::ImageButton(blocks_imGuiImg[i], {64, 64}, {0,0}, {1,1}, -1, buildInterface.selectedBlockType==i?ImVec4{0,0.5,0,1}:ImVec4{0,0,0,1}, buildInterface.selectedBlockType==-1?ImVec4{1,1,1,1}:ImVec4{1,1,1,0.8})) {
-				buildInterface.selectedBlockType = i;
-				buildInterface.paintMode = false;
-				buildInterface.isDirty = true;
-			}
-		}
-		
-		// Paint
-		ImGui::SetCursorPos({float(NB_BLOCKS) * 74 + 2, 24});
-		ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.paintMode? activeColor : inactiveColor);
-		if (ImGui::Button("Paint", {64, 64})) {
-			buildInterface.selectedBlockType = -1;
-			buildInterface.paintMode = true;
-			buildInterface.isDirty = true;
-		}
-		ImGui::PopStyleColor();
-		
-		if (buildInterface.selectedBlockType != -1) {
-			// Size/Orientation
+		#ifdef _ENABLE_IMGUI
+			ImGui::SetNextWindowPos({20, 150}, ImGuiCond_FirstUseEver); // or ImGuiCond_Once
+			ImGui::SetNextWindowSize({460, 160}, ImGuiCond_FirstUseEver);
+			ImGui::Begin("Build System");
+			auto activeColor = ImVec4{0,1,0, 1.0};
+			auto inactiveColor = ImVec4{1,1,1, 0.6};
 			
-			ImGui::SetCursorPos({5, 100});
-			ImGui::SetNextItemWidth(90);
-			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
-			if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+			// Block shapes
+			for (int i = 0; i < NB_BLOCKS; ++i) {
+				if (!blocks_imGuiImg[i]) blocks_imGuiImg[i] = (ImTextureID)ImGui_ImplVulkan_AddTexture(blocks_tex[i].GetImage()->sampler, blocks_tex[i].GetImage()->view, VK_IMAGE_LAYOUT_GENERAL);
+				ImGui::SetCursorPos({float(i) * 74 + 2, 24});
+				if (ImGui::ImageButton(blocks_imGuiImg[i], {64, 64}, {0,0}, {1,1}, -1, buildInterface.selectedBlockType==i?ImVec4{0,0.5,0,1}:ImVec4{0,0,0,1}, buildInterface.selectedBlockType==-1?ImVec4{1,1,1,1}:ImVec4{1,1,1,0.8})) {
+					buildInterface.selectedBlockType = i;
+					buildInterface.paintMode = false;
+					buildInterface.isDirty = true;
+				}
+			}
+			
+			// Paint
+			ImGui::SetCursorPos({float(NB_BLOCKS) * 74 + 2, 24});
+			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.paintMode? activeColor : inactiveColor);
+			if (ImGui::Button("Paint", {64, 64})) {
+				buildInterface.selectedBlockType = -1;
+				buildInterface.paintMode = true;
 				buildInterface.isDirty = true;
 			}
 			ImGui::PopStyleColor();
 			
-			ImGui::SetCursorPos({135, 100});
-			ImGui::SetNextItemWidth(90);
-			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
-			if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
-				buildInterface.isDirty = true;
-			}
-			ImGui::PopStyleColor();
-			
-			ImGui::SetCursorPos({260, 100});
-			ImGui::SetNextItemWidth(90);
-			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
-			if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
-				buildInterface.isDirty = true;
-			}
-			ImGui::PopStyleColor();
-			
-			ImGui::SetCursorPos({5, 125});
-			ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==3? activeColor : inactiveColor);
-			if (ImGui::Button("Rotate")) {
-				buildInterface.FindNextValidBlockRotation();
-				buildInterface.isDirty = true;
-			}
-			ImGui::PopStyleColor();
-			
-		} else if (buildInterface.paintMode) {
-			// Colors
-			for (int i = 0; i < NB_COLORS; ++i) {
-				ImVec4 c{COLORS[i].r, COLORS[i].g, COLORS[i].b, buildInterface.selectedColor==i? 1.0f: 0.2f};
-				ImGui::PushStyleColor(ImGuiCol_Button, c);
-				ImGui::SetCursorPos({32.0f*i + 5, 100.0f});
-				if (ImGui::Button((std::string("    ") + std::to_string(i)).c_str(), {28, 28})) {
-					buildInterface.selectedColor = i;
+			if (buildInterface.selectedBlockType != -1) {
+				// Size/Orientation
+				
+				ImGui::SetCursorPos({5, 100});
+				ImGui::SetNextItemWidth(90);
+				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
+				if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+					buildInterface.isDirty = true;
 				}
 				ImGui::PopStyleColor();
+				
+				ImGui::SetCursorPos({135, 100});
+				ImGui::SetNextItemWidth(90);
+				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
+				if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+					buildInterface.isDirty = true;
+				}
+				ImGui::PopStyleColor();
+				
+				ImGui::SetCursorPos({260, 100});
+				ImGui::SetNextItemWidth(90);
+				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
+				if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+					buildInterface.isDirty = true;
+				}
+				ImGui::PopStyleColor();
+				
+				ImGui::SetCursorPos({5, 125});
+				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==3? activeColor : inactiveColor);
+				if (ImGui::Button("Rotate")) {
+					buildInterface.FindNextValidBlockRotation();
+					buildInterface.isDirty = true;
+				}
+				ImGui::PopStyleColor();
+				
+			} else if (buildInterface.paintMode) {
+				// Colors
+				for (int i = 0; i < NB_COLORS; ++i) {
+					ImVec4 c{COLORS[i].r, COLORS[i].g, COLORS[i].b, buildInterface.selectedColor==i? 1.0f: 0.2f};
+					ImGui::PushStyleColor(ImGuiCol_Button, c);
+					ImGui::SetCursorPos({32.0f*i + 5, 100.0f});
+					if (ImGui::Button((std::string("    ") + std::to_string(i)).c_str(), {28, 28})) {
+						buildInterface.selectedColor = i;
+					}
+					ImGui::PopStyleColor();
+				}
+				// Vertex Gradients checkbox
+				ImGui::Checkbox("Vertex gradients", &buildInterface.paintModeVertexGradients);
 			}
-			// Vertex Gradients checkbox
-			ImGui::Checkbox("Vertex gradients", &buildInterface.paintModeVertexGradients);
-		}
-		
-		ImGui::End();
+			
+			ImGui::End();
+		#endif
 	}
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
