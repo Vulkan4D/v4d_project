@@ -14,7 +14,7 @@ using namespace v4d::graphics::vulkan;
 using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Limits
-	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // 96 bytes each
+	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // up to ~ 256 bytes each
 #pragma endregion
 
 // Application
@@ -50,17 +50,26 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	DescriptorSet set1_raster;
 	DescriptorSet set1_rendering;
 	DescriptorSet set1_post;
-	DescriptorSet set1_thumbnail;
 	DescriptorSet set1_histogram;
 	DescriptorSet set1_overlay;
 #pragma endregion
 
 #pragma region Images
-	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R32G32_SFLOAT } };
-	Image img_lit { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
-	Image img_pp { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
-	Image img_history { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
-	Image img_thumbnail { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_lit { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_depth { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT } };
+	Image img_pos { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
+	Image img_geometry { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
+	Image img_albedo { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_normal { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	
+	Image img_lit_history { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_depth_history { VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT } };
+	Image img_pos_history { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
+	Image img_geometry_history { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R32G32B32A32_SFLOAT }};
+	Image img_albedo_history { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	Image img_normal_history { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
+	
+	Image img_thumbnail { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
 	
 	// Textures
@@ -77,7 +86,6 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	PipelineLayout pl_rendering;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
-	PipelineLayout pl_thumbnail;
 	PipelineLayout pl_histogram;
 #pragma endregion
 
@@ -115,18 +123,6 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}, -1};
 	
 	// Post Processing
-	RasterShaderPipeline shader_thumbnail {pl_thumbnail, {
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_thumbnail.vert"),
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_thumbnail.frag"),
-	}};
-	RasterShaderPipeline shader_fx_txaa {pl_post, {
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.txaa.frag"),
-	}, 100};
-	RasterShaderPipeline shader_history_write {pl_post, {
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
-		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.history_write.frag"),
-	}};
 	RasterShaderPipeline shader_present_hdr {pl_post, {
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.vert"),
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/v4d_post.hdr.frag"),
@@ -144,10 +140,20 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Containers
 	// Pipelines
 	std::unordered_map<std::string, Image*> images {
-		{"img_depth", &img_depth},
 		{"img_lit", &img_lit},
-		{"img_pp", &img_pp},
-		{"img_history", &img_history},
+		{"img_depth", &img_depth},
+		{"img_pos", &img_pos},
+		{"img_geometry", &img_geometry},
+		{"img_albedo", &img_albedo},
+		{"img_normal", &img_normal},
+		
+		{"img_lit_history", &img_lit_history},
+		{"img_depth_history", &img_depth_history},
+		{"img_pos_history", &img_pos_history},
+		{"img_geometry_history", &img_geometry_history},
+		{"img_albedo_history", &img_albedo_history},
+		{"img_normal_history", &img_normal_history},
+		
 		{"img_thumbnail", &img_thumbnail},
 		{"img_overlay", &img_overlay},
 	};
@@ -157,16 +163,12 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		{"pl_rendering", &pl_rendering},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
-		{"pl_thumbnail", &pl_thumbnail},
 		{"pl_histogram", &pl_histogram},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
 		{"sg_transparent", {&shader_transparent}},
 		{"sg_wireframe", {&shader_wireframe}},
 		{"sg_fog", {}},
-		{"sg_thumbnail", {&shader_thumbnail}},
-		{"sg_postfx", {&shader_fx_txaa}},
-		{"sg_history_write", {&shader_history_write}},
 		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
@@ -181,7 +183,6 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 
 #pragma region Render Passes (Rasterization)
 	RenderPass postProcessingRenderPass;
-	RenderPass thumbnailRenderPass;
 	RenderPass uiRenderPass;
 	RenderPass fogRenderPass;
 	
@@ -195,21 +196,65 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 
 #pragma region Rendering Resources
 
+	float renderScale = 1.0;
+	
 	void CreateRenderingResources() {
-		uint rasterWidth = (uint)((float)r->swapChain->extent.width);
-		uint rasterHeight = (uint)((float)r->swapChain->extent.height);
+		uint renderWidth = (uint)((float)r->swapChain->extent.width*renderScale);
+		uint renderHeight = (uint)((float)r->swapChain->extent.height*renderScale);
 		
-		img_lit.Create(r->renderingDevice, rasterWidth, rasterHeight);
-		img_depth.Create(r->renderingDevice, rasterWidth, rasterHeight);
+		img_geometry.samplerInfo.magFilter = VK_FILTER_NEAREST;
+		img_geometry.samplerInfo.minFilter = VK_FILTER_NEAREST;
+		img_geometry_history.samplerInfo.magFilter = VK_FILTER_NEAREST;
+		img_geometry_history.samplerInfo.minFilter = VK_FILTER_NEAREST;
+		
+		img_lit.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_depth.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_pos.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_geometry.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_albedo.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_normal.Create(r->renderingDevice, renderWidth, renderHeight);
+		
+		img_lit_history.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_depth_history.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_pos_history.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_geometry_history.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_albedo_history.Create(r->renderingDevice, renderWidth, renderHeight);
+		img_normal_history.Create(r->renderingDevice, renderWidth, renderHeight);
 		
 		auto commandBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
+		
 			r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
 	void DestroyRenderingResources() {
+		
 		img_lit.Destroy(r->renderingDevice);
 		img_depth.Destroy(r->renderingDevice);
+		img_pos.Destroy(r->renderingDevice);
+		img_geometry.Destroy(r->renderingDevice);
+		img_albedo.Destroy(r->renderingDevice);
+		img_normal.Destroy(r->renderingDevice);
+		
+		img_lit_history.Destroy(r->renderingDevice);
+		img_depth_history.Destroy(r->renderingDevice);
+		img_pos_history.Destroy(r->renderingDevice);
+		img_geometry_history.Destroy(r->renderingDevice);
+		img_albedo_history.Destroy(r->renderingDevice);
+		img_normal_history.Destroy(r->renderingDevice);
+		
 	}
 	
 	// void ClearLitImage(VkCommandBuffer commandBuffer) {
@@ -428,10 +473,6 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
-		
-		int width = (int)((float)r->swapChain->extent.width);
-		int height = (int)((float)r->swapChain->extent.height);
-		
 		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_rendering.GetPipeline());
 		sbt_rendering.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
@@ -440,7 +481,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			sbt_rendering.GetRayMissDeviceAddressRegion(),
 			sbt_rendering.GetRayHitDeviceAddressRegion(),
 			sbt_rendering.GetRayCallableDeviceAddressRegion(),
-			width, height, 1
+			img_lit.width, img_lit.height, 1
 		);
 	}
 	
@@ -476,142 +517,45 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		uint thumbnailWidth = (uint)((float)rasterWidth * thumbnailScale);
 		uint thumbnailHeight = (uint)((float)rasterHeight * thumbnailScale);
 		
-		img_pp.Create(r->renderingDevice, rasterWidth, rasterHeight);
-		img_history.Create(r->renderingDevice, rasterWidth, rasterHeight);
 		img_thumbnail.Create(r->renderingDevice, thumbnailWidth, thumbnailHeight, {img_lit.format});
 		
 		auto commandBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
-			r->TransitionImageLayout(commandBuffer, img_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
 	void DestroyPostProcessingResources() {
-		img_pp.Destroy(r->renderingDevice);
-		img_history.Destroy(r->renderingDevice);
 		img_thumbnail.Destroy(r->renderingDevice);
 	}
 	
 	void CreatePostProcessingPipeline() {
-		{// Thumbnail Gen render pass
-			VkAttachmentDescription colorAttachment = {};
-				colorAttachment.format = img_thumbnail.format;
-				colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-				colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-				colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-				colorAttachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-				colorAttachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			VkAttachmentReference colorAttachmentRef = {
-				thumbnailRenderPass.AddAttachment(colorAttachment),
-				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-			};
-			
-			// SubPass
-			VkSubpassDescription subpass = {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttachmentRef;
-			thumbnailRenderPass.AddSubpass(subpass);
-			
-			// Create the render pass
-			thumbnailRenderPass.Create(r->renderingDevice);
-			thumbnailRenderPass.CreateFrameBuffers(r->renderingDevice, img_thumbnail);
-			
-			// Shaders
-			for (auto* shaderPipeline : shaderGroups["sg_thumbnail"]) {
-				shaderPipeline->SetRenderPass(&img_thumbnail, thumbnailRenderPass.handle, 0);
-				shaderPipeline->AddColorBlendAttachmentState();
-				shaderPipeline->CreatePipeline(r->renderingDevice);
-			}
-		}
-		
 		{// Post Processing render pass
-			std::array<VkAttachmentDescription, 3> attachments {};
+			std::array<VkAttachmentDescription, 1> attachments {};
 			// std::array<VkAttachmentReference, 0> inputAttachmentRefs {};
 			
-			// PP image
-			attachments[0].format = img_pp.format;
+			// SwapChain image
+			attachments[0].format = r->swapChain->format.format;
 			attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 			attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			uint32_t ppAttachmentIndex = postProcessingRenderPass.AddAttachment(attachments[0]);
-			
-			// History image
-			attachments[1].format = img_history.format;
-			attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[1].initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-			attachments[1].finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-			uint32_t historyAttachmentIndex = postProcessingRenderPass.AddAttachment(attachments[1]);
-			
-			// SwapChain image
-			attachments[2].format = r->swapChain->format.format;
-			attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
-			attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			attachments[2].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-			uint32_t presentAttachmentIndex = postProcessingRenderPass.AddAttachment(attachments[2]);
+			attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			
 			// SubPasses
-			VkAttachmentReference colorAttRef_0 { ppAttachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			std::array<VkAttachmentReference, 1> colorAttachmentRefs {
+				VkAttachmentReference{ postProcessingRenderPass.AddAttachment(attachments[0]), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL },
+			};
 			{
 				VkSubpassDescription subpass {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttRef_0;
-				postProcessingRenderPass.AddSubpass(subpass);
-			}
-			VkAttachmentReference colorAttRef_1 { historyAttachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			VkAttachmentReference inputAtt_1 { ppAttachmentIndex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			{
-				VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttRef_1;
-				subpass.inputAttachmentCount = 1;
-				subpass.pInputAttachments = &inputAtt_1;
-				postProcessingRenderPass.AddSubpass(subpass);
-			}
-			VkAttachmentReference colorAttRef_2 { presentAttachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			VkAttachmentReference inputAtt_2 { ppAttachmentIndex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			uint32_t preserverAtt_2 = historyAttachmentIndex;
-			{
-				VkSubpassDescription subpass {};
-				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				subpass.colorAttachmentCount = 1;
-				subpass.pColorAttachments = &colorAttRef_2;
-				subpass.preserveAttachmentCount = 1;
-				subpass.pPreserveAttachments = &preserverAtt_2;
-				subpass.inputAttachmentCount = 1;
-				subpass.pInputAttachments = &inputAtt_2;
+				subpass.colorAttachmentCount = colorAttachmentRefs.size();
+				subpass.pColorAttachments = colorAttachmentRefs.data();
 				postProcessingRenderPass.AddSubpass(subpass);
 			}
 			
-			std::array<VkSubpassDependency, 3> subPassDependencies {
+			std::array<VkSubpassDependency, 1> subPassDependencies {
 				VkSubpassDependency{
 					VK_SUBPASS_EXTERNAL,// srcSubpass;
 					0,// dstSubpass;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
-					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
-					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
-					0// dependencyFlags;
-				},
-				VkSubpassDependency{
-					0,// srcSubpass;
-					1,// dstSubpass;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
-					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
-					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// dstAccessMask;
-					0// dependencyFlags;
-				},
-				VkSubpassDependency{
-					0,// srcSubpass;
-					2,// dstSubpass;
 					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// srcStageMask;
 					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// dstStageMask;
 					VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// srcAccessMask;
@@ -624,25 +568,11 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			
 			// Create the render pass
 			postProcessingRenderPass.Create(r->renderingDevice);
-			postProcessingRenderPass.CreateFrameBuffers(r->renderingDevice, r->swapChain, {
-				img_pp.view, 
-				img_history.view, 
-				VK_NULL_HANDLE,
-			});
+			postProcessingRenderPass.CreateFrameBuffers(r->renderingDevice, r->swapChain);
 			
 			// Shaders
-			for (auto* shader : shaderGroups["sg_postfx"]) {
-				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 0);
-				shader->AddColorBlendAttachmentState();
-				shader->CreatePipeline(r->renderingDevice);
-			}
-			for (auto* shader : shaderGroups["sg_history_write"]) {
-				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 1);
-				shader->AddColorBlendAttachmentState(VK_FALSE);
-				shader->CreatePipeline(r->renderingDevice);
-			}
 			for (auto* shader : shaderGroups["sg_present"]) {
-				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle, 2);
+				shader->SetRenderPass(r->swapChain, postProcessingRenderPass.handle);
 				shader->AddColorBlendAttachmentState();
 				shader->CreatePipeline(r->renderingDevice);
 			}
@@ -652,20 +582,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		shader_histogram_compute.CreatePipeline(r->renderingDevice);
 	}
 	void DestroyPostProcessingPipeline() {
-		// Thumbnail Gen
-		for (auto* shaderPipeline : shaderGroups["sg_thumbnail"]) {
-			shaderPipeline->DestroyPipeline(r->renderingDevice);
-		}
-		thumbnailRenderPass.DestroyFrameBuffers(r->renderingDevice);
-		thumbnailRenderPass.Destroy(r->renderingDevice);
-		
-		// Post-processing
-		for (auto* s : shaderGroups["sg_postfx"]) {
-			s->DestroyPipeline(r->renderingDevice);
-		}
-		for (auto* s : shaderGroups["sg_history_write"]) {
-			s->DestroyPipeline(r->renderingDevice);
-		}
+		// Present
 		for (auto* s : shaderGroups["sg_present"]) {
 			s->DestroyPipeline(r->renderingDevice);
 		}
@@ -677,22 +594,13 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void ConfigurePostProcessingShaders() {
-		// Thumbnail Gen
-		shader_thumbnail.inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		shader_thumbnail.depthStencilState.depthTestEnable = VK_FALSE;
-		shader_thumbnail.depthStencilState.depthWriteEnable = VK_FALSE;
-		shader_thumbnail.rasterizer.cullMode = VK_CULL_MODE_NONE;
-		shader_thumbnail.SetData(3);
-		
-		// Post-Processing
-		for (auto[rp, ss] : shaderGroups) if (rp == "sg_postfx" || rp == "sg_history_write" || rp == "sg_present") {
-			for (auto* s : ss) {
-				s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-				s->depthStencilState.depthTestEnable = VK_FALSE;
-				s->depthStencilState.depthWriteEnable = VK_FALSE;
-				s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-				s->SetData(3);
-			}
+		// Present
+		for (auto* s : shaderGroups["sg_present"]) {
+			s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			s->depthStencilState.depthTestEnable = VK_FALSE;
+			s->depthStencilState.depthWriteEnable = VK_FALSE;
+			s->rasterizer.cullMode = VK_CULL_MODE_NONE;
+			s->SetData(3);
 		}
 	}
 	
@@ -720,27 +628,79 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void RecordPostProcessingCommands(VkCommandBuffer commandBuffer, int imageIndex) {
-		// Gen Thumbnail
-		thumbnailRenderPass.Begin(r->renderingDevice, commandBuffer, img_thumbnail, {{.0,.0,.0,.0}});
-			for (auto* shader : shaderGroups["sg_thumbnail"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
-			}
-		thumbnailRenderPass.End(r->renderingDevice, commandBuffer);
 		
 		// Post Processing
-		postProcessingRenderPass.Begin(r->renderingDevice, commandBuffer, r->swapChain, {{.0,.0,.0,.0}, {.0,.0,.0,.0}, {.0,.0,.0,.0}}, imageIndex);
-			for (auto* shader : shaderGroups["sg_postfx"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
-			}
-			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-			for (auto* shader : shaderGroups["sg_history_write"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
-			}
-			r->renderingDevice->CmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+		postProcessingRenderPass.Begin(r->renderingDevice, commandBuffer, r->swapChain, {{.0,.0,.0,.0}}, imageIndex);
 			for (auto* shader : shaderGroups["sg_present"]) {
 				shader->Execute(r->renderingDevice, commandBuffer);
 			}
 		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
+		
+		// Transition images to transfer
+		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+		
+		r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		
+		r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		
+		const VkImageSubresourceLayers imageSubresourceLayers {
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			0,// mipLevel
+			0,// baseArrayLayer
+			1 // layerCount
+		};
+		
+		// Copy to history
+		VkImageCopy copyRegion {
+			imageSubresourceLayers,// srcSubresource
+			{0,0,0},// srcOffset
+			imageSubresourceLayers,// dstSubresource
+			{0,0,0},// dstOffset
+			{img_lit.width,img_lit.height,1}// extent
+		};
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_lit_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_depth.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_depth_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_pos.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_pos_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_geometry.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_geometry_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_albedo.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_albedo_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		r->renderingDevice->CmdCopyImage(commandBuffer, img_normal.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_normal_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		
+		// Generate thumbnail
+		VkImageBlit blitRegion {
+			imageSubresourceLayers, // srcSubresource
+			{{0,0,0},{(int)img_lit.width,(int)img_lit.height,1}}, // srcOffsets
+			imageSubresourceLayers, // dstSubresource
+			{{0,0,0},{(int)img_thumbnail.width,(int)img_thumbnail.height,1}} // dstOffsets
+		};
+		r->renderingDevice->CmdBlitImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_thumbnail.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion, VK_FILTER_LINEAR);
+		
+		// Transition images back to general
+		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		
+		r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		
+		r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+		
 	}
 	void RunDynamicPostProcessingCompute(VkCommandBuffer commandBuffer) {
 		// histogram
@@ -755,35 +715,35 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			scene->camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
 		}
 	}
-	void RunTXAA() {
-		// TXAA
-		if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS && !DEBUG_OPTIONS::WIREFRAME) {
-			static unsigned long frameCount = 0;
-			static const glm::dvec2 samples8[8] = {
-				glm::dvec2(-7.0, 1.0) / 8.0,
-				glm::dvec2(-5.0, -5.0) / 8.0,
-				glm::dvec2(-1.0, -3.0) / 8.0,
-				glm::dvec2(3.0, -7.0) / 8.0,
-				glm::dvec2(5.0, -1.0) / 8.0,
-				glm::dvec2(7.0, 7.0) / 8.0,
-				glm::dvec2(1.0, 3.0) / 8.0,
-				glm::dvec2(-3.0, 5.0) / 8.0
-			};
-			glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
-			glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
-			scene->camera.projectionMatrix[2].x = subSample.x;
-			scene->camera.projectionMatrix[2].y = subSample.y;
-			// historyTxaaOffset = txaaOffset;
-			scene->camera.historyTxaaOffset = scene->camera.txaaOffset;
-			scene->camera.txaaOffset = subSample / 2.0;
-			frameCount++;
+	// void RunTXAA() {
+	// 	// TXAA
+	// 	if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS && !DEBUG_OPTIONS::WIREFRAME) {
+	// 		static unsigned long frameCount = 0;
+	// 		static const glm::dvec2 samples8[8] = {
+	// 			glm::dvec2(-7.0, 1.0) / 8.0,
+	// 			glm::dvec2(-5.0, -5.0) / 8.0,
+	// 			glm::dvec2(-1.0, -3.0) / 8.0,
+	// 			glm::dvec2(3.0, -7.0) / 8.0,
+	// 			glm::dvec2(5.0, -1.0) / 8.0,
+	// 			glm::dvec2(7.0, 7.0) / 8.0,
+	// 			glm::dvec2(1.0, 3.0) / 8.0,
+	// 			glm::dvec2(-3.0, 5.0) / 8.0
+	// 		};
+	// 		glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
+	// 		glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
+	// 		scene->camera.projectionMatrix[2].x = subSample.x;
+	// 		scene->camera.projectionMatrix[2].y = subSample.y;
+	// 		// historyTxaaOffset = txaaOffset;
+	// 		scene->camera.historyTxaaOffset = scene->camera.txaaOffset;
+	// 		scene->camera.txaaOffset = subSample;
+	// 		frameCount++;
 			
-			scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
+	// 		scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
 			
-			// Save Projection and View matrices from previous frame
-			scene->camera.historyViewMatrix = scene->camera.viewMatrix;
-		}
-	}
+	// 		// Save Projection and View matrices from previous frame
+	// 		scene->camera.historyViewMatrix = scene->camera.viewMatrix;
+	// 	}
+	// }
 	
 #pragma endregion
 
@@ -910,7 +870,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		overlayText[overlayTextSize++] = {x, y, PackColorAsFloat(color), glm::uintBitsToFloat((size << 16) | (c << 8) | flags)};
 	}
 	void AddOverlayText(const std::string& text, float x, float y, glm::vec4 color = {1,1,1,1}, uint16_t size = 20, uint8_t flags = 0, float letterSpacing = 0, float fontSizeRatio = 0.5) {
-		const float letterWidth = (float(size)*fontSizeRatio+letterSpacing) / scene->camera.width * 2;
+		const float letterWidth = (float(size)*fontSizeRatio+letterSpacing) / (float)r->swapChain->extent.width * 2;
 		x -= letterWidth * float(text.length()-1) / 2;
 		for (int i = 0; i < text.length(); ++i) {
 			AddOverlayText(text[i], x, y, color, size, flags);
@@ -1095,9 +1055,12 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			scene->camera.frameCount++;
 			scene->camera.renderOptions = RENDER_OPTIONS::Get();
 			scene->camera.debugOptions = DEBUG_OPTIONS::Get();
+			if (scene->camera.accumulateFrames != -1) {
+				scene->camera.accumulateFrames++;
+			}
 		}
 		
-		RunTXAA();
+		// RunTXAA();
 		
 		{// Handle RayCast (captured in the past 1 or 2 frames)
 			if (previousRayCast && previousRayCast != *raycastBuffer) {
@@ -1185,6 +1148,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				}
 				
 				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && (entity->sharedGeometryData->isRayTracedTriangles || entity->sharedGeometryData->isRayTracedProceduralAABB)) {
+					// First BLAS build
 					if (entity->sharedGeometryData->isRayTracedTriangles) {
 						entity->sharedGeometryData->blas.AssignBottomLevelGeometry(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
 					} else {
@@ -1194,11 +1158,13 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					blasQueueBuildGeometryInfos.push_back(entity->sharedGeometryData->blas.buildGeometryInfo);
 					blasQueueBuildRangeInfos.push_back(entity->sharedGeometryData->blas.buildRangeInfo.data());
 					entity->sharedGeometryData->blas.built = true;
+					entity->entityInstanceInfo.modelViewTransform = glm::mat4(0); // this is because we want to assign the history matrix to it and we need the reprojection to be invalid initially
 				}
 				
 				// add BLAS instance to TLAS
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					// Update and Assign transform
+					entity->entityInstanceInfo.modelViewTransform_history = entity->entityInstanceInfo.modelViewTransform;
 					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->worldTransform;
 					
 					if (entity->sharedGeometryData && entity->sharedGeometryData->blas.built) {
@@ -1516,9 +1482,23 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		{r->descriptorSets["set1_rendering"] = &set1_rendering;
-			set1_rendering.AddBinding_imageView(0, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(1, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_storageBuffer(2, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			int i = 0;
+			
+			set1_rendering.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_pos, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_geometry, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_albedo, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_normal, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_lit_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_depth_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_pos_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_geometry_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_albedo_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_normal_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			
+			set1_rendering.AddBinding_storageBuffer(i++, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_raster"] = &set1_raster;
@@ -1527,19 +1507,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		{r->descriptorSets["set1_post"] = &set1_post;
 			int i = 0;
+			
 			set1_post.AddBinding_combinedImageSampler(i++, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(i++, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_combinedImageSampler(i++, &img_history, VK_SHADER_STAGE_FRAGMENT_BIT);
 			set1_post.AddBinding_combinedImageSampler(i++, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
-			set1_post.AddBinding_inputAttachment(i++, &img_pp, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_pos, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_geometry, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_albedo, VK_SHADER_STAGE_FRAGMENT_BIT);
+			set1_post.AddBinding_combinedImageSampler(i++, &img_normal, VK_SHADER_STAGE_FRAGMENT_BIT);
+			
+			set1_post.AddBinding_combinedImageSampler(i++, &img_overlay, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_overlay"] = &set1_overlay;
 			set1_overlay.AddBinding_combinedImageSampler(0, tex_img_font_atlas.GetImage(), VK_SHADER_STAGE_FRAGMENT_BIT);
-		}
-		
-		{r->descriptorSets["set1_thumbnail"] = &set1_thumbnail;
-			set1_thumbnail.AddBinding_combinedImageSampler(0, &img_lit, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
 		
 		{r->descriptorSets["set1_histogram"] = &set1_histogram;
@@ -1556,7 +1536,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			pipelineLayouts["pl_rendering"]->AddDescriptorSet(&set1_rendering);
 			pipelineLayouts["pl_raster"]->AddDescriptorSet(&set1_raster);
 			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_raster);
-			pipelineLayouts["pl_thumbnail"]->AddDescriptorSet(&set1_thumbnail);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
 			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
@@ -2066,15 +2045,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SliderInt("Light Bounces", &scene->camera.maxBounces, -1, 10); // -1 = infinite bounces
 				ImGui::SliderFloat("Max bounce time", &scene->camera.bounceTimeBudget, 0.0f, 2.0f);
 				if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
-					if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
-						ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
-					}
+					// if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
+					// 	ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
+					// }
 					ImGui::Checkbox("Gamma correction", &RENDER_OPTIONS::GAMMA_CORRECTION);
 					ImGui::Checkbox("HDR Tone Mapping", &RENDER_OPTIONS::HDR_TONE_MAPPING);
 					ImGui::SliderFloat("HDR Exposure", &exposureFactor, 0, 10);
 					ImGui::SliderFloat("brightness", &scene->camera.brightness, 0, 2);
 					ImGui::SliderFloat("contrast", &scene->camera.contrast, 0, 2);
 					ImGui::SliderFloat("gamma", &scene->camera.gamma, 0, 5);
+					ImGui::SliderFloat("Multi-Sampling kernel size", &scene->camera.multisamplingKernelSize, 0, 4);
 				}
 			}
 		#endif
@@ -2095,6 +2075,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SetNextWindowPos({425+345,0}, ImGuiCond_FirstUseEver);
 				ImGui::SetNextWindowSize({250, 100}, ImGuiCond_FirstUseEver);
 				ImGui::Begin("Debug");
+				if (scene->camera.accumulateFrames != -1) {
+					ImGui::Text("Accumulated frames: %d", scene->camera.accumulateFrames);
+				}
 				// RayCast
 				if (previousRayCast) ImGui::Text((std::string("RayCast ") + std::string(v4d::modular::ModuleID(previousRayCast.moduleVen, previousRayCast.moduleId)) + ":" + std::to_string(previousRayCast.objId)).c_str());
 				else ImGui::Text("RayCast no hit");
@@ -2187,6 +2170,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
 	
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
+		
+		if (key == GLFW_KEY_ENTER) {
+			if (action == GLFW_RELEASE) {
+				scene->camera.accumulateFrames = -1;
+			} else if (scene->camera.accumulateFrames == -1) {
+				scene->camera.accumulateFrames = 0;
+			}
+			return;
+		}
+		
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
 				&& !ImGui::IsAnyWindowFocused()

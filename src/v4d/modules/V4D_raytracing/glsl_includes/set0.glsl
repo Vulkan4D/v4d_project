@@ -30,8 +30,8 @@ layout(set = 0, binding = 0) uniform Camera {
 	double znear;
 	dvec3 viewUp; //TODO remove if not needed
 	double zfar;
+	dmat4 multisampleProjectionMatrices[9];
 	dmat4 viewMatrix;
-	dmat4 rawProjectionMatrix;
 	dmat4 projectionMatrix;
 	dmat4 historyViewMatrix;
 	mat4 reprojectionMatrix;
@@ -48,6 +48,7 @@ layout(set = 0, binding = 0) uniform Camera {
 	float renderDebugScaling;
 	int maxBounces; // -1 = infinite bounces
 	uint frameCount;
+	int accumulateFrames;
 	
 	vec3 gravityVector;
 	
@@ -104,9 +105,10 @@ float GetOptimalBounceStartDistance(float distance) {
 	layout(buffer_reference, std430, buffer_reference_align = 16) buffer Geometries {
 		GeometryInfo geometries[];
 	};
-	// 96 bytes
+	
 	struct RenderableEntityInstance {
 		mat4 modelViewTransform;
+		mat4 modelViewTransform_history;
 		uint64_t moduleVen;
 		uint64_t moduleId;
 		uint64_t objId;
@@ -146,6 +148,9 @@ float GetOptimalBounceStartDistance(float distance) {
 		mat4 GetModelViewMatrix(uint entityInstanceIndex, uint geometryIndex) {
 			return GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform * GetGeometry(entityInstanceIndex, geometryIndex).transform;
 		}
+		mat4 GetModelViewMatrix_history(uint entityInstanceIndex, uint geometryIndex) {
+			return GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform_history * GetGeometry(entityInstanceIndex, geometryIndex).transform;
+		}
 		mat3 GetModelNormalViewMatrix(uint entityInstanceIndex, uint geometryIndex) {
 			return transpose(inverse(mat3(GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform * GetGeometry(entityInstanceIndex, geometryIndex).transform)));
 		}
@@ -158,6 +163,9 @@ float GetOptimalBounceStartDistance(float distance) {
 		}
 		mat4 GetModelViewMatrix() {
 			return GetRenderableEntityInstance().modelViewTransform * mat4(transpose(mat3x4(GetGeometry().transform)));
+		}
+		mat4 GetModelViewMatrix_history() {
+			return GetRenderableEntityInstance().modelViewTransform_history * mat4(transpose(mat3x4(GetGeometry().transform)));
 		}
 		mat3 GetModelNormalViewMatrix() {
 			return transpose(inverse(mat3(GetRenderableEntityInstance().modelViewTransform * mat4(transpose(mat3x4(GetGeometry().transform))))));
@@ -278,6 +286,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		int32_t primitiveID;
 		int32_t bounces;
 		uint64_t raycastCustomData;
+		vec3 localPosition;
 		float totalDistance;
 		uint seed;
 		vec3 normal;
@@ -293,6 +302,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.primitiveID = -1;
 		ray.bounces = 0;
 		ray.raycastCustomData = 0;
+		ray.localPosition = vec3(0);
 		ray.totalDistance = 0;
 		ray.seed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), camera.frameCount);
 		ray.specular = false;
@@ -306,6 +316,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
 			ray.primitiveID = PRIMITIVE_ID_VALUE;
 			ray.raycastCustomData = GetCustomData();
+			ray.localPosition = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 			ray.totalDistance += gl_HitTEXT;
 			ray.specular = false;
 		}
@@ -373,7 +384,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		}
 
 		void ScatterMetallic(inout RenderingPayload ray, const float roughness, const vec3 direction, const vec3 normal) {
-			ray.bounceDirection = vec4(normalize(reflect(direction, normal) + roughness*RandomInUnitSphere(ray.seed)), float(camera.zfar));
+			ray.bounceDirection = vec4(normalize(reflect(direction, normal) + roughness*roughness*RandomInUnitSphere(ray.seed)), float(camera.zfar));
 			ray.normal = normal;
 			++ray.bounces;
 		}
@@ -399,8 +410,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			ray.color.a = roughness;
 			ray.normal = normal;
 			ray.specular = true;
-			// ray.bounceDirection = vec4(normalize(mix(normal, RandomInUnitSphere(ray.seed), roughness)), float(camera.zfar));
-			// ++ray.bounces;
+			// ray.bounceDirection = vec4(normalize(mix(normal, normal+RandomInUnitSphere(ray.seed), roughness*roughness)), float(camera.zfar));
+			++ray.bounces;
 		}
 
 	#endif

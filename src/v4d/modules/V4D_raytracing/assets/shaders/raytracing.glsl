@@ -6,8 +6,20 @@
 #shader rgen
 
 layout(set = 1, binding = 0, rgba16f) uniform image2D img_lit;
-layout(set = 1, binding = 1, r32f) uniform image2D img_depth;
-layout(set = 1, binding = 2) buffer writeonly RayCast {
+layout(set = 1, binding = 1, rg32f) uniform image2D img_depth;
+layout(set = 1, binding = 2, rgba32f) uniform image2D img_pos;
+layout(set = 1, binding = 3, rgba32f) uniform image2D img_geometry;
+layout(set = 1, binding = 4, rgba16f) uniform image2D img_albedo;
+layout(set = 1, binding = 5, rgba16f) uniform image2D img_normal;
+
+layout(set = 1, binding = 6) uniform sampler2D img_lit_history;
+layout(set = 1, binding = 7) uniform sampler2D img_depth_history;
+layout(set = 1, binding = 8) uniform sampler2D img_pos_history;
+layout(set = 1, binding = 9) uniform sampler2D img_geometry_history;
+layout(set = 1, binding = 10) uniform sampler2D img_albedo_history;
+layout(set = 1, binding = 11) uniform sampler2D img_normal_history;
+
+layout(set = 1, binding = 12) buffer writeonly RayCast {
 	uint64_t moduleVen;
 	uint64_t moduleId;
 	uint64_t objId;
@@ -22,7 +34,7 @@ layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadEXT RenderingPayload
 // #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
 
 vec4 SampleBackground(vec3 direction) {
-	return vec4(0.5,0.5,0.7,1);
+	return vec4(0.0,0.0,0.0,1);
 }
 
 vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal, inout uint seed) {
@@ -64,6 +76,7 @@ vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal, inout uint seed)
 
 void main() {
 	const uint64_t startTime = clockARB();
+	ivec2 renderSize = imageSize(img_lit);
 	
 	const ivec2 imgCoords = ivec2(gl_LaunchIDEXT.xy);
 	const ivec2 pixelInMiddleOfScreen = ivec2(gl_LaunchSizeEXT.xy) / 2;
@@ -71,142 +84,222 @@ void main() {
 	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
 	const vec2 d = pixelCenter/vec2(gl_LaunchSizeEXT.xy) * 2.0 - 1.0;
 	
-	vec3 rayOrigin = vec3(0);
-	vec3 rayDirection = normalize(vec4(inverse(isMiddleOfScreen? camera.rawProjectionMatrix : camera.projectionMatrix) * dvec4(d.x, d.y, 1, 1)).xyz);
-	float rayMinDistance = GetOptimalBounceStartDistance(0);
-	float rayMaxDistance = float(camera.zfar);
-	
-	float depth = 0;
+	// const int numSamples = 9;
+	const int numSamplesPerFrame = 1;
+	// const int numFrames = numSamples - numSamplesPerFrame;
+
+	float primaryRayDepth = 0;
+	vec4 primaryRayPos = vec4(0);
+	vec4 primaryRayAlbedo = vec4(0);
+	vec3 primaryRayNormal = vec3(0);
+	vec3 primaryRayLocalPos = vec3(0);
 	float primaryRayDistance = 0;
-	vec4 color = vec4(1,1,1,0);
+	int primaryRayInstanceIndex = -1;
+	int primaryRayGeometryIndex = -1;
+	int primaryRayPrimitiveIndex = -1;
 	
-	// Trace Rays
-	InitRayPayload(ray);
-	uint totalRaysTraced = 0;
-	do {
-		int nbBounces = ray.bounces;
-		// Trace Ray
-		traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
-		++totalRaysTraced;
-		// Write Depth after first ray
-		if (nbBounces == 0) {
-			primaryRayDistance = ray.position.w;
-			depth = primaryRayDistance==0?0:clamp(GetFragDepthFromViewSpacePosition(ray.position.xyz), 0, 1);
-			imageStore(img_depth, imgCoords, vec4(depth, primaryRayDistance, 0,0));
-			
-			// Store raycast info
-			if (isMiddleOfScreen) {
-				if (ray.position.w > 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1) {
-					// write obj info in hit raycast
-					RenderableEntityInstance entity = GetRenderableEntityInstance(ray.entityInstanceIndex);
-					rayCast.moduleVen = entity.moduleVen;
-					rayCast.moduleId = entity.moduleId;
-					rayCast.objId = entity.objId;
-					rayCast.raycastCustomData = ray.raycastCustomData;
-					rayCast.localSpaceHitPositionAndDistance = vec4((inverse(GetModelViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * vec4(ray.position.xyz, 1)).xyz, ray.position.w);
-					rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex)) * ray.normal), 0);
-				} else {
-					// write empty hit raycast
-					rayCast.moduleVen = 0;
-					rayCast.moduleId = 0;
-					rayCast.objId = 0;
-					rayCast.raycastCustomData = 0;
-					rayCast.localSpaceHitPositionAndDistance = vec4(0);
-					rayCast.localSpaceHitSurfaceNormal = vec4(0);
+	vec4 finalColor = vec4(0);
+	uint seed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), camera.frameCount);
+	for (int frameSampleIndex = 0; frameSampleIndex < numSamplesPerFrame; ++frameSampleIndex) {
+		// uint frameIndex = camera.frameCount % numFrames;
+		
+		dmat4 projection = camera.projectionMatrix;
+		// vec2 subSample = (vec2(RandomFloat(seed), RandomFloat(seed)) * 2.0 - 1.0) / vec2(renderSize.x, renderSize.y);
+		// projection[2].x = subSample.x;
+		// projection[2].y = subSample.y;
+		
+		vec3 rayOrigin = vec3(0);
+		
+		// uint sampleIndex = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), InitRandomSeed(frameIndex, frameSampleIndex)) % numSamples;
+		// vec3 rayDirection = normalize(vec4(inverse(camera.multisampleProjectionMatrices[sampleIndex]) * dvec4(d.x, d.y, 1, 1)).xyz);
+		vec3 rayDirection = normalize(vec4(inverse(projection) * dvec4(d.x, d.y, 1, 1)).xyz);
+		
+		float rayMinDistance = GetOptimalBounceStartDistance(0);
+		float rayMaxDistance = float(camera.zfar);
+		
+		vec4 color = vec4(1,1,1,0);
+
+		// Trace Rays
+		InitRayPayload(ray);
+		ray.seed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), InitRandomSeed(camera.frameCount, frameSampleIndex));
+		uint totalRaysTraced = 0;
+		do {
+			int nbBounces = ray.bounces;
+			// Trace Ray
+			traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
+			++totalRaysTraced;
+			// Write g-buffers for first ray
+			if (frameSampleIndex == 0 && nbBounces == 0) {
+				primaryRayPos = ray.position;
+				primaryRayDistance = primaryRayPos.w;
+				primaryRayDepth = primaryRayDistance==0?0:clamp(GetFragDepthFromViewSpacePosition(ray.position.xyz), 0, 1);
+				primaryRayInstanceIndex = ray.entityInstanceIndex;
+				primaryRayGeometryIndex = ray.geometryIndex;
+				primaryRayPrimitiveIndex = ray.primitiveID;
+				primaryRayLocalPos = ray.localPosition;
+				primaryRayAlbedo = ray.color;
+				primaryRayNormal = ray.normal;
+				
+				// Store raycast info
+				if (isMiddleOfScreen) {
+					if (ray.position.w > 0 && primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
+						// write obj info in hit raycast
+						RenderableEntityInstance entity = GetRenderableEntityInstance(primaryRayInstanceIndex);
+						rayCast.moduleVen = entity.moduleVen;
+						rayCast.moduleId = entity.moduleId;
+						rayCast.objId = entity.objId;
+						rayCast.raycastCustomData = ray.raycastCustomData;
+						rayCast.localSpaceHitPositionAndDistance = vec4(ray.localPosition, ray.position.w);
+						rayCast.localSpaceHitSurfaceNormal = vec4(normalize(inverse(GetModelNormalViewMatrix(primaryRayInstanceIndex, primaryRayGeometryIndex)) * ray.normal), 0);
+					} else {
+						// write empty hit raycast
+						rayCast.moduleVen = 0;
+						rayCast.moduleId = 0;
+						rayCast.objId = 0;
+						rayCast.raycastCustomData = 0;
+						rayCast.localSpaceHitPositionAndDistance = vec4(0);
+						rayCast.localSpaceHitSurfaceNormal = vec4(0);
+					}
+				}
+				
+				// Debug / Render Modes
+				switch (camera.renderMode) {
+					case RENDER_MODE_NOTHING:
+						imageStore(img_lit, imgCoords, vec4(0));
+						return;
+					case RENDER_MODE_NORMALS:
+						if (primaryRayDistance == 0) {
+							imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
+						} else {
+							imageStore(img_lit, imgCoords, ray.color);
+						}
+						return;
+					case RENDER_MODE_ALBEDO:
+						if (primaryRayDistance == 0) {
+							imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
+						} else {
+							imageStore(img_lit, imgCoords, ray.color);
+						}
+						return;
+					case RENDER_MODE_EMISSION:
+						if (primaryRayDistance == 0) {
+							imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
+						} else {
+							imageStore(img_lit, imgCoords, ray.color);
+						}
+						return;
+					case RENDER_MODE_METALLIC:
+						if (primaryRayDistance == 0) {
+							imageStore(img_lit, imgCoords, vec4(1,0,1, 1));
+						} else {
+							imageStore(img_lit, imgCoords, ray.color);
+						}
+						return;
+					case RENDER_MODE_ROUGNESS:
+						if (primaryRayDistance == 0) {
+							imageStore(img_lit, imgCoords, vec4(1,0,1, 1));
+						} else {
+							imageStore(img_lit, imgCoords, ray.color);
+						}
+						return;
+					case RENDER_MODE_DEPTH:
+						imageStore(img_lit, imgCoords, vec4(vec3(primaryRayDepth*pow(10, camera.renderDebugScaling*6)), 1));
+						return;
+					case RENDER_MODE_DISTANCE:
+						imageStore(img_lit, imgCoords, vec4(vec3(primaryRayDistance/pow(10, camera.renderDebugScaling*4)), 1));
+						return;
 				}
 			}
-			
-			// Debug / Render Modes
-			switch (camera.renderMode) {
-				case RENDER_MODE_NOTHING:
-					imageStore(img_lit, imgCoords, vec4(0));
-					return;
-				case RENDER_MODE_NORMALS:
-					if (primaryRayDistance == 0) {
-						imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
-					} else {
-						imageStore(img_lit, imgCoords, ray.color);
-					}
-					return;
-				case RENDER_MODE_ALBEDO:
-					if (primaryRayDistance == 0) {
-						imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
-					} else {
-						imageStore(img_lit, imgCoords, ray.color);
-					}
-					return;
-				case RENDER_MODE_EMISSION:
-					if (primaryRayDistance == 0) {
-						imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
-					} else {
-						imageStore(img_lit, imgCoords, ray.color);
-					}
-					return;
-				case RENDER_MODE_METALLIC:
-					if (primaryRayDistance == 0) {
-						imageStore(img_lit, imgCoords, vec4(1,0,1, 1));
-					} else {
-						imageStore(img_lit, imgCoords, ray.color);
-					}
-					return;
-				case RENDER_MODE_ROUGNESS:
-					if (primaryRayDistance == 0) {
-						imageStore(img_lit, imgCoords, vec4(1,0,1, 1));
-					} else {
-						imageStore(img_lit, imgCoords, ray.color);
-					}
-					return;
-				case RENDER_MODE_DEPTH:
-					imageStore(img_lit, imgCoords, vec4(vec3(depth*pow(10, camera.renderDebugScaling*6)), 1));
-					return;
-				case RENDER_MODE_DISTANCE:
-					imageStore(img_lit, imgCoords, vec4(vec3(primaryRayDistance/pow(10, camera.renderDebugScaling*4)), 1));
-					return;
+			// miss
+			if (ray.position.w <= 0) {
+				color.rgb *= mix(SampleBackground(rayDirection).rgb, vec3(1), color.a);
+				color.a = 1;
+				break;
 			}
+			color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
+			if (ray.specular) {
+				color.rgb = mix(color.rgb*Specular(rayOrigin, ray.position.xyz, ray.normal, ray.seed), color.rgb, color.a);
+			}
+			color.a = min(1, max(ray.color.a, color.a));
+			// all light has been absorbed
+			if (color.a == 1) {
+				break;
+			}
+			// no more bounce
+			if (ray.bounceDirection.a <= 0) {
+				break;
+			}
+			// maximum bounces reached
+			if (ray.bounces > camera.maxBounces && camera.maxBounces >= 0) {
+				break;
+			}
+			// maximum time budget exceeded for bounces
+			if (camera.bounceTimeBudget > 0.0 && float(double(clockARB() - startTime)/1000000.0) > camera.bounceTimeBudget) {
+				break;
+			}
+			// Next bounce
+			rayOrigin += rayDirection * ray.position.w;
+			rayDirection = normalize(ray.bounceDirection.xyz);
+			rayMinDistance = GetOptimalBounceStartDistance(ray.totalDistance);
+			rayMaxDistance = ray.bounceDirection.a;
+		} while (totalRaysTraced < 1000);
+		
+		// Write lit image
+		if (camera.renderMode == RENDER_MODE_BOUNCES) {
+			if (frameSampleIndex == 0) {
+				imageStore(img_lit, imgCoords, vec4(heatmap(float(ray.bounces)/(camera.renderDebugScaling*5)), 1));
+			}
+			return;
+		} else if (camera.renderMode == RENDER_MODE_TIME) {
+			if (frameSampleIndex == 0) {
+				imageStore(img_lit, imgCoords, vec4(heatmap(float(double(clockARB() - startTime) / double(camera.renderDebugScaling*1000000.0))), 1));
+			}
+			return;
 		}
-		// miss
-		if (ray.position.w <= 0) {
-			color.rgb *= mix(SampleBackground(rayDirection).rgb, vec3(1), color.a);
-			color.a = 1;
+		
+		// finalColor += color / ((frameSampleIndex==0)? 2.0:(2.0*numSamplesPerFrame));
+		// finalColor += color / numSamplesPerFrame;
+		if (camera.accumulateFrames <= 0) {
+			finalColor = mix(finalColor, color, 1.0 / (frameSampleIndex+1));
+		} else {
+			finalColor = mix(texture(img_lit_history, vec2(imgCoords)/renderSize), color, 1.0/camera.accumulateFrames);
 			break;
 		}
-		color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
-		if (ray.specular) {
-			color.rgb = mix(color.rgb*Specular(rayOrigin, ray.position.xyz, ray.normal, ray.seed), color.rgb, color.a);
-		}
-		color.a = min(1, max(ray.color.a, color.a));
-		// all light has been absorbed
-		if (color.a == 1) {
-			break;
-		}
-		// no more bounce
-		if (ray.bounceDirection.a <= 0) {
-			break;
-		}
-		// maximum bounces reached
-		if (ray.bounces > camera.maxBounces && camera.maxBounces >= 0) {
-			break;
-		}
-		// maximum time budget exceeded for bounces
-		if (camera.bounceTimeBudget > 0.0 && float(double(clockARB() - startTime)/1000000.0) > camera.bounceTimeBudget) {
-			break;
-		}
-		// Next bounce
-		rayOrigin += rayDirection * ray.position.w;
-		rayDirection = normalize(ray.bounceDirection.xyz);
-		rayMinDistance = GetOptimalBounceStartDistance(ray.totalDistance);
-		rayMaxDistance = ray.bounceDirection.a;
-	} while (totalRaysTraced < 1000);
-	
-	// Write lit image
-	if (camera.renderMode == RENDER_MODE_BOUNCES) {
-		imageStore(img_lit, imgCoords, vec4(heatmap(float(ray.bounces)/(camera.renderDebugScaling*5)), 1));
-	} else if (camera.renderMode == RENDER_MODE_TIME) {
-		imageStore(img_lit, imgCoords, vec4(heatmap(float(double(clockARB() - startTime) / double(camera.renderDebugScaling*1000000.0))), 1));
-	} else {
-		imageStore(img_lit, imgCoords, color);
+		
+		
+		// if (float(double(clockARB() - startTime)/10000.0) > 80.0) break;
 	}
 	
+	// Spatiotemporal Reprojection & Denoising algorithm
+	if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
+		vec4 clipSpaceCoords = mat4(camera.projectionMatrix) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
+		vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
+		vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
+		if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
+			vec4 geometryHistory = texture(img_geometry_history, reprojectedCoords);
+			if (round(geometryHistory.w) == primaryRayInstanceIndex) {
+				if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
+					float dotN = dot(normalize(texture(img_normal_history, reprojectedCoords).xyz), normalize(primaryRayNormal.xyz));
+					if (dotN > 0.5) {
+						finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / (dotN*dotN*dotN*dotN*50));
+					}
+				}
+			}
+		}
+	}
+	
+	imageStore(img_lit, imgCoords, finalColor);
+	imageStore(img_depth, imgCoords, vec4(primaryRayDepth, primaryRayDistance, 0,0));
+	imageStore(img_pos, imgCoords, primaryRayPos);
+	imageStore(img_geometry, imgCoords, vec4(primaryRayLocalPos, float(primaryRayInstanceIndex)));
+	imageStore(img_albedo, imgCoords, primaryRayAlbedo);
+	imageStore(img_normal, imgCoords, vec4(primaryRayNormal, 0));
+
+
+
+
+
+
 
 
 

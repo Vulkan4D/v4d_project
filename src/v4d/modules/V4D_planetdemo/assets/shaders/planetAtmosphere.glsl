@@ -66,6 +66,7 @@ const float minStepSize = 100.0; // meters
 
 void main() {
 	if (camera.renderMode != RENDER_MODE_STANDARD) discard;
+	discard;
 	
 	vec4 unpackedAtmosphereColor = UnpackVec4FromUint(planetAtmosphere.color);
 	vec3 atmosphereColor = normalize(unpackedAtmosphereColor.rgb);

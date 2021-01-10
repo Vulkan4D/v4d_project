@@ -30,7 +30,7 @@
 #ifdef V4D_RAYTRACING_RENDERER_MODULE
 namespace RENDER_OPTIONS {
 	bool HARD_SHADOWS = true;
-	bool TXAA = true;
+	bool TXAA = false;
 	bool HDR_TONE_MAPPING = true;
 	bool GAMMA_CORRECTION = true;
 	
