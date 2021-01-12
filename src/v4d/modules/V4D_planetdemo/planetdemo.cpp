@@ -1,4 +1,7 @@
-#include "common.hh"
+#define _V4D_MODULE
+#include <v4d.h>
+
+#include "PlanetsRenderer/PlanetTerrain.hpp"
 #include "../V4D_flycam/common.hh"
 
 using namespace v4d::graphics;
@@ -11,7 +14,6 @@ const double distanceFromChunkToGenerateCollider = 1'000;
 
 std::shared_ptr<RenderableGeometryEntity> sun = nullptr;
 std::shared_ptr<RenderableGeometryEntity> sun2 = nullptr;
-PlanetAtmosphereShaderPipeline* planetAtmosphereShader = nullptr;
 Device* renderingDevice = nullptr;
 Scene* scene = nullptr;
 Renderer* r = nullptr;
@@ -207,10 +209,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		playerView->SetInitialPositionAndView(worldPosition, glm::normalize(sun1Position), glm::normalize(worldPosition), true);
 	}
 	
-	V4D_MODULE_FUNC(void, ModuleUnload) {
-		if (planetAtmosphereShader) delete planetAtmosphereShader;
-	}
-	
 	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {
 		r = _r;
 	}
@@ -267,13 +265,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		PlanetTerrain::EndChunkGenerator();
 		TerrainGeneratorLib::Stop();
 		if (terrain) {
-			terrain->atmosphere.Free(device);
 			delete terrain;
 			terrain = nullptr;
-			if (planetAtmosphereShader) {
-				planetAtmosphereShader->planets.clear();
-				planetAtmosphereShader->lightSources.clear();
-			}
 		}
 	}
 	
@@ -288,16 +281,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				{
 					std::lock_guard lock(terrain->planetMutex);
 					terrain->scene = scene;
-					if (planetAtmosphereShader) {
-						planetAtmosphereShader->planets.push_back(terrain);
-						planetAtmosphereShader->lightSources.push_back(sun);
-						planetAtmosphereShader->lightSources.push_back(sun2);
-					}
-					if (terrain->atmosphere.radius > 0) {
-						renderingDevice->RunSingleTimeCommands(renderingDevice->GetQueue("graphics"), [](auto cmdBuffer){
-							terrain->atmosphere.Allocate(renderingDevice, cmdBuffer);
-						});
-					}
 				}
 			}
 		//
@@ -392,17 +375,27 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::Separator();
 				ImGui::Text("Planet");
 				if (terrain) {
-					if (terrain->atmosphere.radius > 0) {
-						ImGui::Separator();
-						ImGui::Text("Atmosphere");
-						ImGui::SliderFloat("density", &terrain->atmosphere.densityFactor, 0.0f, 10.0f);
-						ImGui::ColorEdit3("color", (float*)&terrain->atmosphere.color);
-						ImGui::Separator();
-						// ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
-						// ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
-						// ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
-						ImGui::SliderFloat("Terrain near detail resolution", &PlanetTerrain::targetVertexSeparationInMeters, 0.02f, 0.5f);
+					ImGui::Separator();
+					ImGui::Text("Atmosphere");
+					if (ImGui::SliderFloat("density", &terrain->atmosphereDensityFactor, 0.0f, 10.0f)
+					||
+					ImGui::ColorEdit3("color", (float*)&terrain->atmosphereColor)
+					) {
+						if (auto atmosphereEntity = terrain->atmosphere.lock(); atmosphereEntity) {
+							if (auto atmosphereColor = atmosphereEntity->meshVertexColorF32.Lock(); atmosphereColor && atmosphereColor->data) {
+								atmosphereColor->data->r = terrain->atmosphereColor.r;
+								atmosphereColor->data->g = terrain->atmosphereColor.g;
+								atmosphereColor->data->b = terrain->atmosphereColor.b;
+								atmosphereColor->data->a = terrain->atmosphereDensityFactor;
+								atmosphereColor->dirtyOnDevice = true;
+							}
+						}
 					}
+					ImGui::Separator();
+					// ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
+					// ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);
+					// ImGui::Checkbox("Automatic terrain detail level", &automaticChunkSubdivisionDistanceFactor);
+					ImGui::SliderFloat("Terrain near detail resolution", &PlanetTerrain::targetVertexSeparationInMeters, 0.02f, 0.5f);
 					
 					ImGui::Separator();
 					ImGui::Text("Sun1");
@@ -482,31 +475,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		mapsSamplerDescriptorSet.AddBinding_combinedImageSampler_array(0, bumpMaps, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 		
 		rayTracingPipelineLayout->AddDescriptorSet(&mapsSamplerDescriptorSet);
-		
-		// Atmosphere raster shader
-		planetAtmosphereShader = new PlanetAtmosphereShaderPipeline {*fogPipelineLayout, {
-			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.vert",
-			"modules/V4D_planetdemo/assets/shaders/planetAtmosphere.frag",
-		}};
-		planetAtmosphereShader->camera = &scene->camera;
-		planetAtmosphereShader->atmospherePushConstantIndex = fogPipelineLayout->AddPushConstant<PlanetAtmosphereShaderPipeline::PlanetAtmospherePushConstant>(VK_SHADER_STAGE_ALL_GRAPHICS);
-		mainRenderModule->AddShader("sg_fog", planetAtmosphereShader);
 	}
 	
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
 		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "planet.terrain");
-		
-		// Atmosphere
-		if (planetAtmosphereShader) {
-			planetAtmosphereShader->AddVertexInputBinding(sizeof(PlanetAtmosphere::Vertex), VK_VERTEX_INPUT_RATE_VERTEX, PlanetAtmosphere::Vertex::GetInputAttributes());
-			planetAtmosphereShader->rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-			#ifdef PLANETARY_ATMOSPHERE_MESH_USE_TRIANGLE_STRIPS
-				planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-				planetAtmosphereShader->inputAssembly.primitiveRestartEnable = VK_TRUE;
-			#else
-				planetAtmosphereShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			#endif
-		}
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "atmosphere");
 	}
 	
 	V4D_MODULE_FUNC(void, ReadShaders) {

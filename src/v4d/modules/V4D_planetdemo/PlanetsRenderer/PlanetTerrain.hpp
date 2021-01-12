@@ -2,7 +2,6 @@
 #include <v4d.h>
 
 #include "CubeToSphere.hpp"
-#include "PlanetAtmosphere.hpp"
 #include "Noise.hpp"
 
 #include "v4d/modules/V4D_raytracing/camera_options.hh"
@@ -20,7 +19,9 @@ struct PlanetTerrain {
 	double solidRadius; // standard radius of solid surface (AKA sea level, surface height can go below or above)
 	double heightVariation; // half the total variation (surface height is +- heightVariation)
 	glm::dvec3 absolutePosition; // position of planet relative to world (star system center)
-	PlanetAtmosphere atmosphere;
+	std::weak_ptr<v4d::graphics::RenderableGeometryEntity> atmosphere;
+	float atmosphereDensityFactor = 1.0f;
+	glm::vec3 atmosphereColor = glm::vec3(0.85, 0.8, 1.0);
 	#pragma endregion
 	
 	glm::dvec3 rotationAxis {0,0,1};
@@ -1251,16 +1252,30 @@ struct PlanetTerrain {
 	) : radius(radius),
 		solidRadius(solidRadius),
 		heightVariation(heightVariation),
-		absolutePosition(absolutePosition),
-		atmosphere(radius)
-		// atmosphere(0)
+		absolutePosition(absolutePosition)
 	{
 		AddBaseChunks();
+		
+		// Atmosphere
+		auto atmosphereEntity = RenderableGeometryEntity::Create(THIS_MODULE);
+		atmosphereEntity->generator = [this](v4d::graphics::RenderableGeometryEntity* entity, v4d::graphics::vulkan::Device* device){
+			entity->Allocate(device, "V4D_planetdemo:atmosphere");
+			entity->rayTracingMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-this->radius), glm::vec3(this->radius)}});
+			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{atmosphereColor.r, atmosphereColor.g, atmosphereColor.b, atmosphereDensityFactor}});
+			entity->SetWorldTransform(matrix);
+		};
+		atmosphere = atmosphereEntity;
 	}
 	
 	~PlanetTerrain() {
 		std::lock_guard lock(planetMutex);
 		RemoveBaseChunks();
+		
+		// Atmosphere
+		if (auto atmosphereEntity = atmosphere.lock(); atmosphereEntity) {
+			atmosphereEntity->Destroy();
+		}
 	}
 	
 	void AddBaseChunks() {

@@ -45,8 +45,9 @@ vec3 ApplyPBRShading(vec3 origin, vec3 hitPoint, vec3 albedo, vec3 normal, vec3 
 		if (light.radius > 0.0) {
 			
 			// Calculate light radiance at distance
-			float dist = length(light.position - hitPoint);
-			vec3 radiance = light.color * light.intensity * (1.0 / (dist*dist));
+			vec3 relPos = light.position - hitPoint;
+			float distSqr = dot(relPos, relPos);
+			vec3 radiance = light.color * light.intensity * (1.0 / distSqr);
 			vec3 L = normalize(light.position - hitPoint);
 			
 			if (length(radiance) > radianceThreshold) {

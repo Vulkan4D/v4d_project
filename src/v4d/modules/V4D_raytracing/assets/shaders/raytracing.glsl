@@ -5,37 +5,12 @@
 #############################################################
 #shader rgen
 
-layout(set = 1, binding = 0, rgba16f) uniform image2D img_lit;
-layout(set = 1, binding = 1, rg32f) uniform image2D img_depth;
-layout(set = 1, binding = 2, rgba32f) uniform image2D img_pos;
-layout(set = 1, binding = 3, rgba32f) uniform image2D img_geometry;
-layout(set = 1, binding = 4, rgba16f) uniform image2D img_albedo;
-layout(set = 1, binding = 5, rgba16f) uniform image2D img_normal;
-
-layout(set = 1, binding = 6) uniform sampler2D img_lit_history;
-layout(set = 1, binding = 7) uniform sampler2D img_depth_history;
-layout(set = 1, binding = 8) uniform sampler2D img_pos_history;
-layout(set = 1, binding = 9) uniform sampler2D img_geometry_history;
-layout(set = 1, binding = 10) uniform sampler2D img_albedo_history;
-layout(set = 1, binding = 11) uniform sampler2D img_normal_history;
-
-layout(set = 1, binding = 12) buffer writeonly RayCast {
-	uint64_t moduleVen;
-	uint64_t moduleId;
-	uint64_t objId;
-	uint64_t raycastCustomData;
-	vec4 localSpaceHitPositionAndDistance; // w component is distance
-	vec4 localSpaceHitSurfaceNormal; // w component is unused
-} rayCast;
+#include "v4d/modules/V4D_raytracing/glsl_includes/set1_rendering.glsl"
 
 layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadEXT RenderingPayload ray;
 // layout(location = 1) rayPayloadEXT bool shadowed;
 
 // #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
-
-vec4 SampleBackground(vec3 direction) {
-	return vec4(0.0,0.0,0.0,1);
-}
 
 vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal, inout uint seed) {
 	vec3 specularColor = vec3(0);
@@ -212,13 +187,13 @@ void main() {
 			}
 			// miss
 			if (ray.position.w <= 0) {
-				color.rgb *= mix(SampleBackground(rayDirection).rgb, vec3(1), color.a);
+				color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
 				color.a = 1;
 				break;
 			}
 			color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
-			if (ray.specular) {
-				color.rgb = mix(color.rgb*Specular(rayOrigin, ray.position.xyz, ray.normal, ray.seed), color.rgb, color.a);
+			if (ray.specular > 0) {
+				color.rgb = mix(color.rgb*mix(vec3(1), Specular(rayOrigin, ray.position.xyz, ray.normal, ray.seed), ray.specular), color.rgb, color.a);
 			}
 			color.a = min(1, max(ray.color.a, color.a));
 			// all light has been absorbed
@@ -262,7 +237,7 @@ void main() {
 		if (camera.accumulateFrames <= 0) {
 			finalColor = mix(finalColor, color, 1.0 / (frameSampleIndex+1));
 		} else {
-			finalColor = mix(texture(img_lit_history, vec2(imgCoords)/renderSize), color, 1.0/camera.accumulateFrames);
+			finalColor = mix(texture(img_lit_history, (vec2(imgCoords)+0.5)/renderSize), color, 1.0/camera.accumulateFrames);
 			break;
 		}
 		
@@ -279,10 +254,11 @@ void main() {
 			vec4 geometryHistory = texture(img_geometry_history, reprojectedCoords);
 			if (round(geometryHistory.w) == primaryRayInstanceIndex) {
 				if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
-					float dotN = dot(normalize(texture(img_normal_history, reprojectedCoords).xyz), normalize(primaryRayNormal.xyz));
-					if (dotN > 0.5) {
-						finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / (dotN*dotN*dotN*dotN*50));
-					}
+					// float dotN = dot(normalize(texture(img_normal_history, reprojectedCoords).xyz), normalize(primaryRayNormal.xyz));
+					// if (dotN > 0.5) {
+					// 	finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / (dotN*dotN*dotN*dotN*16));
+					// }
+					finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / 16);
 				}
 			}
 		}
@@ -488,13 +464,15 @@ void main() {
 layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
 
 void main() {
-	ray.color = vec4(0);
 	ray.position = vec4(0);
 	ray.bounceDirection = vec4(0);
 	ray.entityInstanceIndex = -1;
 	ray.geometryIndex = -1;
 	ray.primitiveID = -1;
 	ray.raycastCustomData = 0;
+	
+	ray.color = vec4(0); //TODO sample galaxy
+	
 }
 
 

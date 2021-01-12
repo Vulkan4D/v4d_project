@@ -30,7 +30,6 @@ layout(set = 0, binding = 0) uniform Camera {
 	double znear;
 	dvec3 viewUp; //TODO remove if not needed
 	double zfar;
-	dmat4 multisampleProjectionMatrices[9];
 	dmat4 viewMatrix;
 	dmat4 projectionMatrix;
 	dmat4 historyViewMatrix;
@@ -290,7 +289,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		float totalDistance;
 		uint seed;
 		vec3 normal;
-		bool specular;
+		float specular;
 	};
 
 	void InitRayPayload(inout RenderingPayload ray) {
@@ -305,7 +304,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.localPosition = vec3(0);
 		ray.totalDistance = 0;
 		ray.seed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), camera.frameCount);
-		ray.specular = false;
+		ray.specular = 0;
 	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
@@ -318,7 +317,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			ray.raycastCustomData = GetCustomData();
 			ray.localPosition = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 			ray.totalDistance += gl_HitTEXT;
-			ray.specular = false;
+			ray.specular = 0;
 		}
 		
 		void DebugRay(inout RenderingPayload ray, vec3 albedo, vec3 normal, float emission, float metallic, float roughness) {
@@ -409,7 +408,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		void ScatterLambertian(inout RenderingPayload ray, const float roughness, const vec3 normal) {
 			ray.color.a = roughness;
 			ray.normal = normal;
-			ray.specular = true;
+			ray.specular = 1.0;
 			// ray.bounceDirection = vec4(normalize(mix(normal, normal+RandomInUnitSphere(ray.seed), roughness*roughness)), float(camera.zfar));
 			++ray.bounces;
 		}

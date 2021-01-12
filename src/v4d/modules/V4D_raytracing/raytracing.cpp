@@ -1484,21 +1484,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		{r->descriptorSets["set1_rendering"] = &set1_rendering;
 			int i = 0;
 			
-			set1_rendering.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(i++, &img_pos, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(i++, &img_geometry, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(i++, &img_albedo, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_imageView(i++, &img_normal, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_lit, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_depth, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_pos, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_geometry, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_albedo, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_imageView(i++, &img_normal, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_lit_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_depth_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_pos_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_geometry_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_albedo_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
-			set1_rendering.AddBinding_combinedImageSampler(i++, &img_normal_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_lit_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_depth_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_pos_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_geometry_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_albedo_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_normal_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			
-			set1_rendering.AddBinding_storageBuffer(i++, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+			set1_rendering.AddBinding_storageBuffer(i++, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_raster"] = &set1_raster;
