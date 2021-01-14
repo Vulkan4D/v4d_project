@@ -377,7 +377,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (terrain) {
 					ImGui::Separator();
 					ImGui::Text("Atmosphere");
-					if (ImGui::SliderFloat("density", &terrain->atmosphereDensityFactor, 0.0f, 10.0f)
+					if (ImGui::SliderFloat("density", &terrain->atmosphereDensityFactor, 0.0f, 5.0f)
 					||
 					ImGui::ColorEdit3("color", (float*)&terrain->atmosphereColor)
 					) {

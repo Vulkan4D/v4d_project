@@ -101,8 +101,10 @@ void main() {
 	// trace for geometries within the atmosphere
 	int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT;
 	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_RENDERING, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, sphereAttr.t2, RAY_PAYLOAD_LOCATION_RENDERING);
+	// if (densityFactor < 0.0001) {
+	// 	return;
+	// }
 	// if (ray.position.w > 0 && ray.position.w < minStepSize/2) {
-	// 	// here we consider that the atmosphere is too thin and will not affect the result enough to be worth doing the math, so we can simply draw the geometry
 	// 	return;
 	// }
 	
@@ -152,7 +154,7 @@ void main() {
 				
 				// Cache some values related to that light before raymarching in the atmosphere
 				vec3 lightDir = normalize(lightPos);
-				vec3 lightIntensity = light.color * luminosity;
+				vec3 lightIntensity = light.color * luminosity * 4;
 				float mu = dot(viewDir, lightDir);
 				float mumu = mu * mu;
 				float rayleighPhase = 3.0 / (50.2654824574 /* (16 * pi) */) * (1.0 + mumu);
@@ -167,7 +169,7 @@ void main() {
 					maxDepth = max(maxDepth, depth);
 					
 					float altitude = max(0.001, length(posOnSphere) - innerRadius);
-					vec2 density = exp(-altitude / scaleHeight) * stepSize;
+					vec2 density = exp(-altitude / scaleHeight / densityFactor) * stepSize;
 					opticalDepth += density;
 					
 					// step size for light ray
@@ -185,7 +187,7 @@ void main() {
 					for (int l = 0; l < RAYMARCH_LIGHT_STEPS; ++l) {
 						vec3 posLightRay = posOnSphere + lightDir * (lightRayDist + lightRayStepSize/2.0);
 						float lightRayAltitude = max(0.001, length(posLightRay) - innerRadius);
-						vec2 lightRayDensity = exp(-lightRayAltitude / scaleHeight) * lightRayStepSize;
+						vec2 lightRayDensity = exp(-lightRayAltitude / scaleHeight * densityFactor) * lightRayStepSize;
 						
 						// Sun shafts
 						vec3 posLightViewSpace = posLightRay - centerPosition;
@@ -201,9 +203,9 @@ void main() {
 						lightRayOpticalDepth += lightRayDensity;
 						lightRayDist += lightRayStepSize;
 					}
-					decay *= clamp(-rayStartAltitude/atmosphereHeight*8.0, 0.0, 1.0);
+					decay *= clamp(-rayStartAltitude/atmosphereHeight, 0.0, 1.0);
 					
-					vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x)))) * densityFactor*8;
+					vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x))));
 					totalRayleigh += density.x * attenuation * (1.0-decay/3.0);
 					totalMie += density.y * attenuation * (1.0-decay);
 					
@@ -212,8 +214,8 @@ void main() {
 
 				atmColor += vec3(
 					(
-						rayleighPhase * RAYLEIGH_BETA * densityFactor * totalRayleigh // rayleigh color
-						+ miePhase * MIE_BETA * densityFactor * totalMie // mie
+						rayleighPhase * RAYLEIGH_BETA * totalRayleigh // rayleigh colorx
+						+ miePhase * MIE_BETA * totalMie // mie
 					) * lightIntensity * atmosphereColor / rayMarchingSteps
 				);
 				
@@ -221,8 +223,8 @@ void main() {
 		}
 	}
 	
-	float alpha = clamp(maxDepth/atmosphereHeight*densityFactor/2, 0.0, 1.0);
+	float alpha = clamp(maxDepth / atmosphereHeight * pow(densityFactor, 1.0/8), 0, 1);
 	ray.color.rgb = mix(ray.color.rgb*min(1.0, max(ambientFactor, length(atmColor))), atmColor, alpha);
-	ray.specular *= 1.0-alpha;
+	ray.specular *= 1.0 - alpha;
 }
 

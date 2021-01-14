@@ -49,6 +49,12 @@ vec3 Specular(vec3 rayOrigin, vec3 hitPosition, vec3 hitNormal, inout uint seed)
 	return specularColor;
 }
 
+vec2 GetSubSample(uint frameIndex, ivec2 renderSize) {
+	uint seed = InitRandomSeed(frameIndex, 0);
+	vec2 subPixel = vec2(RandomFloat(seed), RandomFloat(seed));
+	return (subPixel * 2.0 - 1.0) / vec2(renderSize.x, renderSize.y);
+}
+
 void main() {
 	const uint64_t startTime = clockARB();
 	ivec2 renderSize = imageSize(img_lit);
@@ -79,9 +85,11 @@ void main() {
 		// uint frameIndex = camera.frameCount % numFrames;
 		
 		dmat4 projection = camera.projectionMatrix;
-		// vec2 subSample = (vec2(RandomFloat(seed), RandomFloat(seed)) * 2.0 - 1.0) / vec2(renderSize.x, renderSize.y);
-		// projection[2].x = subSample.x;
-		// projection[2].y = subSample.y;
+		if (camera.accumulateFrames > 0) {
+			vec2 subSample = GetSubSample(camera.frameCount, renderSize);
+			projection[2].x = subSample.x;
+			projection[2].y = subSample.y;
+		}
 		
 		vec3 rayOrigin = vec3(0);
 		
@@ -246,22 +254,23 @@ void main() {
 	}
 	
 	// Spatiotemporal Reprojection & Denoising algorithm
-	if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
-		vec4 clipSpaceCoords = mat4(camera.projectionMatrix) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
-		vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
-		vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
-		if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
-			vec4 geometryHistory = texture(img_geometry_history, reprojectedCoords);
-			if (round(geometryHistory.w) == primaryRayInstanceIndex) {
-				if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
-					// float dotN = dot(normalize(texture(img_normal_history, reprojectedCoords).xyz), normalize(primaryRayNormal.xyz));
-					// if (dotN > 0.5) {
-					// 	finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / (dotN*dotN*dotN*dotN*16));
-					// }
-					finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / 16);
+	if (camera.accumulateFrames <= 0) {
+		
+		// V4D custom denoiser algo
+		if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1 /*&& round(texture(img_geometry_history, (vec2(imgCoords)+0.5)/renderSize).w) == primaryRayInstanceIndex*/) {
+			vec4 clipSpaceCoords = mat4(camera.projectionMatrix) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
+			vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
+			vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
+			if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
+				vec4 geometryHistory = texture(img_geometry_history, reprojectedCoords);
+				if (round(geometryHistory.w) == primaryRayInstanceIndex) {
+					if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
+						finalColor = mix(texture(img_lit_history, reprojectedCoords), finalColor, 1.0 / 16);
+					}
 				}
 			}
 		}
+		
 	}
 	
 	imageStore(img_lit, imgCoords, finalColor);
