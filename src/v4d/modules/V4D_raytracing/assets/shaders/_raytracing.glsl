@@ -7,7 +7,7 @@
 
 #include "v4d/modules/V4D_raytracing/glsl_includes/set1_rendering.glsl"
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadEXT VisibilityPayload ray;
 // layout(location = 1) rayPayloadEXT bool shadowed;
 
 // #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
@@ -109,7 +109,7 @@ void main() {
 		do {
 			int nbBounces = ray.bounces;
 			// Trace Ray
-			traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
+			traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 			++totalRaysTraced;
 			// Write g-buffers for first ray
 			if (frameSampleIndex == 0 && nbBounces == 0) {
@@ -301,7 +301,7 @@ void main() {
 	// // Trace Primary Ray
 	// InitRayPayload(ray);
 	// do {
-	// 	traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
+	// 	traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 	// } while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 	
 	// // Store raycast info
@@ -393,7 +393,7 @@ void main() {
 	// 			} else break;
 				
 	// 			do {
-	// 				traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_RENDERING, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_RENDERING);
+	// 				traceRayEXT(topLevelAS, 0, rayMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 	// 			} while (ray.passthrough && ray.recursions++ < 100 && (rayMinDistance = ray.distance) > 0);
 	// 			vec3 color;
 	// 			if (ray.distance == 0) {
@@ -470,7 +470,7 @@ void main() {
 #############################################################
 #shader rmiss
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
 	ray.position = vec4(0);

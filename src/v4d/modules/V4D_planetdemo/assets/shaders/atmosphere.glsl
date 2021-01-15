@@ -54,9 +54,9 @@ void main() {
 
 
 #############################################################
-#shader rendering.rahit
+#shader visibility.rahit
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
 	if (camera.renderMode != RENDER_MODE_STANDARD) ignoreIntersectionEXT;
@@ -67,13 +67,13 @@ void main() {
 
 
 #############################################################
-#shader rendering.rchit
+#shader visibility.rchit
 
 #include "v4d/modules/V4D_raytracing/glsl_includes/set1_rendering.glsl"
 
 hitAttributeEXT SphereAttr sphereAttr;
 
-layout(location = 0) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 #define RAYLEIGH_BETA vec3(7.0e-6, 8.0e-6, 9.0e-6)
 #define MIE_BETA vec3(1e-7)
@@ -100,7 +100,7 @@ void main() {
 	
 	// trace for geometries within the atmosphere
 	int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT;
-	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_RENDERING, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, sphereAttr.t2, RAY_PAYLOAD_LOCATION_RENDERING);
+	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, sphereAttr.t2, RAY_PAYLOAD_LOCATION_VISIBILITY);
 	// if (densityFactor < 0.0001) {
 	// 	return;
 	// }
@@ -225,6 +225,6 @@ void main() {
 	
 	float alpha = clamp(maxDepth / atmosphereHeight * pow(densityFactor, 1.0/8), 0, 1);
 	ray.color.rgb = mix(ray.color.rgb*min(1.0, max(ambientFactor, length(atmColor))), atmColor, alpha);
-	ray.specular *= 1.0 - alpha;
+	// ray.specular *= 1.0 - alpha;
 }
 

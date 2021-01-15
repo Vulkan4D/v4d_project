@@ -61,14 +61,14 @@ void main() {
 
 
 #############################################################
-#shader rendering.rchit
+#shader visibility.rchit
 
 #define DISABLE_SHADOWS
 #include "v4d/modules/V4D_raytracing/glsl_includes/core_pbr.glsl"
 
 hitAttributeEXT SphereAttr sphereAttr;
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 layout(location = RAY_PAYLOAD_LOCATION_EXTRA) rayPayloadEXT RayPayloadTerrainNegateSphereExtra rayExtra;
 
 void main() {
@@ -99,18 +99,14 @@ void main() {
 	
 	// Find other geometries within that distance
 	int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_LIGHT;
-	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_RENDERING, 0, 0, hitPoint, float(camera.znear), gl_WorldRayDirectionEXT, hitDepthTotal, RAY_PAYLOAD_LOCATION_RENDERING);
+	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, hitPoint, float(camera.znear), gl_WorldRayDirectionEXT, hitDepthTotal, RAY_PAYLOAD_LOCATION_VISIBILITY);
 	if (ray.position.w != 0) return; // we found a geometry, just exit here to draw it on screen.
 
 	// Find out if we are above or below ground level by tracing a terrain-seeking ray upwards
-	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT, RAY_TRACED_ENTITY_TERRAIN, RAY_SBT_OFFSET_RENDERING, 0, 0, endPoint, float(camera.znear), normalize(-camera.gravityVector), 20000000, RAY_PAYLOAD_LOCATION_RENDERING);
+	traceRayEXT(topLevelAS, gl_RayFlagsTerminateOnFirstHitEXT, RAY_TRACED_ENTITY_TERRAIN, RAY_SBT_OFFSET_VISIBILITY, 0, 0, endPoint, float(camera.znear), normalize(-camera.gravityVector), 20000000, RAY_PAYLOAD_LOCATION_VISIBILITY);
 	if (ray.position.w == 0) {
 		// we are above ground, trace a standard ray and exit here
-		// if (ray.recursions++ > 200) {
-		// 	// WriteRayPayload(ray);
-		// 	return;
-		// }
-		ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
+		WriteRayPayload(ray);
 		ray.position.w = gl_HitTEXT + hitDepthTotal;
 		ray.bounceDirection = vec4(gl_WorldRayDirectionEXT, float(camera.zfar));
 		ray.color.rgb = vec3(1);
@@ -123,25 +119,25 @@ void main() {
 	float undergroundDepth = ray.position.w;
 	
 	ray.position = vec4(endPoint, gl_HitTEXT + hitDepthTotal);
-	ScatterLambertian(ray, 0.7, mix(ray.normal, normal, 0.5));
-	ray.specular = 0;
+	// ScatterLambertian(ray, 0.7, mix(ray.normal, normal, 0.5));
+	// ray.specular = 0;
 	
-	// // Override shading
-	// ray.albedo = ApplyPBRShading(gl_WorldRayOriginEXT, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, vec4(0));
-	// ray.albedo *= pow(1-clamp(linearStep(0, sphereRadius*3, undergroundDepth), 0, 1), 10);
-	// ray.roughness = 0;
+	// // // Override shading
+	// // ray.albedo = ApplyPBRShading(gl_WorldRayOriginEXT, ray.position, ray.albedo, ray.normal, /*bump*/vec3(0), ray.roughness, ray.metallic, vec4(0));
+	// // ray.albedo *= pow(1-clamp(linearStep(0, sphereRadius*3, undergroundDepth), 0, 1), 10);
+	// // ray.roughness = 0;
 	
 	
-	DebugRay(ray, ray.color.rgb, normal, 0, 0, 0);
+	// DebugRay(ray, ray.color.rgb, normal, 0, 0, 0);
 }
 
 
 #############################################################
-#shader rendering.rahit
+#shader visibility.rahit
 
 // hitAttributeEXT SphereAttr sphereAttr;
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
 	if (ray.entityInstanceIndex == gl_InstanceCustomIndexEXT) {

@@ -53,7 +53,7 @@ vec3 TriplanarLocalNormalMap(sampler2D normalTex, vec3 coords, vec3 localFaceNor
 
 
 #############################################################
-#shader rendering.rchit
+#shader visibility.rchit
 
 layout(buffer_reference, std430, buffer_reference_align = 4) buffer CustomData {
 	uint packed[];
@@ -61,55 +61,68 @@ layout(buffer_reference, std430, buffer_reference_align = 4) buffer CustomData {
 
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
+	WriteRayPayload(ray);
+	
 	uint i0 = GetIndex(0);
 	uint i1 = GetIndex(1);
 	uint i2 = GetIndex(2);
 	
-	// Interpolate fragment
 	vec3 barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
-	vec3 pos = (
-		+ GetVertexPosition(i0) * barycentricCoords.x
-		+ GetVertexPosition(i1) * barycentricCoords.y
-		+ GetVertexPosition(i2) * barycentricCoords.z
-	);
-	vec3 normal = normalize(
+	
+	// vec3 pos = (
+	// 	+ GetVertexPosition(i0) * barycentricCoords.x
+	// 	+ GetVertexPosition(i1) * barycentricCoords.y
+	// 	+ GetVertexPosition(i2) * barycentricCoords.z
+	// );
+	
+	ray.normal.xyz = DoubleSidedNormals(normalize(
 		+ GetVertexNormal(i0) * barycentricCoords.x
 		+ GetVertexNormal(i1) * barycentricCoords.y
 		+ GetVertexNormal(i2) * barycentricCoords.z
-	);
-	vec4 color = HasVertexColor()? (
-		+ GetVertexColor(i0) * barycentricCoords.x
-		+ GetVertexColor(i1) * barycentricCoords.y
-		+ GetVertexColor(i2) * barycentricCoords.z
-	) : vec4(0);
-	// vec2 uv = HasVertexUV()? (
-	// 	+ GetVertexUV(i0) * barycentricCoords.x
-	// 	+ GetVertexUV(i1) * barycentricCoords.y
-	// 	+ GetVertexUV(i2) * barycentricCoords.z
-	// ) : vec2(0);
+	));
 	
-	
-	vec3 blending = TriplanarBlending(normal);
-	normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending, gl_HitTEXT);
-	normal += TriplanarLocalNormalMap(tex_img_metalNormal, pos/200, normal, blending, gl_HitTEXT/100)/2;
-	normal = DoubleSidedNormals(normalize(GetModelNormalViewMatrix() * normalize(normal)));
-	
-	WriteRayPayload(ray);
-	ray.color = color;
-	float metallic = 0.7;
-	float roughness = 0.1;
-	if (metallic > 0) {
-		ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
-		ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
-	} else if (color.a < 1) {
-		ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
-	} else {
-		ScatterLambertian(ray, roughness, normal);
+	if (HasVertexUV()) {
+		ray.uv = 
+			+ GetVertexUV(i0) * barycentricCoords.x
+			+ GetVertexUV(i1) * barycentricCoords.y
+			+ GetVertexUV(i2) * barycentricCoords.z
+		;
 	}
-	ray.raycastCustomData = uint64_t(CustomData(GetCustomData()).packed[i0]);
 	
-	DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
+	if (HasVertexColor()) {
+		ray.color = 
+			+ GetVertexColor(i0) * barycentricCoords.x
+			+ GetVertexColor(i1) * barycentricCoords.y
+			+ GetVertexColor(i2) * barycentricCoords.z
+		;
+	} else {
+		ray.color = vec4(1);
+	}
+	
+	ray.customData = uint64_t(CustomData(GetCustomData()).packed[i0]);
+	
+	
+	
+	// vec3 blending = TriplanarBlending(normal);
+	// normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending, gl_HitTEXT);
+	// normal += TriplanarLocalNormalMap(tex_img_metalNormal, pos/200, normal, blending, gl_HitTEXT/100)/2;
+	// normal = normalize(GetModelNormalViewMatrix() * DoubleSidedNormals(normalize(normal)));
+	
+	// WriteRayPayload(ray);
+	// ray.color = color;
+	// float metallic = 0.7;
+	// float roughness = 0.1;
+	// if (metallic > 0) {
+	// 	ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+	// 	ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+	// } else if (color.a < 1) {
+	// 	ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+	// } else {
+	// 	ScatterLambertian(ray, roughness, normal);
+	// }
+	
+	// DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
 }

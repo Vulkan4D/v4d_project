@@ -3,37 +3,29 @@
 #include "noise.glsl"
 
 #define NormalFromBumpNoise(noiseFunc) \
-	vec3 _tangentX = normalize(cross(normalize(vec3(0.356,1.2145,0.24537))/* fixed arbitrary vector in object space */, tex.normal));\
-	vec3 _tangentY = normalize(cross(tex.normal, _tangentX));\
-	mat3 _TBN = mat3(_tangentX, _tangentY, tex.normal);\
-	float _altitudeTop = noiseFunc(tex.localHitPosition + _tangentY/1000);\
-	float _altitudeBottom = noiseFunc(tex.localHitPosition - _tangentY/1000);\
-	float _altitudeRight = noiseFunc(tex.localHitPosition + _tangentX/1000);\
-	float _altitudeLeft = noiseFunc(tex.localHitPosition - _tangentX/1000);\
+	vec3 _tangentX = normalize(cross(normalize(vec3(0.356,1.2145,0.24537))/* fixed arbitrary vector in object space */, tex.normal.xyz));\
+	vec3 _tangentY = normalize(cross(tex.normal.xyz, _tangentX));\
+	mat3 _TBN = mat3(_tangentX, _tangentY, tex.normal.xyz);\
+	float _altitudeTop = noiseFunc(tex.position.xyz + _tangentY/1000);\
+	float _altitudeBottom = noiseFunc(tex.position.xyz - _tangentY/1000);\
+	float _altitudeRight = noiseFunc(tex.position.xyz + _tangentX/1000);\
+	float _altitudeLeft = noiseFunc(tex.position.xyz - _tangentX/1000);\
 	vec3 _bump = normalize(vec3((_altitudeRight-_altitudeLeft), (_altitudeBottom-_altitudeTop), 2));\
 	vec3 normal = normalize(_TBN * _bump)
 
-struct ProceduralTextureCall {
-	vec3 albedo;
-	vec3 normal;
-	float metallic;
-	float roughness;
-	float opacity;
-	// input-only
-	vec3 localHitPosition;
-	float distance;
-	float factor;
-};
+#define MixTexNormal(val) tex.normal.xyz = normalize(mix(tex.normal.xyz, val, tex.factor))
+#define MixTex(what, val) what = mix(what, val, tex.factor)
 
-layout(location = 0) callableDataInEXT ProceduralTextureCall tex;
+layout(location = CALL_DATA_LOCATION_TEXTURE) callableDataInEXT ProceduralTextureCall tex;
 
-#######################################################################################3
+#######################################################################################
 
 #shader tex_noisy.rcall
 void main() {
-	float noise = clamp01(FastSimplexFractal(tex.localHitPosition*1000, 3)/2+.5);
-	tex.roughness = mix(tex.roughness, noise, tex.factor/2);
-	tex.metallic = mix(tex.metallic, 1-noise, tex.factor/2);
+	float noise = clamp01(FastSimplexFractal(tex.position.xyz*1000, 3)/2+.5);
+	
+	MixTex(tex.roughness, noise/2);
+	MixTex(tex.metallic, (1-noise)/2);
 }
 
 #shader tex_grainy.rcall
@@ -42,9 +34,10 @@ float GrainyNoise(vec3 pos) {
 }
 void main() {
 	NormalFromBumpNoise(GrainyNoise);
-	tex.normal = mix(tex.normal, normal, tex.factor/2);
-	tex.roughness = mix(tex.roughness, 0.6, tex.factor);
-	tex.metallic = mix(tex.metallic, 0.5, tex.factor);
+	
+	MixTexNormal(normal/2);
+	MixTex(tex.roughness, 0.6);
+	MixTex(tex.metallic, 0.5);
 }
 
 #shader tex_bumped.rcall
@@ -53,7 +46,8 @@ float BumpyNoise(vec3 pos) {
 }
 void main() {
 	NormalFromBumpNoise(BumpyNoise);
-	tex.normal = mix(tex.normal, normal, tex.factor/2);
+	
+	MixTexNormal(normal/2);
 }
 
 #shader tex_brushed.rcall
@@ -62,9 +56,10 @@ float BrushedNoise(vec3 pos) {
 }
 void main() {
 	NormalFromBumpNoise(BrushedNoise);
-	tex.normal = mix(tex.normal, normal, tex.factor/2);
-	tex.roughness = mix(tex.roughness, 0.3, tex.factor);
-	tex.metallic = mix(tex.metallic, 0.7, tex.factor);
+	
+	MixTexNormal(normal/2);
+	MixTex(tex.roughness, 0.3);
+	MixTex(tex.metallic, 0.7);
 }
 
 #shader tex_hammered.rcall
@@ -72,18 +67,22 @@ float HammeredNoise(vec3 pos) {
 	return 1-pow(clamp01(voronoi3d(pos*20).x), 2);
 }
 void main() {
+	float hammer = HammeredNoise(tex.position.xyz);
+	float roughness = mix(0.3, 0.8, hammer);
+	float metallic = mix(0.3, 0.1, hammer);
+	
 	NormalFromBumpNoise(HammeredNoise);
-	tex.normal = mix(tex.normal, normal, tex.factor);
-	float hammer = HammeredNoise(tex.localHitPosition);
-	tex.albedo = mix(tex.albedo, tex.albedo/3, tex.factor);
-	tex.roughness = mix(tex.roughness, mix(0.3, 0.8, hammer), tex.factor);
-	tex.metallic = mix(tex.metallic, mix(0.3, 0.1, hammer), tex.factor);
+	
+	MixTexNormal(normal);
+	MixTex(tex.color.rgb, tex.color.rgb/3);
+	MixTex(tex.roughness, roughness);
+	MixTex(tex.metallic, metallic);
 }
 
 #shader tex_polished.rcall
 void main() {
-	tex.metallic = mix(tex.metallic, 1.0, tex.factor);
-	tex.roughness = mix(tex.roughness, 0.01, tex.factor);
+	MixTex(tex.metallic, 1.0);
+	MixTex(tex.roughness, 0.01);
 }
 
 #shader tex_galvanized.rcall

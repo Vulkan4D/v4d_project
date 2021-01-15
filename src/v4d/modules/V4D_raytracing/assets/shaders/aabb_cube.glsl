@@ -1,7 +1,6 @@
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
 
-
 #############################################################
 #shader rint
 
@@ -27,42 +26,49 @@ void main() {
 
 
 #############################################################
-#shader rendering.rchit
+#shader visibility.rchit
 
 hitAttributeEXT vec3 aabbGeomLocalPositionAttr;
 
-layout(location = 0) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
-	vec3 hitPointObj = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
+	WriteRayPayload(ray);
 	
 	// Calculate normal for a cube (will most likely NOT work with any non-uniform cuboid)
-	vec3 normal = normalize(hitPointObj - aabbGeomLocalPositionAttr);
-	vec3 absN = abs(normal);
+	vec3 n = normalize(ray.position.xyz - aabbGeomLocalPositionAttr);
+	vec3 absN = abs(n);
 	float maxC = max(max(absN.x, absN.y), absN.z);
-	normal = GetModelNormalViewMatrix() * (
-		(maxC == absN.x) ?
-			vec3(sign(normal.x), 0, 0) :
-			((maxC == absN.y) ? 
-				vec3(0, sign(normal.y), 0) : 
-				vec3(0, 0, sign(normal.z))
-			)
-	);
+	ray.normal.xyz = (maxC == absN.x) ?
+		vec3(sign(n.x), 0, 0)
+		 :
+		((maxC == absN.y) ? 
+			vec3(0, sign(n.y), 0) : 
+			vec3(0, 0, sign(n.z))
+		)
+	;
 	
-	vec4 color = HasVertexColor()? GetVertexColor(gl_PrimitiveID) : vec4(0,0,0,1);
-	
-	WriteRayPayload(ray);
-	ray.color = color;
-	float metallic = 0.5;
-	float roughness = 0.5;
-	if (metallic > 0) {
-		ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
-		ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
-	} else if (color.a < 1) {
-		ScatterDieletric(ray, GetGeometry().material.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
-	} else {
-		ScatterLambertian(ray, roughness, normal);
+	if (HasVertexColor()) {
+		ray.color = GetVertexColor(gl_PrimitiveID);
 	}
 	
-	DebugRay(ray, color.rgb, normal, GetGeometry().material.emission, metallic, roughness);
+	
+	// // ray.color = color;
+	
+	// // // float metallic = 0.5;
+	// // // float roughness = 0.5;
+	// // // if (metallic > 0) {
+	// // // 	ray.color.a = 1.0 - FresnelReflectAmount(1.0, GetGeometry().material.visibility.indexOfRefraction, normal, gl_WorldRayDirectionEXT, metallic);
+	// // // 	ScatterMetallic(ray, roughness, gl_WorldRayDirectionEXT, normal);
+	// // // } else if (color.a < 1) {
+	// // // 	ScatterDieletric(ray, GetGeometry().material.visibility.indexOfRefraction, gl_WorldRayDirectionEXT, normal);
+	// // // } else {
+	// // // 	ScatterLambertian(ray, roughness, normal);
+	// // // }
+	
+	// // // DebugRay(ray, color.rgb, normal, GetGeometry().material.visibility.emission, metallic, roughness);
+	
+	
+	
+	
 }

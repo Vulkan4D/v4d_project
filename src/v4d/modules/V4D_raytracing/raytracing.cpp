@@ -92,7 +92,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Shaders
 
 	// Ray Tracing
-	ShaderBindingTable sbt_rendering {pl_rendering, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rgen")};
+	ShaderBindingTable sbt_rendering {pl_rendering, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.rgen")};
 
 	// Transparent/Fog
 	RasterShaderPipeline shader_transparent {pl_raster, {
@@ -367,13 +367,9 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		
 		std::string rint { path + ".rint" };
 		
-		std::string rendering_rchit { path + ".rendering.rchit" };
-		std::string rendering_rahit { path + ".rendering.rahit" };
-		std::string rendering_rint { path + ".rendering.rint" };
-		
-		std::string depth_rchit { path + ".depth.rchit" };
-		std::string depth_rahit { path + ".depth.rahit" };
-		std::string depth_rint { path + ".depth.rint" };
+		std::string rendering_rchit { path + ".visibility.rchit" };
+		std::string rendering_rahit { path + ".visibility.rahit" };
+		std::string rendering_rint { path + ".visibility.rint" };
 		
 		std::string spectral_rchit { path + ".spectral.rchit" };
 		std::string spectral_rahit { path + ".spectral.rahit" };
@@ -388,23 +384,13 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		}
 		
 		if (!v4d::io::FilePath::FileExists(rendering_rchit)) {
-			rendering_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rendering.rchit");
+			rendering_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.visibility.rchit");
 		}
 		if (!v4d::io::FilePath::FileExists(rendering_rahit)) {
-			rendering_rahit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.rendering.rahit");
+			rendering_rahit = "";// V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.visibility.rahit");
 		}
 		if (!v4d::io::FilePath::FileExists(rendering_rint)) {
 			rendering_rint = rint;
-		}
-		
-		if (!v4d::io::FilePath::FileExists(depth_rchit)) {
-			depth_rchit = V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/default.depth.rchit");
-		}
-		if (!v4d::io::FilePath::FileExists(depth_rahit)) {
-			depth_rahit = "";
-		}
-		if (!v4d::io::FilePath::FileExists(depth_rint)) {
-			depth_rint = rint;
 		}
 		
 		if (!v4d::io::FilePath::FileExists(spectral_rchit)) {
@@ -430,46 +416,70 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		// Rendering
 		Renderer::sbtOffsets[std::string("rendering:hit:") + mod.String() + ":" + name] = 
 		/* offset / payload location 0 */ sbt_rendering.AddHitShader(rendering_rchit, rendering_rahit, rendering_rint);
-		/* offset / payload location 1 */ sbt_rendering.AddHitShader(depth_rchit, depth_rahit, depth_rint);
-		/* offset / payload location 2 */ sbt_rendering.AddHitShader(spectral_rchit, spectral_rahit, spectral_rint);
-		/* offset / payload location 3 */ sbt_rendering.AddHitShader(extra_rchit, extra_rahit, extra_rint);
+		/* offset / payload location 1 */ sbt_rendering.AddHitShader(spectral_rchit, spectral_rahit, spectral_rint);
+		/* offset / payload location 2 */ sbt_rendering.AddHitShader(extra_rchit, extra_rahit, extra_rint);
 		
 		//...
 	}
 
 	void ConfigureRayTracingShaders() {
-		// Ray Miss shaders
-		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.rmiss"));
-		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.shadow.rmiss"));
-		sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raytracing.void.rmiss"));
+		{// Ray Miss shaders
+			sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.rmiss"));
+			sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.void.rmiss"));
+		}
 		
-		// Ray Hit default shaders
-		AddRayTracingShader(THIS_MODULE, "default");
-		AddRayTracingShader(THIS_MODULE, "aabb_cube");
-		AddRayTracingShader(THIS_MODULE, "aabb_sphere");
-		AddRayTracingShader(THIS_MODULE, "aabb_sphere.light");
+		{// Ray Hit default shaders
+			AddRayTracingShader(THIS_MODULE, "default");
+			AddRayTracingShader(THIS_MODULE, "aabb_cube");
+			AddRayTracingShader(THIS_MODULE, "aabb_sphere");
+			AddRayTracingShader(THIS_MODULE, "aabb_sphere.light");
+		}
 		
-		// Callable shaders
-		Renderer::sbtOffsets["call:tex_noisy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
-		Renderer::sbtOffsets["call:tex_grainy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
-		Renderer::sbtOffsets["call:tex_bumped"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));
-		Renderer::sbtOffsets["call:tex_brushed"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_brushed.rcall"));
-		Renderer::sbtOffsets["call:tex_hammered"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_hammered.rcall"));
-		Renderer::sbtOffsets["call:tex_polished"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_polished.rcall"));
-		Renderer::sbtOffsets["call:tex_galvanized"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_galvanized.rcall"));
-		Renderer::sbtOffsets["call:tex_perforated"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_perforated.rcall"));
-		Renderer::sbtOffsets["call:tex_diamond"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_diamond.rcall"));
-		Renderer::sbtOffsets["call:tex_carbon_fiber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_carbon_fiber.rcall"));
-		Renderer::sbtOffsets["call:tex_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_ceramic.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_iron"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_iron.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_copper"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_copper.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_aluminum"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_aluminum.rcall"));
-		Renderer::sbtOffsets["call:tex_oxydation_silver"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_silver.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_metal"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_metal.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_plastic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_plastic.rcall"));
-		Renderer::sbtOffsets["call:tex_scratches_glass"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_glass.rcall"));
-		Renderer::sbtOffsets["call:tex_cracked_rubber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_rubber.rcall"));
-		Renderer::sbtOffsets["call:tex_cracked_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_ceramic.rcall"));
+		{// default callables
+			Renderer::sbtOffsets["call:material_default"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/material_default.rcall"));
+			assert(Renderer::sbtOffsets["call:material_default"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_VISIBILITY_MATERIAL_RCALL);
+			
+			// Renderer::sbtOffsets["call:spectral_default.emit"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/spectral_default.emit.rcall"));
+			// assert(Renderer::sbtOffsets["call:spectral_default.emit"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_SPECTRAL_EMIT_RCALL);
+			
+			// Renderer::sbtOffsets["call:spectral_default.absorb"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/spectral_default.absorb.rcall"));
+			// assert(Renderer::sbtOffsets["call:spectral_default.absorb"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_SPECTRAL_ABSORB_RCALL);
+			
+			// Renderer::sbtOffsets["call:collider_default"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/collider_default.rcall"));
+			// assert(Renderer::sbtOffsets["call:collider_default"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_COLLIDER_RCALL);
+			
+			// Renderer::sbtOffsets["call:physics_default"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/physics_default.rcall"));
+			// assert(Renderer::sbtOffsets["call:physics_default"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_PHYSICS_RCALL);
+			
+			// Renderer::sbtOffsets["call:sound_default.prop"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/sound_default.prop.rcall"));
+			// assert(Renderer::sbtOffsets["call:sound_default.prop"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_SOUND_PROP_RCALL);
+			
+			// Renderer::sbtOffsets["call:sound_default.gen"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/sound_default.gen.rcall"));
+			// assert(Renderer::sbtOffsets["call:sound_default.gen"] == v4d::graphics::RenderableGeometryEntity::Material::DEFAULT_SOUND_GEN_RCALL);
+		}
+		
+		{// texture callables for default materials (max 256)
+			Renderer::sbtOffsets["call:tex_noisy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
+			Renderer::sbtOffsets["call:tex_grainy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
+			Renderer::sbtOffsets["call:tex_bumped"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));
+			Renderer::sbtOffsets["call:tex_brushed"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_brushed.rcall"));
+			Renderer::sbtOffsets["call:tex_hammered"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_hammered.rcall"));
+			Renderer::sbtOffsets["call:tex_polished"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_polished.rcall"));
+			Renderer::sbtOffsets["call:tex_galvanized"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_galvanized.rcall"));
+			Renderer::sbtOffsets["call:tex_perforated"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_perforated.rcall"));
+			Renderer::sbtOffsets["call:tex_diamond"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_diamond.rcall"));
+			Renderer::sbtOffsets["call:tex_carbon_fiber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_carbon_fiber.rcall"));
+			Renderer::sbtOffsets["call:tex_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_ceramic.rcall"));
+			Renderer::sbtOffsets["call:tex_oxydation_iron"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_iron.rcall"));
+			Renderer::sbtOffsets["call:tex_oxydation_copper"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_copper.rcall"));
+			Renderer::sbtOffsets["call:tex_oxydation_aluminum"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_aluminum.rcall"));
+			Renderer::sbtOffsets["call:tex_oxydation_silver"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_oxydation_silver.rcall"));
+			Renderer::sbtOffsets["call:tex_scratches_metal"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_metal.rcall"));
+			Renderer::sbtOffsets["call:tex_scratches_plastic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_plastic.rcall"));
+			Renderer::sbtOffsets["call:tex_scratches_glass"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_scratches_glass.rcall"));
+			Renderer::sbtOffsets["call:tex_cracked_rubber"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_rubber.rcall"));
+			Renderer::sbtOffsets["call:tex_cracked_ceramic"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_cracked_ceramic.rcall"));
+		}
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
@@ -1104,37 +1114,36 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 									try {
 										auto& substance = Substance::substances.at(mat);
 										if (glm::vec3(substance.color) != glm::vec3{1,1,1}) {
-											geom.material.baseColor = substance.color*255.0f;
+											geom.material.visibility.baseColor = substance.color*255.0f;
 										}
-										geom.material.metallic = substance.metallic*255.0;
-										geom.material.roughness = substance.roughness*255.0;
-										geom.material.indexOfRefraction = substance.IOR*50;
-										geom.material.rim = substance.rim*255.0f;
+										geom.material.visibility.metallic = substance.metallic*255.0;
+										geom.material.visibility.roughness = substance.roughness*255.0;
+										geom.material.visibility.indexOfRefraction = substance.IOR*50;
 										if (variant != "" && Renderer::sbtOffsets.count(std::string("call:tex_")+std::string(variant))) {
-											geom.material.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
-											geom.material.texFactors[0] = 1;
+											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
+											geom.material.visibility.texFactors[0] = 1;
 										} else if (substance.baseMap != "") {
-											geom.material.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
-											geom.material.texFactors[0] = 1;
+											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
+											geom.material.visibility.texFactors[0] = 1;
 											if (variant != "") {
 												LOG_WARN("Unknown variant '" << variant << "'")
 											}
 										}
 										if (substance.agingMap != "" && substance.agingFactor > 0) {
-											geom.material.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
-											geom.material.texFactors[1] = substance.agingFactor;
+											geom.material.visibility.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
+											geom.material.visibility.texFactors[1] = substance.agingFactor;
 										}
 										if (substance.oxydationMap != "" && substance.oxydationFactor > 0) {
-											geom.material.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
-											geom.material.texFactors[2] = substance.oxydationFactor;
+											geom.material.visibility.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
+											geom.material.visibility.texFactors[2] = substance.oxydationFactor;
 										}
 										if (substance.wearAndTearMap != "" && substance.wearAndTearFactor > 0) {
-											geom.material.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
-											geom.material.texFactors[3] = substance.wearAndTearFactor;
+											geom.material.visibility.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
+											geom.material.visibility.texFactors[3] = substance.wearAndTearFactor;
 										}
 										if (substance.burnMap != "" && substance.burnFactor > 0) {
-											geom.material.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
-											geom.material.texFactors[4] = substance.burnFactor;
+											geom.material.visibility.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
+											geom.material.visibility.texFactors[4] = substance.burnFactor;
 										}
 									} catch(...) {
 										LOG_WARN("Unknown material '" << mat << "'")
@@ -2045,6 +2054,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SliderInt("Light Bounces", &scene->camera.maxBounces, -1, 10); // -1 = infinite bounces
 				ImGui::SliderFloat("Max bounce time", &scene->camera.bounceTimeBudget, 0.0f, 2.0f);
 				if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
+					ImGui::SliderFloat("Denoise", &scene->camera.denoise, 0.0f, 64.0f);
 					// if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {
 					// 	ImGui::Checkbox("TXAA", &RENDER_OPTIONS::TXAA);
 					// }

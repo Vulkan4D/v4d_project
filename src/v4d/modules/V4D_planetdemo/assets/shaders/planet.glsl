@@ -41,7 +41,7 @@ vec3 GetCubeDirection(writeonly imageCube image) {
 	return normalize(direction);
 }
 
-#common terrain.*comp|terrain.rendering.rchit
+#common terrain.*comp|terrain.visibility.rchit
 
 layout(set = 2, binding = 0) uniform sampler2D bumpMap[1];
 
@@ -82,7 +82,7 @@ void main() {
 }
 
 #############################################################
-#shader terrain.rendering.rchit
+#shader terrain.visibility.rchit
 
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
@@ -98,61 +98,89 @@ vec4 GetBumpMap(vec2 uv) {
 
 hitAttributeEXT vec3 hitAttribs;
 
-layout(location = RAY_PAYLOAD_LOCATION_RENDERING) rayPayloadInEXT RenderingPayload ray;
+layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
+	WriteRayPayload(ray);
+	
 	uint i0 = GetIndex(0);
 	uint i1 = GetIndex(1);
 	uint i2 = GetIndex(2);
 	
-	// Interpolate fragment
 	vec3 barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
+	
 	// vec3 pos = (
 	// 	+ GetVertexPosition(i0) * barycentricCoords.x
 	// 	+ GetVertexPosition(i1) * barycentricCoords.y
 	// 	+ GetVertexPosition(i2) * barycentricCoords.z
 	// );
-	vec3 normal = normalize(
+	
+	ray.normal.xyz = DoubleSidedNormals(normalize(
 		+ GetVertexNormal(i0) * barycentricCoords.x
 		+ GetVertexNormal(i1) * barycentricCoords.y
 		+ GetVertexNormal(i2) * barycentricCoords.z
-	);
-	vec4 color = HasVertexColor()? (
-		+ GetVertexColor(i0) * barycentricCoords.x
-		+ GetVertexColor(i1) * barycentricCoords.y
-		+ GetVertexColor(i2) * barycentricCoords.z
-	) : vec4(0);
-	vec2 uv = HasVertexUV()? (
-		+ GetVertexUV(i0) * barycentricCoords.x
-		+ GetVertexUV(i1) * barycentricCoords.y
-		+ GetVertexUV(i2) * barycentricCoords.z
-	) : vec2(0);
+	));
 	
-	vec3 viewSpaceNormal = normalize(GetModelNormalViewMatrix() * normal);
-	vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, viewSpaceNormal));
-	vec3 tangentY = normalize(cross(viewSpaceNormal, tangentX));
-	mat3 TBN = mat3(tangentX, tangentY, viewSpaceNormal); // viewSpace TBN
-	vec4 bump = GetBumpMap(uv);
-	normal = normalize(TBN * bump.xyz);
-	float roughness = 0.7;
+	if (HasVertexUV()) {
+		ray.uv = 
+			+ GetVertexUV(i0) * barycentricCoords.x
+			+ GetVertexUV(i1) * barycentricCoords.y
+			+ GetVertexUV(i2) * barycentricCoords.z
+		;
+	}
 	
-	WriteRayPayload(ray);
-	ray.color = color;
-	ScatterLambertian(ray, roughness, normal);
+	// BaseColor
+	if (HasVertexColor()) {
+		ray.color = 
+			+ GetVertexColor(i0) * barycentricCoords.x
+			+ GetVertexColor(i1) * barycentricCoords.y
+			+ GetVertexColor(i2) * barycentricCoords.z
+		;
+	}
 	
 	
-	DebugRay(ray, color.rgb, normal, 0, 0, 0);
+	
+	// uint i0 = GetIndex(0);
+	// uint i1 = GetIndex(1);
+	// uint i2 = GetIndex(2);
+	
+	// // Interpolate fragment
+	// vec3 barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
+	// // vec3 pos = (
+	// // 	+ GetVertexPosition(i0) * barycentricCoords.x
+	// // 	+ GetVertexPosition(i1) * barycentricCoords.y
+	// // 	+ GetVertexPosition(i2) * barycentricCoords.z
+	// // );
+	// vec3 normal = normalize(
+	// 	+ GetVertexNormal(i0) * barycentricCoords.x
+	// 	+ GetVertexNormal(i1) * barycentricCoords.y
+	// 	+ GetVertexNormal(i2) * barycentricCoords.z
+	// );
+	// vec4 color = HasVertexColor()? (
+	// 	+ GetVertexColor(i0) * barycentricCoords.x
+	// 	+ GetVertexColor(i1) * barycentricCoords.y
+	// 	+ GetVertexColor(i2) * barycentricCoords.z
+	// ) : vec4(0);
+	// vec2 uv = HasVertexUV()? (
+	// 	+ GetVertexUV(i0) * barycentricCoords.x
+	// 	+ GetVertexUV(i1) * barycentricCoords.y
+	// 	+ GetVertexUV(i2) * barycentricCoords.z
+	// ) : vec2(0);
+	
+	// vec3 viewSpaceNormal = normalize(GetModelNormalViewMatrix() * normal);
+	// vec3 tangentX = normalize(cross(GetModelNormalViewMatrix() * vec3(0,1,0)/* fixed arbitrary vector in object space */, viewSpaceNormal));
+	// vec3 tangentY = normalize(cross(viewSpaceNormal, tangentX));
+	// mat3 TBN = mat3(tangentX, tangentY, viewSpaceNormal); // viewSpace TBN
+	// vec4 bump = GetBumpMap(uv);
+	// normal = normalize(TBN * bump.xyz);
+	// float roughness = 0.7;
+	
+	// WriteRayPayload(ray);
+	// ray.color = color;
+	// ScatterLambertian(ray, roughness, normal);
+	
+	
+	// DebugRay(ray, color.rgb, normal, 0, 0, 0);
 }
 
 
-
-#############################################################
-#shader terrain.aabb.rint
-
-void main() {}
-
-
-#############################################################
-#shader terrain.aabb.rendering.rchit
-
-void main() {}
