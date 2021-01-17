@@ -459,6 +459,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		}
 		
 		{// texture callables for default materials (max 256)
+			Renderer::sbtOffsets["call:tex_checker"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/texture_checker.rcall"));
 			Renderer::sbtOffsets["call:tex_noisy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_noisy.rcall"));
 			Renderer::sbtOffsets["call:tex_grainy"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_grainy.rcall"));
 			Renderer::sbtOffsets["call:tex_bumped"] = sbt_rendering.AddCallableShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/textures.tex_bumped.rcall"));

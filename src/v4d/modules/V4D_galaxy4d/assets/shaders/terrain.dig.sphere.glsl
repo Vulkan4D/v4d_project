@@ -108,7 +108,7 @@ void main() {
 		// we are above ground, trace a standard ray and exit here
 		WriteRayPayload(ray);
 		ray.position.w = gl_HitTEXT + hitDepthTotal;
-		ray.bounceDirection = vec4(gl_WorldRayDirectionEXT, float(camera.zfar));
+		ray.rayDirection.w = float(camera.zfar);
 		ray.color.rgb = vec3(1);
 		ray.color.a = 0;
 		return;

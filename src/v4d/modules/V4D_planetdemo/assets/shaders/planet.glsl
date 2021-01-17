@@ -119,7 +119,7 @@ void main() {
 		+ GetVertexNormal(i0) * barycentricCoords.x
 		+ GetVertexNormal(i1) * barycentricCoords.y
 		+ GetVertexNormal(i2) * barycentricCoords.z
-	));
+	), 0.333);
 	
 	if (HasVertexUV()) {
 		ray.uv = 
@@ -137,6 +137,8 @@ void main() {
 			+ GetVertexColor(i2) * barycentricCoords.z
 		;
 	}
+	
+	ray.color.a = 1;
 	
 	
 	

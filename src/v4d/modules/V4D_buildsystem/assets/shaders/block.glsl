@@ -104,7 +104,7 @@ void main() {
 	
 	ray.customData = uint64_t(CustomData(GetCustomData()).packed[i0]);
 	
-	
+	ray.color.a = 1;
 	
 	// vec3 blending = TriplanarBlending(normal);
 	// normal = TriplanarLocalNormalMap(tex_img_metalNormal, pos, normal, blending, gl_HitTEXT);

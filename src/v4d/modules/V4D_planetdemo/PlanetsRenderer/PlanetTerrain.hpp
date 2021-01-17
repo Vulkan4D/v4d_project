@@ -37,7 +37,7 @@ struct PlanetTerrain {
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
 	static constexpr int CHUNK_CACHE_VERSION = 5;
-	static const bool useSkirts = true;
+	static const bool useSkirts = false;
 	static bool generateAabbChunks;
 	#pragma endregion
 
@@ -520,6 +520,12 @@ struct PlanetTerrain {
 					entity->Add_meshCustomData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 					entity->generator = [](auto* entity, Device*){entity->generated = false;};
 					entity->SetWorldTransform(planet->matrix * transform);
+					// {
+					// 	RenderableGeometryEntity::Material material {};
+					// 		material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
+					// 		material.visibility.texFactors[0] = 1;
+					// 	entity->meshGeometries.Lock()->data->material = material;
+					// }
 				entityLock.unlock();
 			
 				#ifdef PLANET_CHUNK_CACHE_ENABLE

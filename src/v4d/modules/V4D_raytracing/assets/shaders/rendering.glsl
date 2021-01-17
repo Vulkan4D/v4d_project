@@ -11,7 +11,7 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadEXT VisibilityPaylo
 layout(location = CALL_DATA_LOCATION_MATERIAL) callableDataEXT ProceduralMaterialCall mat;
 
 vec2 GetSubSample(uint frameIndex, ivec2 renderSize) {
-	uint seed = InitRandomSeed(frameIndex, 0);
+	uint seed = InitRandomSeed(frameIndex, InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y));
 	vec2 subPixel = vec2(RandomFloat(seed), RandomFloat(seed));
 	return (subPixel * 2.0 - 1.0) / vec2(renderSize.x, renderSize.y);
 }
@@ -24,9 +24,13 @@ void ExecuteMaterial(inout VisibilityPayload ray, inout vec4 dstColor) {
 	mat.normal = ray.normal;
 	mat.entityInstanceIndex = ray.entityInstanceIndex;
 	mat.geometryIndex = ray.geometryIndex;
+	mat.randomSeed = ray.randomSeed;
+	mat.rayDirection = ray.rayDirection;
 	
 	executeCallableEXT(material.visibility.rcall_material, CALL_DATA_LOCATION_MATERIAL);
 	
+	ray.rayDirection = mat.rayDirection;
+	ray.randomSeed = mat.randomSeed;
 	dstColor.rgb *= mix(mat.color.rgb, vec3(1), dstColor.a);
 	dstColor.a = clamp(dstColor.a + mat.color.a, 0, 1);
 	
@@ -65,7 +69,11 @@ void main() {
 	
 	dmat4 projection = camera.projectionMatrix;
 	if (camera.accumulateFrames > 0) {
-		vec2 subSample = GetSubSample(camera.frameCount, renderSize);
+		vec2 subSample = GetSubSample(camera.frameCount, renderSize) * 0.85;
+		projection[2].x = subSample.x;
+		projection[2].y = subSample.y;
+	} else if (camera.denoise > 0) {
+		vec2 subSample = GetSubSample(camera.frameCount, renderSize) * 0.65;
 		projection[2].x = subSample.x;
 		projection[2].y = subSample.y;
 	}
@@ -166,13 +174,17 @@ void main() {
 		
 		// Miss
 		if (!hasHitGeometry) {
-			color.rgb *= mix(ray.color.rgb, vec3(1), color.a);
+			color.rgb *= mix(mix(ray.color.rgb, ray.fog.rgb, ray.fog.a), vec3(1), color.a);
 			color.a = 1;
 			break;
 		}
 		
 		// Material
 		ExecuteMaterial(ray, color);
+		
+		// Fog
+		color.rgb = mix(color.rgb, ray.fog.rgb, ray.fog.a);
+		ray.fog = vec4(0);
 	
 		// Debug / Render Modes
 		switch (camera.renderMode) {
@@ -191,7 +203,7 @@ void main() {
 		}
 		
 		// no more bounce
-		if (ray.bounceDirection.w <= 0) {
+		if (ray.rayDirection.w <= 0) {
 			break;
 		}
 		
@@ -207,9 +219,9 @@ void main() {
 		
 		// Next bounce
 		rayOrigin += rayDirection * ray.position.w;
-		rayDirection = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.bounceDirection.xyz);
+		rayDirection = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.rayDirection.xyz);
 		rayMinDistance = GetOptimalBounceStartDistance(ray.normal.w);
-		rayMaxDistance = ray.bounceDirection.w;
+		rayMaxDistance = ray.rayDirection.w;
 
 	} while (ray.bounces < 100);
 
@@ -230,15 +242,32 @@ void main() {
 	// Spatiotemporal Reprojection & Denoising algorithms
 	if (camera.accumulateFrames <= 0 && camera.denoise > 0) {
 		// V4D custom denoiser algo
-		if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1 /*&& round(texture(img_geometry_history, (vec2(imgCoords)+0.5)/renderSize).w) == primaryRayInstanceIndex*/) {
-			vec4 clipSpaceCoords = mat4(camera.projectionMatrix) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
+		if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
+			vec4 clipSpaceCoords = mat4(projection) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
 			vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
 			vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
 			if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
-				vec4 geometryHistory = texture(img_geometry_history, reprojectedCoords);
-				if (round(geometryHistory.w) == primaryRayInstanceIndex) {
-					if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
-						color = mix(texture(img_lit_history, reprojectedCoords), color, 1.0 / camera.denoise);
+				const int NBSAMPLES = 9;
+				const vec2 samples[NBSAMPLES] = {
+					vec2( 0,  0) / vec2(renderSize),
+					vec2( 1,  0) / vec2(renderSize),
+					vec2( 0,  1) / vec2(renderSize),
+					vec2(-1,  0) / vec2(renderSize),
+					vec2( 0, -1) / vec2(renderSize),
+					vec2( 1,  1) / vec2(renderSize),
+					vec2(-1,  1) / vec2(renderSize),
+					vec2( 1, -1) / vec2(renderSize),
+					vec2(-1, -1) / vec2(renderSize),
+				};
+				vec4 geometryHistory;
+				for (int i = 0; i < NBSAMPLES; ++i) {
+					const vec2 offset = samples[i];
+					geometryHistory = texture(img_geometry_history, reprojectedCoords + offset);
+					if (round(geometryHistory.w) == primaryRayInstanceIndex) {
+						// if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
+							color = mix(texture(img_lit_history, reprojectedCoords + offset), color, 1.0 / max(1, camera.denoise));
+							break;
+						// }
 					}
 				}
 			}
@@ -262,7 +291,7 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPay
 void main() {
 	ray.position = vec4(0);
 	ray.normal = vec4(0);
-	ray.bounceDirection = vec4(0);
+	ray.rayDirection = vec4(0);
 	ray.entityInstanceIndex = -1;
 	ray.geometryIndex = -1;
 	ray.primitiveID = -1;

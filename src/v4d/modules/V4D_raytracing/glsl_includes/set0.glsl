@@ -263,6 +263,9 @@ float GetOptimalBounceStartDistance(float distance) {
 		vec3 DoubleSidedNormals(in vec3 localNormal) {
 			return -sign(dot(localNormal, gl_ObjectRayDirectionEXT)) * localNormal;
 		}
+		vec3 DoubleSidedNormals(in vec3 localNormal, in float bias) {
+			return -sign(dot(localNormal, gl_ObjectRayDirectionEXT)-bias) * localNormal;
+		}
 	#endif
 #endif
 
@@ -307,7 +310,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		vec4 position; // xyz = local position straight from vertex data, w = hitDistance
 		vec4 normal; // xyz = normal (local space), w = totalRayTravelDistance
  		vec2 uv; // local UVs straight from vertex data
-		vec4 bounceDirection; // xyz = bounce direction in local space, w = maxDistance for bounced ray
+		vec4 rayDirection; // xyz = ray direction in object space, w = maxDistance for next ray
+		vec4 fog;
 		uint bounces;
 		int32_t entityInstanceIndex;
 		int32_t geometryIndex;
@@ -321,7 +325,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.color = vec4(0);
 		ray.position = vec4(0);
 		ray.normal = vec4(0);
-		ray.bounceDirection = vec4(0);
+		ray.rayDirection = vec4(0);
+		ray.fog = vec4(0);
 		ray.bounces = 0;
 		ray.entityInstanceIndex = -1;
 		ray.geometryIndex = -1;
@@ -336,7 +341,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 			ray.color = vec4(0,0,0, 1);
 			ray.position = vec4(gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT, gl_HitTEXT);
 			ray.normal = vec4(0, 0, 0, ray.normal.w + gl_HitTEXT);
-			ray.bounceDirection = vec4(0);
+			ray.rayDirection = vec4(gl_ObjectRayDirectionEXT, 0);
 			ray.entityInstanceIndex = INSTANCE_CUSTOM_INDEX_VALUE;
 			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
 			ray.primitiveID = PRIMITIVE_ID_VALUE;
@@ -366,128 +371,35 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		uint geometryIndex;
 		uint primitiveIndex;
 		uint extra;
+		uint randomSeed;
 		uint64_t customData;
-		vec4 bounceDirection; // xyz = bounce direction in local space, w = maxDistance for bounced ray
+		vec4 rayDirection; // xyz = ray direction in local space, w = maxDistance for bounced ray
 	};
 
-	void DebugMaterial(inout ProceduralMaterialCall mat, in ProceduralTextureCall tex) {
+	bool DebugMaterial(inout ProceduralMaterialCall mat, in ProceduralTextureCall tex) {
 		switch (camera.renderMode) {
 			case RENDER_MODE_ALBEDO: {
 				mat.color = vec4(tex.color.rgb*camera.renderDebugScaling, 1);
-				break;
+				return true;
 			}
 			case RENDER_MODE_EMISSION: {
 				vec3 debugColor = vec3(tex.color.rgb*tex.emission*camera.renderDebugScaling);
 				mat.color = vec4(debugColor, 1);
-				break;
+				return true;
 			}
 			case RENDER_MODE_METALLIC: {
 				vec3 debugColor = vec3(tex.metallic*camera.renderDebugScaling);
 				mat.color = vec4(debugColor, 1);
-				break;
+				return true;
 			}
 			case RENDER_MODE_ROUGNESS: {
 				vec3 debugColor = tex.roughness >=0 ? vec3(tex.roughness*camera.renderDebugScaling) : vec3(-tex.roughness*camera.renderDebugScaling,0,0);
 				mat.color = vec4(debugColor, 1);
-				break;
+				return true;
 			}
 		}
+		return false;
 	}
-	
-	// 	void DebugRay(inout VisibilityPayload ray, vec3 albedo, vec3 normal, float emission, float metallic, float roughness) {
-	// 		// Other Render Modes
-	// 		switch (camera.renderMode) {
-	// 			case RENDER_MODE_NORMALS: {
-	// 				vec3 debugColor = vec3(normal*camera.renderDebugScaling);
-	// 				ray.color = vec4(debugColor, 1);
-	// 				ray.bounceDirection = vec4(0);
-	// 				break;
-	// 			}
-	// 			case RENDER_MODE_ALBEDO: {
-	// 				vec3 debugColor = vec3(albedo*camera.renderDebugScaling);
-	// 				ray.color = vec4(debugColor, 1);
-	// 				ray.bounceDirection = vec4(0);
-	// 				break;
-	// 			}
-	// 			case RENDER_MODE_EMISSION: {
-	// 				vec3 debugColor = vec3(albedo*emission*camera.renderDebugScaling);
-	// 				ray.color = vec4(debugColor, 1);
-	// 				ray.bounceDirection = vec4(0);
-	// 				break;
-	// 			}
-	// 			case RENDER_MODE_METALLIC: {
-	// 				vec3 debugColor = vec3(metallic*camera.renderDebugScaling);
-	// 				ray.color = vec4(debugColor, 1);
-	// 				ray.bounceDirection = vec4(0);
-	// 				break;
-	// 			}
-	// 			case RENDER_MODE_ROUGNESS: {
-	// 				vec3 debugColor = roughness >=0 ? vec3(roughness*camera.renderDebugScaling) : vec3(-roughness*camera.renderDebugScaling,0,0);
-	// 				ray.color = vec4(debugColor, 1);
-	// 				ray.bounceDirection = vec4(0);
-	// 				break;
-	// 			}
-	// 		}
-	// 	}
-		
-	// 	//https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/
-	// 	float FresnelReflectAmount(float n1, float n2, vec3 normal, vec3 incident, float reflectivity) {
-	// 		// Schlick aproximation
-	// 		float r0 = (n1-n2) / (n1+n2);
-	// 		r0 *= r0;
-	// 		float cosX = -dot(normal, incident);
-	// 		if (n1 > n2) {
-	// 			float n = n1/n2;
-	// 			float sinT2 = n*n*(1.0-cosX*cosX);
-	// 			// Total internal reflection
-	// 			if (sinT2 > 1.0)
-	// 				return 1.0;
-	// 			cosX = sqrt(1.0-sinT2);
-	// 		}
-	// 		float x = 1.0-cosX;
-	// 		float ret = r0+(1.0-r0)*x*x*x*x*x;
-	// 		// adjust reflect multiplier for object reflectivity
-	// 		return reflectivity + (1.0-reflectivity) * ret;
-	// 	}
-
-	// 	float Schlick(const float cosine, const float indexOfRefraction) {
-	// 		float r0 = (1 - indexOfRefraction) / (1 + indexOfRefraction);
-	// 		r0 *= r0;
-	// 		return r0 + (1 - r0) * pow(1 - cosine, 5);
-	// 	}
-
-	// 	void ScatterMetallic(inout VisibilityPayload ray, const float roughness, const vec3 direction, const vec3 normal) {
-	// 		ray.bounceDirection = vec4(normalize(reflect(direction, normal) + roughness*roughness*RandomInUnitSphere(ray.seed)), float(camera.zfar));
-	// 		ray.normal = normal;
-	// 		++ray.bounces;
-	// 	}
-		
-	// 	void ScatterDieletric(inout VisibilityPayload ray, const float indexOfRefraction, const vec3 direction, const vec3 normal) {
-	// 		const float dot = dot(direction, normal);
-	// 		const vec3 outwardNormal = dot > 0 ? -normal : normal;
-	// 		const float niOverNt = dot > 0 ? indexOfRefraction : 1 / indexOfRefraction;
-	// 		const float cosine = dot > 0 ? indexOfRefraction * dot : -dot;
-	// 		const vec3 refracted = refract(direction, outwardNormal, niOverNt);
-	// 		const float reflectProb = refracted != vec3(0) ? Schlick(cosine, indexOfRefraction) : 1;
-			
-	// 		if (RandomFloat(ray.seed) < reflectProb) {
-	// 			ray.bounceDirection = vec4(reflect(direction, normal), float(camera.zfar));
-	// 		} else {
-	// 			ray.bounceDirection = vec4(refracted, float(camera.zfar));
-	// 		}
-	// 		ray.normal = normal;
-	// 		++ray.bounces;
-	// 	}
-		
-	// 	void ScatterLambertian(inout VisibilityPayload ray, const float roughness, const vec3 normal) {
-	// 		ray.color.a = roughness;
-	// 		ray.normal = normal;
-	// 		ray.specular = 1.0;
-	// 		// ray.bounceDirection = vec4(normalize(mix(normal, normal+RandomInUnitSphere(ray.seed), roughness*roughness)), float(camera.zfar));
-	// 		++ray.bounces;
-	// 	}
-
-	// #endif
 	
 #endif
 

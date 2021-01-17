@@ -302,6 +302,41 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::Checkbox("Player visible", &playerVisible);
 			ImGui::SliderFloat("Terrain dig sphere radius (10 to the power of)", &terrainNegationSphereRadiusPower, 0.0f, 7.0f);
+			
+			{
+				ImGui::Separator();
+				
+				using namespace glm;
+
+				const double pi = 3.14159265359;
+				const dvec3 wavelengthsRGB = dvec3(680, 550, 440)/1e9;
+				const double wavelength = 680 / 1e9;
+				
+				// const double BoltzmannConstant = 1.380649e-23;
+				// double temperatureK = 250;
+				// double gravityAccelerationMS2 = 9.8;
+				//double moleculeMassKg = ;
+				// static double scaleHeightKM = 8.5;// (BoltzmannConstant * temperatureK) / (moleculeMassKg * gravityAccelerationMS2);
+				// static double altitudeKM = 2;
+				
+				static double iorOfAir = 1.0003;
+				static double molecularDensityAtSeaLevel = 1.225;
+
+				// ImGui::InputDouble("scaleHeightKM", &scaleHeightKM);
+				// ImGui::InputDouble("altitudeKM", &altitudeKM);
+				ImGui::InputDouble("iorOfAir", &iorOfAir); 
+				ImGui::InputDouble("molecularDensityAtSeaLevel", &molecularDensityAtSeaLevel);
+				
+				dvec3 beta_rayleigh = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelengthsRGB*wavelengthsRGB*wavelengthsRGB*wavelengthsRGB) ;// * exp(-altitudeKM/scaleHeightKM);
+				double beta_rayleigh_r = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelength*wavelength*wavelength*wavelength);
+				
+				std::ostringstream streamObj;
+				streamObj << beta_rayleigh.r << ", " << beta_rayleigh.g << ", " << beta_rayleigh.b << " ::: " << beta_rayleigh_r;
+				
+				ImGui::Text(streamObj.str().c_str());
+			}
+			
+			
 		#endif
 	}
 	

@@ -43,10 +43,10 @@ void main() {
 			reportIntersectionEXT(t1, 0);
 		}
 		
-		// Inside of sphere
-		if (t1 <= tMin && t2 >= tMin) {
-			reportIntersectionEXT(tMin, 1);
-		}
+		// // Inside of sphere
+		// if (t1 <= tMin && t2 >= tMin) {
+		// 	reportIntersectionEXT(tMin, 1);
+		// }
 	}
 }
 
