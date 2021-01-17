@@ -37,7 +37,7 @@ struct PlanetTerrain {
 	static constexpr double chunkOptimizationMinMoveDistance = 500; // meters
 	static constexpr double chunkOptimizationMinTimeInterval = 10; // seconds
 	static constexpr int CHUNK_CACHE_VERSION = 5;
-	static const bool useSkirts = false;
+	static const bool useSkirts = true;
 	static bool generateAabbChunks;
 	#pragma endregion
 
@@ -94,6 +94,7 @@ struct PlanetTerrain {
 		// true positions on planet
 		glm::dmat4 transform {1};
 		glm::dmat4 inverseTransform {1};
+		glm::dmat3 upDirTransform {1};
 		glm::dvec3 centerPos {0};
 		glm::dvec3 topLeftPos {0};
 		glm::dvec3 topRightPos {0};
@@ -213,6 +214,7 @@ struct PlanetTerrain {
 			
 			inverseTransform = glm::lookAt(centerPos, (topLeftPos + topRightPos)/2.0, glm::cross(glm::normalize(topRightPos-topLeftPos), glm::normalize(bottomLeftPos-topLeftPos)));
 			transform = glm::inverse(inverseTransform);
+			upDirTransform = glm::transpose(glm::inverse(glm::dmat3(transform)));
 			
 			aabb = PlanetTerrain::generateAabbChunks;
 		}
@@ -773,7 +775,7 @@ struct PlanetTerrain {
 							auto addSkirt = [this, &genVertexIndex, &genIndexIndex, firstSkirtIndex, topSign, rightSign, meshIndices, vertexPositions, vertexNormals, vertexColors, vertexUVs](int pointIndex, int nextPointIndex, bool firstPoint = false, bool lastPoint = false) {
 								int skirtIndex = genVertexIndex++;
 								{
-									vertexPositions[skirtIndex] = glm::vec3(vertexPositions[pointIndex]) - glm::vec3(glm::normalize(centerPos) * (chunkSize / double(vertexSubdivisionsPerChunk) / 4.0));
+									vertexPositions[skirtIndex] = glm::vec3(vertexPositions[pointIndex]) + glm::vec3(glm::normalize(glm::dvec3(0,1,0)) * (chunkSize / double(vertexSubdivisionsPerChunk) / 4.0));
 								}
 								vertexNormals[skirtIndex] = vertexNormals[pointIndex];
 								vertexColors[skirtIndex] = vertexColors[pointIndex];

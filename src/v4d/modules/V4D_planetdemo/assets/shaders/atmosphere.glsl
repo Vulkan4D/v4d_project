@@ -80,7 +80,7 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPay
 // Graphics Quality configuration
 const int MAX_RAYMARCH_STEPS = 24;
 const int RAYMARCH_LIGHT_STEPS = 3;
-const float minStepSize = 1.0; // meters
+const float minStepSize = 1000.0; // meters
 const float sunLuminosityThreshold = 0.01;
 
 // planet-specific stuff
@@ -88,8 +88,8 @@ const float planetSolidRadius = 8000000;
 const float innerRadius = planetSolidRadius - 2000;
 const float outerRadius = 8200000;
 const float atmosphereThickness = outerRadius - innerRadius;
-const float rayleighHeight = 10000;//atmosphereThickness/8;
-const float mieHeight = 3000;//atmosphereThickness/16;
+const float rayleighHeight = 10000;
+const float mieHeight = 3000;
 const vec2 scaleHeight = vec2(rayleighHeight, mieHeight);
 const float gg = G * G;
 
@@ -133,7 +133,7 @@ void main() {
 				
 				// Cache some values related to that light before raymarching in the atmosphere
 				vec3 lightIntensity = light.color * luminosity;
-				float mu = dot(rayMarchDirObjectSpace, lightDirViewSpace);
+				float mu = dot(rayMarchDirViewSpace, lightDirViewSpace);
 				float mumu = mu * mu;
 				float rayleighPhase = 3.0 / (50.2654824574 /* (16 * pi) */) * (1.0 + mumu);
 				float miePhase = 3.0 / (25.1327412287 /* (8 * pi) */) * ((1.0 - gg) * (mumu + 1.0)) / (pow(1.0 + gg - 2.0 * mu * G, 1.5) * (2.0 + gg));
@@ -145,8 +145,8 @@ void main() {
 	
 				// Ray-March
 				for (float dist = 0; dist < rayDepth; dist += stepSize) {
-					vec3 rayPos = startPoint + rayMarchDirObjectSpace * dist;
-					float rayAltitude = length(rayPos);
+					vec3 rayPosObjectSpace = startPoint + rayMarchDirObjectSpace * dist;
+					float rayAltitude = length(rayPosObjectSpace);
 					float rayAltitudeAboveInnerRadius = rayAltitude - innerRadius;
 					// float rayAltitudeFactor = clamp(rayAltitudeAboveInnerRadius / atmosphereThickness, 0, 1); // 0.0 = deepest,  1.0 = top of atmosphere
 					// float rayDepthFactor = 1.0 - rayAltitudeFactor; // 1.0 = deepest,  0.0 = top of atmosphere
@@ -157,26 +157,33 @@ void main() {
 					maxDepth = max(maxDepth, outerRadius - rayAltitude);
 					
 					// light
-					vec3 rayPosViewSpace = (objectToViewSpacePos * vec4(rayPos, 1)).xyz;
+					vec3 rayPosViewSpace = (objectToViewSpacePos * vec4(rayPosObjectSpace, 1)).xyz;
 					vec3 lightPosViewSpaceRelativeToRayPos = lightPosViewSpace - rayPosViewSpace; // relative to current ray position in atmosphere in view space
-					// vec3 lightPosObjectCurrentRaySpace = lightPosObjectSpace - rayPos;
-					// vec3 lightDirObjectCurrentRaySpace = normalize(lightPosObjectCurrentRaySpace);
+					vec3 lightPosObjectCurrentRaySpace = lightPosObjectSpace - rayPosObjectSpace;
+					vec3 lightDirObjectCurrentRaySpace = normalize(lightPosObjectCurrentRaySpace);
 
 					// step size for light ray
-					float a = dot(lightDirObjectSpace, lightDirObjectSpace);
-					float b = 2.0 * dot(lightDirObjectSpace, rayPos);
-					float c = dot(rayPos, rayPos) - (outerRadius * outerRadius);
+					float a = dot(lightDirObjectCurrentRaySpace, lightDirObjectCurrentRaySpace);
+					float b = 2.0 * dot(lightDirObjectCurrentRaySpace, rayPosObjectSpace);
+					float c = dot(rayPosObjectSpace, rayPosObjectSpace) - (outerRadius * outerRadius);
 					float d = (b * b) - 4.0 * a * c;
-					float lightRayStepSize = (-b + sqrt(d)) / (2.0 * a * float(RAYMARCH_LIGHT_STEPS));
+					int rayMarchLightSteps = RAYMARCH_LIGHT_STEPS;
+					float lightRayDepth = (sqrt(d) - b);
+					float lightRayStepSize
+						// = (-b + sqrt(d)) / (2.0 * a * float(rayMarchLightSteps));
+						= lightRayDepth / float(rayMarchLightSteps);
+					if (lightRayStepSize < minStepSize) {
+						rayMarchLightSteps = 1;
+						lightRayStepSize = lightRayDepth;
+					}
 					
 					// RayMarch towards light source
 					vec2 lightRayOpticalDepth = vec2(0);
 					float lightRayDist = 0;
-					for (int l = 0; l < RAYMARCH_LIGHT_STEPS; ++l) {
+					for (float lightRayDist = 0; lightRayDist < lightRayDepth; lightRayDist += lightRayStepSize) {
 						
-						float lightRayDist = l * lightRayStepSize;
-						vec3 posLightRayObjectSpace = rayPos + lightDirObjectSpace * (lightRayDist + lightRayStepSize/2.0);
-						vec3 posLightRayViewcSpace = rayPosViewSpace + lightDirViewSpace * (lightRayDist + lightRayStepSize/2.0);
+						vec3 posLightRayObjectSpace = rayPosObjectSpace + lightDirObjectCurrentRaySpace * (lightRayDist + lightRayStepSize/2.0);
+						// vec3 posLightRayViewSpace = rayPosViewSpace + lightDirViewSpace * (lightRayDist + lightRayStepSize/2.0);
 						float lightRayAltitude = length(posLightRayObjectSpace);
 						float lightRayAltitudeAboveInnerRadius = lightRayAltitude - innerRadius;
 						// float lightRayAltitudeFactor = clamp(lightRayAltitudeAboveInnerRadius / atmosphereThickness, 0, 1); // 0.0 = deepest,  1.0 = top of atmosphere
@@ -184,7 +191,6 @@ void main() {
 						
 						vec2 lightRayDensity = exp(-max(0.001, lightRayAltitudeAboveInnerRadius) / scaleHeight) * lightRayStepSize;
 						lightRayOpticalDepth += lightRayDensity;
-						lightRayDist += lightRayStepSize;
 					}
 				
 					vec3 attenuation = exp(-((MIE_BETA * (opticalDepth.y + lightRayOpticalDepth.y)) + (RAYLEIGH_BETA * (opticalDepth.x + lightRayOpticalDepth.x))));
