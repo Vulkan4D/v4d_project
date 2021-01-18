@@ -41,7 +41,7 @@ struct TerrainDigSphere {
 	float radius;
 	void operator() (RenderableGeometryEntity* entity, Device* device){
 		entity->Allocate(device, "V4D_galaxy4d:terrain.dig.sphere");
-		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
+		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 	}
 };
 
@@ -303,38 +303,38 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::Checkbox("Player visible", &playerVisible);
 			ImGui::SliderFloat("Terrain dig sphere radius (10 to the power of)", &terrainNegationSphereRadiusPower, 0.0f, 7.0f);
 			
-			{
-				ImGui::Separator();
+			// {
+			// 	ImGui::Separator();
 				
-				using namespace glm;
+			// 	using namespace glm;
 
-				const double pi = 3.14159265359;
-				const dvec3 wavelengthsRGB = dvec3(680, 550, 440)/1e9;
-				const double wavelength = 680 / 1e9;
+			// 	const double pi = 3.14159265359;
+			// 	const dvec3 wavelengthsRGB = dvec3(680, 550, 440)/1e9;
+			// 	const double wavelength = 680 / 1e9;
 				
-				// const double BoltzmannConstant = 1.380649e-23;
-				// double temperatureK = 250;
-				// double gravityAccelerationMS2 = 9.8;
-				//double moleculeMassKg = ;
-				// static double scaleHeightKM = 8.5;// (BoltzmannConstant * temperatureK) / (moleculeMassKg * gravityAccelerationMS2);
-				// static double altitudeKM = 2;
+			// 	// const double BoltzmannConstant = 1.380649e-23;
+			// 	// double temperatureK = 250;
+			// 	// double gravityAccelerationMS2 = 9.8;
+			// 	//double moleculeMassKg = ;
+			// 	// static double scaleHeightKM = 8.5;// (BoltzmannConstant * temperatureK) / (moleculeMassKg * gravityAccelerationMS2);
+			// 	// static double altitudeKM = 2;
 				
-				static double iorOfAir = 1.0003;
-				static double molecularDensityAtSeaLevel = 1.225;
+			// 	static double iorOfAir = 1.0003;
+			// 	static double molecularDensityAtSeaLevel = 1.225;
 
-				// ImGui::InputDouble("scaleHeightKM", &scaleHeightKM);
-				// ImGui::InputDouble("altitudeKM", &altitudeKM);
-				ImGui::InputDouble("iorOfAir", &iorOfAir); 
-				ImGui::InputDouble("molecularDensityAtSeaLevel", &molecularDensityAtSeaLevel);
+			// 	// ImGui::InputDouble("scaleHeightKM", &scaleHeightKM);
+			// 	// ImGui::InputDouble("altitudeKM", &altitudeKM);
+			// 	ImGui::InputDouble("iorOfAir", &iorOfAir); 
+			// 	ImGui::InputDouble("molecularDensityAtSeaLevel", &molecularDensityAtSeaLevel);
 				
-				dvec3 beta_rayleigh = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelengthsRGB*wavelengthsRGB*wavelengthsRGB*wavelengthsRGB) ;// * exp(-altitudeKM/scaleHeightKM);
-				double beta_rayleigh_r = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelength*wavelength*wavelength*wavelength);
+			// 	dvec3 beta_rayleigh = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelengthsRGB*wavelengthsRGB*wavelengthsRGB*wavelengthsRGB) ;// * exp(-altitudeKM/scaleHeightKM);
+			// 	double beta_rayleigh_r = (8.0 * pi*pi*pi * pow(iorOfAir*iorOfAir - 1.0, 2.0)) / (3.0 * molecularDensityAtSeaLevel * wavelength*wavelength*wavelength*wavelength);
 				
-				std::ostringstream streamObj;
-				streamObj << beta_rayleigh.r << ", " << beta_rayleigh.g << ", " << beta_rayleigh.b << " ::: " << beta_rayleigh_r;
+			// 	std::ostringstream streamObj;
+			// 	streamObj << beta_rayleigh.r << ", " << beta_rayleigh.g << ", " << beta_rayleigh.b << " ::: " << beta_rayleigh_r;
 				
-				ImGui::Text(streamObj.str().c_str());
-			}
+			// 	ImGui::Text(streamObj.str().c_str());
+			// }
 			
 			
 		#endif
@@ -375,8 +375,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_sphere");
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{127,127,127,255}});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
 			}break;
 			case OBJECT_TYPE::GlassBall:{
@@ -386,8 +386,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material.visibility.indexOfRefraction = 1.01 * 50;
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {{255,255,255,1}});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,1});
 				};
 			}break;
 			case OBJECT_TYPE::TerrainDigSphere:{
@@ -404,10 +404,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 2;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light");
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = 100000.0f;
 					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-					entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{100000.0f,100000.0f,100000.0f,100000.0f}});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,255});
 					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
 				};
 			}break;
@@ -422,25 +422,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:default")->material.visibility.indexOfRefraction = 1.01 * 50;
-					entity->Add_meshVertexPosition()->AllocateBuffers(device, {
+					entity->Add_meshVertexPosition()->AllocateBuffersFromList(device, {
 						{-2.0,-2.0, 0.0},
 						{ 2.0,-2.0, 0.0},
 						{ 2.0, 2.0, 0.0},
 						{-2.0, 2.0, 0.0},
 					});
-					entity->Add_meshVertexNormal()->AllocateBuffers(device, {
+					entity->Add_meshVertexNormal()->AllocateBuffersFromList(device, {
 						{ 0.0, 0.0, 1.0},
 						{ 0.0, 0.0, 1.0},
 						{ 0.0, 0.0, 1.0},
 						{ 0.0, 0.0, 1.0},
 					});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {
+					entity->Add_meshVertexColorU8()->AllocateBuffersFromList(device, {
 						{255, 255, 255, 1},
 						{255, 255, 255, 1},
 						{255, 255, 255, 1},
 						{255, 255, 255, 1},
 					});
-					entity->Add_meshIndices16()->AllocateBuffers(device, {
+					entity->Add_meshIndices16()->AllocateBuffersFromList(device, {
 						0, 1, 2, 2, 3, 0,
 					});
 				};

@@ -115,11 +115,11 @@ void main() {
 	// 	+ GetVertexPosition(i2) * barycentricCoords.z
 	// );
 	
-	ray.normal.xyz = DoubleSidedNormals(normalize(
+	ray.normal.xyz = (normalize(
 		+ GetVertexNormal(i0) * barycentricCoords.x
 		+ GetVertexNormal(i1) * barycentricCoords.y
 		+ GetVertexNormal(i2) * barycentricCoords.z
-	), 0.333);
+	));
 	
 	if (HasVertexUV()) {
 		ray.uv = 
@@ -137,10 +137,6 @@ void main() {
 			+ GetVertexColor(i2) * barycentricCoords.z
 		;
 	}
-	
-	ray.color.a = 1;
-	
-	
 	
 	// uint i0 = GetIndex(0);
 	// uint i1 = GetIndex(1);

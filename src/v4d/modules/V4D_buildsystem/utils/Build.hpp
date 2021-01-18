@@ -27,7 +27,10 @@ public:
 			entity->Add_physics(v4d::scene::PhysicsInfo::RigidBodyType::STATIC, 1.0f);
 			entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
 				std::lock_guard lock(blocksMutex);
-				entity->Allocate(device, "V4D_buildsystem:block");
+				RenderableGeometryEntity::Material material {};
+				material.visibility.roughness = 0;
+				material.visibility.metallic = 1;
+				entity->Allocate(device, "V4D_buildsystem:block")->material = material;
 				
 				std::vector<Mesh::Index32> meshIndices (Block::MAX_INDICES * blocks.size());
 				std::vector<Mesh::VertexPosition> vertexPositions (Block::MAX_VERTICES * blocks.size());
@@ -43,11 +46,11 @@ public:
 					nextIndex += indexCount;
 				}
 				
-				entity->Add_meshIndices32()->AllocateBuffers(device, meshIndices.data(), nextIndex);
-				entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), nextVertex);
-				entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), nextVertex);
-				entity->Add_meshVertexColorU8()->AllocateBuffers(device, vertexColors.data(), nextVertex);
-				entity->Add_meshCustomData()->AllocateBuffers(device, (float*)customData.data(), nextVertex);
+				entity->Add_meshIndices32()->AllocateBuffersFromArray(device, meshIndices.data(), nextIndex);
+				entity->Add_meshVertexPosition()->AllocateBuffersFromArray(device, vertexPositions.data(), nextVertex);
+				entity->Add_meshVertexNormal()->AllocateBuffersFromArray(device, vertexNormals.data(), nextVertex);
+				entity->Add_meshVertexColorU8()->AllocateBuffersFromArray(device, vertexColors.data(), nextVertex);
+				entity->Add_meshCustomData()->AllocateBuffersFromArray(device, (float*)customData.data(), nextVertex);
 				
 				entity->Add_physics()->SetMeshCollider();
 			};

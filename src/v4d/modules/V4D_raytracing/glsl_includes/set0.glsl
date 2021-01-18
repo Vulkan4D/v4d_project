@@ -367,6 +367,7 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		vec4 position; // xyz = local position straight from vertex data, w = hitDistance
 		vec4 normal; // xyz = normal (local space), w = totalRayTravelDistance
 		vec2 uv; // straight from vertex data or custom stuff from rchit shader
+		float emission;
 		uint entityInstanceIndex;
 		uint geometryIndex;
 		uint primitiveIndex;

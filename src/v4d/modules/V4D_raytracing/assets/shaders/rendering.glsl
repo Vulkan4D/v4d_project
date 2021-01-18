@@ -27,24 +27,28 @@ void ExecuteMaterial(inout VisibilityPayload ray, inout vec4 dstColor) {
 	mat.randomSeed = ray.randomSeed;
 	mat.rayDirection = ray.rayDirection;
 	
+	// Apply material
 	executeCallableEXT(material.visibility.rcall_material, CALL_DATA_LOCATION_MATERIAL);
-	
 	ray.rayDirection = mat.rayDirection;
 	ray.randomSeed = mat.randomSeed;
-	dstColor.rgb *= mix(mat.color.rgb, vec3(1), dstColor.a);
-	dstColor.a = clamp(dstColor.a + mat.color.a, 0, 1);
 	
+	// Debug
 	switch (camera.renderMode) {
 		case RENDER_MODE_NORMALS: 
 			dstColor = vec4(normalize(GetModelNormalViewMatrix(mat.entityInstanceIndex, mat.geometryIndex) * mat.normal.xyz) * camera.renderDebugScaling, 1);
-			break;
+			return;
 		case RENDER_MODE_ALBEDO:
 		case RENDER_MODE_EMISSION: 
 		case RENDER_MODE_METALLIC:
 		case RENDER_MODE_ROUGNESS: 
 			dstColor = mat.color;
-			break;
+			return;
 	}
+	
+	// Apply rendering equation
+	float cos_theta = dot(mat.rayDirection.xyz, mat.normal.xyz);
+	float p = 2.0 * 3.14159265359;
+	dstColor.rgb = (mat.emission*mat.color.rgb/max(1,ray.position.w*ray.position.w) + mat.color.rgb*dstColor.rgb*cos_theta/p);
 }
 
 void main() {
@@ -174,8 +178,7 @@ void main() {
 		
 		// Miss
 		if (!hasHitGeometry) {
-			color.rgb *= mix(mix(ray.color.rgb, ray.fog.rgb, ray.fog.a), vec3(1), color.a);
-			color.a = 1;
+			color.rgb = mix(mix(ray.color.rgb, color.rgb*ray.fog.rgb, ray.fog.a), vec3(1), color.a);
 			break;
 		}
 		
@@ -183,7 +186,7 @@ void main() {
 		ExecuteMaterial(ray, color);
 		
 		// Fog
-		color.rgb = mix(color.rgb, ray.fog.rgb, ray.fog.a);
+		color.rgb = mix(color.rgb, color.rgb*ray.fog.rgb, ray.fog.a);
 		ray.fog = vec4(0);
 	
 		// Debug / Render Modes
@@ -197,10 +200,10 @@ void main() {
 				return;
 		}
 		
-		// all light has been absorbed
-		if (color.a >= 1.0) {
-			break;
-		}
+		// // all light has been absorbed
+		// if (color.a >= 1.0) {
+		// 	break;
+		// }
 		
 		// no more bounce
 		if (ray.rayDirection.w <= 0) {
@@ -223,7 +226,7 @@ void main() {
 		rayMinDistance = GetOptimalBounceStartDistance(ray.normal.w);
 		rayMaxDistance = ray.rayDirection.w;
 
-	} while (ray.bounces < 100);
+	} while (ray.bounces < 1000);
 
 	// Write lit image
 	if (camera.renderMode == RENDER_MODE_BOUNCES) {

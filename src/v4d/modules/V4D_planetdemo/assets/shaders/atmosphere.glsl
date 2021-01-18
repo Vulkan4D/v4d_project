@@ -95,10 +95,12 @@ const float gg = G * G;
 
 void main() {
 	// trace for geometries within the atmosphere
-	const int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
-	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, atmosphereAttr.t2, RAY_PAYLOAD_LOCATION_VISIBILITY);
+	const int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
+	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
 	VisibilityPayload hitRay = ray;
 	const float hitDistance = hitRay.position.w==0? float(camera.zfar) : hitRay.position.w;
+	
+	if (hitDistance < minStepSize) return;
 	
 	const vec3 startPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 	const vec3 endPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * min(atmosphereAttr.t2, hitDistance);
@@ -219,7 +221,7 @@ void main() {
 	}
 	
 	ray = hitRay;
-	ray.fog = vec4(atmColor, clamp(maxDepth / atmosphereThickness, 0, 1));
+	ray.fog = vec4(atmColor, mix(0, clamp(maxDepth / atmosphereThickness, 0, 1), clamp(pow(smoothstep(minStepSize, minStepSize*100, hitDistance), 0.5),0,1)));
 }
 
 

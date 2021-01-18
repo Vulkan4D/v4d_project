@@ -41,11 +41,11 @@ public:
 				boundingDistance = glm::max(boundingDistance, glm::length(glm::vec3(vert)));
 			}
 			
-			entity->Add_meshIndices32()->AllocateBuffers(device, meshIndices.data(), indexCount); 
-			entity->Add_meshVertexPosition()->AllocateBuffers(device, vertexPositions.data(), vertexCount);
-			entity->Add_meshVertexNormal()->AllocateBuffers(device, vertexNormals.data(), vertexCount);
-			entity->Add_meshVertexColorU8()->AllocateBuffers(device, vertexColors.data(), vertexCount);
-			entity->Add_meshCustomData()->AllocateBuffers(device, (float*)customData.data(), vertexCount);
+			entity->Add_meshIndices32()->AllocateBuffersFromArray(device, meshIndices.data(), indexCount); 
+			entity->Add_meshVertexPosition()->AllocateBuffersFromArray(device, vertexPositions.data(), vertexCount);
+			entity->Add_meshVertexNormal()->AllocateBuffersFromArray(device, vertexNormals.data(), vertexCount);
+			entity->Add_meshVertexColorU8()->AllocateBuffersFromArray(device, vertexColors.data(), vertexCount);
+			entity->Add_meshCustomData()->AllocateBuffersFromArray(device, (float*)customData.data(), vertexCount);
 		};
 	}
 	

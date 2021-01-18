@@ -496,6 +496,6 @@ extern "C" {
 		
 		// return {0.5f, 0.4f, 0.3f};
 		
-		return {0.4f, 0.15f, 0.03f};
+		return {1.0f,1.0f,1.0f};
 	}
 }

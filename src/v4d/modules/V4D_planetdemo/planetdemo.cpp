@@ -215,41 +215,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
-		
-		// Light source
-		sun = RenderableGeometryEntity::Create(THIS_MODULE);
-		sun->SetInitialTransform(glm::translate(glm::dmat4(1), sun1Position));
-		sun->generator = [](auto* entity, Device* device){
-			float lightIntensity = 1e24f;
-			float radius = 700000000;
-			entity->Allocate(device, "aabb_sphere.light");
-			entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
-			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
-			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
-		}, sun1Position;
-		
-		sun2 = RenderableGeometryEntity::Create(THIS_MODULE);
-		sun2->SetInitialTransform(glm::translate(glm::dmat4(1), sun2Position));
-		sun2->generator = [](auto* entity, Device* device){
-			float lightIntensity = 5e22f;
-			float radius = 700000000;
-			entity->Allocate(device, "aabb_sphere.light");
-			entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
-			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-radius), glm::vec3(radius)}});
-			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {glm::vec4{lightIntensity}});
-			entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
-		}, sun2Position;
-		
-	}
-	
-	V4D_MODULE_FUNC(void, UnloadScene) {
-		if (sun) {
-			sun->Destroy();
-		}
-		if (sun2) {
-			sun2->Destroy();
-		}
 	}
 	
 	// Images / Buffers / Pipelines
@@ -268,10 +233,46 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			delete terrain;
 			terrain = nullptr;
 		}
+		if (sun) {
+			sun->Destroy();
+			sun = nullptr;
+		}
+		if (sun2) {
+			sun2->Destroy();
+			sun2 = nullptr;
+		}
 	}
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
 		// LOG(playerView->worldPosition.x << ", " << playerView->worldPosition.y << ", " << playerView->worldPosition.z)
+		
+		// Light sources
+		if (!sun) {
+			sun = RenderableGeometryEntity::Create(THIS_MODULE);
+			sun->SetInitialTransform(glm::translate(glm::dmat4(1), sun1Position));
+			sun->generator = [](auto* entity, Device* device){
+				float lightIntensity = 1e24f;
+				float radius = 3700000000;
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = lightIntensity;
+				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
+				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,255});
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
+			};
+		}
+		if (!sun2) {
+			sun2 = RenderableGeometryEntity::Create(THIS_MODULE);
+			sun2->SetInitialTransform(glm::translate(glm::dmat4(1), sun2Position));
+			sun2->generator = [](auto* entity, Device* device){
+				float lightIntensity = 5e22f;
+				float radius = 1700000000;
+				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = lightIntensity;
+				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
+				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+				entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,255});
+				entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, lightIntensity);
+			};
+		}
 		
 		std::lock_guard generatorLock(TerrainGeneratorLib::mu);
 		// For each planet
@@ -375,22 +376,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::Separator();
 				ImGui::Text("Planet");
 				if (terrain) {
-					ImGui::Separator();
-					ImGui::Text("Atmosphere");
-					if (ImGui::SliderFloat("density", &terrain->atmosphereDensityFactor, 0.0f, 125.0f) // BAR
-					||
-					ImGui::ColorEdit3("color", (float*)&terrain->atmosphereColor)
-					) {
-						if (auto atmosphereEntity = terrain->atmosphere.lock(); atmosphereEntity) {
-							if (auto atmosphereColor = atmosphereEntity->meshVertexColorF32.Lock(); atmosphereColor && atmosphereColor->data) {
-								atmosphereColor->data->r = terrain->atmosphereColor.r;
-								atmosphereColor->data->g = terrain->atmosphereColor.g;
-								atmosphereColor->data->b = terrain->atmosphereColor.b;
-								atmosphereColor->data->a = terrain->atmosphereDensityFactor;
-								atmosphereColor->dirtyOnDevice = true;
-							}
-						}
-					}
+					// ImGui::Separator();
+					// ImGui::Text("Atmosphere");
+					// if (ImGui::SliderFloat("density", &terrain->atmosphereDensityFactor, 0.0f, 125.0f) // BAR
+					// ||
+					// ImGui::ColorEdit3("color", (float*)&terrain->atmosphereColor)
+					// ) {
+					// 	if (auto atmosphereEntity = terrain->atmosphere.lock(); atmosphereEntity) {
+					// 		if (auto atmosphereColor = atmosphereEntity->meshVertexColorF32.Lock(); atmosphereColor && atmosphereColor->data) {
+					// 			atmosphereColor->data->r = terrain->atmosphereColor.r;
+					// 			atmosphereColor->data->g = terrain->atmosphereColor.g;
+					// 			atmosphereColor->data->b = terrain->atmosphereColor.b;
+					// 			atmosphereColor->data->a = terrain->atmosphereDensityFactor;
+					// 			atmosphereColor->dirtyOnDevice = true;
+					// 		}
+					// 	}
+					// }
 					ImGui::Separator();
 					// ImGui::Checkbox("Voxel Terrain", &PlanetTerrain::generateAabbChunks);
 					// ImGui::SliderFloat("Terrain detail level", &PlanetTerrain::chunkSubdivisionDistanceFactor, 0.5f, 5.0f);

@@ -2184,9 +2184,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (key == GLFW_KEY_ENTER) {
 			if (action == GLFW_RELEASE) {
-				scene->camera.accumulateFrames = -1;
-			} else if (scene->camera.accumulateFrames == -1) {
-				scene->camera.accumulateFrames = 0;
+				if (scene->camera.accumulateFrames == -1) {
+					scene->camera.accumulateFrames = 0;
+				} else {
+					scene->camera.accumulateFrames = -1;
+				}
 			}
 			return;
 		}

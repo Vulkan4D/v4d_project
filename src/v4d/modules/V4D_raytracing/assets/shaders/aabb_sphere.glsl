@@ -89,6 +89,8 @@ void main() {
 		ray.color = GetVertexColor(gl_PrimitiveID);
 	}
 	
+	// ray.color = vec4(0);
+	
 	ray.normal.xyz = sphereAttr.normal;
 	ray.uv = vec2(sphereAttr.radius, sphereAttr.t2);
 

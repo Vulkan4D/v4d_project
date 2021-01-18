@@ -510,7 +510,13 @@ struct PlanetTerrain {
 				}
 				
 			} else {
-				entity->Allocate(device, "V4D_planetdemo:planet.terrain");
+				RenderableGeometryEntity::Material material {};
+				material.visibility.roughness = 255;
+				material.visibility.metallic = 0;
+				material.visibility.indexOfRefraction = 1.55 * 50;
+				// material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
+				// material.visibility.texFactors[0] = 1;
+				entity->Allocate(device, "V4D_planetdemo:planet.terrain")->material = material;
 				entity->rayTracingMask = 0;
 				entity->Add_physics();
 				auto buffersWriteLock = entity->GetBuffersWriteLock();
@@ -519,15 +525,9 @@ struct PlanetTerrain {
 					auto vertexNormals = entity->Add_meshVertexNormal()->AllocateBuffersCount(device, nbVerticesPerChunk);
 					auto vertexColors = entity->Add_meshVertexColorF32()->AllocateBuffersCount(device, nbVerticesPerChunk);
 					auto vertexUVs = entity->Add_meshVertexUV()->AllocateBuffersCount(device, nbVerticesPerChunk);
-					entity->Add_meshCustomData()->AllocateBuffers(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
+					entity->Add_meshCustomData()->AllocateBuffersFromList(device, {uvMult, uvMult, uvOffsetX, uvOffsetY});
 					entity->generator = [](auto* entity, Device*){entity->generated = false;};
 					entity->SetWorldTransform(planet->matrix * transform);
-					// {
-					// 	RenderableGeometryEntity::Material material {};
-					// 		material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
-					// 		material.visibility.texFactors[0] = 1;
-					// 	entity->meshGeometries.Lock()->data->material = material;
-					// }
 				entityLock.unlock();
 			
 				#ifdef PLANET_CHUNK_CACHE_ENABLE
@@ -1245,7 +1245,7 @@ struct PlanetTerrain {
 		// auto h = ((GetHeightMap(normalizedPos, triangleSize) - solidRadius) / heightVariation)/2.0+0.5;
 		// return glm::vec4(h,h,h, 1.0);
 		
-		return {0.5f, 0.4f, 0.3f, 1.0f};
+		return {1.0f, 1.0f, 1.0f, 1.0f};
 	}
 	
 	double GetSolidCirconference() {
@@ -1269,8 +1269,8 @@ struct PlanetTerrain {
 		atmosphereEntity->generator = [this](v4d::graphics::RenderableGeometryEntity* entity, v4d::graphics::vulkan::Device* device){
 			entity->Allocate(device, "V4D_planetdemo:atmosphere");
 			entity->rayTracingMask = RAY_TRACED_ENTITY_ATMOSPHERE;
-			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {{glm::vec3(-this->radius), glm::vec3(this->radius)}});
-			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {{atmosphereColor.r, atmosphereColor.g, atmosphereColor.b, atmosphereDensityFactor}});
+			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-this->radius), glm::vec3(this->radius)});
+			entity->Add_meshVertexColorF32()->AllocateBuffers(device, {atmosphereColor.r, atmosphereColor.g, atmosphereColor.b, atmosphereDensityFactor});
 			entity->SetWorldTransform(matrix);
 		};
 		atmosphere = atmosphereEntity;
@@ -1381,4 +1381,4 @@ float PlanetTerrain::chunkSubdivisionDistanceFactor = 1.0;
 double (*PlanetTerrain::generatorFunction)(glm::dvec3* const) = nullptr;
 glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;
 bool PlanetTerrain::generateAabbChunks = false;
-float PlanetTerrain::targetVertexSeparationInMeters = 0.02;
+float PlanetTerrain::targetVertexSeparationInMeters = 0.50; // 0.02 - 0.50
