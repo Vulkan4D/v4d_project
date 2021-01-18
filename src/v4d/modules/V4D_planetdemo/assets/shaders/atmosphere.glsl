@@ -95,18 +95,21 @@ const float gg = G * G;
 
 void main() {
 	// trace for geometries within the atmosphere
-	const int traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
+	uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;//|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
+	if (ray.bounces == 0) {
+		traceMask |= RAY_TRACED_ENTITY_LIGHT;
+	}
 	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
 	VisibilityPayload hitRay = ray;
 	const float hitDistance = hitRay.position.w==0? float(camera.zfar) : hitRay.position.w;
-	
-	if (hitDistance < minStepSize) return;
 	
 	const vec3 startPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 	const vec3 endPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * min(atmosphereAttr.t2, hitDistance);
 	const mat3 objectToViewSpaceDir = GetModelNormalViewMatrix();
 	const mat4 objectToViewSpacePos = GetModelViewMatrix();
 	const float rayDepth = distance(startPoint, endPoint);
+	
+	if (rayDepth < minStepSize) return;
 	
 	// Ray-marching configuration
 	vec3 rayMarchDirObjectSpace = gl_ObjectRayDirectionEXT;

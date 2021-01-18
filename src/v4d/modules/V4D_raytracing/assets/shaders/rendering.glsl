@@ -90,8 +90,12 @@ void main() {
 	InitRayPayload(ray);
 	do {
 		uint nbBounces = ray.bounces;
+		uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_TERRAIN_NEGATE|RAY_TRACED_ENTITY_LIQUID|RAY_TRACED_ENTITY_ATMOSPHERE|RAY_TRACED_ENTITY_FOG;
+		if (nbBounces == 0) {
+			rayTraceMask |= RAY_TRACED_ENTITY_LIGHT;
+		}
 		// Trace Ray
-		traceRayEXT(topLevelAS, 0, RAY_TRACE_MASK_VISIBLE, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
+		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 		++ray.bounces;
 		
 		bool hasHitGeometry = ray.position.w > 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1;
@@ -246,31 +250,37 @@ void main() {
 	if (camera.accumulateFrames <= 0 && camera.denoise > 0) {
 		// V4D custom denoiser algo
 		if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
-			vec4 clipSpaceCoords = mat4(projection) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
-			vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
-			vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
-			if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
-				const int NBSAMPLES = 9;
-				const vec2 samples[NBSAMPLES] = {
-					vec2( 0,  0) / vec2(renderSize),
-					vec2( 1,  0) / vec2(renderSize),
-					vec2( 0,  1) / vec2(renderSize),
-					vec2(-1,  0) / vec2(renderSize),
-					vec2( 0, -1) / vec2(renderSize),
-					vec2( 1,  1) / vec2(renderSize),
-					vec2(-1,  1) / vec2(renderSize),
-					vec2( 1, -1) / vec2(renderSize),
-					vec2(-1, -1) / vec2(renderSize),
-				};
-				vec4 geometryHistory;
-				for (int i = 0; i < NBSAMPLES; ++i) {
-					const vec2 offset = samples[i];
-					geometryHistory = texture(img_geometry_history, reprojectedCoords + offset);
-					if (round(geometryHistory.w) == primaryRayInstanceIndex) {
-						// if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance/100.0) {
-							color = mix(texture(img_lit_history, reprojectedCoords + offset), color, 1.0 / max(1, camera.denoise));
-							break;
-						// }
+			Material material = GetGeometry(primaryRayInstanceIndex, primaryRayGeometryIndex).material;
+			if (material.visibility.roughness > 0) {
+				vec4 clipSpaceCoords = mat4(projection) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
+				vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
+				vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
+				if (reprojectedCoords.x >= 0 && reprojectedCoords.x <= 1.0 && reprojectedCoords.y >= 0 && reprojectedCoords.y <= 1.0) {
+					const int NBSAMPLES = 9;
+					const vec2 samples[NBSAMPLES] = {
+						vec2( 0,  0) / vec2(renderSize),
+						vec2( 1,  0) / vec2(renderSize),
+						vec2( 0,  1) / vec2(renderSize),
+						vec2(-1,  0) / vec2(renderSize),
+						vec2( 0, -1) / vec2(renderSize),
+						vec2( 1,  1) / vec2(renderSize),
+						vec2(-1,  1) / vec2(renderSize),
+						vec2( 1, -1) / vec2(renderSize),
+						vec2(-1, -1) / vec2(renderSize),
+					};
+					vec4 geometryHistory;
+					for (int i = 0; i < NBSAMPLES; ++i) {
+						const vec2 offset = samples[i];
+						geometryHistory = texture(img_geometry_history, reprojectedCoords + offset);
+						if (round(geometryHistory.w) == primaryRayInstanceIndex) {
+							if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance) {
+								vec4 historyColor = texture(img_lit_history, reprojectedCoords + offset);
+								if (dot(normalize(historyColor), normalize(color)) > 0.8 || distance(historyColor, color) < 3) {
+									color = mix(historyColor, color, 1.0 / max(1, camera.denoise * (float(material.visibility.roughness)/255)));
+								}
+								break;
+							}
+						}
 					}
 				}
 			}

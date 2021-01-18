@@ -385,7 +385,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material.visibility.indexOfRefraction = 1.01 * 50;
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.indexOfRefraction = 1.02 * 50;
+					mat.visibility.roughness = 0;
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,1});
 				};
@@ -421,7 +424,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				obj->renderableGeometryEntityInstance = entity;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				entity->generator = [](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_raytracing:default")->material.visibility.indexOfRefraction = 1.01 * 50;
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.indexOfRefraction = 1.02 * 50;
+					mat.visibility.roughness = 0;
+					entity->Allocate(device, "V4D_raytracing:default")->material = mat;
 					entity->Add_meshVertexPosition()->AllocateBuffersFromList(device, {
 						{-2.0,-2.0, 0.0},
 						{ 2.0,-2.0, 0.0},

@@ -252,7 +252,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			sun->SetInitialTransform(glm::translate(glm::dmat4(1), sun1Position));
 			sun->generator = [](auto* entity, Device* device){
 				float lightIntensity = 1e24f;
-				float radius = 3700000000;
+				float radius = 700000000;
 				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = lightIntensity;
 				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
@@ -265,7 +265,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			sun2->SetInitialTransform(glm::translate(glm::dmat4(1), sun2Position));
 			sun2->generator = [](auto* entity, Device* device){
 				float lightIntensity = 5e22f;
-				float radius = 1700000000;
+				float radius = 400000000;
 				entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = lightIntensity;
 				entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
