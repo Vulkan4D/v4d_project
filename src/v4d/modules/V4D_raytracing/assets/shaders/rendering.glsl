@@ -46,7 +46,7 @@ void ExecuteMaterial(inout VisibilityPayload ray, inout vec4 dstColor) {
 	}
 	
 	// Apply rendering equation
-	float cos_theta = dot(mat.rayDirection.xyz, mat.normal.xyz);
+	float cos_theta = mat.rayDirection.w>0? dot(mat.rayDirection.xyz, mat.normal.xyz) : 1;
 	float p = 2.0 * 3.14159265359;
 	dstColor.rgb = (mat.emission*mat.color.rgb/max(1,ray.position.w*ray.position.w) + mat.color.rgb*dstColor.rgb*cos_theta/p);
 }
@@ -277,8 +277,8 @@ void main() {
 								vec4 historyColor = texture(img_lit_history, reprojectedCoords + offset);
 								if (dot(normalize(historyColor), normalize(color)) > 0.8 || distance(historyColor, color) < 3) {
 									color = mix(historyColor, color, 1.0 / max(1, camera.denoise * (float(material.visibility.roughness)/255)));
+									break;
 								}
-								break;
 							}
 						}
 					}
