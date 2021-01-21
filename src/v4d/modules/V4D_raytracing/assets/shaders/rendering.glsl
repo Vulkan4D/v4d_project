@@ -16,41 +16,6 @@ vec2 GetSubSample(uint frameIndex, ivec2 renderSize) {
 	return (subPixel * 2.0 - 1.0) / vec2(renderSize.x, renderSize.y);
 }
 
-void ExecuteMaterial(inout VisibilityPayload ray, inout vec4 dstColor) {
-	Material material = GetGeometry(ray.entityInstanceIndex, ray.geometryIndex).material;
-	
-	mat.color = ray.color;
-	mat.position = ray.position;
-	mat.normal = ray.normal;
-	mat.entityInstanceIndex = ray.entityInstanceIndex;
-	mat.geometryIndex = ray.geometryIndex;
-	mat.randomSeed = ray.randomSeed;
-	mat.rayDirection = ray.rayDirection;
-	
-	// Apply material
-	executeCallableEXT(material.visibility.rcall_material, CALL_DATA_LOCATION_MATERIAL);
-	ray.rayDirection = mat.rayDirection;
-	ray.randomSeed = mat.randomSeed;
-	
-	// Debug
-	switch (camera.renderMode) {
-		case RENDER_MODE_NORMALS: 
-			dstColor = vec4(normalize(GetModelNormalViewMatrix(mat.entityInstanceIndex, mat.geometryIndex) * mat.normal.xyz) * camera.renderDebugScaling, 1);
-			return;
-		case RENDER_MODE_ALBEDO:
-		case RENDER_MODE_EMISSION: 
-		case RENDER_MODE_METALLIC:
-		case RENDER_MODE_ROUGNESS: 
-			dstColor = mat.color;
-			return;
-	}
-	
-	// Apply rendering equation
-	float cos_theta = mat.rayDirection.w>0? dot(mat.rayDirection.xyz, mat.normal.xyz) : 1;
-	float p = 2.0 * 3.14159265359;
-	dstColor.rgb = (mat.emission*mat.color.rgb/max(1,ray.position.w*ray.position.w) + mat.color.rgb*dstColor.rgb*cos_theta/p);
-}
-
 void main() {
 	const uint64_t startTime = clockARB();
 	ivec2 renderSize = imageSize(img_lit);
@@ -69,7 +34,7 @@ void main() {
 	int primaryRayInstanceIndex = -1;
 	int primaryRayGeometryIndex = -1;
 	int primaryRayPrimitiveIndex = -1;
-	vec4 color = vec4(1,1,1,0);
+	vec4 color = vec4(0);
 	
 	dmat4 projection = camera.projectionMatrix;
 	if (camera.accumulateFrames > 0) {
@@ -90,10 +55,13 @@ void main() {
 	InitRayPayload(ray);
 	do {
 		uint nbBounces = ray.bounces;
+		vec3 reflectance = ray.reflectance;
+		ray.emission = vec3(0);
+		ray.bounceShadowRays = -1;
 		uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_TERRAIN_NEGATE|RAY_TRACED_ENTITY_LIQUID|RAY_TRACED_ENTITY_ATMOSPHERE|RAY_TRACED_ENTITY_FOG;
-		if (nbBounces == 0) {
+		// if (nbBounces == 0) {
 			rayTraceMask |= RAY_TRACED_ENTITY_LIGHT;
-		}
+		// }
 		// Trace Ray
 		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 		++ray.bounces;
@@ -155,7 +123,7 @@ void main() {
 					break;
 				case RENDER_MODE_EMISSION:
 					if (!hasHitGeometry) {
-						imageStore(img_lit, imgCoords, vec4(vec3(0), 1));
+						imageStore(img_lit, imgCoords, vec4(ray.emission, 1));
 						return;
 					}
 					break;
@@ -180,55 +148,97 @@ void main() {
 			}
 		}
 		
+		// Material
+		if (hasHitGeometry) {
+			mat.rayPayload = ray;
+			mat.emission.rgb = vec3(0);
+			mat.reflectance.rgb = vec3(1);
+			mat.bounceDirection.xyz = vec3(0);
+			mat.bounceShadowRays = -1;
+			
+			// Execute material callable
+			Material material = GetGeometry(ray.entityInstanceIndex, ray.geometryIndex).material;
+			executeCallableEXT(material.visibility.rcall_material, CALL_DATA_LOCATION_MATERIAL);
+			
+			ray = mat.rayPayload;
+			ray.emission.rgb = mat.emission.rgb;
+			ray.reflectance.rgb *= clamp(mat.reflectance.rgb, 0, 1);
+			ray.rayDirection.xyz = mat.bounceDirection.xyz;
+			ray.bounceShadowRays = mat.bounceShadowRays;
+		}
+		
+		// divide the emissive brightness by the square of distance ONLY for bounced rays, not for primary rays.
+		if (dot(ray.emission.rgb, ray.emission.rgb) > 0 && ray.bounces > 1 && ray.position.w > 0) {
+			ray.emission /= (ray.position.w * ray.position.w);
+		}
+		// V4D's custom rendering equation
+		color.rgb += ray.emission * reflectance;
+		
 		// Miss
 		if (!hasHitGeometry) {
-			color.rgb = mix(mix(ray.color.rgb, color.rgb*ray.fog.rgb, ray.fog.a), vec3(1), color.a);
 			break;
 		}
 		
-		// Material
-		ExecuteMaterial(ray, color);
-		
-		// Fog
-		color.rgb = mix(color.rgb, color.rgb*ray.fog.rgb, ray.fog.a);
-		ray.fog = vec4(0);
-	
-		// Debug / Render Modes
+		// Debug
 		switch (camera.renderMode) {
-			case RENDER_MODE_NORMALS:
+			case RENDER_MODE_NORMALS: 
+				vec4 debugColor = vec4(normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.normal.xyz) * camera.renderDebugScaling, 1);
+				imageStore(img_lit, imgCoords, debugColor);
+				return;
 			case RENDER_MODE_ALBEDO:
-			case RENDER_MODE_EMISSION:
+			case RENDER_MODE_EMISSION: 
 			case RENDER_MODE_METALLIC:
-			case RENDER_MODE_ROUGNESS:
-				imageStore(img_lit, imgCoords, color);
+			case RENDER_MODE_ROUGNESS: 
+				imageStore(img_lit, imgCoords, ray.color);
 				return;
 		}
 		
-		// // all light has been absorbed
-		// if (color.a >= 1.0) {
-		// 	break;
-		// }
-		
-		// no more bounce
-		if (ray.rayDirection.w <= 0) {
-			break;
+		// Shadow rays
+		if (ray.bounceShadowRays != -1) {
+			VisibilityPayload _ray = ray;
+			vec3 hitPositionViewSpace = rayDirection * ray.position.w;
+			vec3 surfaceNormalViewSpace = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.normal.xyz);
+			float totalRayDistance = GetOptimalBounceStartDistance(ray.normal.w);
+			reflectance = ray.reflectance.rgb;
+			for (int activeLightIndex = 0; activeLightIndex < MAX_ACTIVE_LIGHTS; activeLightIndex++) {
+				LightSource light = lightSources[activeLightIndex];
+				if (light.radius > 0) {
+					vec3 lightPosRelativeToHitPositionViewSpace = light.position - hitPositionViewSpace;
+					vec3 randomDirTowardsLightSourceSphere = normalize(lightPosRelativeToHitPositionViewSpace + RandomInUnitSphere(ray.randomSeed) * light.radius);
+					float distanceSqr = dot(lightPosRelativeToHitPositionViewSpace, lightPosRelativeToHitPositionViewSpace);
+					float intensity = light.intensity / distanceSqr;
+					if (intensity > 0.001 && dot(surfaceNormalViewSpace, randomDirTowardsLightSourceSphere) > 0) {
+						uint rayTraceShadowMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_TERRAIN_NEGATE|RAY_TRACED_ENTITY_FOG;
+						traceRayEXT(topLevelAS, 0, rayTraceShadowMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, hitPositionViewSpace, totalRayDistance, randomDirTowardsLightSourceSphere, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
+						if (ray.position.w == 0) {
+							ray.bounceShadowRays = 0.0;
+							float specular = pow(dot(randomDirTowardsLightSourceSphere, surfaceNormalViewSpace), (1.0 - ray.bounceShadowRays)*5 + 0.5);
+							color.rgb += ray.color.rgb * light.color * intensity * specular;
+						}
+					}
+				}
+			}
+			ray = _ray;
 		}
+		
+		// No more reflection
+		if (dot(ray.reflectance, ray.reflectance) == 0 || dot(ray.rayDirection.xyz, ray.rayDirection.xyz) == 0) break;
 		
 		// maximum bounces reached
 		if (ray.bounces > camera.maxBounces && camera.maxBounces >= 0) {
 			break;
 		}
 		
-		// maximum time budget exceeded for bounces
-		if (camera.bounceTimeBudget > 0.0 && float(double(clockARB() - startTime)/1000000.0) > camera.bounceTimeBudget) {
-			break;
-		}
+		// // maximum time budget exceeded for bounces
+		// if (camera.bounceTimeBudget > 0.0 && float(double(clockARB() - startTime)/1000000.0) > camera.bounceTimeBudget) {
+		// 	break;
+		// }
 		
 		// Next bounce
 		rayOrigin += rayDirection * ray.position.w;
-		rayDirection = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.rayDirection.xyz);
+		rayDirection = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * normalize(ray.rayDirection.xyz));
 		rayMinDistance = GetOptimalBounceStartDistance(ray.normal.w);
-		rayMaxDistance = ray.rayDirection.w;
+		rayMaxDistance = float(camera.zfar);
 
 	} while (ray.bounces < 1000);
 
@@ -311,7 +321,7 @@ void main() {
 	ray.extra = 0;
 	ray.customData = 0;
 	
-	ray.color = vec4(0); //TODO sample galaxy
+	ray.emission = vec3(0); //TODO sample galaxy
 }
 
 

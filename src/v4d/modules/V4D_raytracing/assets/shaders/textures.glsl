@@ -6,10 +6,10 @@
 	vec3 _tangentX = normalize(cross(normalize(vec3(0.356,1.2145,0.24537))/* fixed arbitrary vector in object space */, tex.normal.xyz));\
 	vec3 _tangentY = normalize(cross(tex.normal.xyz, _tangentX));\
 	mat3 _TBN = mat3(_tangentX, _tangentY, tex.normal.xyz);\
-	float _altitudeTop = noiseFunc(tex.position.xyz + _tangentY/1000);\
-	float _altitudeBottom = noiseFunc(tex.position.xyz - _tangentY/1000);\
-	float _altitudeRight = noiseFunc(tex.position.xyz + _tangentX/1000);\
-	float _altitudeLeft = noiseFunc(tex.position.xyz - _tangentX/1000);\
+	float _altitudeTop = noiseFunc(tex.materialPayload.rayPayload.position.xyz + _tangentY/1000);\
+	float _altitudeBottom = noiseFunc(tex.materialPayload.rayPayload.position.xyz - _tangentY/1000);\
+	float _altitudeRight = noiseFunc(tex.materialPayload.rayPayload.position.xyz + _tangentX/1000);\
+	float _altitudeLeft = noiseFunc(tex.materialPayload.rayPayload.position.xyz - _tangentX/1000);\
 	vec3 _bump = normalize(vec3((_altitudeRight-_altitudeLeft), (_altitudeBottom-_altitudeTop), 2));\
 	vec3 normal = normalize(_TBN * _bump)
 
@@ -22,7 +22,7 @@ layout(location = CALL_DATA_LOCATION_TEXTURE) callableDataInEXT ProceduralTextur
 
 #shader tex_noisy.rcall
 void main() {
-	float noise = clamp01(FastSimplexFractal(tex.position.xyz*1000, 3)/2+.5);
+	float noise = clamp01(FastSimplexFractal(tex.materialPayload.rayPayload.position.xyz*1000, 3)/2+.5);
 	
 	MixTex(tex.roughness, noise/2);
 	MixTex(tex.metallic, (1-noise)/2);
@@ -67,14 +67,14 @@ float HammeredNoise(vec3 pos) {
 	return 1-pow(clamp01(voronoi3d(pos*20).x), 2);
 }
 void main() {
-	float hammer = HammeredNoise(tex.position.xyz);
+	float hammer = HammeredNoise(tex.materialPayload.rayPayload.position.xyz);
 	float roughness = mix(0.3, 0.8, hammer);
 	float metallic = mix(0.3, 0.1, hammer);
 	
 	NormalFromBumpNoise(HammeredNoise);
 	
 	MixTexNormal(normal);
-	MixTex(tex.color.rgb, tex.color.rgb/3);
+	MixTex(tex.albedo.rgb, tex.albedo.rgb/3);
 	MixTex(tex.roughness, roughness);
 	MixTex(tex.metallic, metallic);
 }

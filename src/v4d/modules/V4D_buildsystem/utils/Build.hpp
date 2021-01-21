@@ -29,7 +29,7 @@ public:
 				std::lock_guard lock(blocksMutex);
 				RenderableGeometryEntity::Material material {};
 				material.visibility.roughness = 0;
-				material.visibility.metallic = 1;
+				material.visibility.metallic = 255;
 				entity->Allocate(device, "V4D_buildsystem:block")->material = material;
 				
 				std::vector<Mesh::Index32> meshIndices (Block::MAX_INDICES * blocks.size());

@@ -50,6 +50,11 @@ void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 }
 
 void CreateCornellBox(RenderableGeometryEntity* entity, Device* device) {
+	RenderableGeometryEntity::Material mat {};
+	mat.visibility.roughness = 1.0;
+	
+	entity->Allocate(device, "V4D_raytracing:default")->material = mat;
+	
 	auto meshIndices = entity->Add_meshIndices16();
 	auto meshVertexPosition = entity->Add_meshVertexPosition();
 	auto meshVertexNormal = entity->Add_meshVertexNormal();
@@ -356,23 +361,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		// Cornell boxes
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
-			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}))
-			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "V4D_raytracing:default");
-				CreateCornellBox(entity, device);
-			};
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {0,250,-30}), glm::radians( 180.0), {0,0,1}))->generator = CreateCornellBox;
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
-			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}))
-			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "V4D_raytracing:default");
-				CreateCornellBox(entity, device);
-			};
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {200,250,-30}), glm::radians( 120.0), {0,0,1}))->generator = CreateCornellBox;
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)
-			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}))
-			->generator = [](RenderableGeometryEntity* entity, Device* device){
-				entity->Allocate(device, "V4D_raytracing:default");
-				CreateCornellBox(entity, device);
-			};
+			->SetInitialTransform(glm::rotate(glm::translate(glm::dmat4(1), {-200,250,-30}), glm::radians(-120.0), {0,0,1}))->generator = CreateCornellBox;
 			
 		// Ball
 		RenderableGeometryEntity::Create(v4d::modular::ModuleID(0,0), 0/*objId*/)

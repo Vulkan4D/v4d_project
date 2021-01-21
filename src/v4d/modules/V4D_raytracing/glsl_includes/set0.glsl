@@ -311,7 +311,6 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		vec4 normal; // xyz = normal (local space), w = totalRayTravelDistance
  		vec2 uv; // local UVs straight from vertex data
 		vec4 rayDirection; // xyz = ray direction in object space, w = maxDistance for next ray
-		vec4 fog;
 		uint bounces;
 		int32_t entityInstanceIndex;
 		int32_t geometryIndex;
@@ -319,6 +318,10 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		uint extra;
 		uint64_t customData;
 		uint randomSeed;
+		
+		vec3 emission;
+		vec3 reflectance;
+		float bounceShadowRays; // -1 for no shadow rays, or Roughness value between 0.0 and 1.0
 	};
 
 	void InitRayPayload(inout VisibilityPayload ray) {
@@ -326,7 +329,6 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.position = vec4(0);
 		ray.normal = vec4(0);
 		ray.rayDirection = vec4(0);
-		ray.fog = vec4(0);
 		ray.bounces = 0;
 		ray.entityInstanceIndex = -1;
 		ray.geometryIndex = -1;
@@ -334,6 +336,10 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.extra = 0;
 		ray.customData = 0;
 		ray.randomSeed = InitRandomSeed(InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y), camera.frameCount);
+		
+		ray.emission = vec3(0);
+		ray.reflectance = vec3(1);
+		ray.bounceShadowRays = -1;
 	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
@@ -350,52 +356,41 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 	#endif
 	
 	
+	struct ProceduralMaterialCall {
+		VisibilityPayload rayPayload;
+		vec3 reflectance;
+		vec3 emission;
+		vec3 bounceDirection;
+		float bounceShadowRays;
+	};
+
 	struct ProceduralTextureCall {
-		vec4 color; // rgb = color, a = opacity (straight from vertex data)
-		vec4 position; // xyz = local position straight from vertex data, w = hitDistance
-		vec4 normal; // xyz = normal (local space), w = totalRayTravelDistance
-		vec2 uv;
+		ProceduralMaterialCall materialPayload;
+		vec4 albedo;
+		vec3 emission;
+		vec3 normal;
 		float metallic;
 		float roughness;
 		float height;
-		float emission;
 		float factor;
 	};
 
-	struct ProceduralMaterialCall {
-		vec4 color; // rgb = color, a = opacity (straight from vertex data)
-		vec4 position; // xyz = local position straight from vertex data, w = hitDistance
-		vec4 normal; // xyz = normal (local space), w = totalRayTravelDistance
-		vec2 uv; // straight from vertex data or custom stuff from rchit shader
-		float emission;
-		uint entityInstanceIndex;
-		uint geometryIndex;
-		uint primitiveIndex;
-		uint extra;
-		uint randomSeed;
-		uint64_t customData;
-		vec4 rayDirection; // xyz = ray direction in local space, w = maxDistance for bounced ray
-	};
-
-	bool DebugMaterial(inout ProceduralMaterialCall mat, in ProceduralTextureCall tex) {
+	bool DebugMaterial(in ProceduralTextureCall tex, inout vec4 debugColor) {
 		switch (camera.renderMode) {
 			case RENDER_MODE_ALBEDO: {
-				mat.color = vec4(tex.color.rgb*camera.renderDebugScaling, 1);
+				debugColor = vec4(tex.albedo.rgb*camera.renderDebugScaling, 1);
 				return true;
 			}
 			case RENDER_MODE_EMISSION: {
-				vec3 debugColor = vec3(tex.color.rgb*tex.emission*camera.renderDebugScaling);
-				mat.color = vec4(debugColor, 1);
+				debugColor = vec4(tex.emission.rgb*camera.renderDebugScaling, 1);
 				return true;
 			}
 			case RENDER_MODE_METALLIC: {
-				vec3 debugColor = vec3(tex.metallic*camera.renderDebugScaling);
-				mat.color = vec4(debugColor, 1);
+				debugColor = vec4(vec3(tex.metallic*camera.renderDebugScaling), 1);
 				return true;
 			}
 			case RENDER_MODE_ROUGNESS: {
-				vec3 debugColor = tex.roughness >=0 ? vec3(tex.roughness*camera.renderDebugScaling) : vec3(-tex.roughness*camera.renderDebugScaling,0,0);
-				mat.color = vec4(debugColor, 1);
+				debugColor = vec4(vec3(tex.roughness*camera.renderDebugScaling), 1);
 				return true;
 			}
 		}

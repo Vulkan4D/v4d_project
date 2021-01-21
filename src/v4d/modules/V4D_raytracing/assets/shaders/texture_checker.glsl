@@ -5,5 +5,5 @@ layout(location = CALL_DATA_LOCATION_TEXTURE) callableDataInEXT ProceduralTextur
 
 #shader rcall
 void main() {
-    tex.color.rgb *= mod(floor(tex.position.x) + floor(tex.position.z), 2.0);
+    tex.albedo.rgb *= mod(floor(tex.materialPayload.rayPayload.position.x) + floor(tex.materialPayload.rayPayload.position.z), 2.0);
 }
