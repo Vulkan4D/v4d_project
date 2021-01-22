@@ -57,11 +57,9 @@ void main() {
 layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
-	// if (camera.renderMode != RENDER_MODE_STANDARD) ignoreIntersectionEXT;
-	
-	// if (ray.entityInstanceIndex == gl_InstanceCustomIndexEXT) {
-	// 	ignoreIntersectionEXT;
-	// }
+	if (ray.atmosphereId == gl_InstanceCustomIndexEXT) {
+		ignoreIntersectionEXT;
+	}
 }
 
 
@@ -97,14 +95,15 @@ const float gg = G * G;
 
 void main() {
 	// trace for geometries within the atmosphere
-	uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT ;//|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
+	uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_TERRAIN_NEGATE|RAY_TRACED_ENTITY_LIGHT ;//|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
 	if (ray.bounceMask > 0) {
 		traceMask &= ray.bounceMask;
 	}
-	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
-	VisibilityPayload hitRay = ray;
-	const float hitDistance = hitRay.position.w==0? float(camera.zfar) : hitRay.position.w;
+	ray.atmosphereId = gl_InstanceCustomIndexEXT;
+	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, RAY_MISS_OFFSET_STANDARD, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
+	const float hitDistance = ray.position.w==0? float(camera.zfar) : ray.position.w;
 	bool hasHitSomethingWithinAtmosphere = hitDistance < atmosphereAttr.t2;
+	// VisibilityPayload hitRay = ray;
 	
 	const vec3 startPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 	const vec3 endPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * min(atmosphereAttr.t2, hitDistance);
@@ -208,7 +207,7 @@ void main() {
 					
 					// // Ray-Traced Sun shafts
 					// // if (RandomFloat(hitRay.randomSeed) < (1.0/rayMarchingSteps)) {
-					// 	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayPosViewSpace, GetOptimalBounceStartDistance(hitRay.normal.w), normalize(lightPosViewSpaceRelativeToRayPos), length(lightPosViewSpaceRelativeToRayPos) - light.radius, RAY_PAYLOAD_LOCATION_VISIBILITY);
+					// 	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, RAY_MISS_OFFSET_STANDARD, rayPosViewSpace, GetOptimalBounceStartDistance(hitRay.normal.w), normalize(lightPosViewSpaceRelativeToRayPos), length(lightPosViewSpaceRelativeToRayPos) - light.radius, RAY_PAYLOAD_LOCATION_VISIBILITY);
 					// 	if (ray.position.w > 0) {
 					// 		totalRayleigh = vec3(0);
 					// 		totalMie = vec3(0);
@@ -232,10 +231,11 @@ void main() {
 		}
 	}
 	
-	ray = hitRay;
-	if (hasHitSomethingWithinAtmosphere) 
+	// ray = hitRay;
+	if (hasHitSomethingWithinAtmosphere) {
 		ray.fog = max(ray.fog, vec4(fog.rgb, mix(0, clamp(fog.a, 0, 1), clamp(pow(smoothstep(minStepSize, minStepSize*100, hitDistance), 0.5),0,1))));
-	else
+	} else {
 		ray.emission += atmColor;
+	}
 }
 

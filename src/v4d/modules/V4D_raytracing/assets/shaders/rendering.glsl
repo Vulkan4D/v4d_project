@@ -59,9 +59,11 @@ void main() {
 		vec3 reflectance = ray.reflectance;
 		ray.emission = vec3(0);
 		ray.bounceShadowRays = -1;
+		ray.atmosphereId = -1;
 		// Trace Ray
-		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
+		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_VISIBILITY, 0, RAY_MISS_OFFSET_STANDARD, rayOrigin, rayMinDistance, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_VISIBILITY);
 		++ray.bounces;
+		ray.normal.w += ray.position.w;
 		
 		bool hasHitGeometry = ray.position.w > 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1;
 		
@@ -202,10 +204,10 @@ void main() {
 		
 		// Shadow rays
 		if (ray.bounceShadowRays != -1) {
-			VisibilityPayload _ray = ray;
-			vec3 hitPositionViewSpace = rayDirection * ray.position.w;
+			vec3 hitPositionViewSpace = rayOrigin + rayDirection * ray.position.w;
 			vec3 surfaceNormalViewSpace = normalize(GetModelNormalViewMatrix(ray.entityInstanceIndex, ray.geometryIndex) * ray.normal.xyz);
 			float totalRayDistance = ray.normal.w;
+			VisibilityPayload _ray = ray;
 			for (int activeLightIndex = 0; activeLightIndex < MAX_ACTIVE_LIGHTS; activeLightIndex++) {
 				LightSource light = lightSources[activeLightIndex];
 				if (light.radius > 0) {
@@ -219,13 +221,15 @@ void main() {
 						vec3 shadowRayStartPosition = hitPositionViewSpace;
 						float shadowRayTravelDistance = totalRayDistance;
 						do {
-							if (++ray.bounces > camera.maxBounces && camera.maxBounces >= 0) break;
 							InitRayPayload(ray);
-							traceRayEXT(topLevelAS, 0, rayTraceShadowMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, shadowRayStartPosition, GetOptimalBounceStartDistance(shadowRayTravelDistance), randomDirTowardsLightSourceSphere, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
-							opacity += ray.color.a;
-							shadowRayStartPosition += randomDirTowardsLightSourceSphere * ray.position.w;
-							shadowRayTravelDistance += ray.position.w;
-						} while (ray.position.w != 0 && opacity < 1.0);
+							ray.bounceMask = rayTraceShadowMask;
+							traceRayEXT(topLevelAS, 0, rayTraceShadowMask, RAY_SBT_OFFSET_VISIBILITY, 0, RAY_MISS_OFFSET_VOID, shadowRayStartPosition, GetOptimalBounceStartDistance(shadowRayTravelDistance), randomDirTowardsLightSourceSphere, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
+							if (ray.position.w != 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1) {
+								opacity += max(0.1, ray.color.a);
+								shadowRayStartPosition += randomDirTowardsLightSourceSphere * ray.position.w;
+								shadowRayTravelDistance += ray.position.w;
+							}
+						} while (ray.position.w != 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1 && opacity < 1.0);
 						if (opacity < 1.0) {
 							float specular = pow(dot(randomDirTowardsLightSourceSphere, surfaceNormalViewSpace), (1.0 - ray.bounceShadowRays)*5 + 1);
 							color.rgb += _ray.color.rgb * light.color * intensity * specular * (1.0 - clamp(opacity, 0, 1));
@@ -341,6 +345,7 @@ void main() {
 	ray.primitiveID = -1;
 	ray.extra = 0;
 	ray.customData = 0;
+	ray.color = vec4(0);
 	
 	ray.emission = vec3(0);
 	if (ray.bounces == 0) {

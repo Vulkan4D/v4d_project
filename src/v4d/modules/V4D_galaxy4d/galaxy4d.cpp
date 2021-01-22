@@ -40,7 +40,10 @@ float terrainNegationSphereRadiusPower = 1;
 struct TerrainDigSphere {
 	float radius;
 	void operator() (RenderableGeometryEntity* entity, Device* device){
-		entity->Allocate(device, "V4D_galaxy4d:terrain.dig.sphere");
+		RenderableGeometryEntity::Material mat {};
+		mat.visibility.roughness = 254;
+		mat.visibility.baseColor = {255,255,255,255};
+		entity->Allocate(device, "V4D_galaxy4d:terrain.dig.sphere")->material = mat;
 		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 	}
 };

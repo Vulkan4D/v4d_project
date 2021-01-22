@@ -303,6 +303,9 @@ bool PathTracing = ((camera.renderOptions & RENDER_OPTION_PATH_TRACING)!=0 && _R
 	#define RAY_SBT_OFFSET_SPECTRAL 1
 	#define RAY_SBT_OFFSET_EXTRA 2
 	
+	#define RAY_MISS_OFFSET_STANDARD 0
+	#define RAY_MISS_OFFSET_VOID 1
+	
 	#define CALL_DATA_LOCATION_MATERIAL 0
 	#define CALL_DATA_LOCATION_TEXTURE 1
 	
@@ -325,6 +328,7 @@ bool PathTracing = ((camera.renderOptions & RENDER_OPTION_PATH_TRACING)!=0 && _R
 		float bounceShadowRays; // -1 for no shadow rays, or Roughness value between 0.0 and 1.0
 		vec4 fog;
 		uint bounceMask;
+		int atmosphereId;
 	};
 
 	void InitRayPayload(inout VisibilityPayload ray) {
@@ -345,13 +349,14 @@ bool PathTracing = ((camera.renderOptions & RENDER_OPTION_PATH_TRACING)!=0 && _R
 		ray.bounceShadowRays = -1;
 		ray.fog = vec4(0);
 		ray.bounceMask = 0;
+		ray.atmosphereId = -1;
 	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
 		void WriteRayPayload(inout VisibilityPayload ray) {
 			ray.color = vec4(0,0,0, 1);
 			ray.position = vec4(gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT, gl_HitTEXT);
-			ray.normal = vec4(0, 0, 0, ray.normal.w + gl_HitTEXT);
+			ray.normal.xyz = vec3(0);
 			ray.rayDirection = vec4(gl_ObjectRayDirectionEXT, 0);
 			ray.entityInstanceIndex = INSTANCE_CUSTOM_INDEX_VALUE;
 			ray.geometryIndex = GEOMETRY_INDEX_VALUE;
