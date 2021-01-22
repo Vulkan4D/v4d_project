@@ -374,7 +374,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				float radius = 0.5f;
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_raytracing:aabb_sphere");
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
@@ -386,11 +389,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					RenderableGeometryEntity::Material mat {};
-					mat.visibility.indexOfRefraction = 1.02 * 50;
+					mat.visibility.indexOfRefraction = 1.1 * 50;
 					mat.visibility.roughness = 0;
 					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
-					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,1});
+					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,16});
 				};
 			}break;
 			case OBJECT_TYPE::TerrainDigSphere:{
@@ -441,10 +444,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						{ 0.0, 0.0, 1.0},
 					});
 					entity->Add_meshVertexColorU8()->AllocateBuffersFromList(device, {
-						{255, 255, 255, 1},
-						{255, 255, 255, 1},
-						{255, 255, 255, 1},
-						{255, 255, 255, 1},
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
+						{255, 255, 255, 16},
 					});
 					entity->Add_meshIndices16()->AllocateBuffersFromList(device, {
 						0, 1, 2, 2, 3, 0,

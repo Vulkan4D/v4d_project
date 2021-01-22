@@ -2052,9 +2052,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				}
 			// #endif
 			if (scene->camera.renderMode == RENDER_MODE_STANDARD || scene->camera.renderMode == RENDER_MODE_BOUNCES || scene->camera.renderMode == RENDER_MODE_TIME) {
-				ImGui::Checkbox("Ray-traced Shadows", &RENDER_OPTIONS::HARD_SHADOWS);
+				ImGui::Separator();
 				ImGui::SliderInt("Light Bounces", &scene->camera.maxBounces, -1, 10); // -1 = infinite bounces
 				ImGui::SliderFloat("Max bounce time", &scene->camera.bounceTimeBudget, 0.0f, 2.0f);
+				ImGui::Separator();
+				ImGui::Text("LTBL (Path-tracing preview)");
+				ImGui::Checkbox("Soft Shadows", &RENDER_OPTIONS::SOFT_SHADOWS);
+				ImGui::Checkbox("Path tracing & Rough surfaces", &RENDER_OPTIONS::PATH_TRACING);
 				if (scene->camera.renderMode == RENDER_MODE_STANDARD) {
 					ImGui::SliderFloat("Denoise", &scene->camera.denoise, 0.0f, 64.0f);
 					// if (!DEBUG_OPTIONS::WIREFRAME && !DEBUG_OPTIONS::PHYSICS) {

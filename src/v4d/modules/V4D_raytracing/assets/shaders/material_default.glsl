@@ -8,7 +8,7 @@ layout(location = CALL_DATA_LOCATION_MATERIAL) callableDataInEXT ProceduralMater
 layout(location = CALL_DATA_LOCATION_TEXTURE) callableDataEXT ProceduralTextureCall tex;
 
 //https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/
-float FresnelReflectAmount(float n1, float n2, float reflectionAmount) {
+float FresnelReflectAmount(float n1, float n2) {
 	// Schlick aproximation
 	float r0 = (n1-n2) / (n1+n2);
 	r0 *= r0;
@@ -22,9 +22,7 @@ float FresnelReflectAmount(float n1, float n2, float reflectionAmount) {
 		cosX = sqrt(1.0-sinT2);
 	}
 	float x = 1.0-cosX;
-	float ret = r0+(1.0-r0)*x*x*x*x*x;
-	// adjust reflect multiplier for object reflectivity
-	return reflectionAmount + (1.0-reflectionAmount) * ret;
+	return r0+(1.0-r0)*x*x*x*x*x;
 }
 
 float Schlick(const float cosine, const float indexOfRefraction) {
@@ -34,7 +32,7 @@ float Schlick(const float cosine, const float indexOfRefraction) {
 }
 
 // void Water(float indexOfRefraction) {
-// 	const float vDotN = dot(mat.rayDirection.xyz, mat.normal.xyz);
+// 	const float vDotN = dot(mat.rayPayload.rayDirection.xyz, mat.rayPayload.normal.xyz);
 // 	const vec3 outwardNormal = vDotN > 0 ? -mat.normal.xyz : mat.normal.xyz;
 // 	const float niOverNt = vDotN > 0 ? indexOfRefraction : 1.0 / indexOfRefraction;
 // 	const float cosine = vDotN > 0 ? indexOfRefraction * vDotN : -vDotN;
@@ -93,17 +91,20 @@ void main() {
 		mat.emission.rgb = tex.emission.rgb;
 		mat.reflectance = vec3(0);
 	} else {
-		vec3 randomBounceDirection = normalize(mat.rayPayload.normal.xyz + RandomInUnitSphere(mat.rayPayload.randomSeed));
-		bool isMetallic = tex.metallic>0;// RandomFloat(mat.rayPayload.randomSeed) < tex.metallic;
+		bool isMetallic = tex.metallic>0 ;// RandomFloat(mat.rayPayload.randomSeed) < tex.metallic;
 		if (isMetallic) {
 			// Metallic
 			mat.reflectance.rgb = tex.albedo.rgb;
-			mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness));
+			if (PathTracing) {
+				vec3 randomBounceDirection = normalize(mat.rayPayload.normal.xyz + RandomInUnitSphere(mat.rayPayload.randomSeed));
+				mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness));
+			} else {
+				mat.bounceDirection.xyz = reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz);
+			}
 		} else {
 			// Dielectric
-			mat.bounceDirection.xyz = randomBounceDirection;
 			const float vDotN = -dot(mat.rayPayload.rayDirection.xyz, tex.normal.xyz);
-			bool isTransparent = RandomFloat(mat.rayPayload.randomSeed) > tex.albedo.a;
+			bool isTransparent = tex.albedo.a<1 ;// RandomFloat(mat.rayPayload.randomSeed) > tex.albedo.a;
 			if (isTransparent) {
 				// Transparent
 				const vec3 outwardNormal = vDotN > 0 ? -tex.normal.xyz : tex.normal.xyz;
@@ -111,20 +112,35 @@ void main() {
 				const float cosine = vDotN > 0 ? indexOfRefraction * vDotN : -vDotN;
 				const vec3 refracted = refract(mat.rayPayload.rayDirection.xyz, tex.normal.xyz, niOverNt);
 				const float reflectProb = (refracted != vec3(0))? Schlick(cosine, indexOfRefraction) : 1;
-				if (RandomFloat(mat.rayPayload.randomSeed) < reflectProb) {
-					mat.bounceDirection.xyz = mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), mat.bounceDirection.xyz, tex.roughness);
+				if (PathTracing) {
+					vec3 randomBounceDirection = normalize(mat.rayPayload.normal.xyz + RandomInUnitSphere(mat.rayPayload.randomSeed));
+					if (RandomFloat(mat.rayPayload.randomSeed) < reflectProb) {
+						mat.bounceDirection.xyz = mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness*tex.roughness);
+					} else {
+						mat.bounceDirection.xyz = mix(refracted, randomBounceDirection, tex.roughness*tex.roughness);
+					}
 				} else {
-					mat.bounceDirection.xyz = mix(refracted, mat.bounceDirection.xyz, tex.roughness);
+					if (reflectProb == 1) {
+						mat.bounceDirection.xyz = reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz);
+					} else {
+						mat.bounceDirection.xyz = refracted;
+					}
 				}
 				mat.reflectance = tex.albedo.rgb;
 			} else {
 				// Opaque dielectric
-				float fresnelAmount = 0.7;
+				float fresnelAmount = clamp(FresnelReflectAmount(1.00001, indexOfRefraction) * (1.0 - tex.roughness), 0, 1);
 				mat.rayPayload.color.rgb = tex.albedo.rgb;
-				mat.reflectance = tex.albedo.rgb * FresnelReflectAmount(1.0, indexOfRefraction, fresnelAmount) * fresnelAmount;
-				mat.bounceDirection = normalize(mix(randomBounceDirection, reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), fresnelAmount));
-				mat.bounceShadowRays = tex.roughness;
 				mat.rayPayload.normal.xyz = tex.normal.xyz;
+				mat.bounceShadowRays = tex.roughness;
+				mat.reflectance.rgb = tex.albedo.rgb * fresnelAmount;
+				if (PathTracing) {
+					vec3 randomBounceDirection = normalize(mat.rayPayload.normal.xyz + RandomInUnitSphere(mat.rayPayload.randomSeed));
+					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness*tex.roughness));
+				} else {
+					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), tex.normal.xyz, 0.2));
+					mat.rayPayload.bounceMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+				}
 			}
 		}
 	}

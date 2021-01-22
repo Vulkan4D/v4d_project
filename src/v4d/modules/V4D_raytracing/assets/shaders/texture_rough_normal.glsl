@@ -25,9 +25,9 @@ float BumpyNoise(vec3 pos) {
 	return clamp01(Simplex(pos*10000*tex.roughness)/2+.5);
 }
 void main() {
-	// if (camera.accumulateFrames >= 0) {
+	if (PathTracing) {
 		NormalFromBumpNoise(BumpyNoise);
 		tex.factor = tex.roughness;
 		MixTexNormal(normal);
-	// }
+	}
 }

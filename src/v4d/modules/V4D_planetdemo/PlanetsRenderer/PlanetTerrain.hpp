@@ -511,7 +511,7 @@ struct PlanetTerrain {
 				
 			} else {
 				RenderableGeometryEntity::Material material {};
-				material.visibility.roughness = 255;
+				material.visibility.roughness = 127;
 				material.visibility.metallic = 0;
 				material.visibility.indexOfRefraction = 1.55 * 50;
 				material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_rough_normal"];

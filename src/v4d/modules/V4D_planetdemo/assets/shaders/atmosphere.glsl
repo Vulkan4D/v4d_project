@@ -81,28 +81,30 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPay
 // Graphics Quality configuration
 const int MAX_RAYMARCH_STEPS = 24;
 const int RAYMARCH_LIGHT_STEPS = 3;
-const float minStepSize = 1000.0; // meters
 const float sunLuminosityThreshold = 0.01;
 
 // planet-specific stuff
 const float planetSolidRadius = 8000000;
-const float innerRadius = planetSolidRadius - 2000;
+const float visibilityDistance = 1000000;
+const float minStepSize = visibilityDistance / 1000.0;
+const float innerRadius = planetSolidRadius - 5000;
 const float outerRadius = 8200000;
 const float atmosphereThickness = outerRadius - innerRadius;
-const float rayleighHeight = 10000;
-const float mieHeight = 3000;
+const float rayleighHeight = 12000;
+const float mieHeight = 5000;
 const vec2 scaleHeight = vec2(rayleighHeight, mieHeight);
 const float gg = G * G;
 
 void main() {
 	// trace for geometries within the atmosphere
-uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;//|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
-	// if (ray.bounces == 0) {
-		traceMask |= RAY_TRACED_ENTITY_LIGHT;
-	// }
+	uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_LIGHT ;//|RAY_TRACED_ENTITY_LIGHT ;// RAY_TRACE_MASK_VISIBLE & ~RAY_TRACED_ENTITY_ATMOSPHERE;
+	if (ray.bounceMask > 0) {
+		traceMask &= ray.bounceMask;
+	}
 	traceRayEXT(topLevelAS, 0, traceMask, RAY_SBT_OFFSET_VISIBILITY, 0, 0, gl_WorldRayOriginEXT, gl_HitTEXT, gl_WorldRayDirectionEXT, float(camera.zfar), RAY_PAYLOAD_LOCATION_VISIBILITY);
 	VisibilityPayload hitRay = ray;
 	const float hitDistance = hitRay.position.w==0? float(camera.zfar) : hitRay.position.w;
+	bool hasHitSomethingWithinAtmosphere = hitDistance < atmosphereAttr.t2;
 	
 	const vec3 startPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
 	const vec3 endPoint = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * min(atmosphereAttr.t2, hitDistance);
@@ -125,6 +127,7 @@ uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;//|RAY_TRA
 	// Init accumulation variables
 	vec3 atmColor = vec3(0);
 	float maxDepth = 0;
+	vec4 fog = vec4(0);
 	
 	// Loop through sun lights
 	for (int activeLightIndex = 0; activeLightIndex < MAX_ACTIVE_LIGHTS; activeLightIndex++) {
@@ -212,6 +215,11 @@ uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;//|RAY_TRA
 					// 	}
 					// // }
 					
+					fog += vec4(vec3(
+						clamp(
+							rayleighPhase * RAYLEIGH_BETA * density.x * attenuation // rayleigh color
+						, 0, 1) * lightIntensity
+					), (outerRadius - rayAltitude) / atmosphereThickness * stepSize / visibilityDistance);
 				}
 
 				atmColor += vec3(
@@ -225,12 +233,9 @@ uint traceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN ;//|RAY_TRA
 	}
 	
 	ray = hitRay;
-	// ray.fog = vec4(atmColor, mix(0, clamp(maxDepth / atmosphereThickness, 0, 1), clamp(pow(smoothstep(minStepSize, minStepSize*100, hitDistance), 0.5),0,1)));
-	
-	
-	// ray.reflectance *= 1.0 - clamp(maxDepth / atmosphereThickness, 0, 1);
-	ray.emission += atmColor;
-	
+	if (hasHitSomethingWithinAtmosphere) 
+		ray.fog = max(ray.fog, vec4(fog.rgb, mix(0, clamp(fog.a, 0, 1), clamp(pow(smoothstep(minStepSize, minStepSize*100, hitDistance), 0.5),0,1))));
+	else
+		ray.emission += atmColor;
 }
-
 

@@ -285,11 +285,12 @@ layout(set = 0, binding = 4) uniform sampler2D tex_img_metalNormal;
 // Render Options
 bool DebugWireframe = (camera.debugOptions & DEBUG_OPTION_WIREFRAME)!=0;
 bool DebugPhysics = (camera.debugOptions & DEBUG_OPTION_PHYSICS)!=0;
-bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && camera.renderMode == RENDER_MODE_STANDARD && !DebugPhysics && !DebugWireframe;
+// bool TXAA = (camera.renderOptions & RENDER_OPTION_TXAA)!=0 && camera.renderMode == RENDER_MODE_STANDARD && !DebugPhysics && !DebugWireframe;
 bool HDR = (camera.renderOptions & RENDER_OPTION_HDR_TONE_MAPPING)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
 bool GammaCorrection = (camera.renderOptions & RENDER_OPTION_GAMMA_CORRECTION)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
-bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && camera.renderMode == RENDER_MODE_STANDARD;
-
+bool _RenderStandard = camera.renderMode == RENDER_MODE_STANDARD || camera.renderMode == RENDER_MODE_BOUNCES || camera.renderMode == RENDER_MODE_TIME;
+bool SoftShadows = ((camera.renderOptions & RENDER_OPTION_SOFT_SHADOWS)!=0 && _RenderStandard) || camera.accumulateFrames >= 0;
+bool PathTracing = ((camera.renderOptions & RENDER_OPTION_PATH_TRACING)!=0 && _RenderStandard) || camera.accumulateFrames >= 0;
 
 
 #ifdef RAY_TRACING
@@ -322,6 +323,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		vec3 emission;
 		vec3 reflectance;
 		float bounceShadowRays; // -1 for no shadow rays, or Roughness value between 0.0 and 1.0
+		vec4 fog;
+		uint bounceMask;
 	};
 
 	void InitRayPayload(inout VisibilityPayload ray) {
@@ -340,6 +343,8 @@ bool HardShadows = (camera.renderOptions & RENDER_OPTION_HARD_SHADOWS)!=0 && cam
 		ray.emission = vec3(0);
 		ray.reflectance = vec3(1);
 		ray.bounceShadowRays = -1;
+		ray.fog = vec4(0);
+		ray.bounceMask = 0;
 	}
 	
 	#if defined(SHADER_RCHIT) || defined(SHADER_RAHIT)
