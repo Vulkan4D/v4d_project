@@ -136,6 +136,8 @@ void main() {
 			+ GetVertexColor(i1) * barycentricCoords.y
 			+ GetVertexColor(i2) * barycentricCoords.z
 		;
+	} else {
+		ray.color = vec4(1);
 	}
 	
 	// uint i0 = GetIndex(0);

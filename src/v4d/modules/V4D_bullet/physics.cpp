@@ -92,11 +92,24 @@ glm::dmat4 BulletToGlm(const btTransform& t) {
 	return m;
 }
 
+struct PhysicsObject;
+std::unordered_map<uint32_t, PhysicsObject*> physicsObjects {};
+PhysicsObject* GetPhysicsObject(uint32_t index) {
+	try {
+		return physicsObjects.at(index);
+	} catch(...) {
+		return nullptr;
+	}
+}
+
 struct PhysicsObject : btMotionState {
 	std::weak_ptr<v4d::graphics::RenderableGeometryEntity> entityInstance;
 	btTransform centerOfMassOffset {};
 	btRigidBody* rigidbody = nullptr;
 	btCollisionShape* collisionShape = nullptr;
+	btTypedConstraint* constraint = nullptr;
+	std::unordered_map<uint32_t, btTypedConstraint*> constrainedChildren {};
+	PhysicsObject* parent = nullptr;
 	
 	PhysicsObject(std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
 		centerOfMassOffset.setIdentity();
@@ -117,6 +130,14 @@ struct PhysicsObject : btMotionState {
 		auto entity = entityInstance.lock();if(!entity)return;
 		auto physics = entity->physics.Lock();if(!physics)return;
 		if (entity->GetIndex() == -1) return;
+
+		// Wait until parent object's rigidbody exists before creating this rigidbody
+		if (physics->p2pJointParent != -1) {
+			if (auto* _parent = GetPhysicsObject((uint32_t)physics->p2pJointParent); !_parent || !_parent->rigidbody) {
+				return;
+			}
+		}
+		
 		physics->physicsDirty = false;
 		
 		{// Update Center Of Mass
@@ -235,6 +256,7 @@ struct PhysicsObject : btMotionState {
 			
 			//TODO set additional stuff in rbInfo
 			rbInfo.m_restitution = 0.7;
+			rbInfo.m_friction = 1.0;
 			
 			rigidbody = new btRigidBody(rbInfo);
 			rigidbody->setUserPointer(this);
@@ -243,6 +265,20 @@ struct PhysicsObject : btMotionState {
 				rigidbody->setActivationState(DISABLE_DEACTIVATION);
 			}
 			globalDynamicsWorld->addRigidBody(rigidbody);
+			
+			// Point to point Joint
+			if (physics->p2pJointParent != -1) {
+				if (auto* _parent = GetPhysicsObject((uint32_t)physics->p2pJointParent); _parent && _parent->rigidbody) {
+					parent = _parent;
+					constraint = new btPoint2PointConstraint(*rigidbody, *_parent->rigidbody, btVector3{physics->localPivotPoint.x, physics->localPivotPoint.y, physics->localPivotPoint.z}, btVector3{physics->pivotPointInParent.x, physics->pivotPointInParent.y, physics->pivotPointInParent.z});
+					// constraint->setParam(BT_CONSTRAINT_ERP, 0.1);
+					// constraint->setParam(BT_CONSTRAINT_CFM, 0.0);
+					_parent->constrainedChildren[physics->uniqueId] = constraint;
+					globalDynamicsWorld->addConstraint(constraint, true);
+					rigidbody->setActivationState(DISABLE_DEACTIVATION);
+				}
+			}
+			
 		}
 	}
 	
@@ -260,7 +296,38 @@ struct PhysicsObject : btMotionState {
 		}
 	}
 	
+	void RemoveConstraint() {
+		if (constraint) {
+			if (parent) {
+				for (auto& [childId, c] : parent->constrainedChildren) if (c == constraint) {
+					c = nullptr;
+					break;
+				}
+			}
+			globalDynamicsWorld->removeConstraint(constraint);
+			delete constraint;
+			constraint = nullptr;
+		}
+	}
+	
+	void RemoveConstrainedChildren() {
+		for (auto& [childId, c] : constrainedChildren) if (c) {
+			auto* child = GetPhysicsObject(childId);
+			if (child && child->constraint && child->constraint == c) {
+				child->RemoveRigidbody();
+				auto entity = child->entityInstance.lock();
+				if(!entity) continue;
+				auto physics = entity->physics.Lock();
+				if (!physics) continue;
+				physics->physicsDirty = true;
+			}
+			c = nullptr;
+		}
+	}
+	
 	void RemoveRigidbody() {
+		RemoveConstrainedChildren();
+		RemoveConstraint();
 		if (rigidbody) {
 			globalDynamicsWorld->removeRigidBody(rigidbody);
 			delete rigidbody;
@@ -274,8 +341,6 @@ struct PhysicsObject : btMotionState {
 	}
 	
 };
-
-std::unordered_map<uint32_t, PhysicsObject*> physicsObjects {};
 
 #define PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
 

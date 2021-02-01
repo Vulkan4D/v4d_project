@@ -50,13 +50,14 @@ void main() {
 	vec3 rayDirection = normalize(vec4(inverse(projection) * dvec4(d.x, d.y, 1, 1)).xyz);
 	float rayMinDistance = GetOptimalBounceStartDistance(0);
 	float rayMaxDistance = float(camera.zfar);
+	vec3 reflectance = vec3(1);
 	
 	// Trace Rays
 	InitRayPayload(ray);
 	uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN|RAY_TRACED_ENTITY_TERRAIN_NEGATE|RAY_TRACED_ENTITY_LIQUID|RAY_TRACED_ENTITY_ATMOSPHERE|RAY_TRACED_ENTITY_FOG|RAY_TRACED_ENTITY_LIGHT;
 	do {
 		uint nbBounces = ray.bounces;
-		vec3 reflectance = ray.reflectance;
+		reflectance = ray.reflectance;
 		ray.emission = vec3(0);
 		ray.bounceShadowRays = -1;
 		ray.atmosphereId = -1;
@@ -170,10 +171,10 @@ void main() {
 			ray.bounceMask = mat.rayPayload.bounceMask;
 		}
 		
-		// divide the emissive brightness by the square of distance ONLY for bounced rays, not for primary rays.
-		if (dot(ray.emission.rgb, ray.emission.rgb) > 0 && ray.bounces > 1 && ray.position.w > 0) {
-			ray.emission /= (ray.position.w * ray.position.w);
-		}
+		// // divide the emissive brightness by the square of distance ONLY for bounced rays, not for primary rays.
+		// if (dot(ray.emission.rgb, ray.emission.rgb) > 0 && ray.bounces > 1 && ray.position.w > 0) {
+		// 	ray.emission /= (ray.position.w * ray.position.w);
+		// }
 		
 		// V4D's custom rendering equation
 		color.rgb += ray.emission * reflectance;
@@ -232,7 +233,7 @@ void main() {
 						} while (ray.position.w != 0 && ray.entityInstanceIndex != -1 && ray.geometryIndex != -1 && opacity < 1.0);
 						if (opacity < 1.0) {
 							float specular = pow(dot(randomDirTowardsLightSourceSphere, surfaceNormalViewSpace), (1.0 - ray.bounceShadowRays)*5 + 1);
-							color.rgb += _ray.color.rgb * light.color * intensity * specular * (1.0 - clamp(opacity, 0, 1));
+							color.rgb += _ray.color.rgb * light.color * intensity * specular * (1.0 - clamp(opacity, 0, 1)) * reflectance;
 						}
 					}
 				}
@@ -274,7 +275,7 @@ void main() {
 	}
 	
 	// Apply fog
-	if (ray.fog.a > 0) color.rgb = mix(color.rgb, ray.fog.rgb, clamp(ray.fog.a, 0, 0.99999));
+	if (ray.fog.a > 0) color.rgb = mix(color.rgb, ray.fog.rgb * normalize(min(vec3(0.0001), reflectance)), clamp(ray.fog.a, 0, 1.0));
 	
 	// Accumulation mode
 	if (camera.accumulateFrames > 0) {
@@ -285,8 +286,8 @@ void main() {
 	if (camera.accumulateFrames <= 0 && camera.denoise > 0) {
 		// V4D custom denoiser algo
 		if (primaryRayInstanceIndex != -1 && primaryRayGeometryIndex != -1) {
-			Material material = GetGeometry(primaryRayInstanceIndex, primaryRayGeometryIndex).material;
-			if (material.visibility.roughness > 0) {
+			// Material material = GetGeometry(primaryRayInstanceIndex, primaryRayGeometryIndex).material;
+			// if (material.visibility.roughness > 0) {
 				vec4 clipSpaceCoords = mat4(projection) * GetModelViewMatrix_history(primaryRayInstanceIndex, primaryRayGeometryIndex) * vec4(primaryRayLocalPos, 1);
 				vec3 posNDC = clipSpaceCoords.xyz/clipSpaceCoords.w;
 				vec2 reprojectedCoords = posNDC.xy / 2 + 0.5;
@@ -311,14 +312,14 @@ void main() {
 							if (distance(geometryHistory.xyz, primaryRayLocalPos.xyz) < primaryRayDistance) {
 								vec4 historyColor = texture(img_lit_history, reprojectedCoords + offset);
 								if (dot(normalize(historyColor), normalize(color)) > 0.8 || distance(historyColor, color) < 3) {
-									color = mix(historyColor, color, 1.0 / max(1, camera.denoise * (float(material.visibility.roughness)/255)));
+									color = mix(historyColor, color, 1.0 / max(1, camera.denoise /* * (float(material.visibility.roughness)/255) */ ));
 									break;
 								}
 							}
 						}
 					}
 				}
-			}
+			// }
 		}
 	}
 	

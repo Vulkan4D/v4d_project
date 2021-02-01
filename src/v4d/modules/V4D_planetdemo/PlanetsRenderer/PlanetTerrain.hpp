@@ -515,7 +515,7 @@ struct PlanetTerrain {
 				material.visibility.metallic = 0;
 				material.visibility.indexOfRefraction = 1.55 * 50;
 				material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_rough_normal"];
-				material.visibility.texFactors[0] = 1;
+				material.visibility.texFactors[0] = 255;
 				entity->Allocate(device, "V4D_planetdemo:planet.terrain")->material = material;
 				entity->rayTracingMask = 0;
 				entity->Add_physics();

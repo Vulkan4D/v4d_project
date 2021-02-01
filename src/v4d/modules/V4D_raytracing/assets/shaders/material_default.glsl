@@ -59,7 +59,7 @@ void main() {
 	
 	// Procedural textures
 	for (int i = 0; i < 8; ++i) if (material.visibility.texFactors[i] > 0) {
-		tex.factor = material.visibility.texFactors[i];
+		tex.factor = material.visibility.texFactors[i] / 255.0;
 		executeCallableEXT(material.visibility.textures[i], CALL_DATA_LOCATION_TEXTURE);
 	}
 	// executeCallableEXT(2, CALL_DATA_LOCATION_TEXTURE); // checkerboard
@@ -129,17 +129,17 @@ void main() {
 				mat.reflectance = tex.albedo.rgb;
 			} else {
 				// Opaque dielectric
-				float fresnelAmount = clamp(FresnelReflectAmount(1.00001, indexOfRefraction) * (1.0 - tex.roughness), 0, 1);
+				float fresnelAmount = clamp(FresnelReflectAmount(1.00001, indexOfRefraction) * pow(1.0 - tex.roughness, 2.0), 0, 1);
 				mat.rayPayload.color.rgb = tex.albedo.rgb;
 				mat.rayPayload.normal.xyz = tex.normal.xyz;
 				mat.bounceShadowRays = tex.roughness;
 				mat.reflectance.rgb = tex.albedo.rgb * fresnelAmount;
 				if (PathTracing) {
 					vec3 randomBounceDirection = normalize(mat.rayPayload.normal.xyz + RandomInUnitSphere(mat.rayPayload.randomSeed));
-					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness*tex.roughness));
+					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness*tex.roughness * abs(dot(mat.rayPayload.rayDirection.xyz, tex.normal.xyz))));
 				} else {
-					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), tex.normal.xyz, 0.2));
-					mat.rayPayload.bounceMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), tex.normal.xyz, 0.1));
+					// mat.rayPayload.bounceMask = RAY_TRACED_ENTITY_ATMOSPHERE;
 				}
 			}
 		}

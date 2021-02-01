@@ -1123,29 +1123,29 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 										geom.material.visibility.indexOfRefraction = substance.IOR*50;
 										if (variant != "" && Renderer::sbtOffsets.count(std::string("call:tex_")+std::string(variant))) {
 											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
-											geom.material.visibility.texFactors[0] = 1;
+											geom.material.visibility.texFactors[0] = 255;
 										} else if (substance.baseMap != "") {
 											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
-											geom.material.visibility.texFactors[0] = 1;
+											geom.material.visibility.texFactors[0] = 255;
 											if (variant != "") {
 												LOG_WARN("Unknown variant '" << variant << "'")
 											}
 										}
 										if (substance.agingMap != "" && substance.agingFactor > 0) {
 											geom.material.visibility.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
-											geom.material.visibility.texFactors[1] = substance.agingFactor;
+											geom.material.visibility.texFactors[1] = (uint8_t)(substance.agingFactor*255.0);
 										}
 										if (substance.oxydationMap != "" && substance.oxydationFactor > 0) {
 											geom.material.visibility.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
-											geom.material.visibility.texFactors[2] = substance.oxydationFactor;
+											geom.material.visibility.texFactors[2] = (uint8_t)(substance.oxydationFactor*255.0);
 										}
 										if (substance.wearAndTearMap != "" && substance.wearAndTearFactor > 0) {
 											geom.material.visibility.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
-											geom.material.visibility.texFactors[3] = substance.wearAndTearFactor;
+											geom.material.visibility.texFactors[3] = (uint8_t)(substance.wearAndTearFactor*255.0);
 										}
 										if (substance.burnMap != "" && substance.burnFactor > 0) {
 											geom.material.visibility.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
-											geom.material.visibility.texFactors[4] = substance.burnFactor;
+											geom.material.visibility.texFactors[4] = (uint8_t)(substance.burnFactor*255.0);
 										}
 									} catch(...) {
 										LOG_WARN("Unknown material '" << mat << "'")
@@ -1176,7 +1176,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					// Update and Assign transform
 					entity->entityInstanceInfo.modelViewTransform_history = entity->entityInstanceInfo.modelViewTransform;
-					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->worldTransform;
+					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->GetWorldTransform();
 					
 					if (entity->sharedGeometryData && entity->sharedGeometryData->blas.built) {
 						int index = nbRayTracingInstances++;
@@ -1192,7 +1192,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					if (nbActiveLights < MAX_ACTIVE_LIGHTS) {
 						entity->lightSource.Do([&nbActiveLights, &entity](auto& lightSource){
 							lightSourcesBuffer[nbActiveLights] = lightSource;
-							lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * entity->worldTransform * glm::dvec4(glm::dvec3(lightSource.position), 1));
+							lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * entity->GetWorldTransform() * glm::dvec4(glm::dvec3(lightSource.position), 1));
 							++nbActiveLights;
 						});
 					}
@@ -2187,7 +2187,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
 		
-		if (key == GLFW_KEY_ENTER) {
+		if (key == GLFW_KEY_F12) {
 			if (action == GLFW_RELEASE) {
 				if (scene->camera.accumulateFrames == -1) {
 					scene->camera.accumulateFrames = 0;
