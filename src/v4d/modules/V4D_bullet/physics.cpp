@@ -253,7 +253,7 @@ struct PhysicsObject : btMotionState {
 			}
 			
 			btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, this, collisionShape, localInertia);
-			rbInfo.m_restitution = 0.01;
+			rbInfo.m_restitution = physics->bounciness;
 			rbInfo.m_friction = physics->friction;
 			rbInfo.m_angularDamping = physics->angularDamping;
 			
@@ -280,79 +280,55 @@ struct PhysicsObject : btMotionState {
 					if (physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
 						constraint->enableMotor(0, true);
 						constraint->setServo(0, true);
-						constraint->setMaxMotorForce(0, 100000000000.0f);
-						constraint->setTargetVelocity(0, 5.0f);
-						// constraint->enableSpring(0, true);
-						// constraint->setBounce(0, 1);
-						// constraint->setStiffness(0, 1);
-						// constraint->setDamping(0, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 0);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 0);
+						constraint->setMaxMotorForce(0, 1000.0f);
+						constraint->setTargetVelocity(0, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 0);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 0);
 					}
 					
 					if (physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
 						constraint->enableMotor(1, true);
 						constraint->setServo(1, true);
-						constraint->setMaxMotorForce(1, 100000000000.0f);
-						constraint->setTargetVelocity(1, 5.0f);
-						// constraint->enableSpring(1, true);
-						// constraint->setBounce(1, 1);
-						// constraint->setStiffness(1, 1);
-						// constraint->setDamping(1, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 1);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 1);
+						constraint->setMaxMotorForce(1, 1000.0f);
+						constraint->setTargetVelocity(1, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 1);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 1);
 					}
 					
 					if (physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
 						constraint->enableMotor(2, true);
 						constraint->setServo(2, true);
-						constraint->setMaxMotorForce(2, 100000000000.0f);
-						constraint->setTargetVelocity(2, 5.0f);
-						// constraint->enableSpring(2, true);
-						// constraint->setBounce(2, 1);
-						// constraint->setStiffness(2, 1);
-						// constraint->setDamping(2, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 2);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 2);
+						constraint->setMaxMotorForce(2, 1000.0f);
+						constraint->setTargetVelocity(2, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 2);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 2);
 					}
 					
 					if (physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
 						constraint->enableMotor(3, true);
 						constraint->setServo(3, true);
-						constraint->setMaxMotorForce(3, 100000000000.0f);
-						constraint->setTargetVelocity(3, 5.0f);
-						// constraint->enableSpring(3, true);
-						// constraint->setBounce(3, 1);
-						// constraint->setStiffness(3, 1);
-						// constraint->setDamping(3, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 3);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 3);
+						constraint->setMaxMotorForce(3, 1000.0f);
+						constraint->setTargetVelocity(3, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 3);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 3);
 					}
 					
 					if (physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
 						constraint->enableMotor(4, true);
 						constraint->setServo(4, true);
-						constraint->setMaxMotorForce(4, 100000000000.0f);
-						constraint->setTargetVelocity(4, 5.0f);
-						// constraint->enableSpring(4, true);
-						// constraint->setBounce(4, 1);
-						// constraint->setStiffness(4, 1);
-						// constraint->setDamping(4, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 4);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 4);
+						constraint->setMaxMotorForce(4, 1000.0f);
+						constraint->setTargetVelocity(4, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 4);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 4);
 					}
 					
 					if (physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
 						constraint->enableMotor(5, true);
 						constraint->setServo(5, true);
-						constraint->setMaxMotorForce(5, 100000000000.0f);
-						constraint->setTargetVelocity(5, 5.0f);
-						// constraint->enableSpring(5, true);
-						// constraint->setBounce(5, 1);
-						// constraint->setStiffness(5, 1);
-						// constraint->setDamping(5, 1);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 5);
-						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 5);
+						constraint->setMaxMotorForce(5, 1000.0f);
+						constraint->setTargetVelocity(5, 1000.0f);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 5);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 5);
 					}
 					
 					constraint->setEquilibriumPoint();

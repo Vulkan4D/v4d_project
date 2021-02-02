@@ -375,7 +375,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
+				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+				physics->SetSphereCollider(radius);
+				physics->friction = 0.6;
+				physics->bounciness = 0.7;
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					RenderableGeometryEntity::Material mat {};
 					mat.visibility.roughness = 0;
@@ -389,7 +392,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f)->SetSphereCollider(radius);
+				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+				physics->SetSphereCollider(radius);
+				physics->friction = 0.6;
+				physics->bounciness = 0.7;
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					RenderableGeometryEntity::Material mat {};
 					mat.visibility.indexOfRefraction = 1.1 * 50;
@@ -411,7 +417,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
-				entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f)->SetSphereCollider(radius);
+				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
+				physics->SetSphereCollider(radius);
+				physics->friction = 0.6;
+				physics->bounciness = 0.7;
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = 100000.0f;
 					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
