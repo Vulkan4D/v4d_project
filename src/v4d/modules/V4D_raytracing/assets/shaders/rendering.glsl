@@ -171,10 +171,10 @@ void main() {
 			ray.bounceMask = mat.rayPayload.bounceMask;
 		}
 		
-		// // divide the emissive brightness by the square of distance ONLY for bounced rays, not for primary rays.
-		// if (dot(ray.emission.rgb, ray.emission.rgb) > 0 && ray.bounces > 1 && ray.position.w > 0) {
-		// 	ray.emission /= (ray.position.w * ray.position.w);
-		// }
+		// divide the emissive brightness by the square of distance ONLY for bounced rays, not for primary rays.
+		if (dot(ray.emission.rgb, ray.emission.rgb) > 0 && ray.bounces > 1 && ray.position.w > 0) {
+			ray.emission /= (ray.position.w * ray.position.w);
+		}
 		
 		// V4D's custom rendering equation
 		color.rgb += ray.emission * reflectance;

@@ -152,7 +152,7 @@ void main() {
 				vec2 opticalDepth = vec2(0);
 	
 				// Ray-March
-				for (float dist = 0; dist < rayDepth; dist += stepSize) {
+				for (float dist = 0; dist < rayDepth*0.999; dist += stepSize) {
 					vec3 rayPosObjectSpace = startPoint + rayMarchDirObjectSpace * dist;
 					float rayAltitude = length(rayPosObjectSpace);
 					float rayAltitudeAboveInnerRadius = rayAltitude - innerRadius;
@@ -188,7 +188,7 @@ void main() {
 					// RayMarch towards light source
 					vec2 lightRayOpticalDepth = vec2(0);
 					float lightRayDist = 0;
-					for (float lightRayDist = 0; lightRayDist < lightRayDepth; lightRayDist += lightRayStepSize) {
+					for (float lightRayDist = 0; lightRayDist < lightRayDepth*0.999; lightRayDist += lightRayStepSize) {
 						
 						vec3 posLightRayObjectSpace = rayPosObjectSpace + lightDirObjectCurrentRaySpace * (lightRayDist + lightRayStepSize/2.0);
 						// vec3 posLightRayViewSpace = rayPosViewSpace + lightDirViewSpace * (lightRayDist + lightRayStepSize/2.0);

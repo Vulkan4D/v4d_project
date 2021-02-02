@@ -107,8 +107,8 @@ struct PhysicsObject : btMotionState {
 	btTransform centerOfMassOffset {};
 	btRigidBody* rigidbody = nullptr;
 	btCollisionShape* collisionShape = nullptr;
-	btTypedConstraint* constraint = nullptr;
-	std::unordered_map<uint32_t, btTypedConstraint*> constrainedChildren {};
+	btGeneric6DofSpring2Constraint* constraint = nullptr;
+	std::unordered_map<uint32_t, btGeneric6DofSpring2Constraint*> constrainedChildren {};
 	PhysicsObject* parent = nullptr;
 	
 	PhysicsObject(std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity = nullptr) : entityInstance(entity) {
@@ -132,8 +132,8 @@ struct PhysicsObject : btMotionState {
 		if (entity->GetIndex() == -1) return;
 
 		// Wait until parent object's rigidbody exists before creating this rigidbody
-		if (physics->p2pJointParent != -1) {
-			if (auto* _parent = GetPhysicsObject((uint32_t)physics->p2pJointParent); !_parent || !_parent->rigidbody) {
+		if (physics->jointParent != -1) {
+			if (auto* _parent = GetPhysicsObject((uint32_t)physics->jointParent); !_parent || !_parent->rigidbody) {
 				return;
 			}
 		}
@@ -247,16 +247,15 @@ struct PhysicsObject : btMotionState {
 			btVector3 localInertia {0,0,0};
 			btScalar mass = physics->mass;
 			if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
-				// collisionShape->calculateLocalInertia(mass, localInertia);
+				collisionShape->calculateLocalInertia(mass, localInertia);
 			} else {
 				mass = 0;
 			}
 			
 			btRigidBody::btRigidBodyConstructionInfo rbInfo(mass, this, collisionShape, localInertia);
-			
-			//TODO set additional stuff in rbInfo
-			rbInfo.m_restitution = 0.7;
-			rbInfo.m_friction = 1.0;
+			rbInfo.m_restitution = 0.01;
+			rbInfo.m_friction = physics->friction;
+			rbInfo.m_angularDamping = physics->angularDamping;
 			
 			rigidbody = new btRigidBody(rbInfo);
 			rigidbody->setUserPointer(this);
@@ -264,21 +263,105 @@ struct PhysicsObject : btMotionState {
 				rigidbody->setCollisionFlags(rigidbody->getCollisionFlags() | btCollisionObject::CF_KINEMATIC_OBJECT);
 				rigidbody->setActivationState(DISABLE_DEACTIVATION);
 			}
+			rigidbody->setAngularFactor(physics->angularFactor);
 			globalDynamicsWorld->addRigidBody(rigidbody);
 			
-			// Point to point Joint
-			if (physics->p2pJointParent != -1) {
-				if (auto* _parent = GetPhysicsObject((uint32_t)physics->p2pJointParent); _parent && _parent->rigidbody) {
+			// Joints
+			if (physics->jointParent != -1) {
+				if (auto* _parent = GetPhysicsObject((uint32_t)physics->jointParent); _parent && _parent->rigidbody) {
 					parent = _parent;
-					constraint = new btPoint2PointConstraint(*rigidbody, *_parent->rigidbody, btVector3{physics->localPivotPoint.x, physics->localPivotPoint.y, physics->localPivotPoint.z}, btVector3{physics->pivotPointInParent.x, physics->pivotPointInParent.y, physics->pivotPointInParent.z});
-					// constraint->setParam(BT_CONSTRAINT_ERP, 0.1);
-					// constraint->setParam(BT_CONSTRAINT_CFM, 0.0);
+					
+					constraint = new btGeneric6DofSpring2Constraint(*rigidbody, *_parent->rigidbody, GlmToBullet(physics->localJointPoint), GlmToBullet(physics->parentJointPoint));
+					constraint->setLinearLowerLimit(btVector3(physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsY.min, physics->jointTranslationLimitsZ.min));
+					constraint->setLinearUpperLimit(btVector3(physics->jointTranslationLimitsX.max, physics->jointTranslationLimitsY.max, physics->jointTranslationLimitsZ.max));
+					constraint->setAngularLowerLimit(btVector3(physics->jointRotationLimitsX.min, physics->jointRotationLimitsY.min, physics->jointRotationLimitsZ.min));
+					constraint->setAngularUpperLimit(btVector3(physics->jointRotationLimitsX.max, physics->jointRotationLimitsY.max, physics->jointRotationLimitsZ.max));
+					
+					if (physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
+						constraint->enableMotor(0, true);
+						constraint->setServo(0, true);
+						constraint->setMaxMotorForce(0, 100000000000.0f);
+						constraint->setTargetVelocity(0, 5.0f);
+						// constraint->enableSpring(0, true);
+						// constraint->setBounce(0, 1);
+						// constraint->setStiffness(0, 1);
+						// constraint->setDamping(0, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 0);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 0);
+					}
+					
+					if (physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
+						constraint->enableMotor(1, true);
+						constraint->setServo(1, true);
+						constraint->setMaxMotorForce(1, 100000000000.0f);
+						constraint->setTargetVelocity(1, 5.0f);
+						// constraint->enableSpring(1, true);
+						// constraint->setBounce(1, 1);
+						// constraint->setStiffness(1, 1);
+						// constraint->setDamping(1, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 1);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 1);
+					}
+					
+					if (physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
+						constraint->enableMotor(2, true);
+						constraint->setServo(2, true);
+						constraint->setMaxMotorForce(2, 100000000000.0f);
+						constraint->setTargetVelocity(2, 5.0f);
+						// constraint->enableSpring(2, true);
+						// constraint->setBounce(2, 1);
+						// constraint->setStiffness(2, 1);
+						// constraint->setDamping(2, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 2);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 2);
+					}
+					
+					if (physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
+						constraint->enableMotor(3, true);
+						constraint->setServo(3, true);
+						constraint->setMaxMotorForce(3, 100000000000.0f);
+						constraint->setTargetVelocity(3, 5.0f);
+						// constraint->enableSpring(3, true);
+						// constraint->setBounce(3, 1);
+						// constraint->setStiffness(3, 1);
+						// constraint->setDamping(3, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 3);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 3);
+					}
+					
+					if (physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
+						constraint->enableMotor(4, true);
+						constraint->setServo(4, true);
+						constraint->setMaxMotorForce(4, 100000000000.0f);
+						constraint->setTargetVelocity(4, 5.0f);
+						// constraint->enableSpring(4, true);
+						// constraint->setBounce(4, 1);
+						// constraint->setStiffness(4, 1);
+						// constraint->setDamping(4, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 4);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 4);
+					}
+					
+					if (physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
+						constraint->enableMotor(5, true);
+						constraint->setServo(5, true);
+						constraint->setMaxMotorForce(5, 100000000000.0f);
+						constraint->setTargetVelocity(5, 5.0f);
+						// constraint->enableSpring(5, true);
+						// constraint->setBounce(5, 1);
+						// constraint->setStiffness(5, 1);
+						// constraint->setDamping(5, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 5);
+						constraint->setParam(BT_CONSTRAINT_CFM, 0.2, 5);
+					}
+					
+					constraint->setEquilibriumPoint();
+					
 					_parent->constrainedChildren[physics->uniqueId] = constraint;
 					globalDynamicsWorld->addConstraint(constraint, true);
 					rigidbody->setActivationState(DISABLE_DEACTIVATION);
 				}
 			}
-			
 		}
 	}
 	
@@ -469,6 +552,23 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 			}
+			
+			// Apply joint targets
+			if (physics.jointParent != -1 && physicsObj->constraint) {
+				if (physics.jointTranslationLimitsX.min < physics.jointTranslationLimitsX.max)
+					physicsObj->constraint->setServoTarget(0, physics.jointTranslationTarget.x);
+				if (physics.jointTranslationLimitsY.min < physics.jointTranslationLimitsY.max)
+					physicsObj->constraint->setServoTarget(1, physics.jointTranslationTarget.y);
+				if (physics.jointTranslationLimitsZ.min < physics.jointTranslationLimitsZ.max)
+					physicsObj->constraint->setServoTarget(2, physics.jointTranslationTarget.z);
+				if (physics.jointRotationLimitsX.min < physics.jointRotationLimitsX.max)
+					physicsObj->constraint->setServoTarget(3, physics.jointRotationTarget.x);
+				if (physics.jointRotationLimitsY.min < physics.jointRotationLimitsY.max)
+					physicsObj->constraint->setServoTarget(4, physics.jointRotationTarget.y);
+				if (physics.jointRotationLimitsZ.min < physics.jointRotationLimitsZ.max)
+					physicsObj->constraint->setServoTarget(5, physics.jointRotationTarget.z);
+			}
+			
 		});
 		
 		// Update physics objects
