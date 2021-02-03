@@ -46,6 +46,42 @@ void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 	clientActionQueue.emplace(stream);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+struct AnimationKeyFrame {
+	RenderableGeometryEntity* entity = nullptr;
+	float value = 0;
+	enum class Action {NONE = 0, TRANSLATION_X, TRANSLATION_Y, TRANSLATION_Z, ROTATION_X, ROTATION_Y, ROTATION_Z, FRICTION} action;
+};
+
+struct Animation {
+	float value = 0;
+	std::vector<AnimationKeyFrame> keys {};
+	
+	void operator= (double v) {
+		value = (float)v;
+	}
+	void operator= (float v) {
+		value = v;
+	}
+	void operator= (int v) {
+		value = (float)v;
+	}
+	void operator= (bool v) {
+		value = v? 1.0f : 0.0f;
+	}
+};
+
 struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> root = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> torso = nullptr;
@@ -56,92 +92,102 @@ struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> r_foot = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> l_foot = nullptr;
 	
-	const glm::dmat4 spine = glm::translate(glm::dmat4(1), glm::dvec3{ 0,+.1, 0});
-	const glm::dmat4 r_hip = glm::translate(glm::dmat4(1), glm::dvec3{+.2,-.2, 0});
-	const glm::dmat4 r_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.4, 0});
-	const glm::dmat4 r_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.4, 0});
-	const glm::dmat4 l_hip = glm::translate(glm::dmat4(1), glm::dvec3{-.2,-.2, 0});
-	const glm::dmat4 l_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.4, 0});
-	const glm::dmat4 l_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.4, 0});
+	const glm::dmat4 spine = glm::translate(glm::dmat4(1), glm::dvec3{ 0,+.15, 0});
+	const glm::dmat4 r_hip = glm::translate(glm::dmat4(1), glm::dvec3{+.2,-.15, 0});
+	const glm::dmat4 r_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
+	const glm::dmat4 r_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
+	const glm::dmat4 l_hip = glm::translate(glm::dmat4(1), glm::dvec3{-.2,-.15, 0});
+	const glm::dmat4 l_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
+	const glm::dmat4 l_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
+	
+	std::unordered_map<std::string, Animation> animations {};
 	
 	Avatar(v4d::scene::NetworkGameObject::Id objId) {
-
 		RenderableGeometryEntity::Material material {};
 		material.visibility.roughness = 127;
 		material.visibility.metallic = 0;
 		material.visibility.baseColor = {255,255,255,255};
 		
-		// Ass
-		{
+		{// Create Renderable Entities
 			root = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 20);
 			rootPhysics->angularFactor = 0;
-			rootPhysics->SetBoxCollider({.1,.1,.1});
+			rootPhysics->bounciness = 0;
+			rootPhysics->friction = 1;
+			rootPhysics->SetBoxCollider({.2,.15,.2});
 			root->generator = [material](RenderableGeometryEntity* entity, Device* device){
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.2, -.2), glm::vec3(+.2, +.1, +.2)});
+				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.15, -.2), glm::vec3(+.2, +.15, +.2)});
 			};
 		
 			// Torso
 			{
 				torso = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				torso->SetInitialTransform(spine, root);
 				auto physics = torso->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 40);
 				physics->jointParent = rootPhysics->uniqueId;
-				physics->localJointPoint = glm::dmat4(1);
+				physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
 				physics->parentJointPoint = spine;
+				torso->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), root);
 				physics->jointTranslationLimitsY = {-0.04, 0.04};
 				physics->jointRotationLimitsY = {-glm::radians(30.0f), +glm::radians(30.0f)};
 				physics->jointRotationLimitsX = {-glm::radians(10.0f), +glm::radians(10.0f)};
 				physics->jointRotationLimitsZ = {-glm::radians(5.0f), +glm::radians(5.0f)};
-				physics->SetBoxCollider({.1,.1,.1});
+				physics->bounciness = 0;
+				physics->friction = 1;
+				physics->SetBoxCollider({.3,.2,.2});
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.3, 0, -.2), glm::vec3(+.3, +.4, +.2)});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.3, -.2, -.2), glm::vec3(+.3, +.2, +.2)});
 				};
 			}
 			
 			// Right leg
 			{
 				r_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				r_upperleg->SetInitialTransform(r_hip, root);
 				auto rightUpperLegPhysics = r_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 8);
 				rightUpperLegPhysics->jointParent = rootPhysics->uniqueId;
-				rightUpperLegPhysics->localJointPoint = glm::dmat4(1);
+				rightUpperLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 				rightUpperLegPhysics->parentJointPoint = r_hip;
-				rightUpperLegPhysics->jointRotationLimitsX = {0.0f, +glm::radians(90.0f)};
+				r_upperleg->SetInitialTransform(rightUpperLegPhysics->parentJointPoint * glm::inverse(rightUpperLegPhysics->localJointPoint), root);
+				rightUpperLegPhysics->jointRotationLimitsX = {-glm::radians(30.0f), +glm::radians(90.0f)};
 				rightUpperLegPhysics->jointRotationLimitsZ = {0.0f, +glm::radians(70.0f)};
 				rightUpperLegPhysics->jointRotationLimitsY = {-glm::radians(10.0f), +glm::radians(10.0f)};
-				rightUpperLegPhysics->SetBoxCollider({.1,.1,.1});
+				rightUpperLegPhysics->bounciness = 0;
+				rightUpperLegPhysics->friction = 1;
+				rightUpperLegPhysics->SetBoxCollider({.1,.2,.1});
 				r_upperleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.4, -.1), glm::vec3(+.1, 0, +.1)});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 				};
 				{
 					r_lowerleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-					r_lowerleg->SetInitialTransform(r_knee, r_upperleg);
 					auto rightLowerLegPhysics = r_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 6);
 					rightLowerLegPhysics->jointParent = rightUpperLegPhysics->uniqueId;
-					rightLowerLegPhysics->localJointPoint = glm::dmat4(1);
+					rightLowerLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 					rightLowerLegPhysics->parentJointPoint = r_knee;
+					r_lowerleg->SetInitialTransform(rightLowerLegPhysics->parentJointPoint * glm::inverse(rightLowerLegPhysics->localJointPoint), r_upperleg);
 					rightLowerLegPhysics->jointRotationLimitsX = {-glm::radians(90.0f), 0.0f};
-					rightLowerLegPhysics->SetBoxCollider({.1,.1,.1});
+					rightLowerLegPhysics->bounciness = 0;
+					rightLowerLegPhysics->friction = 1;
+					rightLowerLegPhysics->SetBoxCollider({.1,.2,.1});
 					r_lowerleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.4, -.1), glm::vec3(+.1, 0, +.1)});
+						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 					};
 					{
 						r_foot = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-						r_foot->SetInitialTransform(r_ankle, r_lowerleg);
 						auto physics = r_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5);
 						physics->jointParent = rightLowerLegPhysics->uniqueId;
-						physics->localJointPoint = glm::dmat4(1);
+						physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.05,+.05});
 						physics->parentJointPoint = r_ankle;
+						r_foot->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), r_lowerleg);
 						physics->jointRotationLimitsX = {-glm::radians(20.0f), +glm::radians(20.0f)};
-						physics->SetBoxCollider({.1,.1,.1});
+						physics->bounciness = 0;
+						physics->friction = 1;
+						physics->SetBoxCollider({+.1, +.05, +.15});
 						r_foot->generator = [material](RenderableGeometryEntity* entity, Device* device){
 							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.1, -.2), glm::vec3(+.1, 0, +.1)});
+							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.05, -.15), glm::vec3(+.1, +.05, +.15)});
 						};
 					}
 				}
@@ -150,44 +196,50 @@ struct Avatar {
 			// Left leg
 			{
 				l_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				l_upperleg->SetInitialTransform(l_hip, root);
 				auto leftUpperLegPhysics = l_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 8);
 				leftUpperLegPhysics->jointParent = rootPhysics->uniqueId;
-				leftUpperLegPhysics->localJointPoint = glm::dmat4(1);
+				leftUpperLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 				leftUpperLegPhysics->parentJointPoint = l_hip;
-				leftUpperLegPhysics->jointRotationLimitsX = {0.0f, +glm::radians(90.0f)};
+				l_upperleg->SetInitialTransform(leftUpperLegPhysics->parentJointPoint * glm::inverse(leftUpperLegPhysics->localJointPoint), root);
+				leftUpperLegPhysics->jointRotationLimitsX = {-glm::radians(30.0f), +glm::radians(90.0f)};
 				leftUpperLegPhysics->jointRotationLimitsZ = {-glm::radians(70.0f), 0.0f};
 				leftUpperLegPhysics->jointRotationLimitsY = {-glm::radians(10.0f), +glm::radians(10.0f)};
-				leftUpperLegPhysics->SetBoxCollider({.1,.1,.1});
+				leftUpperLegPhysics->bounciness = 0;
+				leftUpperLegPhysics->friction = 1;
+				leftUpperLegPhysics->SetBoxCollider({.1,.2,.1});
 				l_upperleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.4, -.1), glm::vec3(+.1, 0, +.1)});
+					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 				};
 				{
 					l_lowerleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-					l_lowerleg->SetInitialTransform(l_knee, l_upperleg);
 					auto leftLowerLegPhysics = l_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 6);
 					leftLowerLegPhysics->jointParent = leftUpperLegPhysics->uniqueId;
-					leftLowerLegPhysics->localJointPoint = glm::dmat4(1);
+					leftLowerLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 					leftLowerLegPhysics->parentJointPoint = l_knee;
+					l_lowerleg->SetInitialTransform(leftLowerLegPhysics->parentJointPoint * glm::inverse(leftLowerLegPhysics->localJointPoint), l_upperleg);
 					leftLowerLegPhysics->jointRotationLimitsX = {-glm::radians(90.0f), 0.0f};
-					leftLowerLegPhysics->SetBoxCollider({.1,.1,.1});
+					leftLowerLegPhysics->bounciness = 0;
+					leftLowerLegPhysics->friction = 1;
+					leftLowerLegPhysics->SetBoxCollider({.1,.2,.1});
 					l_lowerleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.4, -.1), glm::vec3(+.1, 0, +.1)});
+						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 					};
 					{
 						l_foot = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-						l_foot->SetInitialTransform(l_ankle, l_lowerleg);
 						auto physics = l_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5);
 						physics->jointParent = leftLowerLegPhysics->uniqueId;
-						physics->localJointPoint = glm::dmat4(1);
+						physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.05,+.05});
 						physics->parentJointPoint = l_ankle;
+						l_foot->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), l_lowerleg);
 						physics->jointRotationLimitsX = {-glm::radians(20.0f), +glm::radians(20.0f)};
-						physics->SetBoxCollider({.1,.1,.1});
+						physics->bounciness = 0;
+						physics->friction = 1;
+						physics->SetBoxCollider({+.1, +.05, +.15});
 						l_foot->generator = [material](RenderableGeometryEntity* entity, Device* device){
 							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
-							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.1, -.2), glm::vec3(+.1, 0, +.1)});
+							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.05, -.15), glm::vec3(+.1, +.05, +.15)});
 						};
 					}
 				}
@@ -197,7 +249,55 @@ struct Avatar {
 		
 	}
 	
+	void PhysicsUpdate(double deltaTime) {
+		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<AnimationKeyFrame::Action, std::vector<std::tuple<float/*keyFrameWeight*/, float/*keyValue*/>>>> animationsByEntityAndAction {};
+		for (auto&[name, animation] : animations) if (animation.value > 0) {
+			for (auto& key : animation.keys) {
+				animationsByEntityAndAction[key.entity][key.action].push_back({animation.value, key.value});
+			}
+		}
+		// Interpolate animated values
+		for (auto&[entity, actions] : animationsByEntityAndAction) {
+			for (auto&[action, keys] : actions) {
+				float totalWeight = 0;
+				float value = 0;
+				
+				for (auto&[keyFrameWeight, keyValue] : keys) {
+					value = glm::mix(value, keyValue, keyFrameWeight / (totalWeight + 1));
+					totalWeight += keyFrameWeight;
+				}
+				
+				switch(action) {
+					case AnimationKeyFrame::Action::TRANSLATION_X:
+						entity->physics.Lock()->jointTranslationTarget.x = value;
+						break;
+					case AnimationKeyFrame::Action::TRANSLATION_Y:
+						entity->physics.Lock()->jointTranslationTarget.y = value;
+						break;
+					case AnimationKeyFrame::Action::TRANSLATION_Z:
+						entity->physics.Lock()->jointTranslationTarget.z = value;
+						break;
+					case AnimationKeyFrame::Action::ROTATION_X:
+						entity->physics.Lock()->jointRotationTarget.x = glm::radians(value);
+						break;
+					case AnimationKeyFrame::Action::ROTATION_Y:
+						entity->physics.Lock()->jointRotationTarget.y = glm::radians(value);
+						break;
+					case AnimationKeyFrame::Action::ROTATION_Z:
+						entity->physics.Lock()->jointRotationTarget.z = glm::radians(value);
+						break;
+					case AnimationKeyFrame::Action::FRICTION:
+						entity->physics.Lock()->friction = value;
+						break;
+				}
+			}
+		}
+		
+	}
+	
 	~Avatar() {
+		animations.clear();
+		
 		// Torso
 		if (torso) {
 			torso->Destroy();
@@ -240,7 +340,88 @@ struct Avatar {
 	}
 };
 
+std::recursive_mutex avatarLock;
 std::shared_ptr<Avatar> avatar = nullptr;
+
+struct AvatarAnimatorConfig : public v4d::io::ConfigFile {
+	CONFIGFILE_STRUCT(AvatarAnimatorConfig)
+	void ReadConfig() override {
+		std::lock_guard lock(avatarLock);
+		if (avatar) {
+			avatar->animations.clear();
+			ReadFromINI([](const std::string& section, std::vector<ConfLineStream>& configs){
+				
+				if (section == "") return;
+				
+				Animation animation {};
+				
+				for (auto& conf : configs) {
+					std::string line = conf.value.str();
+					try {
+						
+						// Entity
+						RenderableGeometryEntity* entity = nullptr;
+							 if (conf.name == "torso")			entity = avatar->torso.get();
+						else if (conf.name == "r_upperleg") 	entity = avatar->r_upperleg.get();
+						else if (conf.name == "l_upperleg") 	entity = avatar->l_upperleg.get();
+						else if (conf.name == "r_lowerleg") 	entity = avatar->r_lowerleg.get();
+						else if (conf.name == "l_lowerleg") 	entity = avatar->l_lowerleg.get();
+						else if (conf.name == "r_foot") 		entity = avatar->r_foot.get();
+						else if (conf.name == "l_foot") 		entity = avatar->l_foot.get();
+						else {
+							throw std::runtime_error("");
+						}
+						
+						do {
+							AnimationKeyFrame keyFrame;
+							keyFrame.entity = entity;
+							
+							// Action
+							std::string action;
+							conf.value >> action;
+								 if (action == "TRANSLATION_X") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_X;
+							else if (action == "TRANSLATION_Y") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_Y;
+							else if (action == "TRANSLATION_Z") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_Z;
+							else if (action == "ROTATION_X") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_X;
+							else if (action == "ROTATION_Y") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_Y;
+							else if (action == "ROTATION_Z") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_Z;
+							else if (action == "FRICTION") 		keyFrame.action = AnimationKeyFrame::Action::FRICTION;
+							else {
+								throw std::runtime_error("");
+							}
+							
+							// Value
+							conf.value >> keyFrame.value;
+							
+							animation.keys.push_back(keyFrame);
+						} while (!conf.value.eof());
+					} catch (...) {
+						LOG_ERROR("Error reading animator line: " << line)
+					}
+				}
+				
+				avatar->animations[section] = animation;
+			});
+		}
+	}
+	void WriteConfig() override {}
+};
+
+auto avatarAnimatorConfig = AvatarAnimatorConfig::Instance(V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/animator.ini"), 1000);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 V4D_MODULE_CLASS(V4D_Mod) {
 	
@@ -388,23 +569,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					mat.visibility.metallic = 255;
 					mat.visibility.roughness = 20;
 				
-				// entity->Allocate(device)->material = mat;
-				// entity->Add_meshVertexPosition()->AllocateBuffersFromList(device, {
-				// 	{-200.0,-200.0, 0.0},
-				// 	{ 200.0,-200.0, 0.0},
-				// 	{ 200.0, 200.0, 0.0},
-				// 	{-200.0, 200.0, 0.0},
-				// });
-				// entity->Add_meshVertexNormal()->AllocateBuffersFromList(device, {
-				// 	{ 0.0, 0.0, 1.0},
-				// 	{ 0.0, 0.0, 1.0},
-				// 	{ 0.0, 0.0, 1.0},
-				// 	{ 0.0, 0.0, 1.0},
-				// });
-				// entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetMeshCollider(entity->Add_meshIndices16()->AllocateBuffersFromList(device, {
-				// 	0, 1, 2, 2, 3, 0,
-				// }), 6);
-				
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = mat;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-20, -20, -1), glm::vec3(+20, +20, +1)});
 				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetBoxCollider({20,20,1});
@@ -416,7 +580,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Avatar:{
+				std::lock_guard lock(avatarLock);
 				avatar = std::make_shared<Avatar>(obj->id);
+				avatarAnimatorConfig->ReadConfig();
 				obj->renderableGeometryEntityInstance = avatar->root;
 			}break;
 		}
@@ -454,6 +620,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::SetNextWindowSize({400, 400}, ImGuiCond_FirstUseEver);
 			ImGui::Begin("Avatar testing");
+				std::lock_guard lock(avatarLock);
 				if (avatar && avatar->root) {
 					auto lock = avatar->root->GetLock();
 					
@@ -495,9 +662,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					testForces("Right foot", avatar->r_foot);
 					testForces("Left foot", avatar->l_foot);
 					
+	
+					ImGui::Separator();
+					ImGui::Separator();
+					
+					for (auto&[name, animation] : avatar->animations) {
+						ImGui::SliderFloat(name.c_str(), &animation.value, 0.0f, 1.0f);
+					}
+					
 				}
 			ImGui::End();
 		#endif
+	}
+	
+	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+		std::lock_guard lock(avatarLock);
+		if (avatar) avatar->PhysicsUpdate(deltaTime);
 	}
 	
 };

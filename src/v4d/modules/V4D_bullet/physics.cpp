@@ -282,7 +282,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(0, true);
 						constraint->setMaxMotorForce(0, 1000.0f);
 						constraint->setTargetVelocity(0, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 0);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 0);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 0);
 					}
 					
@@ -291,7 +291,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(1, true);
 						constraint->setMaxMotorForce(1, 1000.0f);
 						constraint->setTargetVelocity(1, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 1);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 1);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 1);
 					}
 					
@@ -300,7 +300,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(2, true);
 						constraint->setMaxMotorForce(2, 1000.0f);
 						constraint->setTargetVelocity(2, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 2);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 2);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 2);
 					}
 					
@@ -309,7 +309,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(3, true);
 						constraint->setMaxMotorForce(3, 1000.0f);
 						constraint->setTargetVelocity(3, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 3);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 3);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 3);
 					}
 					
@@ -318,7 +318,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(4, true);
 						constraint->setMaxMotorForce(4, 1000.0f);
 						constraint->setTargetVelocity(4, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 4);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 4);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 4);
 					}
 					
@@ -327,7 +327,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setServo(5, true);
 						constraint->setMaxMotorForce(5, 1000.0f);
 						constraint->setTargetVelocity(5, 1000.0f);
-						constraint->setParam(BT_CONSTRAINT_ERP, 0.99, 5);
+						constraint->setParam(BT_CONSTRAINT_ERP, 0.8, 5);
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, 5);
 					}
 					
@@ -506,10 +506,32 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				#endif
 			}
 			
-			// Apply forces
-			if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
-				auto* rb = physicsObj->rigidbody;
-				if (rb) {
+			// Realtime Update
+			auto* rb = physicsObj->rigidbody;
+			if (rb) {
+				
+				// Update rigidbody
+				if (rb->getFriction() != physics.friction) rb->setFriction(physics.friction);
+				if (rb->getRestitution() != physics.bounciness) rb->setRestitution(physics.bounciness);
+				
+				// Apply joint targets
+				if (physics.jointParent != -1 && physicsObj->constraint) {
+					if (physics.jointTranslationLimitsX.min < physics.jointTranslationLimitsX.max)
+						physicsObj->constraint->setServoTarget(0, physics.jointTranslationTarget.x);
+					if (physics.jointTranslationLimitsY.min < physics.jointTranslationLimitsY.max)
+						physicsObj->constraint->setServoTarget(1, physics.jointTranslationTarget.y);
+					if (physics.jointTranslationLimitsZ.min < physics.jointTranslationLimitsZ.max)
+						physicsObj->constraint->setServoTarget(2, physics.jointTranslationTarget.z);
+					if (physics.jointRotationLimitsX.min < physics.jointRotationLimitsX.max)
+						physicsObj->constraint->setServoTarget(3, physics.jointRotationTarget.x);
+					if (physics.jointRotationLimitsY.min < physics.jointRotationLimitsY.max)
+						physicsObj->constraint->setServoTarget(4, physics.jointRotationTarget.y);
+					if (physics.jointRotationLimitsZ.min < physics.jointRotationLimitsZ.max)
+						physicsObj->constraint->setServoTarget(5, physics.jointRotationTarget.z);
+				}
+				
+				// Apply forces
+				if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
 					if (physics.addedForce) {
 						if (physics.forcePoint.length() == 0) {
 							rb->applyCentralForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z));
@@ -527,24 +549,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						physics.physicsForceImpulses.pop();
 					}
 				}
+				
 			}
-			
-			// Apply joint targets
-			if (physics.jointParent != -1 && physicsObj->constraint) {
-				if (physics.jointTranslationLimitsX.min < physics.jointTranslationLimitsX.max)
-					physicsObj->constraint->setServoTarget(0, physics.jointTranslationTarget.x);
-				if (physics.jointTranslationLimitsY.min < physics.jointTranslationLimitsY.max)
-					physicsObj->constraint->setServoTarget(1, physics.jointTranslationTarget.y);
-				if (physics.jointTranslationLimitsZ.min < physics.jointTranslationLimitsZ.max)
-					physicsObj->constraint->setServoTarget(2, physics.jointTranslationTarget.z);
-				if (physics.jointRotationLimitsX.min < physics.jointRotationLimitsX.max)
-					physicsObj->constraint->setServoTarget(3, physics.jointRotationTarget.x);
-				if (physics.jointRotationLimitsY.min < physics.jointRotationLimitsY.max)
-					physicsObj->constraint->setServoTarget(4, physics.jointRotationTarget.y);
-				if (physics.jointRotationLimitsZ.min < physics.jointRotationLimitsZ.max)
-					physicsObj->constraint->setServoTarget(5, physics.jointRotationTarget.z);
-			}
-			
 		});
 		
 		// Update physics objects

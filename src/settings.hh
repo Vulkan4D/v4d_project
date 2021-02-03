@@ -15,9 +15,7 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 	
 	// Graphics
 	int framerate_limit_rendering = 0;
-	#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
-		int framerate_limit_ui = 30;
-	#endif
+	int framerate_limit_ui = 30;
 
 	// Networking
 	int default_server_port = 0;
@@ -27,29 +25,43 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 	
 private:
 	void ReadConfig() override {
-		CONFIGFILE_READ_FROM_INI_WRITE("application", log_verbose)
-		CONFIGFILE_READ_FROM_INI_WRITE("application", modules_list_file)
-		CONFIGFILE_READ_FROM_INI_WRITE("graphics", framerate_limit_rendering)
-		#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
-			CONFIGFILE_READ_FROM_INI_WRITE("graphics", framerate_limit_ui)
-		#endif
-		CONFIGFILE_READ_FROM_INI_WRITE("networking", default_server_port)
-		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_force_tcp)
-		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_server_max_send_fps)
-		CONFIGFILE_READ_FROM_INI_WRITE("networking", bursts_client_max_send_fps)
+		CONFIGFILE_READ_FROM_INI_WRITE(
+			"application"
+			, log_verbose
+			, modules_list_file
+		)
+		CONFIGFILE_READ_FROM_INI_WRITE(
+			"graphics"
+			, framerate_limit_rendering
+			, framerate_limit_ui
+		)
+		CONFIGFILE_READ_FROM_INI_WRITE(
+			"networking"
+			, default_server_port
+			, bursts_force_tcp
+			, bursts_server_max_send_fps
+			, bursts_client_max_send_fps
+		)
 		
 		LOGGER_INSTANCE->SetVerbose(log_verbose);
 	}
 	void WriteConfig() override {
-		CONFIGFILE_WRITE_TO_INI("application", log_verbose)
-		CONFIGFILE_WRITE_TO_INI("application", modules_list_file)
-		CONFIGFILE_WRITE_TO_INI("graphics", framerate_limit_rendering)
-		#ifdef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
-			CONFIGFILE_WRITE_TO_INI("graphics", framerate_limit_ui)
-		#endif
-		CONFIGFILE_WRITE_TO_INI("networking", default_server_port)
-		CONFIGFILE_WRITE_TO_INI("networking", bursts_force_tcp)
-		CONFIGFILE_WRITE_TO_INI("networking", bursts_server_max_send_fps)
-		CONFIGFILE_WRITE_TO_INI("networking", bursts_client_max_send_fps)
+		CONFIGFILE_WRITE_TO_INI(
+			"application"
+			, log_verbose
+			, modules_list_file
+		)
+		CONFIGFILE_WRITE_TO_INI(
+			"graphics"
+			, framerate_limit_rendering
+			, framerate_limit_ui
+		)
+		CONFIGFILE_WRITE_TO_INI(
+			"networking"
+			, default_server_port
+			, bursts_force_tcp
+			, bursts_server_max_send_fps
+			, bursts_client_max_send_fps
+		)
 	}
 };
