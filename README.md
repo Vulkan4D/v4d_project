@@ -18,12 +18,12 @@ Vulkan4D **DEV STATUS** : `in active development` *(Not ready for public use jus
 ☑️ Physics Module (Bullet3)  
 ☑️ Multiplayer/Networking utilities  
 ☑️ Entity-Component system  
-⚙️ Ray-Tracing-only Renderer module  
-⚙️ glTF Model Loader  
-⚙️ Cake (V4D's mascot)  
+☑️ Ray-Tracing-only Renderer module  
+☑️ glTF Model Loader  
+☑️ Cake (V4D's mascot)  
+⚙️ Human Avatar system  
 ⚙️ Demo game ([Galaxy4D](https://trello.com/b/2BPytpD9/galaxy4d-roadmap))  
 ⬜ Audio system  
-⬜ Human Avatar system  
 ⬜ Launcher template  
 ⬜ In-game coding framework (XenonCode)  
 ⬜ Voxel planet system  

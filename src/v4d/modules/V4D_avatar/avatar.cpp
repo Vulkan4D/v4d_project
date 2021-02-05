@@ -47,26 +47,17 @@ void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
 }
 
 
+///////////////////////////////
 
-
-
-
-
-
-
-
-
-
-
-struct AnimationKeyFrame {
+struct ActionKey {
 	RenderableGeometryEntity* entity = nullptr;
 	float value = 0;
-	enum class Action {NONE = 0, TRANSLATION_X, TRANSLATION_Y, TRANSLATION_Z, ROTATION_X, ROTATION_Y, ROTATION_Z, FRICTION} action;
+	enum class Key {NONE = 0, TRANSLATION_X, TRANSLATION_Y, TRANSLATION_Z, ROTATION_X, ROTATION_Y, ROTATION_Z, FRICTION} key;
 };
 
-struct Animation {
+struct AnimatorAction {
 	float value = 0;
-	std::vector<AnimationKeyFrame> keys {};
+	std::vector<ActionKey> keys {};
 	
 	void operator= (double v) {
 		value = (float)v;
@@ -82,6 +73,70 @@ struct Animation {
 	}
 };
 
+// struct AnimationKeyFrame {
+// 	double start;
+// 	double end;
+// 	float from;
+// 	float to;
+// 	enum class Interpolation {INSTANT, LINEAR, SMOOTH} interpolation;
+// };
+
+struct Animation {
+	// using AnimationMap = std::unordered_map<AnimatorAction*, std::map<double/*time*/, float/*value*/>>;
+	// AnimationMap startKeyFrames {};
+	// AnimationMap loopKeyFrames {};
+	// AnimationMap endKeyFrames {};
+	// double startDuration = 0;
+	// double loopStart = 0;
+	// double endDuration = 0;
+	
+	void Start() {
+		startTime = v4d::Timer::GetCurrentTimestamp();
+		endTime = 0;
+	}
+	void End() {
+		startTime = 0;
+		endTime = v4d::Timer::GetCurrentTimestamp();
+	}
+	
+	double startTime = 0;
+	double endTime = 0;
+	
+	float speed = 1.0;
+	
+	// void Run(const AnimationMap& animationMap, double time, bool loop = false) {
+	// 	for (auto&[action, keyFrames] : animationMap) {
+	// 		double curTime = loop? (time % std::prev(keyFrames.end())->first) : time;
+	// 		for (auto&[t, value] : keyFrames) {
+	// 			if (curTime <= t) {
+	// 				float w = glm::clamp(glm::smoothstep(1.0, 0.01, t - curTime) + 0.1, 0.0f, 1.0f); // my own magic mix interpolant
+	// 				action->value = glm::mix(action->value, keyFrameValue, w);
+	// 				break;
+	// 			}
+	// 		}
+	// 	}
+	// }
+	
+	void MayRun(double currentTimestamp) {
+		// if (startTime > 0) {
+		// 	double animationTime = (currentTimestamp - startTime) * speed;
+		// 	if (animationTime <= startDuration) {
+		// 		Run(startKeyFrames, animationTime);
+		// 	}
+		// 	if (animationTime >= loopStart) {
+		// 		Run(loopKeyFrames, animationTime, true);
+		// 	}
+		// } else if (endTime > 0) {
+		// 	double animationTime = (currentTimestamp - endTime) * speed;
+		// 	if (animationTime <= endDuration) {
+		// 		Run(endKeyFrames, animationTime);
+		// 	} else {
+		// 		endTime = 0;
+		// 	}
+		// }
+	}
+};
+
 struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> root = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> torso = nullptr;
@@ -92,7 +147,7 @@ struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> r_foot = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> l_foot = nullptr;
 	
-	const glm::dmat4 spine = glm::translate(glm::dmat4(1), glm::dvec3{ 0,+.15, 0});
+	const glm::dmat4 spine = glm::translate(glm::dmat4(1), glm::dvec3{0,+.15, 0});
 	const glm::dmat4 r_hip = glm::translate(glm::dmat4(1), glm::dvec3{+.2,-.15, 0});
 	const glm::dmat4 r_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
 	const glm::dmat4 r_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
@@ -100,21 +155,20 @@ struct Avatar {
 	const glm::dmat4 l_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
 	const glm::dmat4 l_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
 	
+	std::unordered_map<std::string, AnimatorAction> actions {};
 	std::unordered_map<std::string, Animation> animations {};
 	
 	Avatar(v4d::scene::NetworkGameObject::Id objId) {
-		RenderableGeometryEntity::Material material {};
-		material.visibility.roughness = 127;
-		material.visibility.metallic = 0;
-		material.visibility.baseColor = {255,255,255,255};
+		RenderableGeometryEntity::Material material {};{
+			material.visibility.roughness = 127;
+			material.visibility.metallic = 0;
+			material.visibility.baseColor = {255,255,255,255};
+		}
 		
 		{// Create Renderable Entities
 			root = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 20);
-			rootPhysics->angularFactor = 0;
-			rootPhysics->bounciness = 0;
-			rootPhysics->friction = 1;
-			rootPhysics->SetBoxCollider({.2,.15,.2});
+			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+			rootPhysics->angularFactor = {0,0,0};
 			root->generator = [material](RenderableGeometryEntity* entity, Device* device){
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.15, -.2), glm::vec3(+.2, +.15, +.2)});
@@ -123,18 +177,12 @@ struct Avatar {
 			// Torso
 			{
 				torso = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				auto physics = torso->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 40);
+				auto physics = torso->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 				physics->jointParent = rootPhysics->uniqueId;
 				physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
 				physics->parentJointPoint = spine;
+				physics->jointMotor = true;
 				torso->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), root);
-				physics->jointTranslationLimitsY = {-0.04, 0.04};
-				physics->jointRotationLimitsY = {-glm::radians(30.0f), +glm::radians(30.0f)};
-				physics->jointRotationLimitsX = {-glm::radians(10.0f), +glm::radians(10.0f)};
-				physics->jointRotationLimitsZ = {-glm::radians(5.0f), +glm::radians(5.0f)};
-				physics->bounciness = 0;
-				physics->friction = 1;
-				physics->SetBoxCollider({.3,.2,.2});
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.3, -.2, -.2), glm::vec3(+.3, +.2, +.2)});
@@ -144,47 +192,36 @@ struct Avatar {
 			// Right leg
 			{
 				r_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				auto rightUpperLegPhysics = r_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 8);
+				auto rightUpperLegPhysics = r_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 				rightUpperLegPhysics->jointParent = rootPhysics->uniqueId;
 				rightUpperLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 				rightUpperLegPhysics->parentJointPoint = r_hip;
+				rightUpperLegPhysics->jointMotor = true;
 				r_upperleg->SetInitialTransform(rightUpperLegPhysics->parentJointPoint * glm::inverse(rightUpperLegPhysics->localJointPoint), root);
-				rightUpperLegPhysics->jointRotationLimitsX = {-glm::radians(30.0f), +glm::radians(90.0f)};
-				rightUpperLegPhysics->jointRotationLimitsZ = {0.0f, +glm::radians(70.0f)};
-				rightUpperLegPhysics->jointRotationLimitsY = {-glm::radians(10.0f), +glm::radians(10.0f)};
-				rightUpperLegPhysics->bounciness = 0;
-				rightUpperLegPhysics->friction = 1;
-				rightUpperLegPhysics->SetBoxCollider({.1,.2,.1});
 				r_upperleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 				};
 				{
 					r_lowerleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-					auto rightLowerLegPhysics = r_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 6);
+					auto rightLowerLegPhysics = r_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 					rightLowerLegPhysics->jointParent = rightUpperLegPhysics->uniqueId;
 					rightLowerLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 					rightLowerLegPhysics->parentJointPoint = r_knee;
+					rightLowerLegPhysics->jointMotor = true;
 					r_lowerleg->SetInitialTransform(rightLowerLegPhysics->parentJointPoint * glm::inverse(rightLowerLegPhysics->localJointPoint), r_upperleg);
-					rightLowerLegPhysics->jointRotationLimitsX = {-glm::radians(90.0f), 0.0f};
-					rightLowerLegPhysics->bounciness = 0;
-					rightLowerLegPhysics->friction = 1;
-					rightLowerLegPhysics->SetBoxCollider({.1,.2,.1});
 					r_lowerleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 					};
 					{
 						r_foot = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-						auto physics = r_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5);
+						auto physics = r_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 						physics->jointParent = rightLowerLegPhysics->uniqueId;
 						physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.05,+.05});
 						physics->parentJointPoint = r_ankle;
+						physics->jointMotor = true;
 						r_foot->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), r_lowerleg);
-						physics->jointRotationLimitsX = {-glm::radians(20.0f), +glm::radians(20.0f)};
-						physics->bounciness = 0;
-						physics->friction = 1;
-						physics->SetBoxCollider({+.1, +.05, +.15});
 						r_foot->generator = [material](RenderableGeometryEntity* entity, Device* device){
 							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.05, -.15), glm::vec3(+.1, +.05, +.15)});
@@ -196,47 +233,36 @@ struct Avatar {
 			// Left leg
 			{
 				l_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				auto leftUpperLegPhysics = l_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 8);
+				auto leftUpperLegPhysics = l_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 				leftUpperLegPhysics->jointParent = rootPhysics->uniqueId;
 				leftUpperLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 				leftUpperLegPhysics->parentJointPoint = l_hip;
+				leftUpperLegPhysics->jointMotor = true;
 				l_upperleg->SetInitialTransform(leftUpperLegPhysics->parentJointPoint * glm::inverse(leftUpperLegPhysics->localJointPoint), root);
-				leftUpperLegPhysics->jointRotationLimitsX = {-glm::radians(30.0f), +glm::radians(90.0f)};
-				leftUpperLegPhysics->jointRotationLimitsZ = {-glm::radians(70.0f), 0.0f};
-				leftUpperLegPhysics->jointRotationLimitsY = {-glm::radians(10.0f), +glm::radians(10.0f)};
-				leftUpperLegPhysics->bounciness = 0;
-				leftUpperLegPhysics->friction = 1;
-				leftUpperLegPhysics->SetBoxCollider({.1,.2,.1});
 				l_upperleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 				};
 				{
 					l_lowerleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-					auto leftLowerLegPhysics = l_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 6);
+					auto leftLowerLegPhysics = l_lowerleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 					leftLowerLegPhysics->jointParent = leftUpperLegPhysics->uniqueId;
 					leftLowerLegPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.2,0});
 					leftLowerLegPhysics->parentJointPoint = l_knee;
+					leftLowerLegPhysics->jointMotor = true;
 					l_lowerleg->SetInitialTransform(leftLowerLegPhysics->parentJointPoint * glm::inverse(leftLowerLegPhysics->localJointPoint), l_upperleg);
-					leftLowerLegPhysics->jointRotationLimitsX = {-glm::radians(90.0f), 0.0f};
-					leftLowerLegPhysics->bounciness = 0;
-					leftLowerLegPhysics->friction = 1;
-					leftLowerLegPhysics->SetBoxCollider({.1,.2,.1});
 					l_lowerleg->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.2, -.1), glm::vec3(+.1, +.2, +.1)});
 					};
 					{
 						l_foot = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-						auto physics = l_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5);
+						auto physics = l_foot->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 						physics->jointParent = leftLowerLegPhysics->uniqueId;
 						physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,+.05,+.05});
 						physics->parentJointPoint = l_ankle;
+						physics->jointMotor = true;
 						l_foot->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), l_lowerleg);
-						physics->jointRotationLimitsX = {-glm::radians(20.0f), +glm::radians(20.0f)};
-						physics->bounciness = 0;
-						physics->friction = 1;
-						physics->SetBoxCollider({+.1, +.05, +.15});
 						l_foot->generator = [material](RenderableGeometryEntity* entity, Device* device){
 							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.05, -.15), glm::vec3(+.1, +.05, +.15)});
@@ -250,53 +276,69 @@ struct Avatar {
 	}
 	
 	void PhysicsUpdate(double deltaTime) {
-		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<AnimationKeyFrame::Action, std::vector<std::tuple<float/*keyFrameWeight*/, float/*keyValue*/>>>> animationsByEntityAndAction {};
-		for (auto&[name, animation] : animations) if (animation.value > 0) {
-			for (auto& key : animation.keys) {
-				animationsByEntityAndAction[key.entity][key.action].push_back({animation.value, key.value});
+		// Run animations
+		double currentTimestamp = v4d::Timer::GetCurrentTimestamp();
+		for (auto&[name, animation] : animations) {
+			animation.MayRun(currentTimestamp);
+		}
+		
+		// Prepare actions
+		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<ActionKey::Key, std::vector<std::tuple<float/*keyWeight*/, float/*keyValue*/>>>> animationsByEntityAndKey {};
+		for (auto&[name, action] : actions) if (action.value >= 0) {
+			for (auto& key : action.keys) {
+				animationsByEntityAndKey[key.entity][key.key].push_back({action.value, key.value});
 			}
 		}
-		// Interpolate animated values
-		for (auto&[entity, actions] : animationsByEntityAndAction) {
+		
+		// Interpolate actions
+		for (auto&[entity, actions] : animationsByEntityAndKey) {
 			for (auto&[action, keys] : actions) {
 				float totalWeight = 0;
 				float value = 0;
 				
-				for (auto&[keyFrameWeight, keyValue] : keys) {
-					value = glm::mix(value, keyValue, keyFrameWeight / (totalWeight + 1));
-					totalWeight += keyFrameWeight;
+				for (auto&[keyWeight, keyValue] : keys) {
+					value = glm::mix(value, keyValue, keyWeight / (totalWeight + 1));
+					totalWeight += keyWeight;
 				}
 				
+				auto physics = entity->physics.Lock();
+				
 				switch(action) {
-					case AnimationKeyFrame::Action::TRANSLATION_X:
-						entity->physics.Lock()->jointTranslationTarget.x = value;
+					case ActionKey::Key::TRANSLATION_X:
+						physics->jointTranslationTarget.x = value;
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::TRANSLATION_Y:
-						entity->physics.Lock()->jointTranslationTarget.y = value;
+					case ActionKey::Key::TRANSLATION_Y:
+						physics->jointTranslationTarget.y = value;
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::TRANSLATION_Z:
-						entity->physics.Lock()->jointTranslationTarget.z = value;
+					case ActionKey::Key::TRANSLATION_Z:
+						physics->jointTranslationTarget.z = value;
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::ROTATION_X:
-						entity->physics.Lock()->jointRotationTarget.x = glm::radians(value);
+					case ActionKey::Key::ROTATION_X:
+						physics->jointRotationTarget.x = glm::radians(value);
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::ROTATION_Y:
-						entity->physics.Lock()->jointRotationTarget.y = glm::radians(value);
+					case ActionKey::Key::ROTATION_Y:
+						physics->jointRotationTarget.y = glm::radians(value);
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::ROTATION_Z:
-						entity->physics.Lock()->jointRotationTarget.z = glm::radians(value);
+					case ActionKey::Key::ROTATION_Z:
+						physics->jointRotationTarget.z = glm::radians(value);
+						physics->jointIsDirty = true;
 						break;
-					case AnimationKeyFrame::Action::FRICTION:
-						entity->physics.Lock()->friction = value;
+					case ActionKey::Key::FRICTION:
+						physics->friction = value;
 						break;
 				}
 			}
 		}
-		
 	}
 	
 	~Avatar() {
 		animations.clear();
+		actions.clear();
 		
 		// Torso
 		if (torso) {
@@ -343,84 +385,183 @@ struct Avatar {
 std::recursive_mutex avatarLock;
 std::shared_ptr<Avatar> avatar = nullptr;
 
-struct AvatarAnimatorConfig : public v4d::io::ConfigFile {
-	CONFIGFILE_STRUCT(AvatarAnimatorConfig)
+struct AvatarConfigFile : public v4d::io::ConfigFile {
+	CONFIGFILE_STRUCT(AvatarConfigFile)
 	void ReadConfig() override {
 		std::lock_guard lock(avatarLock);
 		if (avatar) {
 			avatar->animations.clear();
-			ReadFromINI([](const std::string& section, std::vector<ConfLineStream>& configs){
+			avatar->actions.clear();
+			ReadFromINI([](std::stringstream section, std::vector<ConfLineStream>& configs){
 				
-				if (section == "") return;
+				if (section.eof()) return;
 				
-				Animation animation {};
+				std::string type;
+				section >> type;
 				
-				for (auto& conf : configs) {
-					std::string line = conf.value.str();
-					try {
+				auto getEntityByName = [](const std::string& name) -> RenderableGeometryEntity* {
+						 if (name == "root")		return avatar->root.get();
+					else if (name == "torso")		return avatar->torso.get();
+					else if (name == "r_upperleg") 	return avatar->r_upperleg.get();
+					else if (name == "l_upperleg") 	return avatar->l_upperleg.get();
+					else if (name == "r_lowerleg") 	return avatar->r_lowerleg.get();
+					else if (name == "l_lowerleg") 	return avatar->l_lowerleg.get();
+					else if (name == "r_foot") 		return avatar->r_foot.get();
+					else if (name == "l_foot") 		return avatar->l_foot.get();
+					return nullptr;
+				};
+				
+				if (type == "") {
+					//void
+				}
+				else if (type == "OBJECT") {
+					if (section.eof()) return;
+					
+					std::string name;
+					section >> name;
+					
+					// Entity
+					RenderableGeometryEntity* entity = getEntityByName(name);
+					if (!entity) throw std::runtime_error("");
+					auto physics = entity->physics.Lock();
+					
+					for (auto& conf : configs) {
+						std::string line = conf.value.str();
+						try {
+							std::string param;
+							conf.name >> param;
 						
-						// Entity
-						RenderableGeometryEntity* entity = nullptr;
-							 if (conf.name == "torso")			entity = avatar->torso.get();
-						else if (conf.name == "r_upperleg") 	entity = avatar->r_upperleg.get();
-						else if (conf.name == "l_upperleg") 	entity = avatar->l_upperleg.get();
-						else if (conf.name == "r_lowerleg") 	entity = avatar->r_lowerleg.get();
-						else if (conf.name == "l_lowerleg") 	entity = avatar->l_lowerleg.get();
-						else if (conf.name == "r_foot") 		entity = avatar->r_foot.get();
-						else if (conf.name == "l_foot") 		entity = avatar->l_foot.get();
-						else {
-							throw std::runtime_error("");
-						}
-						
-						do {
-							AnimationKeyFrame keyFrame;
-							keyFrame.entity = entity;
-							
-							// Action
-							std::string action;
-							conf.value >> action;
-								 if (action == "TRANSLATION_X") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_X;
-							else if (action == "TRANSLATION_Y") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_Y;
-							else if (action == "TRANSLATION_Z") keyFrame.action = AnimationKeyFrame::Action::TRANSLATION_Z;
-							else if (action == "ROTATION_X") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_X;
-							else if (action == "ROTATION_Y") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_Y;
-							else if (action == "ROTATION_Z") 	keyFrame.action = AnimationKeyFrame::Action::ROTATION_Z;
-							else if (action == "FRICTION") 		keyFrame.action = AnimationKeyFrame::Action::FRICTION;
-							else {
+							if (param == "MASS") {
+								conf.value >> physics->mass;
+							} else if (param == "COLLIDER") {
+								std::string type;
+								conf.value >> type;
+								if (type == "BOX") {
+									float x,y,z;
+									conf.value >> x >> y >> z;
+									physics->SetBoxCollider({x,y,z});
+								} else if (type == "SPHERE") {
+									float radius;
+									conf.value >> radius;
+									physics->SetSphereCollider(radius);
+								} else {
+									//TODO mesh collider
+								}
+							} else if (param == "FRICTION") {
+								conf.value >> physics->friction;
+							} else if (param == "BOUNCINESS") {
+								conf.value >> physics->bounciness;
+							} else if (param == "ANGULAR_FACTOR") {
+								conf.value >> physics->angularFactor.x >> physics->angularFactor.y >> physics->angularFactor.z;
+							} else if (param == "ANGULAR_DAMPING") {
+								conf.value >> physics->angularDamping;
+								physics->physicsDirty = true;
+							} else if (param == "JOINT_TRANSLATION_X") {
+								conf.value >> physics->jointTranslationLimitsX.min >> physics->jointTranslationLimitsX.max;
+								conf.value >> physics->jointTranslationMaxForce.x;
+								conf.value >> physics->jointTranslationVelocity.x;
+								physics->jointIsDirty = true;
+							} else if (param == "JOINT_TRANSLATION_Y") {
+								conf.value >> physics->jointTranslationLimitsY.min >> physics->jointTranslationLimitsY.max;
+								conf.value >> physics->jointTranslationMaxForce.y;
+								conf.value >> physics->jointTranslationVelocity.y;
+								physics->jointIsDirty = true;
+							} else if (param == "JOINT_TRANSLATION_Z") {
+								conf.value >> physics->jointTranslationLimitsZ.min >> physics->jointTranslationLimitsZ.max;
+								conf.value >> physics->jointTranslationMaxForce.z;
+								conf.value >> physics->jointTranslationVelocity.z;
+								physics->jointIsDirty = true;
+							} else if (param == "JOINT_ROTATION_X") {
+								float min, max;
+								conf.value >> min >> max;
+								physics->jointRotationLimitsX = {glm::radians(min), glm::radians(max)};
+								conf.value >> physics->jointRotationMaxForce.x;
+								conf.value >> physics->jointRotationVelocity.x;
+								physics->jointIsDirty = true;
+							} else if (param == "JOINT_ROTATION_Y") {
+								float min, max;
+								conf.value >> min >> max;
+								physics->jointRotationLimitsY = {glm::radians(min), glm::radians(max)};
+								conf.value >> physics->jointRotationMaxForce.y;
+								conf.value >> physics->jointRotationVelocity.y;
+								physics->jointIsDirty = true;
+							} else if (param == "JOINT_ROTATION_Z") {
+								float min, max;
+								conf.value >> min >> max;
+								physics->jointRotationLimitsZ = {glm::radians(min), glm::radians(max)};
+								conf.value >> physics->jointRotationMaxForce.z;
+								conf.value >> physics->jointRotationVelocity.z;
+								physics->jointIsDirty = true;
+							} else {
 								throw std::runtime_error("");
 							}
-							
-							// Value
-							conf.value >> keyFrame.value;
-							
-							animation.keys.push_back(keyFrame);
-						} while (!conf.value.eof());
-					} catch (...) {
-						LOG_ERROR("Error reading animator line: " << line)
+								
+						} catch (...) {
+							LOG_ERROR("Error reading object line: " << line)
+						}
 					}
+					
+					
+				}
+				else if (type == "ACTION") {
+					if (section.eof()) return;
+					
+					std::string actionName;
+					section >> actionName;
+					
+					AnimatorAction action {};
+					
+					for (auto& conf : configs) {
+						std::string line = conf.value.str();
+						try {
+							std::string name;
+							conf.name >> name;
+							
+							// Entity
+							RenderableGeometryEntity* entity = getEntityByName(name);
+							if (!entity) throw std::runtime_error("");
+							
+							do {
+								ActionKey actionKey;
+								actionKey.entity = entity;
+								
+								// Key
+								std::string key;
+								conf.value >> key;
+									 if (key == "TRANSLATION_X") actionKey.key = ActionKey::Key::TRANSLATION_X;
+								else if (key == "TRANSLATION_Y") actionKey.key = ActionKey::Key::TRANSLATION_Y;
+								else if (key == "TRANSLATION_Z") actionKey.key = ActionKey::Key::TRANSLATION_Z;
+								else if (key == "ROTATION_X") 	actionKey.key = ActionKey::Key::ROTATION_X;
+								else if (key == "ROTATION_Y") 	actionKey.key = ActionKey::Key::ROTATION_Y;
+								else if (key == "ROTATION_Z") 	actionKey.key = ActionKey::Key::ROTATION_Z;
+								else if (key == "FRICTION") 	actionKey.key = ActionKey::Key::FRICTION;
+								else {
+									throw std::runtime_error("");
+								}
+								
+								// Value
+								conf.value >> actionKey.value;
+								
+								action.keys.push_back(actionKey);
+							} while (!conf.value.eof());
+						} catch (...) {
+							LOG_ERROR("Error reading action line: " << line)
+						}
+					}
+					
+					avatar->actions[actionName] = action;
+				}
+				else if (type == "ANIMATION") {
+					
 				}
 				
-				avatar->animations[section] = animation;
 			});
 		}
 	}
 	void WriteConfig() override {}
 };
 
-auto avatarAnimatorConfig = AvatarAnimatorConfig::Instance(V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/animator.ini"), 1000);
-
-
-
-
-
-
-
-
-
-
-
-
-
+auto avatarConfig = AvatarConfigFile::Instance(V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/avatar.ini"), 1000);
 
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -582,7 +723,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Avatar:{
 				std::lock_guard lock(avatarLock);
 				avatar = std::make_shared<Avatar>(obj->id);
-				avatarAnimatorConfig->ReadConfig();
+				avatarConfig->ReadConfig();
 				obj->renderableGeometryEntityInstance = avatar->root;
 			}break;
 		}
@@ -624,52 +765,85 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (avatar && avatar->root) {
 					auto lock = avatar->root->GetLock();
 					
-					auto testForces = [](std::string name, std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity){
-						if (entity) {
-							if (std::unique_lock<std::recursive_mutex> l = entity->GetLock(); l) {
-								if (auto physics = entity->physics.Lock(); physics) {
-									ImGui::Separator();
-									
-									if (physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
-										ImGui::SliderFloat((name + " Translation X").c_str(), &physics->jointTranslationTarget.x, physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsX.max);
-									}
-									if (physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
-										ImGui::SliderFloat((name + " Translation Y").c_str(), &physics->jointTranslationTarget.y, physics->jointTranslationLimitsY.min, physics->jointTranslationLimitsY.max);
-									}
-									if (physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
-										ImGui::SliderFloat((name + " Translation Z").c_str(), &physics->jointTranslationTarget.z, physics->jointTranslationLimitsZ.min, physics->jointTranslationLimitsZ.max);
-									}
-									
-									if (physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
-										ImGui::SliderFloat((name + " Rotation X").c_str(), &physics->jointRotationTarget.x, physics->jointRotationLimitsX.min, physics->jointRotationLimitsX.max);
-									}
-									if (physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
-										ImGui::SliderFloat((name + " Rotation Y").c_str(), &physics->jointRotationTarget.y, physics->jointRotationLimitsY.min, physics->jointRotationLimitsY.max);
-									}
-									if (physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
-										ImGui::SliderFloat((name + " Rotation Z").c_str(), &physics->jointRotationTarget.z, physics->jointRotationLimitsZ.min, physics->jointRotationLimitsZ.max);
+					{ImGui::Text("JOINTS");
+						
+						auto testJoints = [](std::string name, std::shared_ptr<v4d::graphics::RenderableGeometryEntity> entity){
+							if (entity) {
+								if (std::unique_lock<std::recursive_mutex> l = entity->GetLock(); l) {
+									if (auto physics = entity->physics.Lock(); physics) {
+										ImGui::Separator();
+										
+										if (physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
+											if (ImGui::SliderFloat((name + " Translation X").c_str(), &physics->jointTranslationTarget.x, physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsX.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
+										if (physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
+											if (ImGui::SliderFloat((name + " Translation Y").c_str(), &physics->jointTranslationTarget.y, physics->jointTranslationLimitsY.min, physics->jointTranslationLimitsY.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
+										if (physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
+											if (ImGui::SliderFloat((name + " Translation Z").c_str(), &physics->jointTranslationTarget.z, physics->jointTranslationLimitsZ.min, physics->jointTranslationLimitsZ.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
+										
+										if (physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
+											if (ImGui::SliderFloat((name + " Rotation X").c_str(), &physics->jointRotationTarget.x, physics->jointRotationLimitsX.min, physics->jointRotationLimitsX.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
+										if (physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
+											if (ImGui::SliderFloat((name + " Rotation Y").c_str(), &physics->jointRotationTarget.y, physics->jointRotationLimitsY.min, physics->jointRotationLimitsY.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
+										if (physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
+											if (ImGui::SliderFloat((name + " Rotation Z").c_str(), &physics->jointRotationTarget.z, physics->jointRotationLimitsZ.min, physics->jointRotationLimitsZ.max)) {
+												physics->jointIsDirty = true;
+											}
+										}
 									}
 								}
 							}
-						}
-					};
-					
-					testForces("Torso", avatar->torso);
-					testForces("Right upper leg", avatar->r_upperleg);
-					testForces("Left upper leg", avatar->l_upperleg);
-					testForces("Right lower leg", avatar->r_lowerleg);
-					testForces("Left lower leg", avatar->l_lowerleg);
-					testForces("Right foot", avatar->r_foot);
-					testForces("Left foot", avatar->l_foot);
-					
+						};
+						
+						testJoints("Torso", avatar->torso);
+						testJoints("Right upper leg", avatar->r_upperleg);
+						testJoints("Left upper leg", avatar->l_upperleg);
+						testJoints("Right lower leg", avatar->r_lowerleg);
+						testJoints("Left lower leg", avatar->l_lowerleg);
+						testJoints("Right foot", avatar->r_foot);
+						testJoints("Left foot", avatar->l_foot);
+					}
 	
 					ImGui::Separator();
-					ImGui::Separator();
 					
-					for (auto&[name, animation] : avatar->animations) {
-						ImGui::SliderFloat(name.c_str(), &animation.value, 0.0f, 1.0f);
+					{ImGui::Text("ACTIONS");
+						for (auto&[name, action] : avatar->actions) {
+							ImGui::SliderFloat(name.c_str(), &action.value, -0.1f, 1.0f);
+						}
 					}
 					
+					ImGui::Separator();
+					
+					{ImGui::Text("ANIMATIONS");
+						float posY = ImGui::GetCursorPosY();
+						for (auto&[name, animation] : avatar->animations) {
+							ImGui::SetCursorPos({5, posY});
+							ImGui::SetNextItemWidth(90);
+							if (animation.startTime == 0) {
+								if (ImGui::Button((std::string("> ") + name).c_str())) animation.Start();
+							} else {
+								if (ImGui::Button((std::string("X ") + name).c_str())) animation.End();
+							}
+							ImGui::SetCursorPos({100, posY});
+							ImGui::SetNextItemWidth(80);
+							ImGui::SliderFloat((name + " speed").c_str(), &animation.speed, 0.2f, 5.0f);
+							posY += 20;
+						}
+					}
 				}
 			ImGui::End();
 		#endif
