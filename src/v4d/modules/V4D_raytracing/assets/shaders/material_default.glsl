@@ -139,7 +139,9 @@ void main() {
 					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), randomBounceDirection, tex.roughness*tex.roughness * abs(dot(mat.rayPayload.rayDirection.xyz, tex.normal.xyz))));
 				} else {
 					mat.bounceDirection.xyz = normalize(mix(reflect(mat.rayPayload.rayDirection.xyz, tex.normal.xyz), tex.normal.xyz, 0.1));
-					mat.rayPayload.bounceMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+					if (tex.roughness > 0.4999) {
+						mat.rayPayload.bounceMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+					}
 				}
 			}
 		}

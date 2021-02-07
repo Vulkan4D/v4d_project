@@ -103,65 +103,83 @@ PhysicsObject* GetPhysicsObject(uint32_t index) {
 }
 
 void UpdateConstraintJointPhysics(btGeneric6DofSpring2Constraint* constraint, v4d::scene::PhysicsInfo* physics) {
-	physics->jointIsDirty = false;
-	
-	constraint->setLinearLowerLimit(btVector3(physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsY.min, physics->jointTranslationLimitsZ.min));
-	constraint->setLinearUpperLimit(btVector3(physics->jointTranslationLimitsX.max, physics->jointTranslationLimitsY.max, physics->jointTranslationLimitsZ.max));
-	constraint->setAngularLowerLimit(btVector3(physics->jointRotationLimitsX.min, physics->jointRotationLimitsY.min, physics->jointRotationLimitsZ.min));
-	constraint->setAngularUpperLimit(btVector3(physics->jointRotationLimitsX.max, physics->jointRotationLimitsY.max, physics->jointRotationLimitsZ.max));
-	
-	if (physics->jointMotor && physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
-		constraint->setServo(0, true);
-		constraint->setServoTarget(0, physics->jointTranslationTarget.x);
-		constraint->setMaxMotorForce(0, physics->jointTranslationMaxForce.x);
-		constraint->setTargetVelocity(0, physics->jointTranslationVelocity.x);
-	} else {
-		constraint->setServo(0, false);
+	if (physics->jointIsDirty) {
+		physics->jointIsDirty = false;
+		
+		constraint->setLinearLowerLimit(btVector3(physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsY.min, physics->jointTranslationLimitsZ.min));
+		constraint->setLinearUpperLimit(btVector3(physics->jointTranslationLimitsX.max, physics->jointTranslationLimitsY.max, physics->jointTranslationLimitsZ.max));
+		constraint->setAngularLowerLimit(btVector3(physics->jointRotationLimitsX.min, physics->jointRotationLimitsY.min, physics->jointRotationLimitsZ.min));
+		constraint->setAngularUpperLimit(btVector3(physics->jointRotationLimitsX.max, physics->jointRotationLimitsY.max, physics->jointRotationLimitsZ.max));
+		
+		if (physics->jointMotor && physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
+			constraint->setServo(0, true);
+			constraint->setServoTarget(0, physics->jointTranslationTarget.x);
+			constraint->setMaxMotorForce(0, physics->jointTranslationMaxForce.x);
+			constraint->setTargetVelocity(0, physics->jointTranslationVelocity.x);
+		} else {
+			constraint->setServo(0, false);
+			constraint->setTargetVelocity(0, 0);
+		}
+		
+		if (physics->jointMotor && physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
+			constraint->setServo(1, true);
+			constraint->setServoTarget(1, physics->jointTranslationTarget.y);
+			constraint->setMaxMotorForce(1, physics->jointTranslationMaxForce.y);
+			constraint->setTargetVelocity(1, physics->jointTranslationVelocity.y);
+		} else {
+			constraint->setServo(1, false);
+			constraint->setTargetVelocity(1, 0);
+		}
+		
+		if (physics->jointMotor && physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
+			constraint->setServo(2, true);
+			constraint->setServoTarget(2, physics->jointTranslationTarget.z);
+			constraint->setMaxMotorForce(2, physics->jointTranslationMaxForce.z);
+			constraint->setTargetVelocity(2, physics->jointTranslationVelocity.z);
+		} else {
+			constraint->setServo(2, false);
+			constraint->setTargetVelocity(2, 0);
+		}
+		
+		if (physics->jointMotor && physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
+			constraint->setServo(3, true);
+			constraint->setServoTarget(3, physics->jointRotationTarget.x);
+			constraint->setMaxMotorForce(3, physics->jointRotationMaxForce.x);
+			constraint->setTargetVelocity(3, physics->jointRotationVelocity.x);
+		} else {
+			constraint->setServo(3, false);
+			constraint->setTargetVelocity(3, 0);
+		}
+		
+		if (physics->jointMotor && physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
+			constraint->setServo(4, true);
+			constraint->setServoTarget(4, physics->jointRotationTarget.y);
+			constraint->setMaxMotorForce(4, physics->jointRotationMaxForce.y);
+			constraint->setTargetVelocity(4, physics->jointRotationVelocity.y);
+		} else {
+			constraint->setServo(4, false);
+			constraint->setTargetVelocity(4, 0);
+		}
+		
+		if (physics->jointMotor && physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
+			constraint->setServo(5, true);
+			constraint->setServoTarget(5, physics->jointRotationTarget.z);
+			constraint->setMaxMotorForce(5, physics->jointRotationMaxForce.z);
+			constraint->setTargetVelocity(5, physics->jointRotationVelocity.z);
+		} else {
+			constraint->setServo(5, false);
+			constraint->setTargetVelocity(5, 0);
+		}
 	}
 	
-	if (physics->jointMotor && physics->jointTranslationLimitsY.min < physics->jointTranslationLimitsY.max) {
-		constraint->setServo(1, true);
-		constraint->setServoTarget(1, physics->jointTranslationTarget.y);
-		constraint->setMaxMotorForce(1, physics->jointTranslationMaxForce.y);
-		constraint->setTargetVelocity(1, physics->jointTranslationVelocity.y);
-	} else {
-		constraint->setServo(1, false);
-	}
-	
-	if (physics->jointMotor && physics->jointTranslationLimitsZ.min < physics->jointTranslationLimitsZ.max) {
-		constraint->setServo(2, true);
-		constraint->setServoTarget(2, physics->jointTranslationTarget.z);
-		constraint->setMaxMotorForce(2, physics->jointTranslationMaxForce.z);
-		constraint->setTargetVelocity(2, physics->jointTranslationVelocity.z);
-	} else {
-		constraint->setServo(2, false);
-	}
-	
-	if (physics->jointMotor && physics->jointRotationLimitsX.min < physics->jointRotationLimitsX.max) {
-		constraint->setServo(3, true);
-		constraint->setServoTarget(3, physics->jointRotationTarget.x);
-		constraint->setMaxMotorForce(3, physics->jointRotationMaxForce.x);
-		constraint->setTargetVelocity(3, physics->jointRotationVelocity.x);
-	} else {
-		constraint->setServo(3, false);
-	}
-	
-	if (physics->jointMotor && physics->jointRotationLimitsY.min < physics->jointRotationLimitsY.max) {
-		constraint->setServo(4, true);
-		constraint->setServoTarget(4, physics->jointRotationTarget.y);
-		constraint->setMaxMotorForce(4, physics->jointRotationMaxForce.y);
-		constraint->setTargetVelocity(4, physics->jointRotationVelocity.y);
-	} else {
-		constraint->setServo(4, false);
-	}
-	
-	if (physics->jointMotor && physics->jointRotationLimitsZ.min < physics->jointRotationLimitsZ.max) {
-		constraint->setServo(5, true);
-		constraint->setServoTarget(5, physics->jointRotationTarget.z);
-		constraint->setMaxMotorForce(5, physics->jointRotationMaxForce.z);
-		constraint->setTargetVelocity(5, physics->jointRotationVelocity.z);
-	} else {
-		constraint->setServo(5, false);
+	if (!physics->jointMotor) {
+		constraint->calculateTransforms();
+		physics->jointTranslationTarget.x = constraint->getRelativePivotPosition(0);
+		physics->jointTranslationTarget.y = constraint->getRelativePivotPosition(1);
+		physics->jointTranslationTarget.z = constraint->getRelativePivotPosition(2);
+		physics->jointRotationTarget.x = constraint->getAngle(0);
+		physics->jointRotationTarget.y = constraint->getAngle(1);
+		physics->jointRotationTarget.z = constraint->getAngle(2);
 	}
 }
 
@@ -412,6 +430,116 @@ struct PhysicsObject : btMotionState {
 	
 };
 
+// void NearCallback(btBroadphasePair& collisionPair, btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo)
+// {
+// 	btCollisionObject* colObj0 = (btCollisionObject*)collisionPair.m_pProxy0->m_clientObject;
+// 	btCollisionObject* colObj1 = (btCollisionObject*)collisionPair.m_pProxy1->m_clientObject;
+
+// 	if (dispatcher.needsCollision(colObj0, colObj1))
+// 	{
+// 		btCollisionObjectWrapper obj0Wrap(0, colObj0->getCollisionShape(), colObj0, colObj0->getWorldTransform(), -1, -1);
+// 		btCollisionObjectWrapper obj1Wrap(0, colObj1->getCollisionShape(), colObj1, colObj1->getWorldTransform(), -1, -1);
+
+// 		//dispatcher will keep algorithms persistent in the collision pair
+// 		if (!collisionPair.m_algorithm)
+// 		{
+// 			collisionPair.m_algorithm = dispatcher.findAlgorithm(&obj0Wrap, &obj1Wrap, 0, BT_CONTACT_POINT_ALGORITHMS);
+// 		}
+
+// 		if (collisionPair.m_algorithm)
+// 		{
+// 			btManifoldResult contactPointResult(&obj0Wrap, &obj1Wrap);
+
+// 			if (dispatchInfo.m_dispatchFunc == btDispatcherInfo::DISPATCH_DISCRETE)
+// 			{
+// 				//discrete collision detection query
+
+// 				collisionPair.m_algorithm->processCollision(&obj0Wrap, &obj1Wrap, dispatchInfo, &contactPointResult);
+// 			}
+// 			else
+// 			{
+// 				//continuous collision detection query, time of impact (toi)
+// 				btScalar toi = collisionPair.m_algorithm->calculateTimeOfImpact(colObj0, colObj1, dispatchInfo, &contactPointResult);
+// 				if (dispatchInfo.m_timeOfImpact > toi)
+// 					dispatchInfo.m_timeOfImpact = toi;
+// 			}
+// 		}
+
+// 		// Custom stuff here
+// 		btRigidBody* rb0 = dynamic_cast<btRigidBody*>(colObj0);
+// 		btRigidBody* rb1 = dynamic_cast<btRigidBody*>(colObj1);
+// 		if (rb0 && rb1) {
+// 			PhysicsObject* obj0 = static_cast<PhysicsObject*>(rb0->getUserPointer());
+// 			PhysicsObject* obj1 = static_cast<PhysicsObject*>(rb1->getUserPointer());
+// 			auto entity0 = obj0->entityInstance.lock();
+// 			auto entity1 = obj1->entityInstance.lock();
+// 			if (entity0 && entity1) {
+// 				// LOG(
+// 				// 	"Collision between " << 
+// 				// 	v4d::modular::ModuleID(entity0->entityInstanceInfo.moduleVen, entity0->entityInstanceInfo.moduleId).String() << ":" << entity0->entityInstanceInfo.objId
+// 				// 	<< " and " <<
+// 				// 	v4d::modular::ModuleID(entity1->entityInstanceInfo.moduleVen, entity1->entityInstanceInfo.moduleId).String() << ":" << entity1->entityInstanceInfo.objId
+// 				// )
+// 				auto physics0 = entity0->physics.Lock();
+// 				auto physics1 = entity1->physics.Lock();
+// 				if (physics0 && physics1) {
+					
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
+void ContactStarted(btPersistentManifold* const& manifold) {
+	const btRigidBody* rb0 = dynamic_cast<const btRigidBody*>(manifold->getBody0());
+	const btRigidBody* rb1 = dynamic_cast<const btRigidBody*>(manifold->getBody1());
+	if (rb0 && rb1) {
+		PhysicsObject* obj0 = static_cast<PhysicsObject*>(rb0->getUserPointer());
+		PhysicsObject* obj1 = static_cast<PhysicsObject*>(rb1->getUserPointer());
+		auto entity0 = obj0->entityInstance.lock();
+		auto entity1 = obj1->entityInstance.lock();
+		if (entity0 && entity1) {
+			// LOG(
+			// 	"Collision Started between " << 
+			// 	v4d::modular::ModuleID(entity0->entityInstanceInfo.moduleVen, entity0->entityInstanceInfo.moduleId).String() << ":" << entity0->entityInstanceInfo.objId
+			// 	<< " and " <<
+			// 	v4d::modular::ModuleID(entity1->entityInstanceInfo.moduleVen, entity1->entityInstanceInfo.moduleId).String() << ":" << entity1->entityInstanceInfo.objId
+			// )
+			auto physics0 = entity0->physics.Lock();
+			auto physics1 = entity1->physics.Lock();
+			if (physics0 && physics1) {
+				++physics0->contacts;
+				++physics1->contacts;
+			}
+		}
+	}
+}
+
+void ContactEnded(btPersistentManifold* const& manifold) {
+		const btRigidBody* rb0 = dynamic_cast<const btRigidBody*>(manifold->getBody0());
+	const btRigidBody* rb1 = dynamic_cast<const btRigidBody*>(manifold->getBody1());
+	if (rb0 && rb1) {
+		PhysicsObject* obj0 = static_cast<PhysicsObject*>(rb0->getUserPointer());
+		PhysicsObject* obj1 = static_cast<PhysicsObject*>(rb1->getUserPointer());
+		auto entity0 = obj0->entityInstance.lock();
+		auto entity1 = obj1->entityInstance.lock();
+		if (entity0 && entity1) {
+			// LOG(
+			// 	"Collision Ended between " << 
+			// 	v4d::modular::ModuleID(entity0->entityInstanceInfo.moduleVen, entity0->entityInstanceInfo.moduleId).String() << ":" << entity0->entityInstanceInfo.objId
+			// 	<< " and " <<
+			// 	v4d::modular::ModuleID(entity1->entityInstanceInfo.moduleVen, entity1->entityInstanceInfo.moduleId).String() << ":" << entity1->entityInstanceInfo.objId
+			// )
+			auto physics0 = entity0->physics.Lock();
+			auto physics1 = entity1->physics.Lock();
+			if (physics0 && physics1) {
+				--physics0->contacts;
+				--physics1->contacts;
+			}
+		}
+	}
+}
+
 #define PHYSICS_REFRESH_COLLIDERS_OUTSIDE_OF_LOOP
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -434,6 +562,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// #ifdef _DEBUG
 			globalDynamicsWorld->setDebugDrawer(&debugDrawer);
 		// #endif
+		
+		// ((btCollisionDispatcher*)globalPhysicsDispatcher)->setNearCallback(NearCallback);
+		
+		gContactStartedCallback = ContactStarted;
+		gContactEndedCallback = ContactEnded;
+
 	}
 	
 	V4D_MODULE_FUNC(void, UnloadScene) {
@@ -532,7 +666,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				// 	rb->setAngularDamping(physics.angularDamping);
 				
 				// Update joint
-				if (physics.jointParent != -1 && physicsObj->constraint && physics.jointIsDirty) {
+				if (physics.jointParent != -1 && physicsObj->constraint) {
 					UpdateConstraintJointPhysics(physicsObj->constraint, &physics);
 				}
 				

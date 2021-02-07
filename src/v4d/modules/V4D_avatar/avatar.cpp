@@ -158,6 +158,78 @@ struct Avatar {
 	std::unordered_map<std::string, AnimatorAction> actions {};
 	std::unordered_map<std::string, Animation> animations {};
 	
+	void WalkForward() {
+		using PhysicsObj = v4d::data::EntityComponentSystem::Component<v4d::graphics::RenderableGeometryEntity, v4d::scene::PhysicsInfo>::ComponentReferenceLocked;
+		PhysicsObj upperLeg[2] {l_upperleg->physics.Lock(), r_upperleg->physics.Lock()};
+		PhysicsObj lowerLeg[2] {l_lowerleg->physics.Lock(), r_lowerleg->physics.Lock()};
+		PhysicsObj foot[2] {l_foot->physics.Lock(), r_foot->physics.Lock()};
+		
+		AnimatorAction* leg_forward[2] {&actions["l_leg_forward"], &actions["r_leg_forward"]};
+		AnimatorAction* leg_back[2] {&actions["l_leg_back"], &actions["r_leg_back"]};
+		AnimatorAction* leg_up[2] {&actions["l_leg_up"], &actions["r_leg_up"]};
+		AnimatorAction* leg_down[2] {&actions["l_leg_down"], &actions["r_leg_down"]};
+		
+		bool footContact[2] {foot[0]->contacts > 0, foot[1]->contacts > 0};
+		
+		if (footContact[0] && footContact[1]) { // both feet are touching ground
+			int forwardMost, backwardMost;
+			if (upperLeg[0]->jointRotationTarget.x > upperLeg[1]->jointRotationTarget.x) {
+				forwardMost = 0;
+				backwardMost = 1;
+			} else {
+				forwardMost = 1;
+				backwardMost = 0;
+			}
+			
+			// Foot that is most forward must move backward while pressing down
+			leg_forward[forwardMost]->value = -1;
+			leg_back[forwardMost]->value = +1;
+			leg_up[forwardMost]->value = -1;
+			leg_down[forwardMost]->value = +1;
+			
+			//Foot that is most backward must move up
+			// leg_forward[backwardMost]->value = -1;
+			leg_back[backwardMost]->value = -1;
+			leg_up[backwardMost]->value = +1;
+			leg_down[backwardMost]->value = -1;
+			
+		} else if (footContact[0] || footContact[1]) { // one foot is on the ground
+			int onGround, aboveGround;
+			if (footContact[0]) {
+				onGround = 0;
+				aboveGround = 1;
+			} else {
+				onGround = 1;
+				aboveGround = 0;
+			}
+			
+			
+			leg_forward[onGround]->value = -1;
+			leg_back[onGround]->value = +1;
+			leg_up[onGround]->value = -1;
+			leg_down[onGround]->value = +1;
+			
+			leg_forward[aboveGround]->value = +1;
+			leg_back[aboveGround]->value = -1;
+			leg_up[aboveGround]->value = -1;
+			leg_down[aboveGround]->value = -1;
+			
+		
+			// If Foot that is on the ground is not passed a certain threshold backward:
+			// 	move backward
+			// If Foot that is above the ground is not passed a certain threshold forward:
+			// 	move forward
+			// else
+			// 	move down
+			
+		} else { // both feet are above ground
+			// move both feet towards middle point
+			
+			leg_down[0]->value = 1;
+			leg_down[1]->value = 1;
+		}
+	}
+	
 	Avatar(v4d::scene::NetworkGameObject::Id objId) {
 		RenderableGeometryEntity::Material material {};{
 			material.visibility.roughness = 127;
@@ -283,15 +355,15 @@ struct Avatar {
 		}
 		
 		// Prepare actions
-		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<ActionKey::Key, std::vector<std::tuple<float/*keyWeight*/, float/*keyValue*/>>>> animationsByEntityAndKey {};
+		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<ActionKey::Key, std::vector<std::tuple<float/*keyWeight*/, float/*keyValue*/>>>> actionsByEntityAndKey {};
 		for (auto&[name, action] : actions) if (action.value >= 0) {
 			for (auto& key : action.keys) {
-				animationsByEntityAndKey[key.entity][key.key].push_back({action.value, key.value});
+				actionsByEntityAndKey[key.entity][key.key].push_back({action.value, key.value});
 			}
 		}
 		
 		// Interpolate actions
-		for (auto&[entity, actions] : animationsByEntityAndKey) {
+		for (auto&[entity, actions] : actionsByEntityAndKey) {
 			for (auto&[action, keys] : actions) {
 				float totalWeight = 0;
 				float value = 0;
@@ -751,6 +823,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
+				case GLFW_KEY_UP:{
+					// Walk forward
+					std::lock_guard lock(avatarLock);
+					if (avatar) {
+						avatar->WalkForward();
+					}
+				}break;
 			}
 		}
 	}
@@ -772,6 +851,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 								if (std::unique_lock<std::recursive_mutex> l = entity->GetLock(); l) {
 									if (auto physics = entity->physics.Lock(); physics) {
 										ImGui::Separator();
+										
+										if (ImGui::Checkbox((name + " motor").c_str(), &physics->jointMotor)) {
+											physics->jointIsDirty = true;
+										}
 										
 										if (physics->jointTranslationLimitsX.min < physics->jointTranslationLimitsX.max) {
 											if (ImGui::SliderFloat((name + " Translation X").c_str(), &physics->jointTranslationTarget.x, physics->jointTranslationLimitsX.min, physics->jointTranslationLimitsX.max)) {
@@ -828,22 +911,26 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 					ImGui::Separator();
 					
-					{ImGui::Text("ANIMATIONS");
-						float posY = ImGui::GetCursorPosY();
-						for (auto&[name, animation] : avatar->animations) {
-							ImGui::SetCursorPos({5, posY});
-							ImGui::SetNextItemWidth(90);
-							if (animation.startTime == 0) {
-								if (ImGui::Button((std::string("> ") + name).c_str())) animation.Start();
-							} else {
-								if (ImGui::Button((std::string("X ") + name).c_str())) animation.End();
-							}
-							ImGui::SetCursorPos({100, posY});
-							ImGui::SetNextItemWidth(80);
-							ImGui::SliderFloat((name + " speed").c_str(), &animation.speed, 0.2f, 5.0f);
-							posY += 20;
-						}
-					}
+					// {ImGui::Text("ANIMATIONS");
+					// 	float posY = ImGui::GetCursorPosY();
+					// 	for (auto&[name, animation] : avatar->animations) {
+					// 		ImGui::SetCursorPos({5, posY});
+					// 		ImGui::SetNextItemWidth(90);
+					// 		if (animation.startTime == 0) {
+					// 			if (ImGui::Button((std::string("> ") + name).c_str())) animation.Start();
+					// 		} else {
+					// 			if (ImGui::Button((std::string("X ") + name).c_str())) animation.End();
+					// 		}
+					// 		ImGui::SetCursorPos({100, posY});
+					// 		ImGui::SetNextItemWidth(80);
+					// 		ImGui::SliderFloat((name + " speed").c_str(), &animation.speed, 0.2f, 5.0f);
+					// 		posY += 20;
+					// 	}
+					// }
+					
+					ImGui::Text("Left Foot Contacts: %d", avatar->l_foot->physics.Lock()->contacts);
+					ImGui::Text("Right Foot Contacts: %d", avatar->r_foot->physics.Lock()->contacts);
+					
 				}
 			ImGui::End();
 		#endif
