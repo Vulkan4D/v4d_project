@@ -140,6 +140,13 @@ struct Animation {
 struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> root = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> torso = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> head = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> r_upperarm = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> l_upperarm = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> r_lowerarm = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> l_lowerarm = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> r_hand = nullptr;
+	std::shared_ptr<RenderableGeometryEntity> l_hand = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> r_upperleg = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> l_upperleg = nullptr;
 	std::shared_ptr<RenderableGeometryEntity> r_lowerleg = nullptr;
@@ -148,6 +155,13 @@ struct Avatar {
 	std::shared_ptr<RenderableGeometryEntity> l_foot = nullptr;
 	
 	const glm::dmat4 spine = glm::translate(glm::dmat4(1), glm::dvec3{0,+.15, 0});
+	const glm::dmat4 neck = glm::translate(glm::dmat4(1), glm::dvec3{0,+.16,0});
+	const glm::dmat4 r_shoulder = glm::translate(glm::dmat4(1), glm::dvec3{+.3,+.12,0});
+	const glm::dmat4 r_elbow = glm::translate(glm::dmat4(1), glm::dvec3{+.15,0, 0});
+	const glm::dmat4 r_wrist = glm::translate(glm::dmat4(1), glm::dvec3{+.15,0, 0});
+	const glm::dmat4 l_shoulder = glm::translate(glm::dmat4(1), glm::dvec3{-.3,+.12,0});
+	const glm::dmat4 l_elbow = glm::translate(glm::dmat4(1), glm::dvec3{-.15,0, 0});
+	const glm::dmat4 l_wrist = glm::translate(glm::dmat4(1), glm::dvec3{-.15,0, 0});
 	const glm::dmat4 r_hip = glm::translate(glm::dmat4(1), glm::dvec3{+.2,-.15, 0});
 	const glm::dmat4 r_knee = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
 	const glm::dmat4 r_ankle = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2, 0});
@@ -245,7 +259,9 @@ struct Avatar {
 			material.visibility.baseColor = {255,255,255,255};
 		}
 		
-		{// Create Renderable Entities
+		// Create Renderable Entities
+		
+		{// Root
 			root = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 			rootPhysics->angularFactor = {0,0,0};
@@ -254,23 +270,117 @@ struct Avatar {
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.15, -.2), glm::vec3(+.2, +.15, +.2)});
 			};
 		
-			// Torso
-			{
+			{// Torso
 				torso = RenderableGeometryEntity::Create(THIS_MODULE, objId);
-				auto physics = torso->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
-				physics->jointParent = rootPhysics->uniqueId;
-				physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
-				physics->parentJointPoint = spine;
-				physics->jointMotor = true;
-				torso->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), root);
+				auto torsoPhysics = torso->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+				torsoPhysics->jointParent = rootPhysics->uniqueId;
+				torsoPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
+				torsoPhysics->parentJointPoint = spine;
+				torsoPhysics->jointMotor = true;
+				torso->SetInitialTransform(torsoPhysics->parentJointPoint * glm::inverse(torsoPhysics->localJointPoint), root);
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.3, -.2, -.2), glm::vec3(+.3, +.2, +.2)});
 				};
+				
+				{// Head
+					head = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+					auto rightUpperArmPhysics = head->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+					rightUpperArmPhysics->jointParent = torsoPhysics->uniqueId;
+					rightUpperArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.16,0});
+					rightUpperArmPhysics->parentJointPoint = neck;
+					rightUpperArmPhysics->jointMotor = true;
+					head->SetInitialTransform(rightUpperArmPhysics->parentJointPoint * glm::inverse(rightUpperArmPhysics->localJointPoint), torso);
+					head->generator = [material](RenderableGeometryEntity* entity, Device* device){
+						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.15, -.15, -.15), glm::vec3(+.15, +.15, +.15)});
+					};
+				}
+				
+				{// Right arm
+					r_upperarm = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+					auto rightUpperArmPhysics = r_upperarm->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+					rightUpperArmPhysics->jointParent = torsoPhysics->uniqueId;
+					rightUpperArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{-.2,0,0});
+					rightUpperArmPhysics->parentJointPoint = r_shoulder;
+					rightUpperArmPhysics->jointMotor = true;
+					r_upperarm->SetInitialTransform(rightUpperArmPhysics->parentJointPoint * glm::inverse(rightUpperArmPhysics->localJointPoint), torso);
+					r_upperarm->generator = [material](RenderableGeometryEntity* entity, Device* device){
+						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.08, -.08), glm::vec3(+.2, +.08, +.08)});
+					};
+					{
+						r_lowerarm = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+						auto rightLowerArmPhysics = r_lowerarm->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+						rightLowerArmPhysics->jointParent = rightUpperArmPhysics->uniqueId;
+						rightLowerArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{-.2,0,0});
+						rightLowerArmPhysics->parentJointPoint = r_elbow;
+						rightLowerArmPhysics->jointMotor = true;
+						r_lowerarm->SetInitialTransform(rightLowerArmPhysics->parentJointPoint * glm::inverse(rightLowerArmPhysics->localJointPoint), r_upperarm);
+						r_lowerarm->generator = [material](RenderableGeometryEntity* entity, Device* device){
+							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.08, -.08), glm::vec3(+.2, +.08, +.08)});
+						};
+						{
+							r_hand = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+							auto physics = r_hand->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+							physics->jointParent = rightLowerArmPhysics->uniqueId;
+							physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{-.05,0,0});
+							physics->parentJointPoint = r_wrist;
+							physics->jointMotor = true;
+							r_hand->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), r_lowerarm);
+							r_hand->generator = [material](RenderableGeometryEntity* entity, Device* device){
+								entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+								entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.07, -.07), glm::vec3(+.1, +.07, +.07)});
+							};
+						}
+					}
+				}
+				
+				{// Left arm
+					l_upperarm = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+					auto rightUpperArmPhysics = l_upperarm->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+					rightUpperArmPhysics->jointParent = torsoPhysics->uniqueId;
+					rightUpperArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{+.2,0,0});
+					rightUpperArmPhysics->parentJointPoint = l_shoulder;
+					rightUpperArmPhysics->jointMotor = true;
+					l_upperarm->SetInitialTransform(rightUpperArmPhysics->parentJointPoint * glm::inverse(rightUpperArmPhysics->localJointPoint), torso);
+					l_upperarm->generator = [material](RenderableGeometryEntity* entity, Device* device){
+						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+						entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.08, -.08), glm::vec3(+.2, +.08, +.08)});
+					};
+					{
+						l_lowerarm = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+						auto rightLowerArmPhysics = l_lowerarm->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+						rightLowerArmPhysics->jointParent = rightUpperArmPhysics->uniqueId;
+						rightLowerArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{+.2,0,0});
+						rightLowerArmPhysics->parentJointPoint = l_elbow;
+						rightLowerArmPhysics->jointMotor = true;
+						l_lowerarm->SetInitialTransform(rightLowerArmPhysics->parentJointPoint * glm::inverse(rightLowerArmPhysics->localJointPoint), l_upperarm);
+						l_lowerarm->generator = [material](RenderableGeometryEntity* entity, Device* device){
+							entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+							entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.08, -.08), glm::vec3(+.2, +.08, +.08)});
+						};
+						{
+							l_hand = RenderableGeometryEntity::Create(THIS_MODULE, objId);
+							auto physics = l_hand->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
+							physics->jointParent = rightLowerArmPhysics->uniqueId;
+							physics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{+.05,0,0});
+							physics->parentJointPoint = l_wrist;
+							physics->jointMotor = true;
+							l_hand->SetInitialTransform(physics->parentJointPoint * glm::inverse(physics->localJointPoint), l_lowerarm);
+							l_hand->generator = [material](RenderableGeometryEntity* entity, Device* device){
+								entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
+								entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.1, -.07, -.07), glm::vec3(+.1, +.07, +.07)});
+							};
+						}
+					}
+				}
+				
+				
 			}
 			
-			// Right leg
-			{
+			{// Right leg
 				r_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 				auto rightUpperLegPhysics = r_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 				rightUpperLegPhysics->jointParent = rootPhysics->uniqueId;
@@ -310,8 +420,7 @@ struct Avatar {
 				}
 			}
 			
-			// Left leg
-			{
+			{// Left leg
 				l_upperleg = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 				auto leftUpperLegPhysics = l_upperleg->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
 				leftUpperLegPhysics->jointParent = rootPhysics->uniqueId;
@@ -355,66 +464,66 @@ struct Avatar {
 		
 	}
 	
-	void PhysicsUpdate(double deltaTime) {
-		// Run animations
-		double currentTimestamp = v4d::Timer::GetCurrentTimestamp();
-		for (auto&[name, animation] : animations) {
-			animation.MayRun(currentTimestamp);
-		}
+	// void PhysicsUpdate(double deltaTime) {
+	// 	// Run animations
+	// 	double currentTimestamp = v4d::Timer::GetCurrentTimestamp();
+	// 	for (auto&[name, animation] : animations) {
+	// 		animation.MayRun(currentTimestamp);
+	// 	}
 		
-		// Prepare actions
-		std::unordered_map<RenderableGeometryEntity*, std::unordered_map<ActionKey::Key, std::vector<std::tuple<float/*keyWeight*/, float/*keyValue*/>>>> actionsByEntityAndKey {};
-		for (auto&[name, action] : actions) if (action.value >= 0) {
-			for (auto& key : action.keys) {
-				actionsByEntityAndKey[key.entity][key.key].push_back({action.value, key.value});
-			}
-		}
+	// 	// Prepare actions
+	// 	std::unordered_map<RenderableGeometryEntity*, std::unordered_map<ActionKey::Key, std::vector<std::tuple<float/*keyWeight*/, float/*keyValue*/>>>> actionsByEntityAndKey {};
+	// 	for (auto&[name, action] : actions) if (action.value >= 0) {
+	// 		for (auto& key : action.keys) {
+	// 			actionsByEntityAndKey[key.entity][key.key].push_back({action.value, key.value});
+	// 		}
+	// 	}
 		
-		// Interpolate actions
-		for (auto&[entity, actions] : actionsByEntityAndKey) {
-			for (auto&[action, keys] : actions) {
-				float totalWeight = 0;
-				float value = 0;
+	// 	// Interpolate actions
+	// 	for (auto&[entity, actions] : actionsByEntityAndKey) {
+	// 		for (auto&[action, keys] : actions) {
+	// 			float totalWeight = 0;
+	// 			float value = 0;
 				
-				for (auto&[keyWeight, keyValue] : keys) {
-					value = glm::mix(value, keyValue, keyWeight / (totalWeight + 1));
-					totalWeight += keyWeight;
-				}
+	// 			for (auto&[keyWeight, keyValue] : keys) {
+	// 				value = glm::mix(value, keyValue, keyWeight / (totalWeight + 1));
+	// 				totalWeight += keyWeight;
+	// 			}
 				
-				auto physics = entity->physics.Lock();
+	// 			auto physics = entity->physics.Lock();
 				
-				switch(action) {
-					case ActionKey::Key::TRANSLATION_X:
-						physics->jointTranslationTarget.x = value;
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::TRANSLATION_Y:
-						physics->jointTranslationTarget.y = value;
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::TRANSLATION_Z:
-						physics->jointTranslationTarget.z = value;
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::ROTATION_X:
-						physics->jointRotationTarget.x = glm::radians(value);
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::ROTATION_Y:
-						physics->jointRotationTarget.y = glm::radians(value);
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::ROTATION_Z:
-						physics->jointRotationTarget.z = glm::radians(value);
-						physics->jointIsDirty = true;
-						break;
-					case ActionKey::Key::FRICTION:
-						physics->friction = value;
-						break;
-				}
-			}
-		}
-	}
+	// 			switch(action) {
+	// 				case ActionKey::Key::TRANSLATION_X:
+	// 					physics->jointTranslationTarget.x = value;
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::TRANSLATION_Y:
+	// 					physics->jointTranslationTarget.y = value;
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::TRANSLATION_Z:
+	// 					physics->jointTranslationTarget.z = value;
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::ROTATION_X:
+	// 					physics->jointRotationTarget.x = glm::radians(value);
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::ROTATION_Y:
+	// 					physics->jointRotationTarget.y = glm::radians(value);
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::ROTATION_Z:
+	// 					physics->jointRotationTarget.z = glm::radians(value);
+	// 					physics->jointIsDirty = true;
+	// 					break;
+	// 				case ActionKey::Key::FRICTION:
+	// 					physics->friction = value;
+	// 					break;
+	// 			}
+	// 		}
+	// 	}
+	// }
 	
 	~Avatar() {
 		animations.clear();
@@ -424,6 +533,40 @@ struct Avatar {
 		if (torso) {
 			torso->Destroy();
 			torso.reset();
+		}
+		
+		// Head
+		if (head) {
+			head->Destroy();
+			head.reset();
+		}
+		
+		// Right arm
+		if (r_hand) {
+			r_hand->Destroy();
+			r_hand.reset();
+		}
+		if (r_lowerarm) {
+			r_lowerarm->Destroy();
+			r_lowerarm.reset();
+		}
+		if (r_upperarm) {
+			r_upperarm->Destroy();
+			r_upperarm.reset();
+		}
+		
+		// Left arm
+		if (l_hand) {
+			l_hand->Destroy();
+			l_hand.reset();
+		}
+		if (l_lowerarm) {
+			l_lowerarm->Destroy();
+			l_lowerarm.reset();
+		}
+		if (l_upperarm) {
+			l_upperarm->Destroy();
+			l_upperarm.reset();
 		}
 		
 		// Right leg
@@ -482,12 +625,19 @@ struct AvatarConfigFile : public v4d::io::ConfigFile {
 				auto getEntityByName = [](const std::string& name) -> RenderableGeometryEntity* {
 						 if (name == "root")		return avatar->root.get();
 					else if (name == "torso")		return avatar->torso.get();
+					else if (name == "head")		return avatar->head.get();
 					else if (name == "r_upperleg") 	return avatar->r_upperleg.get();
 					else if (name == "l_upperleg") 	return avatar->l_upperleg.get();
 					else if (name == "r_lowerleg") 	return avatar->r_lowerleg.get();
 					else if (name == "l_lowerleg") 	return avatar->l_lowerleg.get();
 					else if (name == "r_foot") 		return avatar->r_foot.get();
 					else if (name == "l_foot") 		return avatar->l_foot.get();
+					else if (name == "r_upperarm") 	return avatar->r_upperarm.get();
+					else if (name == "l_upperarm") 	return avatar->l_upperarm.get();
+					else if (name == "r_lowerarm") 	return avatar->r_lowerarm.get();
+					else if (name == "l_lowerarm") 	return avatar->l_lowerarm.get();
+					else if (name == "r_hand") 		return avatar->r_hand.get();
+					else if (name == "l_hand") 		return avatar->l_hand.get();
 					return nullptr;
 				};
 				
@@ -535,43 +685,45 @@ struct AvatarConfigFile : public v4d::io::ConfigFile {
 								conf.value >> physics->angularFactor.x >> physics->angularFactor.y >> physics->angularFactor.z;
 							} else if (param == "ANGULAR_DAMPING") {
 								conf.value >> physics->angularDamping;
-								physics->physicsDirty = true;
 							} else if (param == "JOINT_TRANSLATION_X") {
 								conf.value >> physics->jointTranslationLimitsX.min >> physics->jointTranslationLimitsX.max;
 								conf.value >> physics->jointTranslationMaxForce.x;
 								conf.value >> physics->jointTranslationVelocity.x;
-								physics->jointIsDirty = true;
 							} else if (param == "JOINT_TRANSLATION_Y") {
 								conf.value >> physics->jointTranslationLimitsY.min >> physics->jointTranslationLimitsY.max;
 								conf.value >> physics->jointTranslationMaxForce.y;
 								conf.value >> physics->jointTranslationVelocity.y;
-								physics->jointIsDirty = true;
 							} else if (param == "JOINT_TRANSLATION_Z") {
 								conf.value >> physics->jointTranslationLimitsZ.min >> physics->jointTranslationLimitsZ.max;
 								conf.value >> physics->jointTranslationMaxForce.z;
 								conf.value >> physics->jointTranslationVelocity.z;
-								physics->jointIsDirty = true;
 							} else if (param == "JOINT_ROTATION_X") {
 								float min, max;
 								conf.value >> min >> max;
 								physics->jointRotationLimitsX = {glm::radians(min), glm::radians(max)};
 								conf.value >> physics->jointRotationMaxForce.x;
 								conf.value >> physics->jointRotationVelocity.x;
-								physics->jointIsDirty = true;
 							} else if (param == "JOINT_ROTATION_Y") {
 								float min, max;
 								conf.value >> min >> max;
 								physics->jointRotationLimitsY = {glm::radians(min), glm::radians(max)};
 								conf.value >> physics->jointRotationMaxForce.y;
 								conf.value >> physics->jointRotationVelocity.y;
-								physics->jointIsDirty = true;
 							} else if (param == "JOINT_ROTATION_Z") {
 								float min, max;
 								conf.value >> min >> max;
 								physics->jointRotationLimitsZ = {glm::radians(min), glm::radians(max)};
 								conf.value >> physics->jointRotationMaxForce.z;
 								conf.value >> physics->jointRotationVelocity.z;
-								physics->jointIsDirty = true;
+							} else if (param == "JOINT_MOTOR") {
+								std::string boolValue;
+								conf.value >> boolValue;
+								v4d::String::ToLowerCase(boolValue);
+								if (boolValue == "1" || boolValue == "on" || boolValue == "true") {
+									physics->jointMotor = true;
+								} else if (boolValue == "" || boolValue == "0" || boolValue == "off" || boolValue == "false") {
+									physics->jointMotor = false;
+								}
 							} else {
 								throw std::runtime_error("");
 							}
@@ -580,7 +732,9 @@ struct AvatarConfigFile : public v4d::io::ConfigFile {
 							LOG_ERROR("Error reading object line: " << line)
 						}
 					}
-					
+		
+					physics->jointIsDirty = true;
+					physics->physicsDirty = true;
 					
 				}
 				else if (type == "ACTION") {
@@ -802,6 +956,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		switch (obj->type) {
 			case OBJECT_TYPE::Avatar:{
 				std::lock_guard lock(avatarLock);
+				auto entityLock = RenderableGeometryEntity::GetLock();
 				avatar = std::make_shared<Avatar>(obj->id);
 				avatarConfig->ReadConfig();
 				obj->renderableGeometryEntityInstance = avatar->root;
@@ -901,6 +1056,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						};
 						
 						testJoints("Torso", avatar->torso);
+						testJoints("Head", avatar->head);
+						testJoints("Right upper arm", avatar->r_upperarm);
+						testJoints("Left upper arm", avatar->l_upperarm);
+						testJoints("Right lower arm", avatar->r_lowerarm);
+						testJoints("Left lower arm", avatar->l_lowerarm);
+						testJoints("Right hand", avatar->r_hand);
+						testJoints("Left hand", avatar->l_hand);
 						testJoints("Right upper leg", avatar->r_upperleg);
 						testJoints("Left upper leg", avatar->l_upperleg);
 						testJoints("Right lower leg", avatar->r_lowerleg);
@@ -944,9 +1106,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#endif
 	}
 	
-	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-		std::lock_guard lock(avatarLock);
-		if (avatar) avatar->PhysicsUpdate(deltaTime);
-	}
+	// V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+	// 	std::lock_guard lock(avatarLock);
+	// 	if (avatar) avatar->PhysicsUpdate(deltaTime);
+	// }
 	
 };

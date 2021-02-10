@@ -360,6 +360,7 @@ struct PhysicsObject : btMotionState {
 						constraint->setParam(BT_CONSTRAINT_CFM, 0.1, i);
 					}
 					
+					physics->jointIsDirty = true;
 					UpdateConstraintJointPhysics(constraint, physics.operator->());
 					
 					_parent->constrainedChildren[physics->uniqueId] = constraint;
