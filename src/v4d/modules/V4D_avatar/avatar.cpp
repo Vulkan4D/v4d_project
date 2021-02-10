@@ -160,38 +160,46 @@ struct Avatar {
 	
 	void WalkForward() {
 		using PhysicsObj = v4d::data::EntityComponentSystem::Component<v4d::graphics::RenderableGeometryEntity, v4d::scene::PhysicsInfo>::ComponentReferenceLocked;
+		
 		PhysicsObj upperLeg[2] {l_upperleg->physics.Lock(), r_upperleg->physics.Lock()};
 		PhysicsObj lowerLeg[2] {l_lowerleg->physics.Lock(), r_lowerleg->physics.Lock()};
 		PhysicsObj foot[2] {l_foot->physics.Lock(), r_foot->physics.Lock()};
 		
-		AnimatorAction* leg_forward[2] {&actions["l_leg_forward"], &actions["r_leg_forward"]};
-		AnimatorAction* leg_back[2] {&actions["l_leg_back"], &actions["r_leg_back"]};
-		AnimatorAction* leg_up[2] {&actions["l_leg_up"], &actions["r_leg_up"]};
-		AnimatorAction* leg_down[2] {&actions["l_leg_down"], &actions["r_leg_down"]};
-		
 		bool footContact[2] {foot[0]->contacts > 0, foot[1]->contacts > 0};
 		
+		auto rotateX = [&](PhysicsObj& obj, float target, float t = 0.2) {
+			obj->jointRotationTarget.x = glm::clamp(glm::mix(obj->jointRotationTarget.x, glm::radians(target), t), obj->jointRotationLimitsX.min, obj->jointRotationLimitsX.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateY = [&](PhysicsObj& obj, float target, float t = 0.2) {
+			obj->jointRotationTarget.y = glm::clamp(glm::mix(obj->jointRotationTarget.y, glm::radians(target), t), obj->jointRotationLimitsY.min, obj->jointRotationLimitsY.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateZ = [&](PhysicsObj& obj, float target, float t = 0.2) {
+			obj->jointRotationTarget.z = glm::clamp(glm::mix(obj->jointRotationTarget.z, glm::radians(target), t), obj->jointRotationLimitsZ.min, obj->jointRotationLimitsZ.max);
+			obj->jointIsDirty = true;
+		};
+		
 		if (footContact[0] && footContact[1]) { // both feet are touching ground
-			int forwardMost, backwardMost;
-			if (upperLeg[0]->jointRotationTarget.x > upperLeg[1]->jointRotationTarget.x) {
-				forwardMost = 0;
-				backwardMost = 1;
+			int forwardMostFoot, backwardMostFoot;
+			glm::dvec3 footPositions[2] { (glm::inverse(root->GetWorldTransform()) * l_foot->GetWorldTransform())[3], (glm::inverse(root->GetWorldTransform()) * r_foot->GetWorldTransform())[3] };
+			if (footPositions[0].z < footPositions[1].z) {
+				forwardMostFoot = 0;
+				backwardMostFoot = 1;
 			} else {
-				forwardMost = 1;
-				backwardMost = 0;
+				forwardMostFoot = 1;
+				backwardMostFoot = 0;
 			}
 			
-			// Foot that is most forward must move backward while pressing down
-			leg_forward[forwardMost]->value = -1;
-			leg_back[forwardMost]->value = +1;
-			leg_up[forwardMost]->value = -1;
-			leg_down[forwardMost]->value = +1;
+			// Foot that is most forward must be pressing down
+			lowerLeg[forwardMostFoot]->friction = 1;
+			rotateX(upperLeg[forwardMostFoot], 0);
+			rotateX(lowerLeg[forwardMostFoot], 0);
 			
-			//Foot that is most backward must move up
-			// leg_forward[backwardMost]->value = -1;
-			leg_back[backwardMost]->value = -1;
-			leg_up[backwardMost]->value = +1;
-			leg_down[backwardMost]->value = -1;
+			// Foot that is most backward must move up
+			lowerLeg[backwardMostFoot]->friction = 0;
+			rotateX(upperLeg[backwardMostFoot], +20);
+			rotateX(lowerLeg[backwardMostFoot], -90, 0.5);
 			
 		} else if (footContact[0] || footContact[1]) { // one foot is on the ground
 			int onGround, aboveGround;
@@ -203,30 +211,30 @@ struct Avatar {
 				aboveGround = 0;
 			}
 			
+			// Foot that is on ground must move backward while pressing down
+			lowerLeg[onGround]->friction = 1;
+			rotateX(upperLeg[onGround], -35);
+			rotateX(lowerLeg[onGround], 0);
 			
-			leg_forward[onGround]->value = -1;
-			leg_back[onGround]->value = +1;
-			leg_up[onGround]->value = -1;
-			leg_down[onGround]->value = +1;
-			
-			leg_forward[aboveGround]->value = +1;
-			leg_back[aboveGround]->value = -1;
-			leg_up[aboveGround]->value = -1;
-			leg_down[aboveGround]->value = -1;
-			
-		
-			// If Foot that is on the ground is not passed a certain threshold backward:
-			// 	move backward
-			// If Foot that is above the ground is not passed a certain threshold forward:
-			// 	move forward
-			// else
-			// 	move down
+			// Foot that is above ground must move forward
+			lowerLeg[aboveGround]->friction = 0;
+			if (glm::degrees(upperLeg[aboveGround]->jointRotationTarget.x) > 50) {
+				rotateX(upperLeg[aboveGround], +20);
+				rotateX(lowerLeg[aboveGround], 0);
+			} else {
+				rotateX(upperLeg[aboveGround], +70);
+				rotateX(lowerLeg[aboveGround], -90);
+			}
 			
 		} else { // both feet are above ground
 			// move both feet towards middle point
 			
-			leg_down[0]->value = 1;
-			leg_down[1]->value = 1;
+			lowerLeg[0]->friction = 1;
+			lowerLeg[1]->friction = 1;
+			rotateX(upperLeg[0], 0);
+			rotateX(lowerLeg[0], 0);
+			rotateX(upperLeg[1], 0);
+			rotateX(lowerLeg[1], 0);
 		}
 	}
 	
