@@ -1451,6 +1451,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			deviceFeaturesToEnable->deviceFeatures2.features.wideLines = VK_TRUE;
 			
 			deviceFeaturesToEnable->shaderClockFeatures.shaderDeviceClock = VK_TRUE;
+			deviceFeaturesToEnable->shaderClockFeatures.shaderSubgroupClock = VK_TRUE;
 			deviceFeaturesToEnable->_16bitStorageFeatures.storageBuffer16BitAccess = VK_TRUE;
 			
 			// Vulkan 1.2
