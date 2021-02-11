@@ -176,6 +176,7 @@ void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 						if (physics) {
 							physics->rigidbodyType = PhysicsInfo::RigidBodyType::STATIC;
 							physics->colliderType = PhysicsInfo::ColliderType::MESH;
+							physics->friction = 1;
 							physics->colliderDirty = true;
 							physics->physicsDirty = true;
 							chunk->colliderActive = true;

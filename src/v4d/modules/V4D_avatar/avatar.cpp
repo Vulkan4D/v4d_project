@@ -172,85 +172,7 @@ struct Avatar {
 	std::unordered_map<std::string, AnimatorAction> actions {};
 	std::unordered_map<std::string, Animation> animations {};
 	
-	void WalkForward() {
-		using PhysicsObj = v4d::data::EntityComponentSystem::Component<v4d::graphics::RenderableGeometryEntity, v4d::scene::PhysicsInfo>::ComponentReferenceLocked;
-		
-		PhysicsObj upperLeg[2] {l_upperleg->physics.Lock(), r_upperleg->physics.Lock()};
-		PhysicsObj lowerLeg[2] {l_lowerleg->physics.Lock(), r_lowerleg->physics.Lock()};
-		PhysicsObj foot[2] {l_foot->physics.Lock(), r_foot->physics.Lock()};
-		
-		bool footContact[2] {foot[0]->contacts > 0, foot[1]->contacts > 0};
-		
-		auto rotateX = [&](PhysicsObj& obj, float target, float t = 0.2) {
-			obj->jointRotationTarget.x = glm::clamp(glm::mix(obj->jointRotationTarget.x, glm::radians(target), t), obj->jointRotationLimitsX.min, obj->jointRotationLimitsX.max);
-			obj->jointIsDirty = true;
-		};
-		auto rotateY = [&](PhysicsObj& obj, float target, float t = 0.2) {
-			obj->jointRotationTarget.y = glm::clamp(glm::mix(obj->jointRotationTarget.y, glm::radians(target), t), obj->jointRotationLimitsY.min, obj->jointRotationLimitsY.max);
-			obj->jointIsDirty = true;
-		};
-		auto rotateZ = [&](PhysicsObj& obj, float target, float t = 0.2) {
-			obj->jointRotationTarget.z = glm::clamp(glm::mix(obj->jointRotationTarget.z, glm::radians(target), t), obj->jointRotationLimitsZ.min, obj->jointRotationLimitsZ.max);
-			obj->jointIsDirty = true;
-		};
-		
-		if (footContact[0] && footContact[1]) { // both feet are touching ground
-			int forwardMostFoot, backwardMostFoot;
-			glm::dvec3 footPositions[2] { (glm::inverse(root->GetWorldTransform()) * l_foot->GetWorldTransform())[3], (glm::inverse(root->GetWorldTransform()) * r_foot->GetWorldTransform())[3] };
-			if (footPositions[0].z < footPositions[1].z) {
-				forwardMostFoot = 0;
-				backwardMostFoot = 1;
-			} else {
-				forwardMostFoot = 1;
-				backwardMostFoot = 0;
-			}
-			
-			// Foot that is most forward must be pressing down
-			lowerLeg[forwardMostFoot]->friction = 1;
-			rotateX(upperLeg[forwardMostFoot], 0);
-			rotateX(lowerLeg[forwardMostFoot], 0);
-			
-			// Foot that is most backward must move up
-			lowerLeg[backwardMostFoot]->friction = 0;
-			rotateX(upperLeg[backwardMostFoot], +20);
-			rotateX(lowerLeg[backwardMostFoot], -90, 0.5);
-			
-		} else if (footContact[0] || footContact[1]) { // one foot is on the ground
-			int onGround, aboveGround;
-			if (footContact[0]) {
-				onGround = 0;
-				aboveGround = 1;
-			} else {
-				onGround = 1;
-				aboveGround = 0;
-			}
-			
-			// Foot that is on ground must move backward while pressing down
-			lowerLeg[onGround]->friction = 1;
-			rotateX(upperLeg[onGround], -35);
-			rotateX(lowerLeg[onGround], 0);
-			
-			// Foot that is above ground must move forward
-			lowerLeg[aboveGround]->friction = 0;
-			if (glm::degrees(upperLeg[aboveGround]->jointRotationTarget.x) > 50) {
-				rotateX(upperLeg[aboveGround], +20);
-				rotateX(lowerLeg[aboveGround], 0);
-			} else {
-				rotateX(upperLeg[aboveGround], +70);
-				rotateX(lowerLeg[aboveGround], -90);
-			}
-			
-		} else { // both feet are above ground
-			// move both feet towards middle point
-			
-			lowerLeg[0]->friction = 1;
-			lowerLeg[1]->friction = 1;
-			rotateX(upperLeg[0], 0);
-			rotateX(lowerLeg[0], 0);
-			rotateX(upperLeg[1], 0);
-			rotateX(lowerLeg[1], 0);
-		}
-	}
+	bool walkingForward = false;
 	
 	Avatar(v4d::scene::NetworkGameObject::Id objId) {
 		RenderableGeometryEntity::Material material {};{
@@ -264,7 +186,7 @@ struct Avatar {
 		{// Root
 			root = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
-			rootPhysics->angularFactor = {0,0,0};
+			// rootPhysics->angularFactor = {0,0,0};
 			root->generator = [material](RenderableGeometryEntity* entity, Device* device){
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.15, -.2), glm::vec3(+.2, +.15, +.2)});
@@ -277,6 +199,7 @@ struct Avatar {
 				torsoPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
 				torsoPhysics->parentJointPoint = spine;
 				torsoPhysics->jointMotor = true;
+				torsoPhysics->angularFactor = {0,0,0};
 				torso->SetInitialTransform(torsoPhysics->parentJointPoint * glm::inverse(torsoPhysics->localJointPoint), root);
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
@@ -290,6 +213,7 @@ struct Avatar {
 					rightUpperArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.16,0});
 					rightUpperArmPhysics->parentJointPoint = neck;
 					rightUpperArmPhysics->jointMotor = true;
+					// rightUpperArmPhysics->angularFactor = {0,0,0};
 					head->SetInitialTransform(rightUpperArmPhysics->parentJointPoint * glm::inverse(rightUpperArmPhysics->localJointPoint), torso);
 					head->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
@@ -464,7 +388,163 @@ struct Avatar {
 		
 	}
 	
-	// void PhysicsUpdate(double deltaTime) {
+	void PhysicsUpdate(double deltaTime) {
+		using PhysicsObj = v4d::data::EntityComponentSystem::Component<v4d::graphics::RenderableGeometryEntity, v4d::scene::PhysicsInfo>::ComponentReferenceLocked;
+		
+		PhysicsObj upperLeg[2] {l_upperleg->physics.Lock(), r_upperleg->physics.Lock()};
+		PhysicsObj lowerLeg[2] {l_lowerleg->physics.Lock(), r_lowerleg->physics.Lock()};
+		PhysicsObj foot[2] {l_foot->physics.Lock(), r_foot->physics.Lock()};
+		
+		PhysicsObj upperArm[2] {l_upperarm->physics.Lock(), r_upperarm->physics.Lock()};
+		PhysicsObj lowerArm[2] {l_lowerarm->physics.Lock(), r_lowerarm->physics.Lock()};
+		PhysicsObj hand[2] {l_hand->physics.Lock(), r_hand->physics.Lock()};
+		
+		auto rotateTargetX = [&](PhysicsObj& obj, float target, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.x = glm::clamp(glm::mix(obj->jointRotationTarget.x, glm::radians(target), t), obj->jointRotationLimitsX.min, obj->jointRotationLimitsX.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateTargetY = [&](PhysicsObj& obj, float target, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.y = glm::clamp(glm::mix(obj->jointRotationTarget.y, glm::radians(target), t), obj->jointRotationLimitsY.min, obj->jointRotationLimitsY.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateTargetZ = [&](PhysicsObj& obj, float target, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.z = glm::clamp(glm::mix(obj->jointRotationTarget.z, glm::radians(target), t), obj->jointRotationLimitsZ.min, obj->jointRotationLimitsZ.max);
+			obj->jointIsDirty = true;
+		};
+		
+		auto rotateX = [&](PhysicsObj& obj, float add, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.x = glm::clamp(obj->jointRotationTarget.x + glm::radians(add) * t, obj->jointRotationLimitsX.min, obj->jointRotationLimitsX.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateY = [&](PhysicsObj& obj, float add, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.y = glm::clamp(obj->jointRotationTarget.y + glm::radians(add) * t, obj->jointRotationLimitsY.min, obj->jointRotationLimitsY.max);
+			obj->jointIsDirty = true;
+		};
+		auto rotateZ = [&](PhysicsObj& obj, float add, float t = 1.0) {
+			t *= deltaTime * 5.0;
+			obj->jointRotationTarget.z = glm::clamp(obj->jointRotationTarget.z + glm::radians(add) * t, obj->jointRotationLimitsZ.min, obj->jointRotationLimitsZ.max);
+			obj->jointIsDirty = true;
+		};
+		
+		bool footContact[2] {foot[0]->contacts > 0, foot[1]->contacts > 0};
+		
+		if (walkingForward) {
+			rotateTargetZ(upperArm[0], +75);
+			rotateTargetZ(upperArm[1], -75);
+			
+			if (footContact[0] && footContact[1]) { // both feet are touching ground
+				int forwardMostFoot, backwardMostFoot;
+				glm::dvec3 footPositions[2] { (glm::inverse(root->GetWorldTransform()) * l_foot->GetWorldTransform())[3], (glm::inverse(root->GetWorldTransform()) * r_foot->GetWorldTransform())[3] };
+				if (footPositions[0].z < footPositions[1].z) {
+					forwardMostFoot = 0;
+					backwardMostFoot = 1;
+				} else {
+					forwardMostFoot = 1;
+					backwardMostFoot = 0;
+				}
+				
+				// Foot that is most forward must be pressing down
+				foot[forwardMostFoot]->friction = 1;
+				foot[forwardMostFoot]->jointMotor = false;
+				// lowerLeg[forwardMostFoot]->jointMotor = true;
+				rotateTargetX(upperLeg[forwardMostFoot], 0);
+				rotateTargetX(lowerLeg[forwardMostFoot], 0);
+				// rotateTargetX(foot[forwardMostFoot], 0);
+				
+				// Foot that is most backward must move up
+				foot[backwardMostFoot]->friction = 0;
+				foot[backwardMostFoot]->jointMotor = true;
+				// lowerLeg[backwardMostFoot]->jointMotor = false;
+				rotateX(upperLeg[backwardMostFoot], +20);
+				rotateTargetX(lowerLeg[backwardMostFoot], -50);
+				rotateX(lowerLeg[backwardMostFoot], -50);
+				rotateTargetX(foot[backwardMostFoot], +30);
+				
+			} else if (footContact[0] || footContact[1]) { // one foot is on the ground
+				int onGround, aboveGround;
+				if (footContact[0]) {
+					onGround = 0;
+					aboveGround = 1;
+				} else {
+					onGround = 1;
+					aboveGround = 0;
+				}
+				
+				// Foot that is on ground must move backward while pressing down
+				foot[onGround]->friction = 1;
+				foot[onGround]->jointMotor = true;
+				// lowerLeg[onGround]->jointMotor = true;
+				rotateTargetX(upperLeg[onGround], -35);
+				rotateTargetX(lowerLeg[onGround], 0);
+				rotateX(foot[onGround], +10);
+				
+				// Foot that is above ground must move forward
+				foot[aboveGround]->friction = 0;
+				foot[aboveGround]->jointMotor = true;
+				if (glm::degrees(upperLeg[aboveGround]->jointRotationTarget.x) > 50) {
+					// lowerLeg[aboveGround]->jointMotor = true;
+					rotateTargetX(upperLeg[aboveGround], +40);
+					rotateTargetX(lowerLeg[aboveGround], 0);
+					foot[onGround]->jointMotor = true;
+					rotateTargetX(foot[aboveGround], +5);
+					rotateTargetX(foot[onGround], +30);
+				} else {
+					// lowerLeg[aboveGround]->jointMotor = false;
+					rotateX(upperLeg[aboveGround], +60);
+					rotateX(lowerLeg[aboveGround], -30);
+					rotateX(foot[aboveGround], +20);
+				}
+				
+				// Move arms
+				rotateX(upperArm[onGround], 20);
+				rotateX(upperArm[aboveGround], -20);
+				
+			} else { // both feet are above ground
+				// move both feet towards middle point
+				
+				foot[0]->friction = 1;
+				foot[1]->friction = 1;
+				foot[0]->jointMotor = true;
+				foot[1]->jointMotor = true;
+				// lowerLeg[0]->jointMotor = true;
+				// lowerLeg[1]->jointMotor = true;
+				rotateTargetX(upperLeg[0], 0);
+				rotateTargetX(lowerLeg[0], 0);
+				rotateTargetX(foot[0], 0);
+				rotateTargetX(upperLeg[1], 0);
+				rotateTargetX(lowerLeg[1], 0);
+				rotateTargetX(foot[1], 0);
+				
+				rotateTargetX(upperArm[0], 0);
+				rotateTargetX(upperArm[1], 0);
+				rotateTargetZ(upperArm[0], +20);
+				rotateTargetZ(upperArm[1], -20);
+			}
+		} else { // Not walking
+			// move both feet towards middle point
+			foot[0]->friction = 1;
+			foot[1]->friction = 1;
+			foot[0]->jointMotor = true;
+			foot[1]->jointMotor = true;
+			// lowerLeg[0]->jointMotor = true;
+			// lowerLeg[1]->jointMotor = true;
+			rotateTargetX(upperLeg[0], 0);
+			rotateTargetX(lowerLeg[0], 0);
+			rotateTargetX(foot[0], 0);
+			rotateTargetX(upperLeg[1], 0);
+			rotateTargetX(lowerLeg[1], 0);
+			rotateTargetX(foot[1], 0);
+			
+			rotateTargetX(upperArm[0], 0);
+			rotateTargetX(upperArm[1], 0);
+		}
+		
+		
 	// 	// Run animations
 	// 	double currentTimestamp = v4d::Timer::GetCurrentTimestamp();
 	// 	for (auto&[name, animation] : animations) {
@@ -523,7 +603,7 @@ struct Avatar {
 	// 			}
 	// 		}
 	// 	}
-	// }
+	}
 	
 	~Avatar() {
 		animations.clear();
@@ -946,8 +1026,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = mat;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-20, -20, -1), glm::vec3(+20, +20, +1)});
-				entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC)->SetBoxCollider({20,20,1});
-				
+				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
+				physics->SetBoxCollider({20,20,1});
+				physics->friction = 1;
 			};
 		
 	}
@@ -971,29 +1052,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
 	
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
-		if (action != GLFW_RELEASE
-			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
-			#endif
-		) {
-			std::lock_guard lock(playerView->mu);
-			
-			switch (key) {
-				// Spawn Avatar
-				case GLFW_KEY_ENTER:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << networking::action::SPAWN_AVATAR;
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
-					ClientEnqueueAction(stream);
-				}break;
-				case GLFW_KEY_UP:{
-					// Walk forward
-					std::lock_guard lock(avatarLock);
-					if (avatar) {
-						avatar->WalkForward();
-					}
-				}break;
-			}
+		switch (key) {
+			// Spawn Avatar
+			case GLFW_KEY_ENTER: if (action == GLFW_PRESS) {
+				std::lock_guard lock(playerView->mu);
+				v4d::data::WriteOnlyStream stream(32);
+					stream << networking::action::SPAWN_AVATAR;
+					stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+				ClientEnqueueAction(stream);
+			}break;
+			case GLFW_KEY_UP:{
+				// Walk forward
+				std::lock_guard lock(avatarLock);
+				if (avatar) {
+					avatar->walkingForward = (action != GLFW_RELEASE);
+				}
+			}break;
 		}
 	}
 	
@@ -1106,9 +1180,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#endif
 	}
 	
-	// V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-	// 	std::lock_guard lock(avatarLock);
-	// 	if (avatar) avatar->PhysicsUpdate(deltaTime);
-	// }
+	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+		std::lock_guard lock(avatarLock);
+		if (avatar) avatar->PhysicsUpdate(deltaTime);
+	}
 	
 };
