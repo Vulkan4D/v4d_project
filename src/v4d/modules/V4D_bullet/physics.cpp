@@ -1,6 +1,7 @@
 #define _V4D_MODULE
 #include <v4d.h>
 #include "btBulletDynamicsCommon.h"
+// #include "BulletCollision/CollisionShapes/btHeightfieldTerrainShape.h"
 #include "../V4D_raytracing/camera_options.hh"
 
 using namespace v4d::scene;
@@ -221,12 +222,12 @@ struct PhysicsObject : btMotionState {
 		
 		physics->physicsDirty = false;
 		
-		{// Update Center Of Mass
+		{// Set/Update Center Of Mass
 			centerOfMassOffset.setIdentity();
 			centerOfMassOffset.setOrigin(btVector3(physics->centerOfMass.x, physics->centerOfMass.y, physics->centerOfMass.z));
 		}
 		
-		{// Update Collision Shape
+		{// Create/Update Collision Shape
 			if (physics->colliderDirty) {
 				RemoveCollisionShape();
 				physics->colliderDirty = false;
@@ -249,6 +250,9 @@ struct PhysicsObject : btMotionState {
 									btVector3 v1(vertices[indices[i+1]].x, vertices[indices[i+1]].y, vertices[indices[i+1]].z);
 									btVector3 v2(vertices[indices[i+2]].x, vertices[indices[i+2]].y, vertices[indices[i+2]].z);
 									mesh->addTriangle(v0, v1, v2, true);
+									physics->boundingDistance = glm::max(physics->boundingDistance, glm::sqrt(float(v0.x()*v0.x() + v0.y()*v0.y() + v0.z()*v0.z())));
+									physics->boundingDistance = glm::max(physics->boundingDistance, glm::sqrt(float(v1.x()*v1.x() + v1.y()*v1.y() + v1.z()*v1.z())));
+									physics->boundingDistance = glm::max(physics->boundingDistance, glm::sqrt(float(v2.x()*v2.x() + v2.y()*v2.y() + v2.z()*v2.z())));
 								}
 							};
 							
@@ -307,7 +311,7 @@ struct PhysicsObject : btMotionState {
 							collisionShape = new btStaticPlaneShape(btVector3(0, 0, 1), entity->GetWorldTransform()[3].z);
 						}break;
 						// case v4d::scene::PhysicsInfo::ColliderType::HEIGHTFIELD:
-						// 	collisionShape = 
+						// 	collisionShape = btHeightfieldTerrainShape();
 						// break;
 					}
 					if (collisionShape) {
@@ -317,7 +321,7 @@ struct PhysicsObject : btMotionState {
 			}
 		}
 
-		{// Update RigidBody
+		{// Create/Update RigidBody
 			RemoveRigidbody();
 			
 			if (collisionShape == nullptr) {
@@ -366,6 +370,10 @@ struct PhysicsObject : btMotionState {
 					_parent->constrainedChildren[physics->uniqueId] = constraint;
 					globalDynamicsWorld->addConstraint(constraint, true);
 					rigidbody->setActivationState(DISABLE_DEACTIVATION);
+					
+					// // Continuous Collision Detection
+					// rigidbody->setCcdMotionThreshold(0.0001f);
+					// rigidbody->setCcdSweptSphereRadius(physics->boundingDistance);
 				}
 			}
 		}
@@ -568,6 +576,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		gContactStartedCallback = ContactStarted;
 		gContactEndedCallback = ContactEnded;
+		
+		// globalPhysicsDispatcher->
 
 	}
 	
