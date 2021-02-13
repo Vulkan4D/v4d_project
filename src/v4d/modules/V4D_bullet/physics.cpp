@@ -701,6 +701,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 				
+				// Apply torque
+				if (physics.appliedTorque.x != 0 || physics.appliedTorque.y != 0 || physics.appliedTorque.z != 0) {
+					rb->applyTorqueImpulse(btVector3{physics.appliedTorque.x, physics.appliedTorque.y, physics.appliedTorque.z});
+					physics.appliedTorque = {0,0,0};
+				}
+				
 			}
 		});
 		
@@ -713,7 +719,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		// Physics Simulation
 		try {
-			globalDynamicsWorld->stepSimulation(deltaTime);
+			globalDynamicsWorld->stepSimulation(deltaTime, 0, btScalar(1.) / btScalar(60.));
 		} catch(...){
 			LOG_ERROR("Exception occured in Bullet Physics stepSimulation()")
 		}

@@ -25,6 +25,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		scene = s;
 	}
 	
+	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+		std::lock_guard lock(player.mu);
+		player.worldPosition += player.velocity * deltaTime;
+	}
+	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
 		{std::lock_guard lock(player.mu);
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
@@ -133,7 +138,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 		}
 		
-		player.worldPosition += player.velocity * deltaTime;
+		// player.worldPosition += player.velocity * deltaTime;
 		
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED
 			#ifdef _ENABLE_IMGUI

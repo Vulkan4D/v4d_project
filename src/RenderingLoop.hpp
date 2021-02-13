@@ -113,7 +113,9 @@ namespace app {
 				
 				SET_THREAD_HIGHEST_PRIORITY()
 				while (loopCheckRunning()) {
+					// static double deltaTime = 0.01;
 					CALCULATE_AVG_FRAMERATE(app::primaryAvgFrameRate)
+					// CALCULATE_DELTATIME(deltaTime)
 					
 					#ifndef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 						RunSecondaryRendering();
@@ -121,6 +123,11 @@ namespace app {
 					
 					app::renderer->Update();
 				
+					// // Run physics
+					// V4D_Mod::ForEachSortedModule([](auto* mod){
+					// 	if (mod->PhysicsUpdate) mod->PhysicsUpdate(deltaTime);
+					// });
+					
 					if (settings->framerate_limit_rendering) LIMIT_FRAMERATE_FRAMETIME(settings->framerate_limit_rendering, app::primaryFrameTime)
 				}
 			}};

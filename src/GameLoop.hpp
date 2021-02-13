@@ -24,7 +24,7 @@ namespace app {
 						if (mod->PhysicsUpdate) mod->PhysicsUpdate(deltaTime);
 					});
 					
-					LIMIT_FRAMERATE_FRAMETIME(200, app::gameLoopFrameTime)
+					LIMIT_FRAMERATE_FRAMETIME(60, app::gameLoopFrameTime)
 				}
 			}};
 		}
