@@ -29,6 +29,9 @@ struct Planet {
 	double heightVariation = 10000;
 } planet;
 
+glm::vec3 gravityOffset {0,0,0};
+float gravityAcceleration = 9.8f;
+
 #pragma endregion
 
 const glm::dvec3 sun1Position = {-1.496e+11,0, 0};
@@ -334,8 +337,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			
 			// Gravity
-			scene->gravityVector = glm::normalize(terrain->cameraPos) * -9.8;
-			scene->camera.gravityVector = (glm::transpose(inverse(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(terrain->cameraPos)) * -9.8f;
+			scene->gravityVector = glm::normalize(glm::normalize(terrain->cameraPos) + glm::dvec3(gravityOffset)) * double(-gravityAcceleration);
+			scene->camera.gravityVector = (glm::transpose(inverse(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(terrain->cameraPos)) * -gravityAcceleration;
 			
 			
 			for (auto* chunk : terrain->chunks) {
@@ -436,6 +439,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							sun2->SetWorldTransform(glm::translate(glm::dmat4(1), terrain->absolutePosition + glm::normalize(glm::dvec3(sunPosition2)) * sunDistance2));
 						}
 					}
+					
+					ImGui::Separator();
+					ImGui::Text("Gravity");
+					ImGui::SliderFloat("Gravity acceleration", &gravityAcceleration, 0.1f, 40.0f);
+					ImGui::SliderFloat3("Gravity Offset", (float*)&gravityOffset, 0.0f, 0.5f);
 					
 				}
 			//

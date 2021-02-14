@@ -324,7 +324,7 @@ struct PhysicsObject : btMotionState {
 		{// Create/Update RigidBody
 			RemoveRigidbody();
 			
-			if (collisionShape == nullptr) {
+			if (collisionShape == nullptr && physics->colliderType != v4d::scene::PhysicsInfo::ColliderType::NONE) {
 				LOG_ERROR("PhysicsObject has no collision shape")
 				return;
 			}
@@ -332,7 +332,9 @@ struct PhysicsObject : btMotionState {
 			btVector3 localInertia {0,0,0};
 			btScalar mass = physics->mass;
 			if (physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
-				collisionShape->calculateLocalInertia(mass, localInertia);
+				if (collisionShape) {
+					collisionShape->calculateLocalInertia(mass, localInertia);
+				}
 			} else {
 				mass = 0;
 			}
@@ -671,8 +673,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					rb->setFriction(physics.friction);
 				if (rb->getRestitution() != physics.bounciness) 
 					rb->setRestitution(physics.bounciness);
-				if (rb->getAngularFactor().x() != physics.angularFactor.x || rb->getAngularFactor().y() != physics.angularFactor.y || rb->getAngularFactor().z() != physics.angularFactor.z) 
+				if (rb->getAngularFactor().x() != physics.angularFactor.x || rb->getAngularFactor().y() != physics.angularFactor.y || rb->getAngularFactor().z() != physics.angularFactor.z) {
 					rb->setAngularFactor(btVector3(physics.angularFactor.x, physics.angularFactor.y, physics.angularFactor.z));
+					rb->setAngularVelocity(btVector3(0,0,0));
+				}
 				// if (rb->getAngularDamping() != physics.angularDamping) 
 				// 	rb->setAngularDamping(physics.angularDamping);
 				
@@ -684,7 +688,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				// Apply forces
 				if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
 					if (physics.addedForce) {
-						if (physics.forcePoint.length() == 0) {
+						if (physics.forcePoint.x == 0 && physics.forcePoint.y == 0 && physics.forcePoint.z == 0) {
 							rb->applyCentralForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z));
 						} else {
 							rb->applyForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z), btVector3(physics.forcePoint.x, physics.forcePoint.y, physics.forcePoint.z));
@@ -692,7 +696,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 					if (physics.physicsForceImpulses.size() > 0) {
 						auto&[impulseDir, atPoint] = physics.physicsForceImpulses.front();
-						if (atPoint.length() == 0) {
+						if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
 							rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
 						} else {
 							rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
@@ -701,11 +705,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 				
-				// Apply torque
+				// Apply local torque
 				if (physics.appliedTorque.x != 0 || physics.appliedTorque.y != 0 || physics.appliedTorque.z != 0) {
-					rb->applyTorqueImpulse(btVector3{physics.appliedTorque.x, physics.appliedTorque.y, physics.appliedTorque.z});
+					btVector3 torque = btVector3{physics.appliedTorque.x, physics.appliedTorque.y, physics.appliedTorque.z};
+					torque = rb->getInvInertiaTensorWorld().inverse() * (rb->getWorldTransform().getBasis() * torque);
+					rb->applyTorqueImpulse(torque);
 					physics.appliedTorque = {0,0,0};
 				}
+				
+				btVector3 angularVelocity = rb->getAngularVelocity();
+				physics.localAngularVelocity = {angularVelocity.x(), angularVelocity.y(), angularVelocity.z()};
 				
 			}
 		});

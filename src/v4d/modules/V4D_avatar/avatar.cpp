@@ -187,7 +187,6 @@ struct Avatar {
 		{// Root
 			root = RenderableGeometryEntity::Create(THIS_MODULE, objId);
 			auto rootPhysics = root->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC);
-			rootPhysics->angularFactor = {0,0,0};
 			root->generator = [material](RenderableGeometryEntity* entity, Device* device){
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
 				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-.2, -.15, -.2), glm::vec3(+.2, +.15, +.2)});
@@ -201,6 +200,7 @@ struct Avatar {
 				torsoPhysics->parentJointPoint = spine;
 				torsoPhysics->jointMotor = true;
 				// torsoPhysics->angularFactor = {0,0,0};
+				// torsoPhysics->centerOfMass = {0, -4, 0};
 				torso->SetInitialTransform(torsoPhysics->parentJointPoint * glm::inverse(torsoPhysics->localJointPoint), root);
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
@@ -214,7 +214,6 @@ struct Avatar {
 					rightUpperArmPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.16,0});
 					rightUpperArmPhysics->parentJointPoint = neck;
 					rightUpperArmPhysics->jointMotor = true;
-					// rightUpperArmPhysics->angularFactor = {0,0,0};
 					head->SetInitialTransform(rightUpperArmPhysics->parentJointPoint * glm::inverse(rightUpperArmPhysics->localJointPoint), torso);
 					head->generator = [material](RenderableGeometryEntity* entity, Device* device){
 						entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
@@ -452,7 +451,7 @@ struct Avatar {
 				// Foot that is most forward must be pressing down
 				foot[forwardMostFoot]->friction = 1;
 				foot[forwardMostFoot]->jointMotor = true;
-				// lowerLeg[forwardMostFoot]->jointMotor = true;
+				lowerLeg[forwardMostFoot]->jointMotor = true;
 				rotateTargetX(upperLeg[forwardMostFoot], 0);
 				rotateTargetX(lowerLeg[forwardMostFoot], 0);
 				rotateTargetX(foot[forwardMostFoot], -10);
@@ -460,7 +459,7 @@ struct Avatar {
 				// Foot that is most backward must move up
 				foot[backwardMostFoot]->friction = 0.5;
 				foot[backwardMostFoot]->jointMotor = true;
-				// lowerLeg[backwardMostFoot]->jointMotor = false;
+				lowerLeg[backwardMostFoot]->jointMotor = true;
 				rotateX(upperLeg[backwardMostFoot], +30);
 				rotateX(lowerLeg[backwardMostFoot], -70);
 				rotateTargetX(foot[backwardMostFoot], +30);
@@ -478,7 +477,8 @@ struct Avatar {
 				// Foot that is on ground must move backward while pressing down
 				foot[onGround]->friction = 1;
 				foot[onGround]->jointMotor = true;
-				// lowerLeg[onGround]->jointMotor = true;
+				lowerLeg[onGround]->jointMotor = true;
+				lowerLeg[aboveGround]->jointMotor = true;
 				rotateTargetX(upperLeg[onGround], -35);
 				rotateX(foot[onGround], +10);
 				
@@ -486,7 +486,6 @@ struct Avatar {
 				foot[aboveGround]->jointMotor = true;
 				if (glm::degrees(upperLeg[aboveGround]->jointRotationTarget.x) > 48) {
 					foot[aboveGround]->friction = 1;
-					// lowerLeg[aboveGround]->jointMotor = true;
 					rotateTargetX(upperLeg[aboveGround], +30);
 					rotateTargetX(lowerLeg[aboveGround], 0, 2.0);
 					rotateX(lowerLeg[onGround], -40);
@@ -495,7 +494,6 @@ struct Avatar {
 					rotateTargetX(foot[onGround], +30);
 				} else {
 					foot[aboveGround]->friction = 0;
-					// lowerLeg[aboveGround]->jointMotor = false;
 					rotateX(upperLeg[aboveGround], +60);
 					rotateX(lowerLeg[aboveGround], -30);
 					rotateX(foot[aboveGround], +20);
@@ -509,8 +507,8 @@ struct Avatar {
 				foot[1]->friction = 1;
 				foot[0]->jointMotor = true;
 				foot[1]->jointMotor = true;
-				// lowerLeg[0]->jointMotor = true;
-				// lowerLeg[1]->jointMotor = true;
+				lowerLeg[0]->jointMotor = true;
+				lowerLeg[1]->jointMotor = true;
 				rotateTargetX(upperLeg[0], 0);
 				rotateTargetX(lowerLeg[0], 0);
 				rotateTargetX(foot[0], 0);
@@ -531,8 +529,8 @@ struct Avatar {
 			foot[1]->friction = 1;
 			foot[0]->jointMotor = true;
 			foot[1]->jointMotor = true;
-			// lowerLeg[0]->jointMotor = true;
-			// lowerLeg[1]->jointMotor = true;
+			lowerLeg[0]->jointMotor = true;
+			lowerLeg[1]->jointMotor = true;
 			rotateTargetX(upperLeg[0], 0);
 			rotateTargetX(lowerLeg[0], 0);
 			rotateTargetX(foot[0], 0);
@@ -542,6 +540,56 @@ struct Avatar {
 			
 			rotateTargetX(upperArm[0], 0);
 			rotateTargetX(upperArm[1], 0);
+		}
+		
+		// If at least one foot is in contact with something, balance torso with gravity
+		if (footContact[0] || footContact[1]) {
+			const float gravityAngleThreshold = 0.02;
+			const float forceFactor = glm::length(scene->gravityVector) * 4;
+			auto torsoPhysics = torso->physics.Lock();
+			auto torsoWorldTransform = torso->GetWorldTransform();
+			auto localGravityVector = glm::normalize(glm::transpose(glm::dmat3(torsoWorldTransform)) * scene->gravityVector);
+			
+			double dotGravity = glm::dot(glm::normalize(localGravityVector), glm::dvec3(0,-1,0));
+			float dotGravityThreshold = 0.95;
+			if (dotGravity < dotGravityThreshold) {
+				lowerLeg[0]->jointMotor = true;
+				rotateTargetX(upperLeg[0], +90, 2.0);
+				rotateTargetX(lowerLeg[0], -90, 2.0);
+				lowerLeg[1]->jointMotor = true;
+				rotateTargetX(upperLeg[1], +90, 2.0);
+				rotateTargetX(lowerLeg[1], -90, 2.0);
+			}
+			
+			float localGravityX = localGravityVector.x;
+			float localGravityZ = localGravityVector.z ;//+ (walkingForward? 0.1f : 0);
+			
+			torsoPhysics->angularFactor = {0,0,0};
+			
+			if (localGravityX < -gravityAngleThreshold) {
+				torsoPhysics->angularFactor = {1,1,1};
+				torsoPhysics->AddLocalTorque(glm::dvec3{0,0,glm::abs(localGravityX) * -forceFactor});
+			}
+			if (localGravityX > gravityAngleThreshold) {
+				torsoPhysics->angularFactor = {1,1,1};
+				torsoPhysics->AddLocalTorque(glm::dvec3{0,0,glm::abs(localGravityX) * forceFactor});
+			}
+			if (localGravityZ < -gravityAngleThreshold) {
+				torsoPhysics->angularFactor = {1,1,1};
+				torsoPhysics->AddLocalTorque(glm::dvec3{glm::abs(localGravityZ) * forceFactor,0,0});
+			}
+			if (localGravityZ > gravityAngleThreshold) {
+				torsoPhysics->angularFactor = {1,1,1};
+				torsoPhysics->AddLocalTorque(glm::dvec3{glm::abs(localGravityZ) * -forceFactor,0,0});
+			}
+		}
+		
+		// If both feet are not touching anything
+		if (!footContact[0] && !footContact[1]) {
+			foot[0]->jointMotor = false;
+			foot[1]->jointMotor = false;
+			lowerLeg[0]->jointMotor = false;
+			lowerLeg[1]->jointMotor = false;
 		}
 		
 		
@@ -1025,12 +1073,16 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					mat.visibility.roughness = 20;
 				
 				entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = mat;
-				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-20, -20, -1), glm::vec3(+20, +20, +1)});
+				entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-100, -100, -1), glm::vec3(+100, +100, +1)});
 				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::STATIC);
-				physics->SetBoxCollider({20,20,1});
+				physics->SetBoxCollider({100,100,1});
 				physics->friction = 1;
 			};
 		
+	}
+	
+	V4D_MODULE_FUNC(void, UnloadScene) {
+		avatar = nullptr;
 	}
 	
 	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
