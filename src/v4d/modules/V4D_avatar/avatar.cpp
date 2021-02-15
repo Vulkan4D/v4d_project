@@ -175,6 +175,8 @@ struct Avatar {
 	bool walkingForward = false;
 	float walkingSpeed = 4.0;
 	
+	glm::dvec3 gForce {0,0,0};
+	
 	Avatar(v4d::scene::NetworkGameObject::Id objId) {
 		RenderableGeometryEntity::Material material {};{
 			material.visibility.roughness = 127;
@@ -199,8 +201,7 @@ struct Avatar {
 				torsoPhysics->localJointPoint = glm::translate(glm::dmat4(1), glm::dvec3{0,-.2,0});
 				torsoPhysics->parentJointPoint = spine;
 				torsoPhysics->jointMotor = true;
-				// torsoPhysics->angularFactor = {0,0,0};
-				// torsoPhysics->centerOfMass = {0, -4, 0};
+				// torsoPhysics->centerOfMass = {0, -3, 0};
 				torso->SetInitialTransform(torsoPhysics->parentJointPoint * glm::inverse(torsoPhysics->localJointPoint), root);
 				torso->generator = [material](RenderableGeometryEntity* entity, Device* device){
 					entity->Allocate(device, "V4D_raytracing:aabb_cube")->material = material;
@@ -390,6 +391,19 @@ struct Avatar {
 	
 	void PhysicsUpdate(double deltaTime) {
 		using PhysicsObj = v4d::data::EntityComponentSystem::Component<v4d::graphics::RenderableGeometryEntity, v4d::scene::PhysicsInfo>::ComponentReferenceLocked;
+
+		{// Calculate G-Forces
+			// auto rootPhysics = root->physics.Lock();
+			// auto localGForce = glm::normalize(glm::transpose(glm::dmat3(root->GetWorldTransform())) * glm::normalize(rootPhysics->gForce)) * glm::length(rootPhysics->gForce);
+			// gForce = glm::mix(gForce, localGForce, glm::min(1.0, deltaTime));
+			// if (glm::isnan(gForce.x) || glm::isnan(gForce.y) || glm::isnan(gForce.z)) gForce = {0,0,0};
+			
+			gForce = glm::normalize(glm::transpose(glm::dmat3(root->GetWorldTransform())) * glm::normalize(scene->gravityVector)) * glm::length(scene->gravityVector);
+			
+			// LOG("local g-force: " << gForce.x << ", " << gForce.y << ", " << gForce.z)
+			// LOG("world velocity: " << rootPhysics->linearVelocity.x << ", " << rootPhysics->linearVelocity.y << ", " << rootPhysics->linearVelocity.z)
+			
+		}
 		
 		PhysicsObj upperLeg[2] {l_upperleg->physics.Lock(), r_upperleg->physics.Lock()};
 		PhysicsObj lowerLeg[2] {l_lowerleg->physics.Lock(), r_lowerleg->physics.Lock()};
@@ -434,8 +448,8 @@ struct Avatar {
 		bool footContact[2] {foot[0]->contacts > 0, foot[1]->contacts > 0};
 		
 		if (walkingForward) {
-			rotateTargetZ(upperArm[0], +75);
-			rotateTargetZ(upperArm[1], -75);
+			rotateTargetZ(upperArm[0], +75, 0.7);
+			rotateTargetZ(upperArm[1], -75, 0.7);
 			
 			if (footContact[0] && footContact[1]) { // both feet are touching ground
 				int forwardMostFoot, backwardMostFoot;
@@ -516,8 +530,8 @@ struct Avatar {
 				rotateTargetX(lowerLeg[1], 0);
 				rotateTargetX(foot[1], 0);
 				
-				rotateTargetZ(upperArm[0], +20);
-				rotateTargetZ(upperArm[1], -20);
+				rotateTargetZ(upperArm[0], +20, 0.3);
+				rotateTargetZ(upperArm[1], -20, 0.3);
 			}
 		
 			rotateTargetX(upperArm[0], -glm::degrees(upperLeg[0]->jointRotationTarget.x)*0.7);
@@ -544,14 +558,14 @@ struct Avatar {
 		
 		// If at least one foot is in contact with something, balance torso with gravity
 		if (footContact[0] || footContact[1]) {
-			const float gravityAngleThreshold = 0.02;
-			const float forceFactor = glm::length(scene->gravityVector) * 4;
 			auto torsoPhysics = torso->physics.Lock();
-			auto torsoWorldTransform = torso->GetWorldTransform();
-			auto localGravityVector = glm::normalize(glm::transpose(glm::dmat3(torsoWorldTransform)) * scene->gravityVector);
+			double gravityAngleThreshold = 0.02;
+			double forceFactor = 3;
 			
-			double dotGravity = glm::dot(glm::normalize(localGravityVector), glm::dvec3(0,-1,0));
-			float dotGravityThreshold = 0.95;
+			auto localLookDir = glm::normalize(glm::transpose(glm::dmat3(torso->GetWorldTransform())) * glm::cross(glm::normalize(scene->gravityVector), glm::dvec3(1,0,0)));
+			
+			double dotGravity = glm::dot(glm::normalize(gForce), glm::dvec3(0,-1,0));
+			double dotGravityThreshold = 0.95;
 			if (dotGravity < dotGravityThreshold) {
 				lowerLeg[0]->jointMotor = true;
 				rotateTargetX(upperLeg[0], +90, 2.0);
@@ -561,10 +575,10 @@ struct Avatar {
 				rotateTargetX(lowerLeg[1], -90, 2.0);
 			}
 			
-			float localGravityX = localGravityVector.x;
-			float localGravityZ = localGravityVector.z ;//+ (walkingForward? 0.1f : 0);
+			double localGravityX = gForce.x;
+			double localGravityZ = gForce.z + (walkingForward? walkingSpeed/5 : 0);
 			
-			torsoPhysics->angularFactor = {0,0,0};
+			// torsoPhysics->angularFactor = {0,0,0};
 			
 			if (localGravityX < -gravityAngleThreshold) {
 				torsoPhysics->angularFactor = {1,1,1};
@@ -582,6 +596,12 @@ struct Avatar {
 				torsoPhysics->angularFactor = {1,1,1};
 				torsoPhysics->AddLocalTorque(glm::dvec3{glm::abs(localGravityZ) * -forceFactor,0,0});
 			}
+			
+			if (glm::abs(localLookDir.z) > 0.02 && dotGravity > dotGravityThreshold) {
+				torsoPhysics->angularFactor = {1,1,1};
+				torsoPhysics->AddLocalTorque(glm::dvec3{0,localLookDir.z*forceFactor/3,0});
+			}
+			
 		}
 		
 		// If both feet are not touching anything

@@ -199,13 +199,13 @@ struct PhysicsObject : btMotionState {
 	
 	virtual void getWorldTransform(btTransform& centerOfMassWorldTrans) const override {
 		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1)return;
-		centerOfMassWorldTrans = GlmToBullet(entity->GetWorldTransform()) * centerOfMassOffset.inverse();
+		centerOfMassWorldTrans = GlmToBullet(entity->GetWorldTransform()) * centerOfMassOffset;
 	}
-
+	
 	//Bullet only calls the update of worldtransform for active objects
 	virtual void setWorldTransform(const btTransform& centerOfMassWorldTrans) override {
 		auto entity = entityInstance.lock();if(!entity || entity->GetIndex()==-1)return;
-		entity->SetWorldTransform(BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset));
+		entity->SetWorldTransform(BulletToGlm(centerOfMassWorldTrans * centerOfMassOffset.inverse()));
 	}
 	
 	void Update() {
@@ -335,6 +335,7 @@ struct PhysicsObject : btMotionState {
 				if (collisionShape) {
 					collisionShape->calculateLocalInertia(mass, localInertia);
 				}
+				// else localInertia = btVector3{mass,mass,mass};
 			} else {
 				mass = 0;
 			}
@@ -358,7 +359,7 @@ struct PhysicsObject : btMotionState {
 				if (auto* _parent = GetPhysicsObject((uint32_t)physics->jointParent); _parent && _parent->rigidbody) {
 					parent = _parent;
 					
-					constraint = new btGeneric6DofSpring2Constraint(*rigidbody, *_parent->rigidbody, GlmToBullet(physics->localJointPoint), GlmToBullet(physics->parentJointPoint));
+					constraint = new btGeneric6DofSpring2Constraint(*rigidbody, *_parent->rigidbody, centerOfMassOffset.inverse() * GlmToBullet(physics->localJointPoint), parent->centerOfMassOffset.inverse() * GlmToBullet(physics->parentJointPoint));
 					
 					for (int i = 0; i < 6; ++i) {
 						constraint->enableMotor(i, true);
@@ -667,55 +668,68 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Realtime Update
 			auto* rb = physicsObj->rigidbody;
 			if (rb) {
-				
 				// Update rigidbody
 				if (rb->getFriction() != physics.friction) 
 					rb->setFriction(physics.friction);
 				if (rb->getRestitution() != physics.bounciness) 
 					rb->setRestitution(physics.bounciness);
-				if (rb->getAngularFactor().x() != physics.angularFactor.x || rb->getAngularFactor().y() != physics.angularFactor.y || rb->getAngularFactor().z() != physics.angularFactor.z) {
-					rb->setAngularFactor(btVector3(physics.angularFactor.x, physics.angularFactor.y, physics.angularFactor.z));
-					rb->setAngularVelocity(btVector3(0,0,0));
-				}
-				// if (rb->getAngularDamping() != physics.angularDamping) 
-				// 	rb->setAngularDamping(physics.angularDamping);
-				
-				// Update joint
-				if (physics.jointParent != -1 && physicsObj->constraint) {
-					UpdateConstraintJointPhysics(physicsObj->constraint, &physics);
-				}
-				
-				// Apply forces
-				if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
-					if (physics.addedForce) {
-						if (physics.forcePoint.x == 0 && physics.forcePoint.y == 0 && physics.forcePoint.z == 0) {
-							rb->applyCentralForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z));
-						} else {
-							rb->applyForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z), btVector3(physics.forcePoint.x, physics.forcePoint.y, physics.forcePoint.z));
+					
+				if (physics.rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
+					if (rb->getAngularFactor().x() != physics.angularFactor.x || rb->getAngularFactor().y() != physics.angularFactor.y || rb->getAngularFactor().z() != physics.angularFactor.z) {
+						rb->setAngularFactor(btVector3(physics.angularFactor.x, physics.angularFactor.y, physics.angularFactor.z));
+						rb->setAngularVelocity(btVector3(0,0,0));
+					}
+					// if (rb->getAngularDamping() != physics.angularDamping) 
+					// 	rb->setAngularDamping(physics.angularDamping);
+					
+					// Update joint
+					if (physics.jointParent != -1 && physicsObj->constraint) {
+						UpdateConstraintJointPhysics(physicsObj->constraint, &physics);
+					}
+					
+					// Apply forces
+					if (physics.addedForce || physics.physicsForceImpulses.size() > 0) {
+						if (physics.addedForce) {
+							if (physics.forcePoint.x == 0 && physics.forcePoint.y == 0 && physics.forcePoint.z == 0) {
+								rb->applyCentralForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z));
+							} else {
+								rb->applyForce(btVector3(physics.forceDirection.x, physics.forceDirection.y, physics.forceDirection.z), btVector3(physics.forcePoint.x, physics.forcePoint.y, physics.forcePoint.z));
+							}
+						}
+						if (physics.physicsForceImpulses.size() > 0) {
+							auto&[impulseDir, atPoint] = physics.physicsForceImpulses.front();
+							if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
+								rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+							} else {
+								rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
+							}
+							physics.physicsForceImpulses.pop();
 						}
 					}
-					if (physics.physicsForceImpulses.size() > 0) {
-						auto&[impulseDir, atPoint] = physics.physicsForceImpulses.front();
-						if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
-							rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
-						} else {
-							rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
-						}
-						physics.physicsForceImpulses.pop();
+					
+					// Apply local torque
+					if (physics.appliedTorque.x != 0 || physics.appliedTorque.y != 0 || physics.appliedTorque.z != 0) {
+						btVector3 torque = btVector3{physics.appliedTorque.x, physics.appliedTorque.y, physics.appliedTorque.z};
+						torque = rb->getInvInertiaTensorWorld().inverse() * (rb->getWorldTransform().getBasis() * torque);
+						rb->applyTorqueImpulse(torque);
+						physics.appliedTorque = {0,0,0};
+					}
+					
+					double deltaTime = physics.timer.GetElapsedSeconds();
+					physics.timer.Reset();
+					if (deltaTime < 0.00001 || deltaTime > 1e+9) {
+						physics.linearVelocity = {rb->getLinearVelocity().x(), rb->getLinearVelocity().y(), rb->getLinearVelocity().z()};
+						physics.gForce = scene->gravityVector;
+					} else {
+						auto lastFrameLinearVelocity = physics.linearVelocity;
+						physics.linearVelocity = {rb->getLinearVelocity().x(), rb->getLinearVelocity().y(), rb->getLinearVelocity().z()};
+						physics.gForce = (lastFrameLinearVelocity - physics.linearVelocity) / deltaTime + scene->gravityVector;
 					}
 				}
-				
-				// Apply local torque
-				if (physics.appliedTorque.x != 0 || physics.appliedTorque.y != 0 || physics.appliedTorque.z != 0) {
-					btVector3 torque = btVector3{physics.appliedTorque.x, physics.appliedTorque.y, physics.appliedTorque.z};
-					torque = rb->getInvInertiaTensorWorld().inverse() * (rb->getWorldTransform().getBasis() * torque);
-					rb->applyTorqueImpulse(torque);
-					physics.appliedTorque = {0,0,0};
-				}
-				
-				btVector3 angularVelocity = rb->getAngularVelocity();
-				physics.localAngularVelocity = {angularVelocity.x(), angularVelocity.y(), angularVelocity.z()};
-				
+			} else {
+				physics.gForce = scene->gravityVector;
+				physics.linearVelocity = {0,0,0};
+				physics.timer = false;
 			}
 		});
 		
