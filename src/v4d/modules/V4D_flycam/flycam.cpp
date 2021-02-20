@@ -6,6 +6,7 @@ using namespace v4d::graphics;
 using namespace v4d::scene;
 
 v4d::graphics::Window* window = nullptr;
+v4d::graphics::Renderer* r = nullptr;
 Scene* scene = nullptr;
 PlayerView player{};
 
@@ -21,17 +22,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		window = w;
 	}
 	
+	V4D_MODULE_FUNC(void, InitRenderer, v4d::graphics::Renderer* _r) {
+		r = _r;
+	}
+	
 	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* s) {
 		scene = s;
 	}
 	
-	V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-		std::lock_guard lock(player.mu);
-		player.worldPosition += player.velocity * deltaTime;
-	}
+	// V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
+	// 	std::lock_guard lock(player.mu);
+	// 	player.worldPosition += player.velocity * deltaTime;
+	// }
 	
 	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
 		{std::lock_guard lock(player.mu);
+			player.worldPosition += player.velocity * r->deltaTime;
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
 		}
 		if (auto parent = scene->cameraParent.lock(); parent) {

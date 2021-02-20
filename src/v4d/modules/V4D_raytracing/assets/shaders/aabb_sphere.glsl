@@ -3,9 +3,9 @@
 
 
 struct SphereAttr {
-	vec3 normal; // local space
-	float radius;
+	float t1;
 	float t2;
+	float radius;
 };
 
 #############################################################
@@ -14,39 +14,33 @@ struct SphereAttr {
 hitAttributeEXT SphereAttr sphereAttr;
 
 void main() {
+	// Ray-Sphere Intersection
 	const vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
 	const vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
 	const vec3 spherePosition = (aabb_max + aabb_min) / 2;
 	const float sphereRadius = (aabb_max.x - aabb_min.x) / 2;
-	const vec3 origin = gl_ObjectRayOriginEXT;
-	const vec3 direction = gl_ObjectRayDirectionEXT;
-	const float tMin = gl_RayTminEXT;
-	const float tMax = gl_RayTmaxEXT;
-	const vec3 oc = origin - spherePosition;
-	const float a = dot(direction, direction);
-	const float b = dot(oc, direction);
+	const vec3 oc = gl_ObjectRayOriginEXT - spherePosition;
+	const float a = dot(gl_ObjectRayDirectionEXT, gl_ObjectRayDirectionEXT);
+	const float b = dot(oc, gl_ObjectRayDirectionEXT);
 	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
 	const float discriminant = b * b - a * c;
-
+	
+	// If we hit the sphere
 	if (discriminant >= 0) {
 		const float discriminantSqrt = sqrt(discriminant);
-		const float t1 = (-b - discriminantSqrt) / a;
-		const float t2 = (-b + discriminantSqrt) / a;
-		vec3 hitPoint = origin + direction * t1;
 		
-		sphereAttr.normal = normalize(hitPoint - spherePosition);
+		sphereAttr.t1 = (-b - discriminantSqrt) / a;
+		sphereAttr.t2 = (-b + discriminantSqrt) / a;
 		sphereAttr.radius = sphereRadius;
-		sphereAttr.t2 = t2;
 		
 		// Outside of sphere
-		if (tMin <= t1 && t1 < tMax) {
-			reportIntersectionEXT(t1, 0);
+		if (gl_RayTminEXT <= sphereAttr.t1 && sphereAttr.t1 < gl_RayTmaxEXT) {
+			reportIntersectionEXT(sphereAttr.t1, 0);
 		}
-		
-		// // Inside of sphere
-		// else if (t1 <= tMin && t2 >= tMin) {
-		// 	reportIntersectionEXT(tMin, 1);
-		// }
+		// Inside of sphere
+		else if (sphereAttr.t1 <= gl_RayTminEXT && sphereAttr.t2 >= gl_RayTminEXT) {
+			reportIntersectionEXT(sphereAttr.t2, 1);
+		}
 	}
 }
 
@@ -63,12 +57,30 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPay
 void main() {
 	WriteRayPayload(ray);
 	
+	// Vertex Colors
 	if (HasVertexColor()) {
 		ray.color = GetVertexColor(gl_PrimitiveID);
+	} else {
+		ray.color = vec4(1);
 	}
 	
-	ray.normal.xyz = sphereAttr.normal;
-	ray.uv = vec2(sphereAttr.radius, sphereAttr.t2);
+	// Compute normal
+	const vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
+	const vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
+	const vec3 spherePosition = (aabb_max + aabb_min) / 2;
+	const vec3 hitPoint1 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t1;
+	const vec3 hitPoint2 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t2;
+	if (gl_HitKindEXT == 0) {
+		// Outside of sphere
+		ray.normal.xyz = normalize(hitPoint1 - spherePosition);
+	}
+	else if (gl_HitKindEXT == 1) {
+		// Inside of sphere
+		ray.normal.xyz = normalize(spherePosition - hitPoint2);
+	}
+	
+	// Store useful information in the UV payload member
+	ray.uv = vec2(sphereAttr.radius, (sphereAttr.t2 - sphereAttr.t1) * sign(sphereAttr.t1 - gl_RayTminEXT));
 }
 
 
@@ -82,10 +94,21 @@ layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPay
 void main() {
 	WriteRayPayload(ray);
 	
+	// Vertex Colors
 	if (HasVertexColor()) {
 		ray.color = GetVertexColor(gl_PrimitiveID);
+	} else {
+		ray.color = vec4(1);
 	}
 	
-	ray.normal.xyz = sphereAttr.normal;
-	ray.uv = vec2(sphereAttr.radius, sphereAttr.t2);
+	// Compute normal
+	const vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
+	const vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
+	const vec3 spherePosition = (aabb_max + aabb_min) / 2;
+	const vec3 hitPoint1 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t1;
+	const vec3 hitPoint2 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t2;
+	ray.normal.xyz = normalize(hitPoint1 - spherePosition); // always use outside normal
+	
+	// Store useful information in the UV payload member
+	ray.uv = vec2(sphereAttr.radius, (sphereAttr.t2 - sphereAttr.t1) * sign(sphereAttr.t1 - gl_RayTminEXT));
 }

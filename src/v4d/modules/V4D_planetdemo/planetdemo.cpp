@@ -474,7 +474,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InitVulkanLayouts) {
 		auto* rayTracingPipelineLayout = mainRenderModule->GetPipelineLayout("pl_rendering");
-		auto* fogPipelineLayout = mainRenderModule->GetPipelineLayout("pl_fog_raster");
 		
 		r->descriptorSets["mapsGen"] = &mapsGenDescriptorSet;
 		r->descriptorSets["mapsSampler"] = &mapsSamplerDescriptorSet;

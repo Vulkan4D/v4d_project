@@ -15,6 +15,8 @@ using namespace v4d::graphics::vulkan::rtx;
 
 #pragma region Limits
 	const uint32_t MAX_RENDERABLE_ENTITY_INSTANCES = 65536; // up to ~ 256 bytes each
+	const uint32_t COLLISION_MAX_LINES_PER_OBJECT = 16;
+	const uint32_t RAY_TRACING_MAX_COLLISION_PER_FRAME = MAX_RENDERABLE_ENTITY_INSTANCES * COLLISION_MAX_LINES_PER_OBJECT;
 #pragma endregion
 
 // Application
@@ -29,11 +31,52 @@ Texture2D tex_img_font_atlas { V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/mon
 VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties {};
 VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties {};
 AccelerationStructure topLevelAccelerationStructure {};
-Buffer rayTracingShaderBindingTableBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
+Buffer rayTracingRenderingShaderBindingTableBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
+Buffer rayTracingCollisionShaderBindingTableBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT};
 std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos {};
 std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
+
+#pragma region Collisions
+
+struct Collision {
+	int32_t objectInstanceA;
+	int32_t objectGeometryA;
+	int32_t objectInstanceB;
+	int32_t objectGeometryB;
+	
+	glm::vec4 startPosition; // view-space, w = max distance to surface (typically boundingRadius)
+	glm::vec4 velocity; // view-space, w = max travel distance from surface (typically velocity*deltaTime)
+	
+	glm::vec4 contactA;
+	glm::vec4 contactB;
+	
+	glm::dmat4 worldTransformBeforeHit;
+	
+	Collision(uint32_t objectInstanceId, glm::vec4 startPositionViewSpaceAndBoundingDistance, glm::vec4 velocityViewSpaceAndMaxTravelDistance, glm::dmat4 worldTransformBeforeHit)
+	 : objectInstanceA(objectInstanceId)
+	 , objectGeometryA(-1)
+	 , objectInstanceB(-1)
+	 , objectGeometryB(-1)
+	 , startPosition(startPositionViewSpaceAndBoundingDistance)
+	 , velocity(velocityViewSpaceAndMaxTravelDistance)
+	 , contactA(0)
+	 , contactB(0)
+	 , worldTransformBeforeHit(worldTransformBeforeHit)
+	 {}
+};
+
+struct CollisionHit {
+	glm::dmat4 worldTransformBeforeHit;
+};
+
+struct CollisionFrame {
+	double deltaTime = 1.0/60;
+	glm::dmat4 viewMatrix {1};
+};
+
+#pragma endregion
 
 #pragma region Buffers
 	StagingBuffer<RenderableGeometryEntity::RenderableEntityInstance, MAX_RENDERABLE_ENTITY_INSTANCES> renderableEntityInstanceBuffer {};
@@ -43,12 +86,15 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	uint32_t nbRayTracingInstances = 0;
 	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	StagingBuffer<RayCast> raycastBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+	StagingBuffer<Collision, RAY_TRACING_MAX_COLLISION_PER_FRAME> collisionBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+	std::array<uint32_t, Renderer::NB_FRAMES_IN_FLIGHT> collisionLineCount {0, 0};
 #pragma endregion
 
 #pragma region Descriptor Sets
 	DescriptorSet set0;
 	DescriptorSet set1_raster;
 	DescriptorSet set1_rendering;
+	DescriptorSet set1_collision;
 	DescriptorSet set1_post;
 	DescriptorSet set1_histogram;
 	DescriptorSet set1_overlay;
@@ -82,8 +128,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 
 #pragma region Pipeline Layouts
 	PipelineLayout pl_raster;
-	PipelineLayout pl_fog_raster;
 	PipelineLayout pl_rendering;
+	PipelineLayout pl_collision;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
 	PipelineLayout pl_histogram;
@@ -93,8 +139,9 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 
 	// Ray Tracing
 	ShaderBindingTable sbt_rendering {pl_rendering, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.rgen")};
+	ShaderBindingTable sbt_collision {pl_collision, V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/collision.rgen")};
 
-	// Transparent/Fog
+	// Transparent/Wireframe
 	RasterShaderPipeline shader_transparent {pl_raster, {
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.vert"),
 		V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/raster.transparent.frag"),
@@ -159,8 +206,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	};
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
 		{"pl_raster", &pl_raster},
-		{"pl_fog_raster", &pl_fog_raster},
 		{"pl_rendering", &pl_rendering},
+		{"pl_collision", &pl_collision},
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
 		{"pl_histogram", &pl_histogram},
@@ -168,12 +215,12 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
 		{"sg_transparent", {&shader_transparent}},
 		{"sg_wireframe", {&shader_wireframe}},
-		{"sg_fog", {}},
 		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
 		{"sbt_rendering", &sbt_rendering},
+		{"sbt_collision", &sbt_collision},
 	};
 	// FrameBuffers
 	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
@@ -184,7 +231,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 #pragma region Render Passes (Rasterization)
 	RenderPass postProcessingRenderPass;
 	RenderPass uiRenderPass;
-	RenderPass fogRenderPass;
+	RenderPass rasterRenderPass;
 	
 	struct RasterPushConstant {
 		glm::vec4 wireframeColor = {1,1,1,1};
@@ -265,7 +312,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	// 	r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 	// }
 	
-	void CreateFogPipeline() {
+	void CreateRasterPipeline() {
 		const int nbColorAttachments = 1;
 		VkAttachmentDescription attachment {};
 		VkAttachmentReference colorAttachmentRef {};
@@ -278,7 +325,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 		attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 		colorAttachmentRef = {
-			fogRenderPass.AddAttachment(attachment),
+			rasterRenderPass.AddAttachment(attachment),
 			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 		};
 	
@@ -295,18 +342,18 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			subpass.colorAttachmentCount = 1;
 			subpass.pColorAttachments = &colorAttachmentRef;
-		fogRenderPass.AddSubpass(subpass);
-		// fogRenderPass.renderPassInfo.dependencyCount = 1;
-		// fogRenderPass.renderPassInfo.pDependencies = &subpassDependency;
+		rasterRenderPass.AddSubpass(subpass);
+		// rasterRenderPass.renderPassInfo.dependencyCount = 1;
+		// rasterRenderPass.renderPassInfo.pDependencies = &subpassDependency;
 		
 		// Create the render pass
-		fogRenderPass.Create(r->renderingDevice);
-		fogRenderPass.CreateFrameBuffers(r->renderingDevice, img_lit);
+		rasterRenderPass.Create(r->renderingDevice);
+		rasterRenderPass.CreateFrameBuffers(r->renderingDevice, img_lit);
 		
 		// Shaders
-		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
+		for (auto& sg : {shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
 			for (auto* s : sg) {
-				s->SetRenderPass(&img_lit, fogRenderPass.handle, 0);
+				s->SetRenderPass(&img_lit, rasterRenderPass.handle, 0);
 				s->AddColorBlendAttachmentState(
 					VK_TRUE,
 					VK_BLEND_FACTOR_SRC_ALPHA,
@@ -320,14 +367,14 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			}
 		}
 	}
-	void DestroyFogPipeline() {
-		for (auto& sg : {shaderGroups["sg_fog"], shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
+	void DestroyRasterPipeline() {
+		for (auto& sg : {shaderGroups["sg_transparent"], shaderGroups["sg_wireframe"]}) {
 			for (auto* s : sg) {
 				s->DestroyPipeline(r->renderingDevice);
 			}
 		}
-		fogRenderPass.DestroyFrameBuffers(r->renderingDevice);
-		fogRenderPass.Destroy(r->renderingDevice);
+		rasterRenderPass.DestroyFrameBuffers(r->renderingDevice);
+		rasterRenderPass.Destroy(r->renderingDevice);
 	}
 	
 #pragma endregion
@@ -352,16 +399,28 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void CreateRayTracingPipeline() {
+		// Rendering
 		sbt_rendering.CreateRayTracingPipeline(r->renderingDevice);
-		rayTracingShaderBindingTableBuffer.size = sbt_rendering.GetSbtBufferSize(rayTracingPipelineProperties);
-		rayTracingShaderBindingTableBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
-		sbt_rendering.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingShaderBindingTableBuffer, 0, rayTracingPipelineProperties);
+		rayTracingRenderingShaderBindingTableBuffer.size = sbt_rendering.GetSbtBufferSize(rayTracingPipelineProperties);
+		rayTracingRenderingShaderBindingTableBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
+		sbt_rendering.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingRenderingShaderBindingTableBuffer, 0, rayTracingPipelineProperties);
+		
+		// Collision
+		sbt_collision.CreateRayTracingPipeline(r->renderingDevice);
+		rayTracingCollisionShaderBindingTableBuffer.size = sbt_collision.GetSbtBufferSize(rayTracingPipelineProperties);
+		rayTracingCollisionShaderBindingTableBuffer.Allocate(r->renderingDevice, MEMORY_USAGE_CPU_TO_GPU);
+		sbt_collision.WriteShaderBindingTableToBuffer(r->renderingDevice, &rayTracingCollisionShaderBindingTableBuffer, 0, rayTracingPipelineProperties);
 	}
 	void DestroyRayTracingPipeline() {
-		rayTracingShaderBindingTableBuffer.Free(r->renderingDevice);
+		// Rendering
+		rayTracingRenderingShaderBindingTableBuffer.Free(r->renderingDevice);
 		sbt_rendering.DestroyRayTracingPipeline(r->renderingDevice);
-	}
 		
+		// Collision
+		rayTracingCollisionShaderBindingTableBuffer.Free(r->renderingDevice);
+		sbt_collision.DestroyRayTracingPipeline(r->renderingDevice);
+	}
+	
 	void AddRayTracingShader (v4d::modular::ModuleID mod, const std::string& name) {
 		std::string path = V4D_MODULE_ASSET_PATH_STR(mod.String(), "shaders/" + name);
 		
@@ -378,6 +437,10 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		std::string extra_rchit { path + ".extra.rchit" };
 		std::string extra_rahit { path + ".extra.rahit" };
 		std::string extra_rint { path + ".extra.rint" };
+		
+		std::string collision_rchit { path + ".collision.rchit" };
+		std::string collision_rahit { path + ".collision.rahit" };
+		std::string collision_rint { path + ".collision.rint" };
 		
 		if (!v4d::io::FilePath::FileExists(rint)) {
 			rint = "";
@@ -413,19 +476,36 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			extra_rint = rint;
 		}
 		
+		if (!v4d::io::FilePath::FileExists(collision_rchit)) {
+			collision_rchit = V4D_MODULE_ASSET_PATH_STR(THIS_MODULE, "shaders/collision.rchit");
+		}
+		if (!v4d::io::FilePath::FileExists(collision_rahit)) {
+			collision_rahit = V4D_MODULE_ASSET_PATH_STR(THIS_MODULE, "shaders/collision.rahit");
+		}
+		if (!v4d::io::FilePath::FileExists(collision_rint)) {
+			collision_rint = rint;
+		}
+		
 		// Rendering
 		Renderer::sbtOffsets[std::string("rendering:hit:") + mod.String() + ":" + name] = 
 		/* offset / payload location 0 */ sbt_rendering.AddHitShader(rendering_rchit, rendering_rahit, rendering_rint);
 		/* offset / payload location 1 */ sbt_rendering.AddHitShader(spectral_rchit, spectral_rahit, spectral_rint);
 		/* offset / payload location 2 */ sbt_rendering.AddHitShader(extra_rchit, extra_rahit, extra_rint);
 		
-		//...
+		// Collision
+		Renderer::sbtOffsets[std::string("collision:hit:") + mod.String() + ":" + name] = 
+										sbt_collision.AddHitShader(collision_rchit, collision_rahit, collision_rint);
+										sbt_collision.AddHitShader();
+										sbt_collision.AddHitShader();
+		
 	}
 
 	void ConfigureRayTracingShaders() {
 		{// Ray Miss shaders
 			sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.rmiss"));
 			sbt_rendering.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/rendering.void.rmiss"));
+			
+			sbt_collision.AddMissShader(V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/collision.rmiss"));
 		}
 		
 		{// Ray Hit default shaders
@@ -485,6 +565,7 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	}
 	
 	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
+		// Rendering
 		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_rendering.GetPipeline());
 		sbt_rendering.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
 		r->renderingDevice->CmdTraceRaysKHR(
@@ -495,6 +576,20 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 			sbt_rendering.GetRayCallableDeviceAddressRegion(),
 			img_lit.width, img_lit.height, 1
 		);
+		
+		// Collision
+		if (collisionLineCount[r->currentFrameInFlight] > 0) {
+			r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_collision.GetPipeline());
+			sbt_collision.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+			r->renderingDevice->CmdTraceRaysKHR(
+				commandBuffer, 
+				sbt_collision.GetRayGenDeviceAddressRegion(),
+				sbt_collision.GetRayMissDeviceAddressRegion(),
+				sbt_collision.GetRayHitDeviceAddressRegion(),
+				sbt_collision.GetRayCallableDeviceAddressRegion(),
+				collisionLineCount[r->currentFrameInFlight], 1, 1
+			);
+		}
 	}
 	
 	void BuildBottomLevelRayTracingAccelerationStructures(Device* device, VkCommandBuffer commandBuffer) {
@@ -629,6 +724,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](VkCommandBuffer cmdBuffer){
 			raycastBuffer.Push(cmdBuffer);
 		});
+		// Collisions
+		collisionBuffer.Allocate(r->renderingDevice);
 	}
 	void FreeComputeBuffers() {
 		// histogram
@@ -637,6 +734,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 		// raycast
 		previousRayCast = {};
 		raycastBuffer.Free();
+		// Collisions
+		collisionBuffer.Free();
 	}
 	
 	void RecordPostProcessingCommands(VkCommandBuffer commandBuffer, int imageIndex) {
@@ -759,16 +858,8 @@ std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_
 	
 #pragma endregion
 
-void ConfigureFogShaders() {
+void ConfigureRasterShaders() {
 	pl_raster.AddPushConstant<RasterPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-	
-	for (auto* s : shaderGroups["sg_fog"]) {
-		s->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-		s->depthStencilState.depthTestEnable = VK_FALSE;
-		s->depthStencilState.depthWriteEnable = VK_FALSE;
-		s->rasterizer.cullMode = VK_CULL_MODE_NONE;
-		s->SetData(3);
-	}
 	
 	for (auto* s : shaderGroups["sg_transparent"]) {
 		// s->AddVertexInputBinding(sizeof(v4d::graphics::Mesh::VertexPosition), VK_VERTEX_INPUT_RATE_VERTEX, v4d::graphics::Mesh::VertexPosition::GetInputAttributes());
@@ -789,11 +880,8 @@ void ConfigureFogShaders() {
 	}
 }
 
-void RunFogCommands(VkCommandBuffer commandBuffer) {
-	fogRenderPass.Begin(r->renderingDevice, commandBuffer, img_lit);
-		for (auto* s : shaderGroups["sg_fog"]) {
-			s->Execute(r->renderingDevice, commandBuffer);
-		}
+void RunRasterCommands(VkCommandBuffer commandBuffer) {
+	rasterRenderPass.Begin(r->renderingDevice, commandBuffer, img_lit);
 		for (auto* s : shaderGroups["sg_transparent"]) {
 			// Transparent
 			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
@@ -838,7 +926,7 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				}
 			});
 		}
-	fogRenderPass.End(r->renderingDevice, commandBuffer);
+	rasterRenderPass.End(r->renderingDevice, commandBuffer);
 }
 
 #pragma region UI
@@ -1051,12 +1139,14 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 #pragma region Frame Update & Graphics commands
 
 	void FrameUpdate(uint imageIndex) {
+		
 		{// Set current frame for staging buffers
 			renderableEntityInstanceBuffer.SetCurrentFrame(r->currentFrameInFlight);
 			cameraUniformBuffer.SetCurrentFrame(r->currentFrameInFlight);
 			lightSourcesBuffer.SetCurrentFrame(r->currentFrameInFlight);
 			rayTracingInstanceBuffer.SetCurrentFrame(r->currentFrameInFlight);
 			raycastBuffer.SetCurrentFrame(r->currentFrameInFlight);
+			collisionBuffer.SetCurrentFrame(r->currentFrameInFlight);
 		}
 		
 		{// Reset camera information
@@ -1073,6 +1163,25 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		}
 		
 		// RunTXAA();
+		
+		// Catch Collisions
+		static std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
+		static std::array<std::unordered_map<uint32_t, CollisionHit>, Renderer::NB_FRAMES_IN_FLIGHT> collisionHits {};
+		{
+			collisionHits[r->currentFrameInFlight].clear();
+			if (collisionLineCount[r->currentFrameInFlight] > 0) {
+				for (size_t i = 0; i < collisionLineCount[r->currentFrameInFlight]; ++i) {
+					auto collision = collisionBuffer[i];
+					if (collision.objectInstanceB != -1 && collisionHits[r->previousFrameInFlight].count(collision.objectInstanceA) == 0) {
+						collisionHits[r->currentFrameInFlight][collision.objectInstanceA].worldTransformBeforeHit = collision.worldTransformBeforeHit;
+						LOG("Collision")
+					}
+				}
+			}
+			collisionLineCount[r->currentFrameInFlight] = 0;
+			collisionFrame[r->currentFrameInFlight].deltaTime = r->deltaTime;
+			collisionFrame[r->currentFrameInFlight].viewMatrix = scene->camera.viewMatrix;
+		}
 		
 		{// Handle RayCast (captured in the past 1 or 2 frames)
 			if (previousRayCast && previousRayCast != *raycastBuffer) {
@@ -1174,9 +1283,82 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 				
 				// add BLAS instance to TLAS
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
+					glm::dmat4 worldTransform = entity->GetWorldTransform();
+					
+					// Physics
+					if (auto physics = entity->physics.Lock(); physics && physics->mass > 0.0 && physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
+						
+						{// Apply Velocity
+							if (physics->linearVelocity.x != 0 || physics->linearVelocity.y != 0 || physics->linearVelocity.z != 0) {
+								worldTransform = glm::translate(glm::dmat4(1), physics->linearVelocity * collisionFrame[r->previousFrameInFlight].deltaTime) * worldTransform;
+								entity->SetWorldTransform(worldTransform);
+							}
+						}
+						
+						{// Apply Collisions from previous frame
+							if (collisionHits[r->currentFrameInFlight].count(entity->GetIndex())) {
+								worldTransform = collisionHits[r->currentFrameInFlight][entity->GetIndex()].worldTransformBeforeHit;
+								worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)) * worldTransform;
+								entity->SetWorldTransform(worldTransform);
+								// physics->linearVelocity *= -1.0;
+								physics->linearVelocity = scene->gravityVector * collisionFrame[r->currentFrameInFlight].deltaTime * -10.0;
+							}
+						}
+						
+						{// Solve constraints
+							//... may reset position and velocity here
+						}
+						
+						{// Apply Gravity
+							physics->linearVelocity += scene->gravityVector * collisionFrame[r->currentFrameInFlight].deltaTime;
+						}
+						
+						// {// Apply Forces
+						// 	if (physics->addedForce || physics->physicsForceImpulses.size() > 0) {
+						// 		if (physics->physicsForceImpulses.size() > 0) {
+						// 			auto&[impulseDir, atPoint] = physics->physicsForceImpulses.front();
+						// 			// if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
+						// 				// rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+						// 				physics->linearVelocity += impulseDir / double(physics->mass);
+						// 			// } else {
+						// 			// 	rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
+						// 			// }
+						// 			physics->physicsForceImpulses.pop();
+						// 		}
+						// 	}
+						// }
+						
+						{// Prepare ray-traced collision detection
+							if (physics->linearVelocity.x != 0 || physics->linearVelocity.y != 0 || physics->linearVelocity.z != 0) {
+								if (collisionLineCount[r->currentFrameInFlight] < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+									size_t collisionIndex = collisionLineCount[r->currentFrameInFlight]++;
+									glm::vec3 position = (scene->camera.viewMatrix * worldTransform)[3];
+									glm::vec3 direction = glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(physics->linearVelocity);
+									double velocity = glm::length(physics->linearVelocity);
+									collisionBuffer[collisionIndex] = Collision {
+										(uint32_t)entity->GetIndex(), 
+										{position.x, position.y, position.z, physics->boundingDistance}, 
+										{direction.x, direction.y, direction.z, velocity * collisionFrame[r->currentFrameInFlight].deltaTime}, 
+										worldTransform
+									};
+									{// Draw debug line
+										glm::vec4 clipSpace1 = scene->camera.projectionMatrix * glm::dvec4(position, 1);
+										glm::vec4 clipSpace2 = scene->camera.projectionMatrix * glm::dvec4(position + direction * float(velocity), 1);
+										clipSpace1 /= clipSpace1.w;
+										clipSpace2 /= clipSpace2.w;
+										if (clipSpace1.z >= 0 && clipSpace2.z >= 0) {
+											AddOverlayLine(clipSpace1.x, clipSpace1.y, clipSpace2.x, clipSpace2.y, {0, 1, 0, 1}, 2);
+										}
+									}
+								}
+							}
+						}
+						
+					}
+					
 					// Update and Assign transform
 					entity->entityInstanceInfo.modelViewTransform_history = entity->entityInstanceInfo.modelViewTransform;
-					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * entity->GetWorldTransform();
+					entity->entityInstanceInfo.modelViewTransform = scene->camera.viewMatrix * worldTransform;
 					
 					if (entity->sharedGeometryData && entity->sharedGeometryData->blas.built) {
 						int index = nbRayTracingInstances++;
@@ -1190,9 +1372,9 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 					
 					// Light Source
 					if (nbActiveLights < MAX_ACTIVE_LIGHTS) {
-						entity->lightSource.Do([&nbActiveLights, &entity](auto& lightSource){
+						entity->lightSource.Do([&nbActiveLights, &entity, &worldTransform](auto& lightSource){
 							lightSourcesBuffer[nbActiveLights] = lightSource;
-							lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * entity->GetWorldTransform() * glm::dvec4(glm::dvec3(lightSource.position), 1));
+							lightSourcesBuffer[nbActiveLights].position = glm::vec4(scene->camera.viewMatrix * worldTransform * glm::dvec4(glm::dvec3(lightSource.position), 1));
 							++nbActiveLights;
 						});
 					}
@@ -1235,27 +1417,23 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 			);
 		}
 		
-		{// Transfer stuff between GPU and CPU
-			// Pull RayCast from previous frame to catch it in the next frame
-			raycastBuffer.SetCurrentFrame(r->nextFrameInFlight);
-			raycastBuffer.Pull(commandBuffer);
-			
-			// Push Entity Components
+		{// Transfer data to rendering device
 			RenderableGeometryEntity::PushComponents(r->renderingDevice, commandBuffer);
-			
-			// Transfer data to rendering device
 			cameraUniformBuffer = scene->camera;
 			cameraUniformBuffer.Push(commandBuffer);
 			renderableEntityInstanceBuffer.Push(commandBuffer);
 			lightSourcesBuffer.Push(commandBuffer);
 			rayTracingInstanceBuffer.Push(commandBuffer, nbRayTracingInstances);
+			if (collisionLineCount[r->currentFrameInFlight] > 0) {
+				collisionBuffer.Push(commandBuffer, collisionLineCount[r->currentFrameInFlight]);
+			}
 		}
 		
 		{// Wait for TRANSFERS to finish before building BLAS
 			VkMemoryBarrier memoryBarrier {
 				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 				nullptr,// pNext
-				VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,// VkAccessFlags srcAccessMask
 				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
 			};
 			r->renderingDevice->CmdPipelineBarrier(
@@ -1314,18 +1492,42 @@ void RunFogCommands(VkCommandBuffer commandBuffer) {
 		// Run Ray Tracing
 		RunRayTracingCommands(commandBuffer);
 		
+		// RenderUpdate2
 		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
 			if (mod->RenderUpdate2) mod->RenderUpdate2(commandBuffer);
 		}, "render");
 		
-		// Fog
-		RunFogCommands(commandBuffer);
+		// Rasterization
+		RunRasterCommands(commandBuffer);
+		
+		{// Wait for ray-tracing to finish before pulling data
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
+		// Pull collisions to catch it in the next frame
+		if (collisionLineCount[r->currentFrameInFlight] > 0) {
+			collisionBuffer.Pull(commandBuffer, collisionLineCount[r->currentFrameInFlight]);
+		}
+		
+		// Pull RayCast to catch it in the next frame
+		raycastBuffer.Pull(commandBuffer);
 	}
 	
 	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
-		
-		// // Run Ray Tracing
-		// RunRayTracingCommands(commandBuffer);
 		
 		{// Wait for ray-tracing to finish before calling any fragment shader (overlay and post processing)
 			VkMemoryBarrier memoryBarrier {
@@ -1513,6 +1715,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set1_rendering.AddBinding_storageBuffer(i++, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 		}
 		
+		{r->descriptorSets["set1_collision"] = &set1_collision;
+			set1_collision.AddBinding_storageBuffer(0, collisionBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
+		}
+		
 		{r->descriptorSets["set1_raster"] = &set1_raster;
 			set1_raster.AddBinding_combinedImageSampler(0, &img_depth, VK_SHADER_STAGE_FRAGMENT_BIT);
 		}
@@ -1546,8 +1752,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			// Add specific set 1 to specific layout lists
 			pipelineLayouts["pl_rendering"]->AddDescriptorSet(&set1_rendering);
+			pipelineLayouts["pl_collision"]->AddDescriptorSet(&set1_collision);
 			pipelineLayouts["pl_raster"]->AddDescriptorSet(&set1_raster);
-			pipelineLayouts["pl_fog_raster"]->AddDescriptorSet(&set1_raster);
 			pipelineLayouts["pl_overlay"]->AddDescriptorSet(&set1_overlay);
 			pipelineLayouts["pl_post"]->AddDescriptorSet(&set1_post);
 			pipelineLayouts["pl_histogram"]->AddDescriptorSet(&set1_histogram);
@@ -1562,7 +1768,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		V4D_MODULE_FUNC(void, ConfigureShaders) {
 			ConfigureRayTracingShaders();
-			ConfigureFogShaders();
+			ConfigureRasterShaders();
 			ConfigurePostProcessingShaders();
 			ConfigureOverlayShaders();
 		}
@@ -1743,8 +1949,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Ray Tracing
 			CreateRayTracingPipeline();
 			
-			// Fog
-			CreateFogPipeline();
+			// Raster
+			CreateRasterPipeline();
 			
 			// Post Processing
 			CreatePostProcessingPipeline();
@@ -1760,8 +1966,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// Ray Tracing
 			DestroyRayTracingPipeline();
 			
-			// Fog
-			DestroyFogPipeline();
+			// Raster
+			DestroyRasterPipeline();
 			
 			// Post Processing
 			DestroyPostProcessingPipeline();

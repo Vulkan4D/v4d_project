@@ -1,4 +1,4 @@
-#include "v4d/modules/V4D_raytracing/glsl_includes/pl_fog_raster.glsl"
+#include "v4d/modules/V4D_raytracing/glsl_includes/pl_raster.glsl"
 
 struct V2F {
 	vec4 color;

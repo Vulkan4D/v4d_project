@@ -113,15 +113,15 @@ namespace app {
 				
 				SET_THREAD_HIGHEST_PRIORITY()
 				while (loopCheckRunning()) {
-					// static double deltaTime = 0.01;
+					static double deltaTime = 1.0/60;
 					CALCULATE_AVG_FRAMERATE(app::primaryAvgFrameRate)
-					// CALCULATE_DELTATIME(deltaTime)
+					CALCULATE_DELTATIME(deltaTime)
 					
 					#ifndef APP_RENDER_SECONDARY_IN_ANOTHER_THREAD
 						RunSecondaryRendering();
 					#endif
 					
-					app::renderer->Update();
+					app::renderer->Update(deltaTime);
 				
 					// // Run physics
 					// V4D_Mod::ForEachSortedModule([](auto* mod){
