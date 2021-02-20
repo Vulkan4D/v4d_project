@@ -52,9 +52,7 @@ struct Collision {
 	glm::vec4 contactA;
 	glm::vec4 contactB;
 	
-	glm::dmat4 worldTransformBeforeHit;
-	
-	Collision(uint32_t objectInstanceId, glm::vec4 startPositionViewSpaceAndBoundingDistance, glm::vec4 velocityViewSpaceAndMaxTravelDistance, glm::dmat4 worldTransformBeforeHit)
+	Collision(uint32_t objectInstanceId, glm::vec4 startPositionViewSpaceAndBoundingDistance, glm::vec4 velocityViewSpaceAndMaxTravelDistance)
 	 : objectInstanceA(objectInstanceId)
 	 , objectGeometryA(-1)
 	 , objectInstanceB(-1)
@@ -63,18 +61,30 @@ struct Collision {
 	 , velocity(velocityViewSpaceAndMaxTravelDistance)
 	 , contactA(0)
 	 , contactB(0)
-	 , worldTransformBeforeHit(worldTransformBeforeHit)
 	 {}
 };
 
-struct CollisionHit {
-	glm::dmat4 worldTransformBeforeHit;
+struct CollisionTest {
+	std::optional<Collision> collision;
+	glm::dvec3 velocity;
+	glm::dmat4 worldTransformBefore;
+	glm::dmat4 worldTransformAfter;
+	CollisionTest() : collision(std::nullopt) {};
+	CollisionTest(const glm::dmat4& worldTransform, const glm::dvec3& velocity, double deltaTime) 
+	: collision(std::nullopt)
+	, velocity(velocity)
+	, worldTransformBefore(worldTransform)
+	, worldTransformAfter(glm::translate(glm::dmat4(1), velocity * deltaTime) * worldTransform)
+	{}
 };
 
 struct CollisionFrame {
 	double deltaTime = 1.0/60;
 	glm::dmat4 viewMatrix {1};
+	std::unordered_map<uint32_t, CollisionTest> collisions {};
 };
+
+std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 
 #pragma endregion
 
@@ -1165,25 +1175,28 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 		// RunTXAA();
 		
 		// Catch Collisions
-		static std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
-		static std::array<std::unordered_map<uint32_t, CollisionHit>, Renderer::NB_FRAMES_IN_FLIGHT> collisionHits {};
 		{
-			collisionHits[r->currentFrameInFlight].clear();
 			if (collisionLineCount[r->currentFrameInFlight] > 0) {
 				for (size_t i = 0; i < collisionLineCount[r->currentFrameInFlight]; ++i) {
-					auto collision = collisionBuffer[i];
-					if (collision.objectInstanceB != -1 && collisionHits[r->previousFrameInFlight].count(collision.objectInstanceA) == 0) {
-						collisionHits[r->currentFrameInFlight][collision.objectInstanceA].worldTransformBeforeHit = collision.worldTransformBeforeHit;
-						LOG("Collision")
+					auto& collision = collisionBuffer[i];
+					if (collisionFrame[r->currentFrameInFlight].collisions.count(collision.objectInstanceA)) {
+						if (collisionFrame[r->previousFrameInFlight].collisions.count(collision.objectInstanceA) == 0 || collisionFrame[r->previousFrameInFlight].collisions[collision.objectInstanceA].collision.has_value() == false) {
+							if (collision.objectInstanceB != -1) {
+								collisionFrame[r->currentFrameInFlight].collisions[collision.objectInstanceA].collision = collision;
+							} else {
+								collisionFrame[r->currentFrameInFlight].collisions[collision.objectInstanceA].collision = std::nullopt;
+							}
+						} else {
+							collisionFrame[r->currentFrameInFlight].collisions.erase(collision.objectInstanceA);
+							collisionFrame[r->previousFrameInFlight].collisions.erase(collision.objectInstanceA);
+						}
 					}
 				}
 			}
 			collisionLineCount[r->currentFrameInFlight] = 0;
-			collisionFrame[r->currentFrameInFlight].deltaTime = r->deltaTime;
-			collisionFrame[r->currentFrameInFlight].viewMatrix = scene->camera.viewMatrix;
 		}
 		
-		{// Handle RayCast (captured in the past 1 or 2 frames)
+		{// Handle RayCast (captured in the past 2 frames)
 			if (previousRayCast && previousRayCast != *raycastBuffer) {
 				auto mod = V4D_Mod::GetModule(v4d::modular::ModuleID(previousRayCast.moduleVen, previousRayCast.moduleId));
 				if (mod->OnRendererRayCastOut) mod->OnRendererRayCastOut(previousRayCast);
@@ -1285,23 +1298,20 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					glm::dmat4 worldTransform = entity->GetWorldTransform();
 					
-					// Physics
+					// Physics/Collisions
 					if (auto physics = entity->physics.Lock(); physics && physics->mass > 0.0 && physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
 						
-						{// Apply Velocity
-							if (physics->linearVelocity.x != 0 || physics->linearVelocity.y != 0 || physics->linearVelocity.z != 0) {
-								worldTransform = glm::translate(glm::dmat4(1), physics->linearVelocity * collisionFrame[r->previousFrameInFlight].deltaTime) * worldTransform;
+						{// Apply collision/transform from previous frame's collision test
+							if (collisionFrame[r->currentFrameInFlight].collisions.count(entity->GetIndex())) {
+								if (collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].collision.has_value()) {
+									worldTransform = collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].worldTransformBefore;
+									// worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)/2.0) * worldTransform;
+									physics->linearVelocity *= -1.0;
+									// physics->linearVelocity = scene->gravityVector * r->deltaTime * -10.0;
+								} else {
+									worldTransform = collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].worldTransformAfter;
+								}
 								entity->SetWorldTransform(worldTransform);
-							}
-						}
-						
-						{// Apply Collisions from previous frame
-							if (collisionHits[r->currentFrameInFlight].count(entity->GetIndex())) {
-								worldTransform = collisionHits[r->currentFrameInFlight][entity->GetIndex()].worldTransformBeforeHit;
-								worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)) * worldTransform;
-								entity->SetWorldTransform(worldTransform);
-								// physics->linearVelocity *= -1.0;
-								physics->linearVelocity = scene->gravityVector * collisionFrame[r->currentFrameInFlight].deltaTime * -10.0;
 							}
 						}
 						
@@ -1310,7 +1320,7 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 						}
 						
 						{// Apply Gravity
-							physics->linearVelocity += scene->gravityVector * collisionFrame[r->currentFrameInFlight].deltaTime;
+							physics->linearVelocity += scene->gravityVector * r->deltaTime;
 						}
 						
 						// {// Apply Forces
@@ -1338,9 +1348,9 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 									collisionBuffer[collisionIndex] = Collision {
 										(uint32_t)entity->GetIndex(), 
 										{position.x, position.y, position.z, physics->boundingDistance}, 
-										{direction.x, direction.y, direction.z, velocity * collisionFrame[r->currentFrameInFlight].deltaTime}, 
-										worldTransform
+										{direction.x, direction.y, direction.z, velocity * r->deltaTime}, 
 									};
+									collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()] = {worldTransform, physics->linearVelocity, r->deltaTime};
 									{// Draw debug line
 										glm::vec4 clipSpace1 = scene->camera.projectionMatrix * glm::dvec4(position, 1);
 										glm::vec4 clipSpace2 = scene->camera.projectionMatrix * glm::dvec4(position + direction * float(velocity), 1);
@@ -1351,6 +1361,9 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 										}
 									}
 								}
+								
+								// Apply Velocity
+								entity->SetWorldTransform(glm::translate(glm::dmat4(1), physics->linearVelocity * r->deltaTime) * worldTransform);
 							}
 						}
 						
@@ -1386,6 +1399,11 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 			// Lights
 			for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
 				lightSourcesBuffer[i].Reset();
+			}
+			
+			{ // Collisions
+				collisionFrame[r->currentFrameInFlight].deltaTime = r->deltaTime;
+				collisionFrame[r->currentFrameInFlight].viewMatrix = scene->camera.viewMatrix;
 			}
 			
 			RenderableGeometryEntity::CleanupOnThisThread();

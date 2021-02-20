@@ -30,8 +30,8 @@ void main() {
 	} while (ray.hitDistance != 0);
 	
 	rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN;
-	rayOrigin -= rayDirection * (collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin)));
-	rayMaxDistance = (collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin)))*2.0;
+	rayOrigin -= rayDirection * (/*collision.velocity.w +*/ GetOptimalBounceStartDistance(length(rayOrigin)));
+	rayMaxDistance = (collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin))*2) ;// *2.0;
 	ray.ignoreInstanceIndex = int(collision.objectInstanceA);
 	ray.acceptInstanceIndex = -1;
 	traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);

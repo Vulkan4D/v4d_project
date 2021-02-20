@@ -9,8 +9,6 @@ struct Collision {
 	
 	vec4 contactA;
 	vec4 contactB;
-	
-	vec4 _worldTransformBeforeHit[8];
 };
 
 layout(set = 1, binding = 0, std430) buffer CollisionBuffer { Collision collisions[]; };
