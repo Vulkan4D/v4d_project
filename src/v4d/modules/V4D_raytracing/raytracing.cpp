@@ -19,6 +19,8 @@ using namespace v4d::graphics::vulkan::rtx;
 	const uint32_t RAY_TRACING_MAX_COLLISION_PER_FRAME = MAX_RENDERABLE_ENTITY_INSTANCES * COLLISION_MAX_LINES_PER_OBJECT;
 #pragma endregion
 
+#pragma region Global objects
+
 // Application
 Renderer* r = nullptr;
 Scene* scene = nullptr;
@@ -36,55 +38,7 @@ Buffer rayTracingCollisionShaderBindingTableBuffer {VK_BUFFER_USAGE_STORAGE_BUFF
 std::recursive_mutex rayTracingInstanceMutex, blasBuildQueueMutex;
 std::vector<VkAccelerationStructureBuildGeometryInfoKHR> blasQueueBuildGeometryInfos {};
 std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blasQueueBuildRangeInfos {};
-std::array<std::vector<std::shared_ptr<RenderableGeometryEntity>>, Renderer::NB_FRAMES_IN_FLIGHT> currentRenderableEntities {};
-
-#pragma region Collisions
-
-struct Collision {
-	int32_t objectInstanceA;
-	int32_t objectGeometryA;
-	int32_t objectInstanceB;
-	int32_t objectGeometryB;
-	
-	glm::vec4 startPosition; // view-space, w = max distance to surface (typically boundingRadius)
-	glm::vec4 velocity; // view-space, w = max travel distance from surface (typically velocity*deltaTime)
-	
-	glm::vec4 contactA;
-	glm::vec4 contactB;
-	
-	Collision(uint32_t objectInstanceId, glm::vec4 startPositionViewSpaceAndBoundingDistance, glm::vec4 velocityViewSpaceAndMaxTravelDistance)
-	 : objectInstanceA(objectInstanceId)
-	 , objectGeometryA(-1)
-	 , objectInstanceB(-1)
-	 , objectGeometryB(-1)
-	 , startPosition(startPositionViewSpaceAndBoundingDistance)
-	 , velocity(velocityViewSpaceAndMaxTravelDistance)
-	 , contactA(0)
-	 , contactB(0)
-	 {}
-};
-
-struct CollisionTest {
-	std::optional<Collision> collision;
-	glm::dvec3 velocity;
-	glm::dmat4 worldTransformBefore;
-	glm::dmat4 worldTransformAfter;
-	CollisionTest() : collision(std::nullopt) {};
-	CollisionTest(const glm::dmat4& worldTransform, const glm::dvec3& velocity, double deltaTime) 
-	: collision(std::nullopt)
-	, velocity(velocity)
-	, worldTransformBefore(worldTransform)
-	, worldTransformAfter(glm::translate(glm::dmat4(1), velocity * deltaTime) * worldTransform)
-	{}
-};
-
-struct CollisionFrame {
-	double deltaTime = 1.0/60;
-	glm::dmat4 viewMatrix {1};
-	std::unordered_map<uint32_t, CollisionTest> collisions {};
-};
-
-std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
+std::vector<std::shared_ptr<RenderableGeometryEntity>> currentRenderableEntities {};
 
 #pragma endregion
 
@@ -97,7 +51,7 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 	Buffer totalLuminance {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, sizeof(glm::vec4)};
 	StagingBuffer<RayCast> raycastBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
 	StagingBuffer<Collision, RAY_TRACING_MAX_COLLISION_PER_FRAME> collisionBuffer {VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
-	std::array<uint32_t, Renderer::NB_FRAMES_IN_FLIGHT> collisionLineCount {0, 0};
+	uint32_t collisionLineCount = 0;
 #pragma endregion
 
 #pragma region Descriptor Sets
@@ -129,10 +83,12 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
 	
 	// Textures
-	Texture2D tex_metal_normal {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_normal.tga"), STBI_rgb_alpha};
-	std::array<Texture2D*, 1> textures {
-		&tex_metal_normal,
+	// Texture2D tex_metal_normal {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_normal.tga"), STBI_rgb_alpha};
+	std::array<Texture2D*, 0> textures {
+		// &tex_metal_normal,
 	};
+	
+	uint32_t currentSwapChainImageIndex = 0;
 
 #pragma endregion
 
@@ -233,9 +189,39 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 		{"sbt_collision", &sbt_collision},
 	};
 	// FrameBuffers
-	std::unordered_map<std::string, std::vector<VkSemaphore>> semaphores {};
-	std::unordered_map<std::string, std::vector<VkFence>> fences {};
-	std::unordered_map<std::string, std::vector<VkCommandBuffer>> commandBuffers {};
+	std::unordered_map<std::string, VkSemaphore> semaphores {
+		{"push", {}},
+		{"graphics", {}},
+		{"physics", {}},
+		{"build", {}},
+		{"pull1", {}},
+		{"pull2", {}},
+		{"post1", {}},
+		{"post2", {}},
+		{"present", {}},
+	};
+	std::unordered_map<std::string, VkFence> fences {
+		{"beforeUpdate", {}},
+		{"frameUpdate", {}},
+		{"post", {}},
+	};
+	struct CommandBuffer {
+		std::string queue;
+		VkCommandBuffer commandBuffer;
+		operator VkCommandBuffer&() {return commandBuffer;}
+		operator VkCommandBuffer*() {return &commandBuffer;}
+		void operator=(VkCommandBuffer value) {commandBuffer = value;}
+		CommandBuffer(std::string queueName, const VkCommandBuffer& commandBuffer = VK_NULL_HANDLE) : queue(queueName), commandBuffer(commandBuffer) {}
+		CommandBuffer(const VkCommandBuffer& commandBuffer = VK_NULL_HANDLE) : commandBuffer(commandBuffer), queue("") {}
+	};
+	std::unordered_map<std::string, CommandBuffer> commandBuffers {
+		{"Push", {"transfer"}},
+		{"Build", {"compute"}},
+		{"Graphics", {"graphics"}},
+		{"Physics", {"compute"}},
+		{"Pull", {"transfer"}},
+		{"Post", {"graphics"}},
+	};
 #pragma endregion
 
 #pragma region Render Passes (Rasterization)
@@ -574,34 +560,6 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 		}
 	}
 	
-	void RunRayTracingCommands(VkCommandBuffer commandBuffer) {
-		// Rendering
-		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_rendering.GetPipeline());
-		sbt_rendering.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
-		r->renderingDevice->CmdTraceRaysKHR(
-			commandBuffer, 
-			sbt_rendering.GetRayGenDeviceAddressRegion(),
-			sbt_rendering.GetRayMissDeviceAddressRegion(),
-			sbt_rendering.GetRayHitDeviceAddressRegion(),
-			sbt_rendering.GetRayCallableDeviceAddressRegion(),
-			img_lit.width, img_lit.height, 1
-		);
-		
-		// Collision
-		if (collisionLineCount[r->currentFrameInFlight] > 0) {
-			r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_collision.GetPipeline());
-			sbt_collision.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
-			r->renderingDevice->CmdTraceRaysKHR(
-				commandBuffer, 
-				sbt_collision.GetRayGenDeviceAddressRegion(),
-				sbt_collision.GetRayMissDeviceAddressRegion(),
-				sbt_collision.GetRayHitDeviceAddressRegion(),
-				sbt_collision.GetRayCallableDeviceAddressRegion(),
-				collisionLineCount[r->currentFrameInFlight], 1, 1
-			);
-		}
-	}
-	
 	void BuildBottomLevelRayTracingAccelerationStructures(Device* device, VkCommandBuffer commandBuffer) {
 		// Build all new/updated bottom levels
 		std::lock_guard lock(blasBuildQueueMutex);
@@ -731,7 +689,7 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 		raycastBuffer.Allocate(r->renderingDevice);
 		previousRayCast = {};
 		raycastBuffer.Init(previousRayCast);
-		r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](VkCommandBuffer cmdBuffer){
+		r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("transfer"), [](VkCommandBuffer cmdBuffer){
 			raycastBuffer.Push(cmdBuffer);
 		});
 		// Collisions
@@ -747,124 +705,6 @@ std::array<CollisionFrame, Renderer::NB_FRAMES_IN_FLIGHT> collisionFrame {};
 		// Collisions
 		collisionBuffer.Free();
 	}
-	
-	void RecordPostProcessingCommands(VkCommandBuffer commandBuffer, int imageIndex) {
-		
-		// Post Processing
-		postProcessingRenderPass.Begin(r->renderingDevice, commandBuffer, r->swapChain, {{.0,.0,.0,.0}}, imageIndex);
-			for (auto* shader : shaderGroups["sg_present"]) {
-				shader->Execute(r->renderingDevice, commandBuffer);
-			}
-		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
-		
-		// Transition images to transfer
-		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		
-		r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		
-		r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		
-		const VkImageSubresourceLayers imageSubresourceLayers {
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			0,// mipLevel
-			0,// baseArrayLayer
-			1 // layerCount
-		};
-		
-		// Copy to history
-		VkImageCopy copyRegion {
-			imageSubresourceLayers,// srcSubresource
-			{0,0,0},// srcOffset
-			imageSubresourceLayers,// dstSubresource
-			{0,0,0},// dstOffset
-			{img_lit.width,img_lit.height,1}// extent
-		};
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_lit_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_depth.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_depth_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_pos.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_pos_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_geometry.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_geometry_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_albedo.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_albedo_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		r->renderingDevice->CmdCopyImage(commandBuffer, img_normal.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_normal_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-		
-		// Generate thumbnail
-		VkImageBlit blitRegion {
-			imageSubresourceLayers, // srcSubresource
-			{{0,0,0},{(int)img_lit.width,(int)img_lit.height,1}}, // srcOffsets
-			imageSubresourceLayers, // dstSubresource
-			{{0,0,0},{(int)img_thumbnail.width,(int)img_thumbnail.height,1}} // dstOffsets
-		};
-		r->renderingDevice->CmdBlitImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_thumbnail.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion, VK_FILTER_LINEAR);
-		
-		// Transition images back to general
-		r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		
-		r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		
-		r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
-		
-	}
-	void RunDynamicPostProcessingCompute(VkCommandBuffer commandBuffer) {
-		// histogram
-		shader_histogram_compute.SetGroupCounts(1, 1, 1);
-		shader_histogram_compute.Execute(r->renderingDevice, commandBuffer);
-	}
-	void PostProcessingUpdate2() {
-		// Histogram
-		glm::vec4 luminance;
-		totalLuminance.ReadFromMappedData(&luminance);
-		if (luminance.a > 0) {
-			scene->camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
-		}
-	}
-	// void RunTXAA() {
-	// 	// TXAA
-	// 	if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS && !DEBUG_OPTIONS::WIREFRAME) {
-	// 		static unsigned long frameCount = 0;
-	// 		static const glm::dvec2 samples8[8] = {
-	// 			glm::dvec2(-7.0, 1.0) / 8.0,
-	// 			glm::dvec2(-5.0, -5.0) / 8.0,
-	// 			glm::dvec2(-1.0, -3.0) / 8.0,
-	// 			glm::dvec2(3.0, -7.0) / 8.0,
-	// 			glm::dvec2(5.0, -1.0) / 8.0,
-	// 			glm::dvec2(7.0, 7.0) / 8.0,
-	// 			glm::dvec2(1.0, 3.0) / 8.0,
-	// 			glm::dvec2(-3.0, 5.0) / 8.0
-	// 		};
-	// 		glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
-	// 		glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
-	// 		scene->camera.projectionMatrix[2].x = subSample.x;
-	// 		scene->camera.projectionMatrix[2].y = subSample.y;
-	// 		// historyTxaaOffset = txaaOffset;
-	// 		scene->camera.historyTxaaOffset = scene->camera.txaaOffset;
-	// 		scene->camera.txaaOffset = subSample;
-	// 		frameCount++;
-			
-	// 		scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
-			
-	// 		// Save Projection and View matrices from previous frame
-	// 		scene->camera.historyViewMatrix = scene->camera.viewMatrix;
-	// 	}
-	// }
 	
 #pragma endregion
 
@@ -888,55 +728,6 @@ void ConfigureRasterShaders() {
 		s->depthStencilState.depthWriteEnable = VK_FALSE;
 		s->dynamicStates.push_back(VK_DYNAMIC_STATE_LINE_WIDTH);
 	}
-}
-
-void RunRasterCommands(VkCommandBuffer commandBuffer) {
-	rasterRenderPass.Begin(r->renderingDevice, commandBuffer, img_lit);
-		for (auto* s : shaderGroups["sg_transparent"]) {
-			// Transparent
-			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if (entity->raster_transparent && entity->sharedGeometryData) {
-					uint32_t i = 0;
-					for (auto& geometry : entity->sharedGeometryData->geometries) {
-						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
-						s->Bind(r->renderingDevice, commandBuffer);
-						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-						if (geometry.vertexCount > 0) {
-							r->renderingDevice->CmdDraw(commandBuffer,
-								geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
-								1, // instanceCount
-								0, // firstVertex (defines the lowest value of gl_VertexIndex)
-								0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-							);
-						}
-					}
-				}
-			});
-		}
-		for (auto* s : shaderGroups["sg_wireframe"]) {
-			// Wireframe
-			RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
-				if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && entity->rayTracingMask)) && entity->sharedGeometryData) {
-					uint32_t i = 0;
-					for (auto& geometry : entity->sharedGeometryData->geometries) {
-						RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
-						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
-						s->Bind(r->renderingDevice, commandBuffer);
-						s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
-						r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
-						if (geometry.vertexCount > 0) {
-							r->renderingDevice->CmdDraw(commandBuffer,
-								geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
-								1, // instanceCount
-								0, // firstVertex (defines the lowest value of gl_VertexIndex)
-								0  // firstInstance (defines the lowest value of gl_InstanceIndex)
-							);
-						}
-					}
-				}
-			});
-		}
-	rasterRenderPass.End(r->renderingDevice, commandBuffer);
 }
 
 #pragma region UI
@@ -1148,16 +939,7 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 
 #pragma region Frame Update & Graphics commands
 
-	void FrameUpdate(uint imageIndex) {
-		
-		{// Set current frame for staging buffers
-			renderableEntityInstanceBuffer.SetCurrentFrame(r->currentFrameInFlight);
-			cameraUniformBuffer.SetCurrentFrame(r->currentFrameInFlight);
-			lightSourcesBuffer.SetCurrentFrame(r->currentFrameInFlight);
-			rayTracingInstanceBuffer.SetCurrentFrame(r->currentFrameInFlight);
-			raycastBuffer.SetCurrentFrame(r->currentFrameInFlight);
-			collisionBuffer.SetCurrentFrame(r->currentFrameInFlight);
-		}
+	void BeforeUpdate() {
 		
 		{// Reset camera information
 			scene->camera.width = r->swapChain->extent.width;
@@ -1174,29 +956,75 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 		
 		// RunTXAA();
 		
-		// Catch Collisions
-		{
-			if (collisionLineCount[r->currentFrameInFlight] > 0) {
-				for (size_t i = 0; i < collisionLineCount[r->currentFrameInFlight]; ++i) {
-					auto& collision = collisionBuffer[i];
-					if (collisionFrame[r->currentFrameInFlight].collisions.count(collision.objectInstanceA)) {
-						if (collisionFrame[r->previousFrameInFlight].collisions.count(collision.objectInstanceA) == 0 || collisionFrame[r->previousFrameInFlight].collisions[collision.objectInstanceA].collision.has_value() == false) {
-							if (collision.objectInstanceB != -1) {
-								collisionFrame[r->currentFrameInFlight].collisions[collision.objectInstanceA].collision = collision;
-							} else {
-								collisionFrame[r->currentFrameInFlight].collisions[collision.objectInstanceA].collision = std::nullopt;
+		// Modules
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->RenderFrame_BeforeUpdate) mod->RenderFrame_BeforeUpdate(); // camera's View Matrix is created here in FlyCam Module
+		});
+		
+		// Generate Renderable Entities
+		RenderableGeometryEntity::ForEach([](auto entity){
+			if (!entity->generated) {
+				// Generate/Load
+				if (entity->Generate(r->renderingDevice)) {
+					if (entity->sbtOffset == 0) {
+						if (auto geometriesData = entity->meshGeometries.Lock(); geometriesData && geometriesData->data) {
+							int i = 0;
+							for (RenderableGeometryEntity::Geometry& geom : entity->sharedGeometryData->geometries) if (geom.materialName != "") {
+								// Override material
+								std::stringstream materialStr {std::string(geom.materialName)};
+								std::string mat, variant;
+								materialStr >> mat;
+								materialStr >> variant;
+								try {
+									auto& substance = Substance::substances.at(mat);
+									if (glm::vec3(substance.color) != glm::vec3{1,1,1}) {
+										geom.material.visibility.baseColor = substance.color*255.0f;
+									}
+									geom.material.visibility.metallic = substance.metallic*255.0;
+									geom.material.visibility.roughness = substance.roughness*255.0;
+									geom.material.visibility.indexOfRefraction = substance.IOR*50;
+									if (variant != "" && Renderer::sbtOffsets.count(std::string("call:tex_")+std::string(variant))) {
+										geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
+										geom.material.visibility.texFactors[0] = 255;
+									} else if (substance.baseMap != "") {
+										geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
+										geom.material.visibility.texFactors[0] = 255;
+										if (variant != "") {
+											LOG_WARN("Unknown variant '" << variant << "'")
+										}
+									}
+									if (substance.agingMap != "" && substance.agingFactor > 0) {
+										geom.material.visibility.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
+										geom.material.visibility.texFactors[1] = (uint8_t)(substance.agingFactor*255.0);
+									}
+									if (substance.oxydationMap != "" && substance.oxydationFactor > 0) {
+										geom.material.visibility.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
+										geom.material.visibility.texFactors[2] = (uint8_t)(substance.oxydationFactor*255.0);
+									}
+									if (substance.wearAndTearMap != "" && substance.wearAndTearFactor > 0) {
+										geom.material.visibility.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
+										geom.material.visibility.texFactors[3] = (uint8_t)(substance.wearAndTearFactor*255.0);
+									}
+									if (substance.burnMap != "" && substance.burnFactor > 0) {
+										geom.material.visibility.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
+										geom.material.visibility.texFactors[4] = (uint8_t)(substance.burnFactor*255.0);
+									}
+								} catch(...) {
+									LOG_WARN("Unknown material '" << mat << "'")
+									continue;
+								}
+								geometriesData->data[i++].material = geom.material;
 							}
-						} else {
-							collisionFrame[r->currentFrameInFlight].collisions.erase(collision.objectInstanceA);
-							collisionFrame[r->previousFrameInFlight].collisions.erase(collision.objectInstanceA);
 						}
 					}
 				}
 			}
-			collisionLineCount[r->currentFrameInFlight] = 0;
-		}
+		});
+	}
+	
+	void FrameUpdate() {
 		
-		{// Handle RayCast (captured in the past 2 frames)
+		{// Handle RayCast (captured during the previous frame)
 			if (previousRayCast && previousRayCast != *raycastBuffer) {
 				auto mod = V4D_Mod::GetModule(v4d::modular::ModuleID(previousRayCast.moduleVen, previousRayCast.moduleId));
 				if (mod->OnRendererRayCastOut) mod->OnRendererRayCastOut(previousRayCast);
@@ -1208,79 +1036,46 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 			}
 		}
 		
-		// Modules
-		V4D_Mod::ForEachSortedModule([](auto* mod){
-			if (mod->BeginFrameUpdate) mod->BeginFrameUpdate(); // camera's View Matrix is created here in FlyCam Module
-		});
-		
-		{// Ray Tracing
-			std::scoped_lock lock(blasBuildQueueMutex, rayTracingInstanceMutex);
-			blasQueueBuildGeometryInfos.clear();
-			blasQueueBuildRangeInfos.clear();
-			nbRayTracingInstances = 0;
-			int nbActiveLights = 0;
-			currentRenderableEntities[r->currentFrameInFlight].clear();
-			// Entities
-			RenderableGeometryEntity::ForEach([&nbActiveLights](auto entity){
-				
-				if (!entity->generated) {
-					// Generate/Load
-					if (entity->Generate(r->renderingDevice)) {
-						if (entity->sbtOffset == 0) {
-							if (auto geometriesData = entity->meshGeometries.Lock(); geometriesData && geometriesData->data) {
-								int i = 0;
-								for (RenderableGeometryEntity::Geometry& geom : entity->sharedGeometryData->geometries) if (geom.materialName != "") {
-									// Override material
-									std::stringstream materialStr {std::string(geom.materialName)};
-									std::string mat, variant;
-									materialStr >> mat;
-									materialStr >> variant;
-									try {
-										auto& substance = Substance::substances.at(mat);
-										if (glm::vec3(substance.color) != glm::vec3{1,1,1}) {
-											geom.material.visibility.baseColor = substance.color*255.0f;
-										}
-										geom.material.visibility.metallic = substance.metallic*255.0;
-										geom.material.visibility.roughness = substance.roughness*255.0;
-										geom.material.visibility.indexOfRefraction = substance.IOR*50;
-										if (variant != "" && Renderer::sbtOffsets.count(std::string("call:tex_")+std::string(variant))) {
-											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:tex_")+std::string(variant)];
-											geom.material.visibility.texFactors[0] = 255;
-										} else if (substance.baseMap != "") {
-											geom.material.visibility.textures[0] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.baseMap)];
-											geom.material.visibility.texFactors[0] = 255;
-											if (variant != "") {
-												LOG_WARN("Unknown variant '" << variant << "'")
-											}
-										}
-										if (substance.agingMap != "" && substance.agingFactor > 0) {
-											geom.material.visibility.textures[1] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.agingMap)];
-											geom.material.visibility.texFactors[1] = (uint8_t)(substance.agingFactor*255.0);
-										}
-										if (substance.oxydationMap != "" && substance.oxydationFactor > 0) {
-											geom.material.visibility.textures[2] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.oxydationMap)];
-											geom.material.visibility.texFactors[2] = (uint8_t)(substance.oxydationFactor*255.0);
-										}
-										if (substance.wearAndTearMap != "" && substance.wearAndTearFactor > 0) {
-											geom.material.visibility.textures[3] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.wearAndTearMap)];
-											geom.material.visibility.texFactors[3] = (uint8_t)(substance.wearAndTearFactor*255.0);
-										}
-										if (substance.burnMap != "" && substance.burnFactor > 0) {
-											geom.material.visibility.textures[4] = Renderer::sbtOffsets[std::string("call:")+std::string(substance.burnMap)];
-											geom.material.visibility.texFactors[4] = (uint8_t)(substance.burnFactor*255.0);
-										}
-									} catch(...) {
-										LOG_WARN("Unknown material '" << mat << "'")
-										continue;
-									}
-									geometriesData->data[i++].material = geom.material;
-								}
+		{// Catch Collisions (captured during the previous frame)
+			if (collisionLineCount > 0) {
+				for (size_t i = 0; i < collisionLineCount; ++i) {
+					auto& collision = collisionBuffer[i];
+					auto entityA = RenderableGeometryEntity::Get(collision.objectInstanceA);
+					if (entityA) {
+						if (auto physicsA = entityA->physics.Lock(); physicsA) {
+							if (collision.objectInstanceB != -1) {
+								physicsA->collisionTest.collision = collision;
+							} else {
+								physicsA->collisionTest.collision = std::nullopt;
 							}
 						}
 					}
 				}
-				
-				if (entity->generated && entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && (entity->sharedGeometryData->isRayTracedTriangles || entity->sharedGeometryData->isRayTracedProceduralAABB)) {
+			}
+			collisionLineCount = 0;
+			
+			//TODO catch collision events here
+			
+		}
+		
+		// Cleanup/Reset stuff
+		RenderableGeometryEntity::CleanupOnThisThread();
+		currentRenderableEntities.clear();
+		int nbActiveLights = 0;
+		std::scoped_lock lock(blasBuildQueueMutex, rayTracingInstanceMutex);
+		blasQueueBuildGeometryInfos.clear();
+		blasQueueBuildRangeInfos.clear();
+		nbRayTracingInstances = 0;
+		
+		// RenderFrame_Update
+		V4D_Mod::ForEachSortedModule([](auto* mod){
+			if (mod->RenderFrame_Update) mod->RenderFrame_Update();
+		}, "render");
+		
+		// Entities
+		RenderableGeometryEntity::ForEach([&nbActiveLights](auto entity){
+			if (entity->generated) {
+				if (entity->sharedGeometryData && !entity->sharedGeometryData->blas.built && (entity->sharedGeometryData->isRayTracedTriangles || entity->sharedGeometryData->isRayTracedProceduralAABB)) {
 					// First BLAS build
 					if (entity->sharedGeometryData->isRayTracedTriangles) {
 						entity->sharedGeometryData->blas.AssignBottomLevelGeometry(r->renderingDevice, entity->sharedGeometryData->geometriesAccelerationStructureInfo);
@@ -1293,7 +1088,7 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 					entity->sharedGeometryData->blas.built = true;
 					entity->entityInstanceInfo.modelViewTransform = glm::mat4(0); // this is because we want to assign the history matrix to it and we need the reprojection to be invalid initially
 				}
-				
+			
 				// add BLAS instance to TLAS
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					glm::dmat4 worldTransform = entity->GetWorldTransform();
@@ -1302,15 +1097,16 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 					if (auto physics = entity->physics.Lock(); physics && physics->mass > 0.0 && physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
 						
 						{// Apply collision/transform from previous frame's collision test
-							if (collisionFrame[r->currentFrameInFlight].collisions.count(entity->GetIndex())) {
-								if (collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].collision.has_value()) {
-									worldTransform = collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].worldTransformBefore;
-									// worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)/2.0) * worldTransform;
-									physics->linearVelocity *= -1.0;
-									// physics->linearVelocity = scene->gravityVector * r->deltaTime * -10.0;
-								} else {
-									worldTransform = collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()].worldTransformAfter;
+							if (physics->collisionTest.collision.has_value()) {
+								if (physics->collisionTest.worldTransformBefore.has_value()) {
+									worldTransform = physics->collisionTest.worldTransformBefore.value();
+									entity->SetWorldTransform(worldTransform);
 								}
+								// worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)/2.0) * worldTransform;
+								physics->linearVelocity *= -0.8;
+								// physics->linearVelocity = scene->gravityVector * r->deltaTime * -10.0;
+							} else if (physics->collisionTest.worldTransformAfter.has_value()) {
+								worldTransform = physics->collisionTest.worldTransformAfter.value();
 								entity->SetWorldTransform(worldTransform);
 							}
 						}
@@ -1339,21 +1135,22 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 						// }
 						
 						{// Prepare ray-traced collision detection
-							if (physics->linearVelocity.x != 0 || physics->linearVelocity.y != 0 || physics->linearVelocity.z != 0) {
-								if (collisionLineCount[r->currentFrameInFlight] < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
-									size_t collisionIndex = collisionLineCount[r->currentFrameInFlight]++;
+							double speed = glm::length(physics->linearVelocity);
+							if (speed > 0.01) {
+								if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+									size_t collisionIndex = collisionLineCount++;
 									glm::vec3 position = (scene->camera.viewMatrix * worldTransform)[3];
-									glm::vec3 direction = glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(physics->linearVelocity);
-									double velocity = glm::length(physics->linearVelocity);
+									glm::vec3 direction = glm::normalize(glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(physics->linearVelocity));
+									
 									collisionBuffer[collisionIndex] = Collision {
 										(uint32_t)entity->GetIndex(), 
 										{position.x, position.y, position.z, physics->boundingDistance}, 
-										{direction.x, direction.y, direction.z, velocity * r->deltaTime}, 
+										{direction.x, direction.y, direction.z, speed * r->deltaTime}, 
 									};
-									collisionFrame[r->currentFrameInFlight].collisions[entity->GetIndex()] = {worldTransform, physics->linearVelocity, r->deltaTime};
+									physics->collisionTest = {worldTransform, physics->linearVelocity, r->deltaTime};
 									{// Draw debug line
 										glm::vec4 clipSpace1 = scene->camera.projectionMatrix * glm::dvec4(position, 1);
-										glm::vec4 clipSpace2 = scene->camera.projectionMatrix * glm::dvec4(position + direction * float(velocity), 1);
+										glm::vec4 clipSpace2 = scene->camera.projectionMatrix * glm::dvec4(position + direction * float(speed), 1);
 										clipSpace1 /= clipSpace1.w;
 										clipSpace2 /= clipSpace2.w;
 										if (clipSpace1.z >= 0 && clipSpace2.z >= 0) {
@@ -1361,9 +1158,9 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 										}
 									}
 								}
-								
-								// Apply Velocity
-								entity->SetWorldTransform(glm::translate(glm::dmat4(1), physics->linearVelocity * r->deltaTime) * worldTransform);
+							} else {
+								physics->collisionTest = {};
+								physics->linearVelocity = {0,0,0};
 							}
 						}
 						
@@ -1381,6 +1178,7 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
 						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
 						rayTracingInstanceBuffer[index].transform = glm::transpose(entity->entityInstanceInfo.modelViewTransform);
+						renderableEntityInstanceBuffer[entity->GetIndex()] = entity->entityInstanceInfo;
 					}
 					
 					// Light Source
@@ -1391,80 +1189,36 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 							++nbActiveLights;
 						});
 					}
+					
 				}
-				
-				renderableEntityInstanceBuffer[entity->GetIndex()] = entity->entityInstanceInfo;
-				currentRenderableEntities[r->currentFrameInFlight].push_back(entity);
-			});
-			// Lights
-			for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
-				lightSourcesBuffer[i].Reset();
 			}
 			
-			{ // Collisions
-				collisionFrame[r->currentFrameInFlight].deltaTime = r->deltaTime;
-				collisionFrame[r->currentFrameInFlight].viewMatrix = scene->camera.viewMatrix;
-			}
-			
-			RenderableGeometryEntity::CleanupOnThisThread();
+			currentRenderableEntities.push_back(entity);
+		});
+		
+		// Lights
+		for (int i = nbActiveLights; i < MAX_ACTIVE_LIGHTS; ++i) {
+			lightSourcesBuffer[i].Reset();
 		}
+		
 	}
-
-	void RunDynamicGraphics(VkCommandBuffer commandBuffer) {
-		for (auto&[name, img] : images) {
-			if (!r->renderingDevice->TouchAllocation(img->allocation)) {
-				LOG_DEBUG("Image ALLOCATION LOST")
-			}
+	
+	void RunPushCommands(VkCommandBuffer commandBuffer) {
+		RenderableGeometryEntity::PushComponents(r->renderingDevice, commandBuffer);
+		cameraUniformBuffer = scene->camera;
+		cameraUniformBuffer.Push(commandBuffer);
+		renderableEntityInstanceBuffer.Push(commandBuffer);
+		lightSourcesBuffer.Push(commandBuffer);
+		rayTracingInstanceBuffer.Push(commandBuffer, nbRayTracingInstances);
+		if (collisionLineCount > 0) {
+			collisionBuffer.Push(commandBuffer, collisionLineCount);
 		}
 		
-		{// Wait for previous ray-tracing pass to finish before starting transfers
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags srcAccessMask
-				VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,// VkAccessFlags dstAccessMask
-			};
-			r->renderingDevice->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 
-				VK_PIPELINE_STAGE_TRANSFER_BIT, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
-		}
-		
-		{// Transfer data to rendering device
-			RenderableGeometryEntity::PushComponents(r->renderingDevice, commandBuffer);
-			cameraUniformBuffer = scene->camera;
-			cameraUniformBuffer.Push(commandBuffer);
-			renderableEntityInstanceBuffer.Push(commandBuffer);
-			lightSourcesBuffer.Push(commandBuffer);
-			rayTracingInstanceBuffer.Push(commandBuffer, nbRayTracingInstances);
-			if (collisionLineCount[r->currentFrameInFlight] > 0) {
-				collisionBuffer.Push(commandBuffer, collisionLineCount[r->currentFrameInFlight]);
-			}
-		}
-		
-		{// Wait for TRANSFERS to finish before building BLAS
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT,// VkAccessFlags srcAccessMask
-				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags dstAccessMask
-			};
-			r->renderingDevice->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_TRANSFER_BIT, 
-				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
-		}
-		
+		V4D_Mod::ForEachSortedModule([commandBuffer](auto* mod){
+			if (mod->RenderFrame_Push) mod->RenderFrame_Push(commandBuffer);
+		}, "render");
+	}
+	void RunBuildCommands(VkCommandBuffer commandBuffer) {
 		// Build Buttom-level Acceleration Structures
 		BuildBottomLevelRayTracingAccelerationStructures(r->renderingDevice, commandBuffer);
 	
@@ -1489,96 +1243,221 @@ void RunRasterCommands(VkCommandBuffer commandBuffer) {
 		// Build Top-Level acceleration structure
 		BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
 		
-		{// Wait for TLAS build to finish before calling any ray tracing shader
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,// VkAccessFlags srcAccessMask
-				VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,// VkAccessFlags dstAccessMask
-			};
-			r->renderingDevice->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
-		}
+		V4D_Mod::ForEachSortedModule([commandBuffer](auto* mod){
+			if (mod->RenderFrame_Build) mod->RenderFrame_Build(commandBuffer);
+		}, "render");
+	}
+	void RunGraphicsCommands(VkCommandBuffer commandBuffer) {
 		
-		// Run Ray Tracing
-		RunRayTracingCommands(commandBuffer);
+		// Run Ray-Traced rendering
+		r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_rendering.GetPipeline());
+		sbt_rendering.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+		r->renderingDevice->CmdTraceRaysKHR(
+			commandBuffer, 
+			sbt_rendering.GetRayGenDeviceAddressRegion(),
+			sbt_rendering.GetRayMissDeviceAddressRegion(),
+			sbt_rendering.GetRayHitDeviceAddressRegion(),
+			sbt_rendering.GetRayCallableDeviceAddressRegion(),
+			img_lit.width, img_lit.height, 1
+		);
 		
-		// RenderUpdate2
+		// RenderFrame_Graphics
 		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
-			if (mod->RenderUpdate2) mod->RenderUpdate2(commandBuffer);
+			if (mod->RenderFrame_Graphics) mod->RenderFrame_Graphics(commandBuffer);
 		}, "render");
 		
-		// Rasterization
-		RunRasterCommands(commandBuffer);
+		{// Rasterization
+			rasterRenderPass.Begin(r->renderingDevice, commandBuffer, img_lit);
+				for (auto* s : shaderGroups["sg_transparent"]) {
+					// Transparent
+					RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+						if (entity->raster_transparent && entity->sharedGeometryData) {
+							uint32_t i = 0;
+							for (auto& geometry : entity->sharedGeometryData->geometries) {
+								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+								s->Bind(r->renderingDevice, commandBuffer);
+								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+								if (geometry.vertexCount > 0) {
+									r->renderingDevice->CmdDraw(commandBuffer,
+										geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
+										1, // instanceCount
+										0, // firstVertex (defines the lowest value of gl_VertexIndex)
+										0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+									);
+								}
+							}
+						}
+					});
+				}
+				for (auto* s : shaderGroups["sg_wireframe"]) {
+					// Wireframe
+					RenderableGeometryEntity::ForEach([s, commandBuffer](auto entity){
+						if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && entity->rayTracingMask)) && entity->sharedGeometryData) {
+							uint32_t i = 0;
+							for (auto& geometry : entity->sharedGeometryData->geometries) {
+								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+								s->Bind(r->renderingDevice, commandBuffer);
+								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
+								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
+								if (geometry.vertexCount > 0) {
+									r->renderingDevice->CmdDraw(commandBuffer,
+										geometry.indexCount > 0 ? geometry.indexCount : geometry.vertexCount/*TODO must test and fix this*/, // vertexCount
+										1, // instanceCount
+										0, // firstVertex (defines the lowest value of gl_VertexIndex)
+										0  // firstInstance (defines the lowest value of gl_InstanceIndex)
+									);
+								}
+							}
+						}
+					});
+				}
+			rasterRenderPass.End(r->renderingDevice, commandBuffer);
+		}
 		
-		{// Wait for ray-tracing to finish before pulling data
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT,// VkAccessFlags srcAccessMask
-				VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags dstAccessMask
-			};
-			r->renderingDevice->CmdPipelineBarrier(
+	}
+	void RunPhysicsCommands(VkCommandBuffer commandBuffer) {
+		// Run Ray-Traced collisions
+		if (collisionLineCount > 0) {
+			r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_collision.GetPipeline());
+			sbt_collision.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+			r->renderingDevice->CmdTraceRaysKHR(
 				commandBuffer, 
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
-				VK_PIPELINE_STAGE_TRANSFER_BIT, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
+				sbt_collision.GetRayGenDeviceAddressRegion(),
+				sbt_collision.GetRayMissDeviceAddressRegion(),
+				sbt_collision.GetRayHitDeviceAddressRegion(),
+				sbt_collision.GetRayCallableDeviceAddressRegion(),
+				collisionLineCount, 1, 1
 			);
 		}
 		
+		// RenderFrame_Physics
+		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
+			if (mod->RenderFrame_Physics) mod->RenderFrame_Physics(commandBuffer);
+		}, "render");
+	}
+	void RunPullCommands(VkCommandBuffer commandBuffer) {
 		// Pull collisions to catch it in the next frame
-		if (collisionLineCount[r->currentFrameInFlight] > 0) {
-			collisionBuffer.Pull(commandBuffer, collisionLineCount[r->currentFrameInFlight]);
+		if (collisionLineCount > 0) {
+			collisionBuffer.Pull(commandBuffer, collisionLineCount);
 		}
 		
 		// Pull RayCast to catch it in the next frame
 		raycastBuffer.Pull(commandBuffer);
-	}
-	
-	void RecordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, int imageIndex) {
 		
-		{// Wait for ray-tracing to finish before calling any fragment shader (overlay and post processing)
-			VkMemoryBarrier memoryBarrier {
-				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-				nullptr,// pNext
-				VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT,// VkAccessFlags dstAccessMask
-				VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_SHADER_READ_BIT,// VkAccessFlags srcAccessMask
+		V4D_Mod::ForEachSortedModule([commandBuffer](auto* mod){
+			if (mod->RenderFrame_Pull) mod->RenderFrame_Pull(commandBuffer);
+		}, "render");
+	}
+	void RunPostCommands(VkCommandBuffer commandBuffer) {
+		V4D_Mod::ForEachSortedModule([commandBuffer](auto* mod){
+			if (mod->RenderFrame_Post) mod->RenderFrame_Post(commandBuffer);
+		}, "render");
+		
+		// Post Processing
+		postProcessingRenderPass.Begin(r->renderingDevice, commandBuffer, r->swapChain, {{.0,.0,.0,.0}}, currentSwapChainImageIndex);
+			for (auto* shader : shaderGroups["sg_present"]) {
+				shader->Execute(r->renderingDevice, commandBuffer);
+			}
+		postProcessingRenderPass.End(r->renderingDevice, commandBuffer);
+		
+		{// Copy images
+			// Transition images to transfer
+			r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			
+			const VkImageSubresourceLayers imageSubresourceLayers {
+				VK_IMAGE_ASPECT_COLOR_BIT,
+				0,// mipLevel
+				0,// baseArrayLayer
+				1 // layerCount
 			};
-			r->renderingDevice->CmdPipelineBarrier(
-				commandBuffer, 
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, 
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
-				0, 
-				1, &memoryBarrier, 
-				0, 0, 
-				0, 0
-			);
+			
+			// Copy to history
+			VkImageCopy copyRegion {
+				imageSubresourceLayers,// srcSubresource
+				{0,0,0},// srcOffset
+				imageSubresourceLayers,// dstSubresource
+				{0,0,0},// dstOffset
+				{img_lit.width,img_lit.height,1}// extent
+			};
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_lit_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_depth.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_depth_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_pos.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_pos_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_geometry.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_geometry_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_albedo.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_albedo_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			r->renderingDevice->CmdCopyImage(commandBuffer, img_normal.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_normal_history.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+			
+			// Generate thumbnail
+			VkImageBlit blitRegion {
+				imageSubresourceLayers, // srcSubresource
+				{{0,0,0},{(int)img_lit.width,(int)img_lit.height,1}}, // srcOffsets
+				imageSubresourceLayers, // dstSubresource
+				{{0,0,0},{(int)img_thumbnail.width,(int)img_thumbnail.height,1}} // dstOffsets
+			};
+			r->renderingDevice->CmdBlitImage(commandBuffer, img_lit.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, img_thumbnail.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blitRegion, VK_FILTER_LINEAR);
+			
+			// Transition images back to general
+			r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_depth, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_pos, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_normal, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_lit_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_depth_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_pos_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_thumbnail, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 		}
-		
-		V4D_Mod::ForEachSortedModule([commandBuffer, imageIndex](auto* mod){
-			if (mod->RecordStaticGraphicsCommands) mod->RecordStaticGraphicsCommands(commandBuffer, imageIndex);
-		}, "render");
-		
-		RecordPostProcessingCommands(commandBuffer, imageIndex);
-		
-		V4D_Mod::ForEachSortedModule([commandBuffer, imageIndex](auto* mod){
-			if (mod->RecordStaticGraphicsCommands2) mod->RecordStaticGraphicsCommands2(commandBuffer, imageIndex);
-		}, "render");
 	}
 
+	// void RunTXAA() {
+	// 	// TXAA
+	// 	if (RENDER_OPTIONS::TXAA && !DEBUG_OPTIONS::PHYSICS && !DEBUG_OPTIONS::WIREFRAME) {
+	// 		static unsigned long frameCount = 0;
+	// 		static const glm::dvec2 samples8[8] = {
+	// 			glm::dvec2(-7.0, 1.0) / 8.0,
+	// 			glm::dvec2(-5.0, -5.0) / 8.0,
+	// 			glm::dvec2(-1.0, -3.0) / 8.0,
+	// 			glm::dvec2(3.0, -7.0) / 8.0,
+	// 			glm::dvec2(5.0, -1.0) / 8.0,
+	// 			glm::dvec2(7.0, 7.0) / 8.0,
+	// 			glm::dvec2(1.0, 3.0) / 8.0,
+	// 			glm::dvec2(-3.0, 5.0) / 8.0
+	// 		};
+	// 		glm::dvec2 texelSize = 1.0 / glm::dvec2(scene->camera.width, scene->camera.height);
+	// 		glm::dvec2 subSample = samples8[frameCount % 8] * texelSize * double(scene->camera.txaaKernelSize);
+	// 		scene->camera.projectionMatrix[2].x = subSample.x;
+	// 		scene->camera.projectionMatrix[2].y = subSample.y;
+	// 		// historyTxaaOffset = txaaOffset;
+	// 		scene->camera.historyTxaaOffset = scene->camera.txaaOffset;
+	// 		scene->camera.txaaOffset = subSample;
+	// 		frameCount++;
+	// 		scene->camera.reprojectionMatrix = (scene->camera.projectionMatrix * scene->camera.historyViewMatrix) * glm::inverse(scene->camera.projectionMatrix * scene->camera.viewMatrix);
+	// 		// Save Projection and View matrices from previous frame
+	// 		scene->camera.historyViewMatrix = scene->camera.viewMatrix;
+	// 	}
+	// }
+	
 #pragma endregion
-
-
 
 ///////////////////////////////////////////////////////////
 
@@ -1710,7 +1589,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set0.AddBinding_storageBuffer(2, renderableEntityInstanceBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 			set0.AddBinding_storageBuffer(3, lightSourcesBuffer, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 			
-			set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
+			// set0.AddBinding_combinedImageSampler(4, tex_metal_normal.GetImage(), VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_rendering"] = &set1_rendering;
@@ -1806,12 +1685,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		V4D_MODULE_FUNC(void, CreateVulkanSyncObjects) {
-			semaphores["imageAvailable"].resize(r->NB_FRAMES_IN_FLIGHT);
-			semaphores["staticRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
-			semaphores["dynamicRenderFinished"].resize(r->NB_FRAMES_IN_FLIGHT);
-			fences["graphics"].resize(r->NB_FRAMES_IN_FLIGHT);
-			fences["compute"].resize(r->NB_FRAMES_IN_FLIGHT);
-
 			VkSemaphoreCreateInfo semaphoreInfo = {};
 				semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -1819,25 +1692,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 				fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Initialize in the signaled state so that we dont get stuck on the first frame
 
-			for (int i = 0; i < r->NB_FRAMES_IN_FLIGHT; i++) {
-				for (auto&[name, s] : semaphores) {
-					if (r->renderingDevice->CreateSemaphore(&semaphoreInfo, nullptr, &s[i]) != VK_SUCCESS) {
-						throw std::runtime_error("Failed to create semaphores");
-					}
+			for (auto&[name, s] : semaphores) {
+				if (r->renderingDevice->CreateSemaphore(&semaphoreInfo, nullptr, &s) != VK_SUCCESS) {
+					throw std::runtime_error("Failed to create semaphores");
 				}
-				for (auto&[name, f] : fences) {
-					if (r->renderingDevice->CreateFence(&fenceInfo, nullptr, &f[i]) != VK_SUCCESS) {
-						throw std::runtime_error("Failed to create fences");
-					}
+			}
+			for (auto&[name, f] : fences) {
+				if (r->renderingDevice->CreateFence(&fenceInfo, nullptr, &f) != VK_SUCCESS) {
+					throw std::runtime_error("Failed to create fences");
 				}
 			}
 		}
 
 		V4D_MODULE_FUNC(void, DestroyVulkanSyncObjects) {
-			for (int i = 0; i < r->NB_FRAMES_IN_FLIGHT; i++) {
-				for (auto&[name, s] : semaphores) r->renderingDevice->DestroySemaphore(s[i], nullptr);
-				for (auto&[name, f] : fences) r->renderingDevice->DestroyFence(f[i], nullptr);
-			}
+			for (auto&[name, s] : semaphores) r->renderingDevice->DestroySemaphore(s, nullptr);
+			for (auto&[name, f] : fences) r->renderingDevice->DestroyFence(f, nullptr);
 		}
 
 		V4D_MODULE_FUNC(void, CreateVulkanResources) {
@@ -1847,15 +1716,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 			CreateRayTracingResources();
 			
-			// It appears that we now need to initially BUILD the empty TLAS before updating descriptor sets... maybe a bug in the validation layers (issue #2368 opened)
-			r->renderingDevice->RunSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), [](auto commandBuffer){
-				BuildTopLevelRayTracingAccelerationStructure(r->renderingDevice, commandBuffer);
-			});
-			
-			
-			// Textures
+			// ImGui
 			tex_img_font_atlas.SetMipLevels();
-			// tex_img_font_atlas.SetSamplerAnisotropy(16);
 			tex_img_font_atlas.AllocateAndWriteStagingMemory(r->renderingDevice);
 			tex_img_font_atlas.CreateImage(r->renderingDevice);
 			auto commandBuffer = r->renderingDevice->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
@@ -1917,7 +1779,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// Entities
 			RenderableGeometryEntity::CleanupOnThisThread();
-			for (auto& v : currentRenderableEntities) v.clear();
+			currentRenderableEntities.clear();
 			RenderableGeometryEntity::ForEach([](auto entity){
 				entity->FreeComponentsBuffers();
 			});
@@ -2000,55 +1862,41 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		V4D_MODULE_FUNC(void, CreateVulkanCommandBuffers) {
 			VkCommandBufferAllocateInfo allocInfo = {};
 			allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			allocInfo.commandBufferCount = 1;
 			allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 							/*	VK_COMMAND_BUFFER_LEVEL_PRIMARY = Can be submitted to a queue for execution, but cannot be called from other command buffers
 								VK_COMMAND_BUFFER_LEVEL_SECONDARY = Cannot be submitted directly, but can be called from primary command buffers
 							*/
-			
-			{// Graphics Commands Recorder
-				// Because one of the drawing commands involves binding the right VkFramebuffer, we'll actually have to record a command buffer for every image in the swap chain once again.
-				// Command buffers will be automatically freed when their command pool is destroyed, so we don't need an explicit cleanup
-				commandBuffers["graphics"].resize(r->swapChain->imageViews.size());
-				
-				allocInfo.commandPool = r->renderingDevice->GetQueue("graphics").commandPool;
-				allocInfo.commandBufferCount = (uint) commandBuffers["graphics"].size();
-				if (r->renderingDevice->AllocateCommandBuffers(&allocInfo, commandBuffers["graphics"].data()) != VK_SUCCESS) {
-					throw std::runtime_error("Failed to allocate command buffers");
+			for (auto&[name, cmdBuffer] : commandBuffers) {
+				allocInfo.commandPool = r->renderingDevice->GetQueue(cmdBuffer.queue).commandPool;
+				if (r->renderingDevice->AllocateCommandBuffers(&allocInfo, cmdBuffer) != VK_SUCCESS) {
+					throw std::runtime_error((std::string("Failed to allocate ") + name + " command buffer").c_str());
 				}
-
-				// Starting command buffer recording...
-				for (size_t i = 0; i < commandBuffers["graphics"].size(); i++) {
-					VkCommandBufferBeginInfo beginInfo = {};
-					beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-					beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; // We have used this flag because we may already be scheduling the drawing commands for the next frame while the last frame is not finished yet.
-									/*	VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT = The command buffer will be rerecorded right after executing it once
-										VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = This is a secondary command buffer that will be entirely within a single render pass.
-										VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT = The command buffer can be resubmited while it is also already pending execution
-									*/
-					beginInfo.pInheritanceInfo = nullptr; // only relevant for secondary command buffers. It specifies which state to inherit from the calling primary command buffers.
-					// If a command buffer was already recorded once, then a call to vkBeginCommandBuffer will implicitly reset it.
-					// It's not possible to append commands to a buffer at a later time.
-					if (r->renderingDevice->BeginCommandBuffer(commandBuffers["graphics"][i], &beginInfo) != VK_SUCCESS) {
-						throw std::runtime_error("Faild to begin recording command buffer");
-					}
+				// if (name == "Post") {
+				// 	// Starting command buffer recording...
+				// 	VkCommandBufferBeginInfo beginInfo = {};
+				// 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+				// 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+				// 	beginInfo.pInheritanceInfo = nullptr;
+				// 	if (r->renderingDevice->BeginCommandBuffer(cmdBuffer, &beginInfo) != VK_SUCCESS) {
+				// 		throw std::runtime_error("Faild to begin recording command buffer");
+				// 	}
 					
-					// Record commands
-					RecordGraphicsCommandBuffer(commandBuffers["graphics"][i], i);
+				// 	// Record commands
+				// 	RecordPostCommandBuffer(cmdBuffer, 0);
 					
-					if (r->renderingDevice->EndCommandBuffer(commandBuffers["graphics"][i]) != VK_SUCCESS) {
-						throw std::runtime_error("Failed to record command buffer");
-					}
-				}
-			}
-			commandBuffers["graphicsDynamic"].resize(commandBuffers["graphics"].size());
-			if (r->renderingDevice->AllocateCommandBuffers(&allocInfo, commandBuffers["graphicsDynamic"].data()) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to allocate command buffers");
+				// 	if (r->renderingDevice->EndCommandBuffer(cmdBuffer) != VK_SUCCESS) {
+				// 		throw std::runtime_error("Failed to record command buffer");
+				// 	}
+				// }
 			}
 		}
 
 		V4D_MODULE_FUNC(void, DestroyVulkanCommandBuffers) {
-			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphics"].size()), commandBuffers["graphics"].data());
-			r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue("graphics").commandPool, static_cast<uint32_t>(commandBuffers["graphicsDynamic"].size()), commandBuffers["graphicsDynamic"].data());
+			for (auto&[name, cmdBuffer] : commandBuffers) {
+				r->renderingDevice->FreeCommandBuffers(r->renderingDevice->GetQueue(cmdBuffer.queue).commandPool, 1, cmdBuffer);
+				cmdBuffer = VK_NULL_HANDLE;
+			}
 		}
 	
 	#pragma endregion
@@ -2070,19 +1918,52 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 	#pragma endregion
 
-	V4D_MODULE_FUNC(void, RenderUpdate) {
-		
-		uint64_t timeout = 1000UL * 1000 * 1000;
+	#define RecordAndSubmitCommandBuffer(cmdBufferName) {\
+		auto& cmdBuffer = commandBuffers[ #cmdBufferName ];\
+		VkCommandBufferBeginInfo beginInfo = {};\
+			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;\
+			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;\
+		VkSubmitInfo submitInfo {};\
+			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;\
+			submitInfo.waitSemaphoreCount = waitSemaphores.size();\
+			submitInfo.pWaitSemaphores = waitSemaphores.data();\
+			submitInfo.pWaitDstStageMask = waitStages.data();\
+			submitInfo.commandBufferCount = 1;\
+			submitInfo.pCommandBuffers = cmdBuffer;\
+			submitInfo.signalSemaphoreCount = signalSemaphores.size();\
+			submitInfo.pSignalSemaphores = signalSemaphores.data();\
+		\
+		if (triggerFence) r->renderingDevice->ResetFences(1, &triggerFence);\
+		r->renderingDevice->ResetCommandBuffer(cmdBuffer, 0);\
+		if (r->renderingDevice->BeginCommandBuffer(cmdBuffer, &beginInfo) != VK_SUCCESS) {\
+			throw std::runtime_error("Faild to begin recording " #cmdBufferName " command buffer");\
+		}\
+		\
+		Run ## cmdBufferName ## Commands(cmdBuffer);\
+		\
+		if (r->renderingDevice->EndCommandBuffer(cmdBuffer) != VK_SUCCESS) {\
+			throw std::runtime_error("Failed to record " #cmdBufferName " command buffer");\
+		}\
+		\
+		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue(cmdBuffer.queue).handle, 1, &submitInfo, triggerFence);\
+		if (result != VK_SUCCESS) {\
+			if (result == VK_ERROR_DEVICE_LOST) {\
+				LOG_ERROR("Failed to submit " #cmdBufferName " command buffer : VK_ERROR_DEVICE_LOST")\
+			}\
+			LOG_ERROR((int)result)\
+			throw std::runtime_error("Failed to submit " #cmdBufferName " command buffer");\
+		}\
+	}
 
-		// Get an image from the swapchain
-		uint imageIndex;
-		{
+	V4D_MODULE_FUNC(void, RenderUpdate) {
+
+		{// Aquire image from the swapchain
 			VkResult result = r->renderingDevice->AcquireNextImageKHR(
 				r->swapChain->GetHandle(), // swapChain
-				timeout, // timeout in nanoseconds (using max disables the timeout)
-				semaphores["imageAvailable"][r->currentFrameInFlight], // semaphore
+				1000UL * 1000 * 1000, // timeout in nanoseconds (using max disables the timeout)
+				semaphores["post1"], // semaphore
 				VK_NULL_HANDLE, // fence
-				&imageIndex // output the index of the swapchain image in there
+				&currentSwapChainImageIndex // output the index of the swapchain image in there
 			);
 
 			// Check for errors
@@ -2097,112 +1978,167 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 		}
 		
-		// r->renderingDevice->QueueWaitIdle(r->renderingDevice->GetQueue("graphics").handle);
-
-		if (r->renderingDevice->WaitForFences(1, &fences["graphics"][r->currentFrameInFlight], VK_TRUE, timeout) != VK_SUCCESS) {
-			throw std::runtime_error("Failed on WaitForFences");
-			return;
+		{// Wait For BeforeUpdate Fence
+			if (r->renderingDevice->WaitForFences(1, &fences["beforeUpdate"], VK_TRUE, /*timeout*/1000UL * 1000 * 1000) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to Wait for beforeUpdate fence");
+			}
 		}
-		r->renderingDevice->ResetFences(1, &fences["graphics"][r->currentFrameInFlight]);
-		r->renderingDevice->ResetCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex], 0);
 		
-		// Update data every frame
-		FrameUpdate(imageIndex);
+		BeforeUpdate();
 
-		std::array<VkSubmitInfo, 2> computeSubmitInfo {};
-			computeSubmitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-			computeSubmitInfo[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		std::array<VkSubmitInfo, 2> graphicsSubmitInfo {};
-			graphicsSubmitInfo[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-			graphicsSubmitInfo[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		{// Wait For FrameUpdate Fence
+			if (r->renderingDevice->WaitForFences(1, &fences["frameUpdate"], VK_TRUE, /*timeout*/1000UL * 1000 * 1000) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to Wait for frameUpdate fence");
+			}
+		}
 		
-		std::array<VkSemaphore, 2> staticGraphicsWaitSemaphores {
-			semaphores["imageAvailable"][r->currentFrameInFlight],
-			semaphores["dynamicRenderFinished"][r->currentFrameInFlight],
-		};
-		VkPipelineStageFlags staticGraphicsWaitStages[] {
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		};
-		
-		{// Configure Graphics
-			VkCommandBufferBeginInfo beginInfo = {};
-			beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		FrameUpdate();
+
+		{// Push
+			std::vector<VkSemaphore> waitSemaphores {};
+			std::vector<VkPipelineStageFlags> waitStages {};
+			if (r->frameIndex > 0) {
+				waitSemaphores.push_back(semaphores["push"]);
+				waitStages.push_back(VK_PIPELINE_STAGE_TRANSFER_BIT);
+			}
+			const std::vector<VkSemaphore> signalSemaphores {
+				semaphores["build"],
+			};
+			const VkFence triggerFence = fences["beforeUpdate"];
 			
-			if (r->renderingDevice->BeginCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex], &beginInfo) != VK_SUCCESS) {
-				throw std::runtime_error("Faild to begin recording command buffer");
-			}
-			RunDynamicGraphics(commandBuffers["graphicsDynamic"][imageIndex]);
-			if (r->renderingDevice->EndCommandBuffer(commandBuffers["graphicsDynamic"][imageIndex]) != VK_SUCCESS) {
-				throw std::runtime_error("Failed to record command buffer");
-			}
-			// dynamic commands
-			graphicsSubmitInfo[0].waitSemaphoreCount = 0;
-			graphicsSubmitInfo[0].pWaitSemaphores = nullptr;
-			graphicsSubmitInfo[0].pWaitDstStageMask = nullptr;
-			graphicsSubmitInfo[0].commandBufferCount = 1;
-			graphicsSubmitInfo[0].pCommandBuffers = &commandBuffers["graphicsDynamic"][imageIndex];
-			graphicsSubmitInfo[0].signalSemaphoreCount = 1;
-			graphicsSubmitInfo[0].pSignalSemaphores = &semaphores["dynamicRenderFinished"][r->currentFrameInFlight];
-			// static commands
-			graphicsSubmitInfo[1].waitSemaphoreCount = staticGraphicsWaitSemaphores.size();
-			graphicsSubmitInfo[1].pWaitSemaphores = staticGraphicsWaitSemaphores.data();
-			graphicsSubmitInfo[1].pWaitDstStageMask = staticGraphicsWaitStages;
-			graphicsSubmitInfo[1].commandBufferCount = 1;
-			graphicsSubmitInfo[1].pCommandBuffers = &commandBuffers["graphics"][imageIndex];
-			graphicsSubmitInfo[1].signalSemaphoreCount = 1;
-			graphicsSubmitInfo[1].pSignalSemaphores = &semaphores["staticRenderFinished"][r->currentFrameInFlight];
+			RecordAndSubmitCommandBuffer(Push)
 		}
 		
-		// Submit Graphics
-		VkResult result = r->renderingDevice->QueueSubmit(r->renderingDevice->GetQueue("graphics").handle, graphicsSubmitInfo.size(), graphicsSubmitInfo.data(), fences["graphics"][r->currentFrameInFlight]);
-		if (result != VK_SUCCESS) {
-			if (result == VK_ERROR_DEVICE_LOST) {
-				LOG_ERROR("Render() Failed to submit graphics command buffer : VK_ERROR_DEVICE_LOST")
-				// SLEEP(500ms)
-				// ReloadRenderer();
-				// return;
+		{// Build
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["build"],
+			};
+			const std::vector<VkPipelineStageFlags> waitStages {
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+			};
+			const std::vector<VkSemaphore> signalSemaphores {
+				semaphores["graphics"],
+				semaphores["physics"],
+			};
+			const VkFence triggerFence = VK_NULL_HANDLE;
+			
+			RecordAndSubmitCommandBuffer(Build)
+		}
+		
+		{// Graphics
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["graphics"],
+			};
+			const std::vector<VkPipelineStageFlags> waitStages {
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+			};
+			const std::vector<VkSemaphore> signalSemaphores {
+				semaphores["pull1"],
+				semaphores["post2"],
+			};
+			const VkFence triggerFence = VK_NULL_HANDLE;
+			
+			RecordAndSubmitCommandBuffer(Graphics)
+		}
+		
+		{// Physics
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["physics"],
+			};
+			const std::vector<VkPipelineStageFlags> waitStages {
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+			};
+			const std::vector<VkSemaphore> signalSemaphores {
+				semaphores["pull2"],
+			};
+			const VkFence triggerFence = VK_NULL_HANDLE;
+			
+			RecordAndSubmitCommandBuffer(Physics)
+		}
+		
+		{// Pull
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["pull1"],
+				semaphores["pull2"],
+			};
+			const std::vector<VkPipelineStageFlags> waitStages {
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+			};
+			const std::vector<VkSemaphore> signalSemaphores {};
+			const VkFence triggerFence = fences["frameUpdate"];
+			
+			RecordAndSubmitCommandBuffer(Pull)
+		}
+		
+		{// Wait For Post Fence
+			if (r->renderingDevice->WaitForFences(1, &fences["post"], VK_TRUE, /*timeout*/1000UL * 1000 * 1000) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to Wait for post fence");
 			}
-			LOG_ERROR((int)result)
-			throw std::runtime_error("Render() Failed to submit graphics command buffer");
 		}
-
-		// Present
-		VkPresentInfoKHR presentInfo = {};
-		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		// Specify which semaphore to wait on before presentation can happen
-		presentInfo.waitSemaphoreCount = 1;
-		VkSemaphore presentWaitSemaphores[] = {
-			semaphores["staticRenderFinished"][r->currentFrameInFlight],
-		};
-		presentInfo.pWaitSemaphores = presentWaitSemaphores;
-		// Specify the swap chains to present images to and the index for each swap chain. (almost always a single one)
-		VkSwapchainKHR swapChains[] = {r->swapChain->GetHandle()};
-		presentInfo.swapchainCount = 1;
-		presentInfo.pSwapchains = swapChains;
-		presentInfo.pImageIndices = &imageIndex;
-		// The next param allows to specify an array of VkResult values to check for every individual swap chain if presentation was successful.
-		// its not necessary if only using a single swap chain, because we can simply use the return value of the present function.
-		presentInfo.pResults = nullptr;
-		// Send the present info to the presentation queue !
-		// This submits the request to present an image to the swap chain.
-		result = r->renderingDevice->QueuePresentKHR(r->renderingDevice->GetQueue("present").handle, &presentInfo);
-
-		// Check for errors
-		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
-			r->RecreateSwapChains();
-			return;
-		} else if (result == VK_SUBOPTIMAL_KHR) {
-			LOG_VERBOSE("Swapchain is suboptimal...")
-		} else if (result != VK_SUCCESS) {
-			throw std::runtime_error("Failed to present swap chain images");
+		
+		{// Post
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["post1"],
+				semaphores["post2"],
+			};
+			const std::vector<VkPipelineStageFlags> waitStages {
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+			};
+			const std::vector<VkSemaphore> signalSemaphores {
+				semaphores["present"],
+				semaphores["push"],
+			};
+			const VkFence triggerFence = fences["post"];
+			
+			RecordAndSubmitCommandBuffer(Post)
 		}
+		
+		{// Present
+			const std::vector<VkSemaphore> waitSemaphores {
+				semaphores["present"],
+			};
+			
+			VkPresentInfoKHR presentInfo = {};
+				presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+				// Specify which semaphore to wait on before presentation can happen
+				presentInfo.waitSemaphoreCount = waitSemaphores.size();
+				presentInfo.pWaitSemaphores = waitSemaphores.data();
+				// Specify the swap chains to present images to and the index for each swap chain. (almost always a single one)
+				VkSwapchainKHR swapChains[] = {r->swapChain->GetHandle()};
+				presentInfo.swapchainCount = 1;
+				presentInfo.pSwapchains = swapChains;
+				presentInfo.pImageIndices = &currentSwapChainImageIndex;
+				// The next param allows to specify an array of VkResult values to check for every individual swap chain if presentation was successful.
+				// its not necessary if only using a single swap chain, because we can simply use the return value of the present function.
+				presentInfo.pResults = nullptr;
+				// Send the present info to the presentation queue !
+				// This submits the request to present an image to the swap chain.
+				
+			VkResult result = r->renderingDevice->QueuePresentKHR(r->renderingDevice->GetQueue("present").handle, &presentInfo);
+
+			// Check for errors
+			if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+				// SwapChain is out of date, for instance if the window was resized, stop here and ReCreate the swapchain.
+				r->RecreateSwapChains();
+				return;
+			} else if (result == VK_SUBOPTIMAL_KHR) {
+				LOG_VERBOSE("Swapchain is suboptimal...")
+			} else if (result != VK_SUCCESS) {
+				throw std::runtime_error("Failed to present to swap chain image");
+			}
+		}
+		
 	}
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate) {
-		PostProcessingUpdate2();
+		// Histogram
+		glm::vec4 luminance;
+		totalLuminance.ReadFromMappedData(&luminance);
+		if (luminance.a > 0) {
+			scene->camera.luminance = glm::vec4(glm::vec3(luminance) / luminance.a, exposureFactor);
+		}
 		
 		// Modules
 		V4D_Mod::ForEachSortedModule([](auto* mod){
@@ -2212,7 +2148,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// Dynamic compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
 		
-			RunDynamicPostProcessingCompute(cmdBuffer);
+			// histogram
+			shader_histogram_compute.SetGroupCounts(1, 1, 1);
+			shader_histogram_compute.Execute(r->renderingDevice, cmdBuffer);
 			
 			// Modules
 			V4D_Mod::ForEachSortedModule([cmdBuffer](auto* mod){
@@ -2343,8 +2281,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::Text("%d rendered objects", RenderableGeometryEntity::CountActive());
 		#endif
 	}
-	
-	// Render pipelines
 	
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
 		

@@ -16,6 +16,8 @@ struct CollisionPayload {
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadEXT CollisionPayload ray;
 
 void main() {
+	const int maxRaysToSurface = 5;
+	
 	Collision collision = collisions[gl_LaunchIDEXT.x];
 	uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT;
 	vec3 rayOrigin = collision.startPosition.xyz;
@@ -24,14 +26,16 @@ void main() {
 	
 	ray.ignoreInstanceIndex = -1;
 	ray.acceptInstanceIndex = int(collision.objectInstanceA);
+	int rayCountToSurface = 0;
 	do {
-		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, GetOptimalBounceStartDistance(length(rayOrigin)), rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
+		if (++rayCountToSurface > maxRaysToSurface) break;
+		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
 		rayOrigin += rayDirection * ray.hitDistance;
 	} while (ray.hitDistance != 0);
 	
 	rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN;
-	rayOrigin -= rayDirection * (/*collision.velocity.w +*/ GetOptimalBounceStartDistance(length(rayOrigin)));
-	rayMaxDistance = (collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin))*2) ;// *2.0;
+	rayOrigin -= rayDirection * GetOptimalBounceStartDistance(length(rayOrigin));
+	rayMaxDistance = collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin))*2;
 	ray.ignoreInstanceIndex = int(collision.objectInstanceA);
 	ray.acceptInstanceIndex = -1;
 	traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);

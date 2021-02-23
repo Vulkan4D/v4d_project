@@ -278,7 +278,7 @@ struct LightSource {
 layout(set = 0, binding = 3) buffer LightSources { LightSource lightSources[]; };
 
 // Test normal texture
-layout(set = 0, binding = 4) uniform sampler2D tex_img_metalNormal;
+// layout(set = 0, binding = 4) uniform sampler2D tex_img_metalNormal;
 
 
 

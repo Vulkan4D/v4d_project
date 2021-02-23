@@ -343,7 +343,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#endif
 	}
 	
-	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
+	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
 			cameraParent->rayTracingMask = playerVisible? RAY_TRACED_ENTITY_DEFAULT : 0;
 		}

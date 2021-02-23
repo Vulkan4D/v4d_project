@@ -16,7 +16,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		return &player;
 	}
 	
-	V4D_MODULE_FUNC(int, OrderIndex) {return -1000;}
+	V4D_MODULE_FUNC(int, OrderIndex) {return -100;}
 	
 	V4D_MODULE_FUNC(void, InitWindow, v4d::graphics::Window* w) {
 		window = w;
@@ -35,7 +35,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	// 	player.worldPosition += player.velocity * deltaTime;
 	// }
 	
-	V4D_MODULE_FUNC(void, BeginFrameUpdate) {
+	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		{std::lock_guard lock(player.mu);
 			player.worldPosition += player.velocity * r->deltaTime;
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
