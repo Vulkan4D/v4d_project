@@ -1043,19 +1043,13 @@ void ConfigureRasterShaders() {
 					auto entityA = RenderableGeometryEntity::Get(collision.objectInstanceA);
 					if (entityA) {
 						if (auto physicsA = entityA->physics.Lock(); physicsA) {
-							if (collision.objectInstanceB != -1) {
-								physicsA->collisionTest.collision = collision;
-							} else {
-								physicsA->collisionTest.collision = std::nullopt;
-							}
+							//TODO catch collision events here
+							physicsA->collisionTest.collision = collision;
 						}
 					}
 				}
 			}
 			collisionLineCount = 0;
-			
-			//TODO catch collision events here
-			
 		}
 		
 		// Cleanup/Reset stuff
@@ -1098,16 +1092,29 @@ void ConfigureRasterShaders() {
 						
 						{// Apply collision/transform from previous frame's collision test
 							if (physics->collisionTest.collision.has_value()) {
-								if (physics->collisionTest.worldTransformBefore.has_value()) {
-									worldTransform = physics->collisionTest.worldTransformBefore.value();
-									entity->SetWorldTransform(worldTransform);
+								if (physics->collisionTest.collision.value().objectInstanceB != -1) {
+									// Collision!!!
+									
+									if (physics->collisionTest.worldTransformBefore.has_value()) {
+										glm::dvec4 offset = physics->collisionTest.collision.value().startPosition;
+										if (offset.w > 0) {
+											worldTransform = glm::translate(glm::dmat4(1), (glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::dvec3(offset)) * offset.w) * physics->collisionTest.worldTransformBefore.value();
+										} else {
+											worldTransform = physics->collisionTest.worldTransformBefore.value();
+										}
+										entity->SetWorldTransform(worldTransform);
+									}
+									// worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)/2.0) * worldTransform;
+									physics->linearVelocity *= -0.8;
+									// physics->linearVelocity = scene->gravityVector * r->deltaTime * -10.0;
+									
+								} else {
+									// Collision tested, No collision occured
+									if (physics->collisionTest.worldTransformAfter.has_value()) {
+										worldTransform = physics->collisionTest.worldTransformAfter.value();
+										entity->SetWorldTransform(worldTransform);
+									}
 								}
-								// worldTransform = glm::translate(glm::dmat4(1), -glm::normalize(scene->gravityVector)/2.0) * worldTransform;
-								physics->linearVelocity *= -0.8;
-								// physics->linearVelocity = scene->gravityVector * r->deltaTime * -10.0;
-							} else if (physics->collisionTest.worldTransformAfter.has_value()) {
-								worldTransform = physics->collisionTest.worldTransformAfter.value();
-								entity->SetWorldTransform(worldTransform);
 							}
 						}
 						

@@ -22,29 +22,48 @@ void main() {
 	uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT;
 	vec3 rayOrigin = collision.startPosition.xyz;
 	vec3 rayDirection = collision.velocity.xyz;
-	float rayMaxDistance = collision.startPosition.w;
+	float rayMaxDistance = collision.startPosition.w + GetOptimalBounceStartDistance(length(rayOrigin));
 	
 	ray.ignoreInstanceIndex = -1;
 	ray.acceptInstanceIndex = int(collision.objectInstanceA);
 	int rayCountToSurface = 0;
 	do {
-		if (++rayCountToSurface > maxRaysToSurface) break;
+		// find object surface
 		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
+		if (ray.hitDistance == -1) break;
 		rayOrigin += rayDirection * ray.hitDistance;
-	} while (ray.hitDistance != 0);
+	} while (++rayCountToSurface < maxRaysToSurface);
 	
+	// find collision
 	rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN;
 	rayOrigin -= rayDirection * GetOptimalBounceStartDistance(length(rayOrigin));
 	rayMaxDistance = collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin))*2;
 	ray.ignoreInstanceIndex = int(collision.objectInstanceA);
 	ray.acceptInstanceIndex = -1;
 	traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
-	if (ray.hitDistance != 0) {
-		collisions[gl_LaunchIDEXT.x].objectGeometryA = 1;
-		collisions[gl_LaunchIDEXT.x].objectInstanceB = 1;
-		collisions[gl_LaunchIDEXT.x].objectGeometryB = 1;
+	if (ray.hitDistance > -1) {
+		collisions[gl_LaunchIDEXT.x].objectGeometryA = 0;
+		collisions[gl_LaunchIDEXT.x].objectInstanceB = 0;
+		collisions[gl_LaunchIDEXT.x].objectGeometryB = 0;
 		collisions[gl_LaunchIDEXT.x].contactA = vec4(0);
 		collisions[gl_LaunchIDEXT.x].contactB = vec4(0);
+		collisions[gl_LaunchIDEXT.x].startPosition = vec4(0);
+	} else if (length(camera.gravityVector) > 0) {
+		// test if below terrain
+		rayTraceMask = RAY_TRACED_ENTITY_TERRAIN;
+		rayDirection = normalize(-camera.gravityVector);
+		rayMaxDistance = 100000;
+		ray.ignoreInstanceIndex = -1;
+		ray.acceptInstanceIndex = -1;
+		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
+		if (ray.hitDistance > -1) {
+			collisions[gl_LaunchIDEXT.x].objectGeometryA = 0;
+			collisions[gl_LaunchIDEXT.x].objectInstanceB = 0;
+			collisions[gl_LaunchIDEXT.x].objectGeometryB = 0;
+			collisions[gl_LaunchIDEXT.x].contactA = vec4(0);
+			collisions[gl_LaunchIDEXT.x].contactB = vec4(0);
+			collisions[gl_LaunchIDEXT.x].startPosition = vec4(rayDirection, ray.hitDistance);
+		}
 	}
 }
 
@@ -55,7 +74,7 @@ void main() {
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
 
 void main() {
-	ray.hitDistance = 0;
+	ray.hitDistance = -1;
 }
 
 
