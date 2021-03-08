@@ -55,3 +55,33 @@ void main() {
 		ray.color = vec4(1);
 	}
 }
+
+
+#############################################################
+#shader collision.rchit
+
+#include "v4d/modules/V4D_raytracing/glsl_includes/set1_collision.glsl"
+layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
+
+void main() {
+	ray.hit = vec4(gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT, gl_HitTEXT);
+	ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
+	ray.geometryIndex = gl_GeometryIndexEXT;
+	
+	// Compute normal for a box (this method works for boxes with arbitrary width/height/depth)
+	const vec3 pos = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * gl_HitTEXT;
+	const float THRESHOLD = 0.000001 * gl_HitTEXT;
+	const vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
+	const vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
+	const vec3 absMin = abs(pos.xyz - aabb_min.xyz);
+	const vec3 absMax = abs(pos.xyz - aabb_max.xyz);
+		 if (absMin.x < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3(-1, 0, 0);
+	else if (absMin.y < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3( 0,-1, 0);
+	else if (absMin.z < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3( 0, 0,-1);
+	else if (absMax.x < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3( 1, 0, 0);
+	else if (absMax.y < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3( 0, 1, 0);
+	else if (absMax.z < THRESHOLD) ray.normal.xyz = GetModelNormalViewMatrix() * vec3( 0, 0, 1);
+	else ray.normal.xyz = -gl_WorldRayDirectionEXT;
+	
+}
+

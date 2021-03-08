@@ -1,69 +1,32 @@
 #define RAY_TRACING
 #include "v4d/modules/V4D_raytracing/glsl_includes/set0.glsl"
-
-struct CollisionPayload {
-	float hitDistance;
-	int32_t ignoreInstanceIndex;
-	int32_t acceptInstanceIndex;
-};
-
+#include "v4d/modules/V4D_raytracing/glsl_includes/set1_collision.glsl"
 
 #############################################################
 #shader rgen
 
-#include "v4d/modules/V4D_raytracing/glsl_includes/set1_collision.glsl"
-
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadEXT CollisionPayload ray;
 
 void main() {
-	const int maxRaysToSurface = 5;
-	
 	Collision collision = collisions[gl_LaunchIDEXT.x];
-	uint rayTraceMask = RAY_TRACED_ENTITY_DEFAULT;
+	// uint collisionFlags = collision.collisionInstance & 0xff;
+	uint rayTraceMask = collision.objectInstanceB & 0xff;
 	vec3 rayOrigin = collision.startPosition.xyz;
 	vec3 rayDirection = collision.velocity.xyz;
-	float rayMaxDistance = collision.startPosition.w + GetOptimalBounceStartDistance(length(rayOrigin));
+	float rayMaxDistance = collision.startPosition.w + collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin));
+	uint rayFlags = gl_RayFlagsTerminateOnFirstHitEXT;
+	ray.entityInstanceIndex = int(collision.collisionInstance >> 8);
+	traceRayEXT(topLevelAS, rayFlags, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
 	
-	ray.ignoreInstanceIndex = -1;
-	ray.acceptInstanceIndex = int(collision.objectInstanceA);
-	int rayCountToSurface = 0;
-	do {
-		// find object surface
-		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
-		if (ray.hitDistance == -1) break;
-		rayOrigin += rayDirection * ray.hitDistance;
-	} while (++rayCountToSurface < maxRaysToSurface);
-	
-	// find collision
-	rayTraceMask = RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN;
-	rayOrigin -= rayDirection * GetOptimalBounceStartDistance(length(rayOrigin));
-	rayMaxDistance = collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin))*2;
-	ray.ignoreInstanceIndex = int(collision.objectInstanceA);
-	ray.acceptInstanceIndex = -1;
-	traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
-	if (ray.hitDistance > -1) {
+	if (ray.hit.w > -1) {
+		collisions[gl_LaunchIDEXT.x].objectInstanceB |= (ray.entityInstanceIndex << 8);
+		collisions[gl_LaunchIDEXT.x].objectGeometryB = ray.geometryIndex;
+		collisions[gl_LaunchIDEXT.x].contactB = ray.hit;
+		collisions[gl_LaunchIDEXT.x].normalB.xyz = ray.normal;
+		collisions[gl_LaunchIDEXT.x].startPosition = vec4(rayDirection, ray.hit.w - collision.startPosition.w);
+		//TODO find out objectGeometryA and contactA
 		collisions[gl_LaunchIDEXT.x].objectGeometryA = 0;
-		collisions[gl_LaunchIDEXT.x].objectInstanceB = 0;
-		collisions[gl_LaunchIDEXT.x].objectGeometryB = 0;
-		collisions[gl_LaunchIDEXT.x].contactA = vec4(0);
-		collisions[gl_LaunchIDEXT.x].contactB = vec4(0);
-		collisions[gl_LaunchIDEXT.x].startPosition = vec4(0);
-	} else if (length(camera.gravityVector) > 0) {
-		// test if below terrain
-		rayTraceMask = RAY_TRACED_ENTITY_TERRAIN;
-		rayDirection = normalize(-camera.gravityVector);
-		rayMaxDistance = 100000;
-		ray.ignoreInstanceIndex = -1;
-		ray.acceptInstanceIndex = -1;
-		traceRayEXT(topLevelAS, 0, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
-		if (ray.hitDistance > -1) {
-			collisions[gl_LaunchIDEXT.x].objectGeometryA = 0;
-			collisions[gl_LaunchIDEXT.x].objectInstanceB = 0;
-			collisions[gl_LaunchIDEXT.x].objectGeometryB = 0;
-			collisions[gl_LaunchIDEXT.x].contactA = vec4(0);
-			collisions[gl_LaunchIDEXT.x].contactB = vec4(0);
-			collisions[gl_LaunchIDEXT.x].startPosition = vec4(rayDirection, ray.hitDistance);
-		}
+		collisions[gl_LaunchIDEXT.x].contactA = vec4(rayOrigin + rayDirection * collision.startPosition.w, 0);
 	}
 }
 
@@ -74,7 +37,7 @@ void main() {
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
 
 void main() {
-	ray.hitDistance = -1;
+	ray.hit.w = -1;
 }
 
 
@@ -84,7 +47,7 @@ void main() {
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
 
 void main() {
-	if (ray.ignoreInstanceIndex == gl_InstanceCustomIndexEXT || (ray.acceptInstanceIndex != -1 && ray.acceptInstanceIndex != gl_InstanceCustomIndexEXT)) {
+	if (ray.entityInstanceIndex == gl_InstanceCustomIndexEXT) {
 		ignoreIntersectionEXT;
 	}
 }
@@ -95,7 +58,24 @@ void main() {
 
 layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
 
+hitAttributeEXT vec3 hitAttribs;
+
 void main() {
-	ray.hitDistance = gl_HitTEXT;
+	ray.hit = vec4(gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT, gl_HitTEXT);
+	ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
+	ray.geometryIndex = gl_GeometryIndexEXT;
+	
+	uint i0 = GetIndex(0);
+	uint i1 = GetIndex(1);
+	uint i2 = GetIndex(2);
+	
+	vec3 barycentricCoords = vec3(1.0f - hitAttribs.x - hitAttribs.y, hitAttribs.x, hitAttribs.y);
+	
+	ray.normal.xyz = GetModelNormalViewMatrix() * normalize(
+		+ GetVertexNormal(i0) * barycentricCoords.x
+		+ GetVertexNormal(i1) * barycentricCoords.y
+		+ GetVertexNormal(i2) * barycentricCoords.z
+	);
+	
 }
 

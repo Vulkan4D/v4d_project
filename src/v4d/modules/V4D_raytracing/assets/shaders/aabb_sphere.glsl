@@ -44,6 +44,29 @@ void main() {
 	}
 }
 
+#############################################################
+#common .*collision.rchit
+
+#include "v4d/modules/V4D_raytracing/glsl_includes/set1_collision.glsl"
+layout(location = RAY_PAYLOAD_LOCATION_COLLISION) rayPayloadInEXT CollisionPayload ray;
+
+hitAttributeEXT SphereAttr sphereAttr;
+
+void main() {
+	ray.hit = vec4(gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT, gl_HitTEXT);
+	ray.entityInstanceIndex = gl_InstanceCustomIndexEXT;
+	ray.geometryIndex = gl_GeometryIndexEXT;
+	
+	// Compute normal
+	const vec3 aabb_min = GetProceduralVertexAABB_min(gl_PrimitiveID);
+	const vec3 aabb_max = GetProceduralVertexAABB_max(gl_PrimitiveID);
+	const vec3 spherePosition = (aabb_max + aabb_min) / 2;
+	const vec3 hitPoint1 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t1;
+	const vec3 hitPoint2 = gl_ObjectRayOriginEXT + gl_ObjectRayDirectionEXT * sphereAttr.t2;
+	ray.normal.xyz = GetModelNormalViewMatrix() * normalize(hitPoint1 - spherePosition); // always use outside normal
+}
+
+#############################################################
 #shader rint
 #shader light.rint
 
@@ -112,3 +135,7 @@ void main() {
 	// Store useful information in the UV payload member
 	ray.uv = vec2(sphereAttr.radius, (sphereAttr.t2 - sphereAttr.t1) * sign(sphereAttr.t1 - gl_RayTminEXT));
 }
+
+
+#shader collision.rchit
+#shader light.collision.rchit
