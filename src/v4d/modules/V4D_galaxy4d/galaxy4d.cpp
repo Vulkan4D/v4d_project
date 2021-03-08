@@ -130,7 +130,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*20.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}
@@ -141,7 +141,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*10.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = client->id;
 				}

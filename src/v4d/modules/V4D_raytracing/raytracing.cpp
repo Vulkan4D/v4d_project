@@ -1113,26 +1113,26 @@ void ConfigureRasterShaders() {
 								
 								// Get avg hit as collision point
 								int collisionCount = 0;
-								glm::dvec3 offset {0};
 								glm::dvec3 hitNormal {0};
+								glm::dvec3 offset {0};
 								for (auto& collision : physics->collisionTest.collisions) {
-									offset += glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::dvec3(collision.startPosition) * double(collision.startPosition.w);
-									hitNormal += glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.normalB));
+									hitNormal += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.normalB)));
+									offset += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.direction))) * double(collision.normalB.w);
 									++collisionCount;
 								}
-								if (collisionCount > 0) {
-									offset /= double(collisionCount);
-									hitNormal = glm::normalize(hitNormal/double(collisionCount));
-								}
+								hitNormal = glm::normalize(hitNormal/double(collisionCount));
+								offset /= double(collisionCount);
+								
+								// Bounce & Drag
+								do {physics->linearVelocity = glm::reflect(physics->linearVelocity, hitNormal);}
+								while (glm::dot(glm::normalize(physics->linearVelocity), hitNormal) < 0);
+								physics->linearVelocity *= 0.6; // restitution
 								
 								// Offset position to collision point
 								if (physics->collisionTest.worldTransformAfter.has_value()) {
 									worldTransform = glm::translate(glm::dmat4(1), offset) * physics->collisionTest.worldTransformAfter.value();
 									entity->SetWorldTransform(worldTransform);
 								}
-								
-								// Bounce & Drag
-								physics->linearVelocity = glm::reflect(glm::normalize(physics->linearVelocity), hitNormal) * glm::length(physics->linearVelocity) * 0.5;
 								
 							} else {
 								// Collision tested, No collision occured
@@ -1226,7 +1226,7 @@ void ConfigureRasterShaders() {
 								if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
 									glm::dvec3 direction = glm::normalize(glm::dvec3(uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator)));
 									glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
-									if (glm::dot(direction, velocityDir) < 0) direction *= -1;
+									// if (glm::dot(direction, velocityDir) < 0) direction *= -1; //TODO uncomment this when collisions are correctly applied to both rigidbodies
 									collisionBuffer[collisionLineCount++] = Collision {
 										(uint32_t)entity->GetIndex(),
 										0, // Collision Options

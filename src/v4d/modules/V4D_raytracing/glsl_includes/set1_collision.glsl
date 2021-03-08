@@ -5,8 +5,8 @@ struct Collision {
 	int32_t objectGeometryA;
 	int32_t objectGeometryB;
 	
-	vec4 startPosition; // view-space, w = depth (how much under the object's surface this start position is)
-	vec4 velocity; // view-space direction, w = max travel distance from surface (typically velocity*deltaTime)
+	vec4 position; // view-space, w = depth (how much under the object's surface this start position is)
+	vec4 direction; // view-space direction, w = max travel distance from surface (typically velocity*deltaTime)
 	
 	vec4 contactA;
 	vec4 contactB;

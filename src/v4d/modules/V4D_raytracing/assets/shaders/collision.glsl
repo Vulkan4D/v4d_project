@@ -11,9 +11,9 @@ void main() {
 	Collision collision = collisions[gl_LaunchIDEXT.x];
 	// uint collisionFlags = collision.collisionInstance & 0xff;
 	uint rayTraceMask = collision.objectInstanceB & 0xff;
-	vec3 rayOrigin = collision.startPosition.xyz;
-	vec3 rayDirection = collision.velocity.xyz;
-	float rayMaxDistance = collision.startPosition.w + collision.velocity.w + GetOptimalBounceStartDistance(length(rayOrigin));
+	vec3 rayOrigin = collision.position.xyz;
+	vec3 rayDirection = collision.direction.xyz;
+	float rayMaxDistance = collision.position.w + collision.direction.w;
 	uint rayFlags = gl_RayFlagsTerminateOnFirstHitEXT;
 	ray.entityInstanceIndex = int(collision.collisionInstance >> 8);
 	traceRayEXT(topLevelAS, rayFlags, rayTraceMask, RAY_SBT_OFFSET_COLLISION, 0, RAY_MISS_OFFSET_COLLISION, rayOrigin, 0.0, rayDirection, rayMaxDistance, RAY_PAYLOAD_LOCATION_COLLISION);
@@ -22,11 +22,10 @@ void main() {
 		collisions[gl_LaunchIDEXT.x].objectInstanceB |= (ray.entityInstanceIndex << 8);
 		collisions[gl_LaunchIDEXT.x].objectGeometryB = ray.geometryIndex;
 		collisions[gl_LaunchIDEXT.x].contactB = ray.hit;
-		collisions[gl_LaunchIDEXT.x].normalB.xyz = ray.normal;
-		collisions[gl_LaunchIDEXT.x].startPosition = vec4(rayDirection, ray.hit.w - collision.startPosition.w);
+		collisions[gl_LaunchIDEXT.x].normalB = vec4(ray.normal, ray.hit.w - collision.position.w);
 		//TODO find out objectGeometryA and contactA
 		collisions[gl_LaunchIDEXT.x].objectGeometryA = 0;
-		collisions[gl_LaunchIDEXT.x].contactA = vec4(rayOrigin + rayDirection * collision.startPosition.w, 0);
+		collisions[gl_LaunchIDEXT.x].contactA = vec4(rayOrigin + rayDirection * collision.position.w, 0);
 	}
 }
 
