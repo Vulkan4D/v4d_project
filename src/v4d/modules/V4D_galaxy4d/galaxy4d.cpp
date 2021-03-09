@@ -381,6 +381,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				physics->bounciness = 0.7;
 				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
 					RenderableGeometryEntity::Material mat {};
+					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
+					mat.visibility.texFactors[0] = 255;
 					mat.visibility.roughness = 0;
 					mat.visibility.metallic = 1;
 					entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;

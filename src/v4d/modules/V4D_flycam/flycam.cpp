@@ -37,7 +37,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		{std::lock_guard lock(player.mu);
-			player.worldPosition += player.velocity * r->deltaTime;
+			player.worldPosition += player.velocity * r->previousDeltaTime;
 			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
 		}
 		if (auto parent = scene->cameraParent.lock(); parent) {
