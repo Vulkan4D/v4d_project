@@ -10,7 +10,7 @@ namespace app::graphics {
 
 	void CreateWindow() {
 		// Create Window and Init Vulkan
-		app::window = new v4d::graphics::Window(WINDOW_TITLE, 1024, 768);
+		app::window = new v4d::graphics::Window(WINDOW_TITLE, 1600, 1000);
 		glfwMaximizeWindow(app::window->GetHandle());
 		app::window->GetRequiredVulkanInstanceExtensions(app::vulkanLoader->requiredInstanceExtensions);
 	}
@@ -53,6 +53,8 @@ namespace app::graphics {
 	}
 
 	void LoadRenderer() {
+		app::renderer->RequiredDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+		
 		app::renderer->InitRenderer();
 		app::renderer->ReadShaders();
 		app::renderer->LoadRenderer();

@@ -335,6 +335,8 @@ void main() {
 #############################################################
 #shader rmiss
 
+#include "v4d/modules/V4D_raytracing/glsl_includes/set1_rendering.glsl"
+
 layout(location = RAY_PAYLOAD_LOCATION_VISIBILITY) rayPayloadInEXT VisibilityPayload ray;
 
 void main() {
@@ -350,8 +352,9 @@ void main() {
 	
 	ray.emission = vec3(0);
 	if (ray.bounces == 0) {
-		//TODO sample galaxy
-		// ray.emission = vec3(0);
+		// Sample background
+		vec3 lookDir = normalize(transpose(mat3(camera.viewMatrix)) * gl_WorldRayDirectionEXT);
+		ray.emission.xyz = texture(img_background, lookDir).xyz;
 	}
 }
 

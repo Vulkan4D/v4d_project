@@ -15,6 +15,7 @@
 #include "input.hpp"
 #include "vulkan.hpp"
 #include "graphics.hpp"
+#include "ServerPhysicsLoop.hpp"
 #include "GameLoop.hpp"
 #include "SlowGameLoop.hpp"
 #include "RenderingLoop.hpp"
@@ -246,8 +247,9 @@ void app::Run() {
 			#endif
 			
 			// Game Loops
+			app::ServerPhysicsLoop serverPhysicsLoop(app::IsRunning);
+			app::SlowGameLoop slowGameLoop(app::IsRunning);
 			if (app::renderer) {
-				app::SlowGameLoop slowGameLoop(app::IsRunning);
 				app::GameLoop gameLoop(app::IsRunning);
 				app::RenderingLoop renderingLoop(app::IsRunning);
 				app::input::UpdateLoop([](){return app::IsRunning() && app::window->IsActive();});
@@ -271,14 +273,8 @@ void app::Run() {
 	}
 	
 	// Wait for Server to terminate
-	if (app::networking::server) {
-		if (!app::isClient) {
-			// Wait for server to finish listening
-			while (app::IsRunning()) {
-				//...
-				SLEEP(10ms)
-			}
-		}
+	if (app::networking::server && app::isServer && !app::isClient) {
+		app::ServerPhysicsLoop serverPhysicsLoop(app::IsRunning);
 	}
 	
 	// App will be terminated

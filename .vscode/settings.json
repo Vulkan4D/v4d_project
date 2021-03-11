@@ -104,7 +104,8 @@
         "concepts": "cpp",
         "ranges": "cpp",
         "stop_token": "cpp",
-        "geometry": "cpp"
+        "geometry": "cpp",
+        "*.def": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

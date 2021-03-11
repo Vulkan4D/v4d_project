@@ -13,6 +13,11 @@
 #extension GL_ARB_enhanced_layouts : enable
 #extension GL_ARB_shader_clock : enable
 
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shader_viewport_layer_array : enable
+
+// #extension GL_ARB_shader_atomic_counters : enable
+
 #include "core.glsl"
 #include "v4d/modules/V4D_raytracing/camera_options.hh"
 

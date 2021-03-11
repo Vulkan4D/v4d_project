@@ -17,6 +17,8 @@ namespace app {
 		double secondaryAvgFrameRate = 0;
 		double secondaryFrameTime = 0;
 	#endif
+	double serverPhysicsLoopAvgFrameRate = 0;
+	double serverPhysicsLoopFrameTime = 0;
 	double gameLoopAvgFrameRate = 0;
 	double gameLoopFrameTime = 0;
 	double slowLoopAvgFrameRate = 0;

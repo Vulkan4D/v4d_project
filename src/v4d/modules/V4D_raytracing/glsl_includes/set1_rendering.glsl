@@ -20,3 +20,5 @@ layout(set = 1, binding = 12) buffer writeonly RayCast {
 	vec4 localSpaceHitPositionAndDistance; // w component is distance
 	vec4 localSpaceHitSurfaceNormal; // w component is unused
 } rayCast;
+
+layout(set = 1, binding = 13) uniform samplerCube img_background;

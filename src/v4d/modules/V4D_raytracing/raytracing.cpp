@@ -6,8 +6,6 @@
 #include "camera_options.hh"
 #include "substances.hh"
 
-#include "../V4D_flycam/common.hh"
-
 #include <cmath>
 #include <random>
 
@@ -89,6 +87,8 @@ int nbStochasticRayTracedCollisions = 5;
 	Image img_thumbnail { VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT ,1,1, { VK_FORMAT_R16G16B16A16_SFLOAT }};
 	Image img_overlay { VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT ,1,1, { VK_FORMAT_R8G8B8A8_UNORM }};
 	
+	CubeMapImage img_background { };
+	
 	// Textures
 	// Texture2D tex_metal_normal {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/textures/metal_normal.tga"), STBI_rgb_alpha};
 	std::array<Texture2D*, 0> textures {
@@ -106,6 +106,7 @@ int nbStochasticRayTracedCollisions = 5;
 	PipelineLayout pl_overlay;
 	PipelineLayout pl_post;
 	PipelineLayout pl_histogram;
+	PipelineLayout pl_background;
 #pragma endregion
 
 #pragma region Shaders
@@ -158,7 +159,6 @@ int nbStochasticRayTracedCollisions = 5;
 #pragma endregion
 
 #pragma region Containers
-	// Pipelines
 	std::unordered_map<std::string, Image*> images {
 		{"img_lit", &img_lit},
 		{"img_depth", &img_depth},
@@ -176,6 +176,8 @@ int nbStochasticRayTracedCollisions = 5;
 		
 		{"img_thumbnail", &img_thumbnail},
 		{"img_overlay", &img_overlay},
+		
+		{"img_background", &img_background},
 	};
 	std::unordered_map<std::string, PipelineLayout*> pipelineLayouts {
 		{"pl_raster", &pl_raster},
@@ -184,18 +186,19 @@ int nbStochasticRayTracedCollisions = 5;
 		{"pl_overlay", &pl_overlay},
 		{"pl_post", &pl_post},
 		{"pl_histogram", &pl_histogram},
+		{"pl_background", &pl_background},
 	};
 	std::unordered_map<std::string, std::vector<RasterShaderPipeline*>> shaderGroups {
 		{"sg_transparent", {&shader_transparent}},
 		{"sg_wireframe", {&shader_wireframe}},
 		{"sg_present", {&shader_present_hdr, &shader_present_overlay_apply}},
 		{"sg_overlay", {&shader_overlay_lines, &shader_overlay_text, &shader_overlay_squares, &shader_overlay_circles}},
+		{"sg_background", {}},
 	};
 	std::unordered_map<std::string, ShaderBindingTable*> shaderBindingTables {
 		{"sbt_rendering", &sbt_rendering},
 		{"sbt_collision", &sbt_collision},
 	};
-	// FrameBuffers
 	std::unordered_map<std::string, VkSemaphore> semaphores {
 		{"push", {}},
 		{"graphics", {}},
@@ -271,6 +274,8 @@ int nbStochasticRayTracedCollisions = 5;
 		img_albedo_history.Create(r->renderingDevice, renderWidth, renderHeight);
 		img_normal_history.Create(r->renderingDevice, renderWidth, renderHeight);
 		
+		img_background.Create(r->renderingDevice, renderWidth, renderWidth);
+		
 		auto commandBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("graphics"));
 		
 			r->TransitionImageLayout(commandBuffer, img_lit, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -286,6 +291,8 @@ int nbStochasticRayTracedCollisions = 5;
 			r->TransitionImageLayout(commandBuffer, img_geometry_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			r->TransitionImageLayout(commandBuffer, img_albedo_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			r->TransitionImageLayout(commandBuffer, img_normal_history, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+			
+			r->TransitionImageLayout(commandBuffer, img_background, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 			
 		r->EndSingleTimeCommands(r->renderingDevice->GetQueue("graphics"), commandBuffer);
 	}
@@ -304,6 +311,8 @@ int nbStochasticRayTracedCollisions = 5;
 		img_geometry_history.Destroy(r->renderingDevice);
 		img_albedo_history.Destroy(r->renderingDevice);
 		img_normal_history.Destroy(r->renderingDevice);
+		
+		img_background.Destroy(r->renderingDevice);
 		
 	}
 	
@@ -1626,6 +1635,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			deviceFeaturesToEnable->deviceFeatures2.features.fillModeNonSolid = VK_TRUE;
 			deviceFeaturesToEnable->deviceFeatures2.features.geometryShader = VK_TRUE;
 			deviceFeaturesToEnable->deviceFeatures2.features.wideLines = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.largePoints = VK_TRUE;
+			deviceFeaturesToEnable->deviceFeatures2.features.shaderTessellationAndGeometryPointSize = VK_TRUE;
 			
 			deviceFeaturesToEnable->shaderClockFeatures.shaderDeviceClock = VK_TRUE;
 			deviceFeaturesToEnable->shaderClockFeatures.shaderSubgroupClock = VK_TRUE;
@@ -1688,6 +1699,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			set1_rendering.AddBinding_combinedImageSampler(i++, &img_normal_history, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
 			
 			set1_rendering.AddBinding_storageBuffer(i++, raycastBuffer, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
+			
+			set1_rendering.AddBinding_combinedImageSampler(i++, &img_background, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR);
 		}
 		
 		{r->descriptorSets["set1_collision"] = &set1_collision;
@@ -2223,7 +2236,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (mod->BeginSecondaryFrameUpdate) mod->BeginSecondaryFrameUpdate();
 		});
 	
-		// Dynamic compute
+		// Secondary Dynamic graphics/compute
 		auto cmdBuffer = r->BeginSingleTimeCommands(r->renderingDevice->GetQueue("secondary"));
 		
 			// histogram

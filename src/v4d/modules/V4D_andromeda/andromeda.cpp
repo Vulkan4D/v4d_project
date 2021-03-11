@@ -1,0 +1,561 @@
+#define _V4D_MODULE
+#include <v4d.h>
+
+#include "GalacticPosition.hpp"
+#include "../V4D_multiplayer/ServerSideObjects.hh"
+#include "../V4D_multiplayer/ClientSideObjects.hh"
+
+#pragma region Global Pointers
+
+	V4D_Mod* mainRenderModule = nullptr;
+	V4D_Mod* mainMultiplayerModule = nullptr;
+	v4d::graphics::Window* window = nullptr;
+	v4d::graphics::Renderer* r = nullptr;
+	v4d::scene::Scene* scene = nullptr;
+	std::shared_ptr<ListeningServer> server = nullptr;
+	ServerSideObjects* serverSideObjects = nullptr;
+	std::shared_ptr<OutgoingConnection> client = nullptr;
+	ClientSideObjects* clientSideObjects = nullptr;
+
+#pragma endregion
+
+#pragma region Networking
+
+	namespace networking::action {
+		typedef uint8_t Action;
+		// const Action EXTENDED_ACTION = 0;
+
+		// Action stream Only (TCP)
+		const Action ASSIGN_PLAYER_OBJ = 0; // + (objectID) = 4
+		
+		const Action TEST_OBJ = 101; // + (string) = variable size
+
+	}
+
+	namespace OBJECT_TYPE {
+		const uint32_t Player = 0;
+		const uint32_t Ball = 1;
+	}
+
+	std::recursive_mutex serverActionQueueMutex;
+	std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serverActionQueuePerClient {};
+	void ServerEnqueueAction(uint64_t clientId, v4d::data::WriteOnlyStream& stream) {
+		std::lock_guard lock(serverActionQueueMutex);
+		serverActionQueuePerClient[clientId].emplace(stream);
+	}
+
+	std::recursive_mutex clientActionQueueMutex;
+	std::queue<v4d::data::Stream> clientActionQueue {};
+	void ClientEnqueueAction(v4d::data::WriteOnlyStream& stream) {
+		std::lock_guard lock(clientActionQueueMutex);
+		clientActionQueue.emplace(stream);
+	}
+
+#pragma endregion
+
+#pragma region Galaxy
+
+	constexpr double STAR_CHUNK_SIZE = 32;
+	constexpr double STAR_CHUNK_MAX_DENSITY = 0.2;
+	constexpr double STAR_MAX_VISIBLE_DISTANCE = 50; // light-years
+	
+	uint RandomInt(uint& seed) {
+		// LCG values from Numerical Recipes
+		return (seed = 1664525 * seed + 1013904223);
+	}
+	float RandomFloat(uint& seed) {
+		// Float version using bitmask from Numerical Recipes
+		const uint one = 0x3f800000;
+		const uint msk = 0x007fffff;
+		return glm::uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+	}
+	glm::vec3 RandomInUnitSphere(uint& seed) {
+		for (;;) {
+			glm::vec3 p = 2.0f * glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1.0f;
+			if (dot(p, p) < 1) return p;
+		}
+	}
+	
+	v4d::graphics::vulkan::RenderPass galaxyBackgroundRenderPass;
+	v4d::graphics::vulkan::RasterShaderPipeline* galaxyBackgroundShader = nullptr;
+	v4d::graphics::CubeMapImage* img_background = nullptr;
+	struct StarVertex {
+		glm::vec4 position;
+		glm::vec4 color;
+		static std::vector<v4d::graphics::vulkan::VertexInputAttributeDescription> GetInputAttributes() {
+			return {
+				{0, offsetof(StarVertex, position), VK_FORMAT_R32G32B32A32_SFLOAT},
+				{1, offsetof(StarVertex, color), VK_FORMAT_R32G32B32A32_SFLOAT},
+			};
+		}
+	};
+	struct GalaxyPushConstant {
+		float minViewDistance = 0.1;
+		float maxViewDistance = STAR_MAX_VISIBLE_DISTANCE; // Light-years
+		float sizeFactor = 1.0;
+		float brightnessFactor = 1.0;
+		glm::vec4 relativePosition {0};
+	};
+	struct GalaxyChunk {
+		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_MAX_DENSITY*1.333)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+		uint32_t count = 0;
+		GalaxyPushConstant pushConstant;
+		bool allocated = false;
+		bool pushed = false;
+		void Allocate() {
+			buffer.Allocate(r->renderingDevice);
+		}
+		void Free() {
+			buffer.Free();
+		}
+		void Push(VkCommandBuffer commandBuffer) {
+			if (!pushed) {
+				buffer.Push(commandBuffer, count);
+				pushed = true;
+			}
+		}
+		void GenerateStars(glm::ivec3 pos) {
+			if (!allocated) Allocate();
+			
+			uint seed = pos.x + pos.y + pos.z;
+			
+			float density = 1.0;
+			
+			const glm::vec3 bounds {STAR_CHUNK_SIZE/2};
+			// Galaxy Gen
+			for (float x = -bounds.x; x < bounds.x; ++x) {
+				for (float y = -bounds.y; y < bounds.y; ++y) {
+					for (float z = -bounds.z; z < bounds.z; ++z) {
+						if (RandomFloat(seed) < density*STAR_CHUNK_MAX_DENSITY) {
+							auto offset = RandomInUnitSphere(seed)*0.45f;
+							auto brightness = RandomFloat(seed);
+							float starType = RandomFloat(seed);
+							glm::vec3 color;
+							if (starType <= 0.4) {
+								color = glm::vec3( 1.0 , 0.7 , 0.6 ); // 40% red
+								brightness *= 0.3;
+							} else if (starType > 0.4 && starType <= 0.7) {
+								color = glm::vec3( 1.0 , 1.0 , 0.8 ); // 30% yellow
+							} else if (starType > 0.7 && starType < 0.85) {
+								color = glm::vec3( 0.8 , 0.8 , 1.0 ); // 15% blue
+								brightness *= 2.0;
+							} else {
+								color = glm::vec3( 1.0 , 1.0 , 1.0 ); // 15% white
+							}
+							buffer[count++] = {
+								{x+offset.x, y+offset.y, z+offset.z, brightness},
+								{color.r, color.g, color.b, brightness}
+							};
+						}
+					}
+				}
+			}
+			assert(count <= 200'000);
+			LOG(count << " stars generated")
+		}
+		void Draw(VkCommandBuffer commandBuffer) {
+			galaxyBackgroundShader->SetData(buffer.GetDeviceLocalBuffer(), count);
+			galaxyBackgroundShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+		}
+	};
+	std::unordered_map<glm::ivec3, GalaxyChunk> galaxyChunks {};
+	glm::dvec3 playerPositionInGalaxy {0}; // Light-Years grid
+
+#pragma endregion
+
+
+#include "../V4D_flycam/common.hh"
+PlayerView* playerView = nullptr;
+
+
+V4D_MODULE_CLASS(V4D_Mod) {
+	
+#pragma region Init
+	
+	V4D_MODULE_FUNC(int, OrderIndex) {return -10;}
+	
+	V4D_MODULE_FUNC(void, ModuleLoad) {
+		// Load Dependencies
+		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
+		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
+		
+		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
+		
+		playerView->SetInitialPositionAndView({0,0,0}, {0,1,0}, {0,0,1});
+		playerView->useFreeFlyCam = true;
+		playerView->camSpeed = 1;
+		
+		galaxyBackgroundShader = new v4d::graphics::vulkan::RasterShaderPipeline(*mainRenderModule->GetPipelineLayout("pl_background"), {
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.vert"),
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.geom"),
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.frag"),
+		});
+		mainRenderModule->AddShader("sg_background", galaxyBackgroundShader);
+		img_background = (v4d::graphics::CubeMapImage*)mainRenderModule->GetImage("img_background");
+	}
+	
+	V4D_MODULE_FUNC(void, ModuleUnload) {
+		if (galaxyBackgroundShader) delete galaxyBackgroundShader;
+	}
+	
+	V4D_MODULE_FUNC(void, InitWindow, v4d::graphics::Window* w) {
+		window = w;
+	}
+	
+	V4D_MODULE_FUNC(void, InitRenderer, v4d::graphics::Renderer* _r) {
+		r = _r;
+	}
+	
+	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<ListeningServer> _srv) {
+		server = _srv;
+		serverSideObjects = (ServerSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_SERVER_OBJECTS);
+	}
+	
+	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<OutgoingConnection> _c) {
+		client = _c;
+		clientSideObjects = (ClientSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_CLIENT_OBJECTS);
+	}
+	
+	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* _s) {
+		scene = _s;
+	}
+
+#pragma endregion
+	
+#pragma region Input
+	
+	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
+	
+	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
+		if (action != GLFW_RELEASE
+			#ifdef _ENABLE_IMGUI
+				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+			#endif
+		) {
+			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
+			switch (key) {
+				
+				// Quit
+				case GLFW_KEY_ESCAPE:
+					glfwSetWindowShouldClose(window->GetHandle(), 1);
+					break;
+					
+				// // Throw stuff
+				// case GLFW_KEY_B:{
+				// 	v4d::data::WriteOnlyStream stream(32);
+				// 		stream << networking::action::TEST_OBJ;
+				// 		stream << std::string("ball");
+				// 		stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+				// 	ClientEnqueueAction(stream);
+				// }break;
+			}
+		}
+	}
+	
+	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
+		if (action == GLFW_RELEASE
+			#ifdef _ENABLE_IMGUI
+				&& !ImGui::IsAnyWindowFocused()
+			#endif
+		) {
+			switch (button) {
+				case GLFW_MOUSE_BUTTON_1:
+					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+					glfwSetCursorPos(window->GetHandle(), 0, 0);
+					break;
+				case GLFW_MOUSE_BUTTON_2:
+					glfwSetCursorPos(window->GetHandle(), 0, 0);
+					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+					break;
+			}
+		}
+	}
+	
+#pragma endregion
+	
+#pragma region Networking
+	
+	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
+		std::scoped_lock lock(serverActionQueueMutex);
+		auto& actionQueue = serverActionQueuePerClient[client->id];
+		while (actionQueue.size()) {
+			// LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
+			stream->Begin();
+				stream->EmplaceStream(actionQueue.front());
+			stream->End();
+			actionQueue.pop();
+		}
+	}
+	
+	V4D_MODULE_FUNC(void, ClientSendActions, v4d::io::SocketPtr stream) {
+		std::lock_guard lock(clientActionQueueMutex);
+		while (clientActionQueue.size()) {
+			// LOG_DEBUG("Client SendActionFromQueue")
+			stream->Begin();
+				stream->EmplaceStream(clientActionQueue.front());
+			stream->End();
+			clientActionQueue.pop();
+		}
+	}
+	
+	// V4D_MODULE_FUNC(void, SendStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {}
+	// V4D_MODULE_FUNC(void, ReceiveStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {}
+	
+	V4D_MODULE_FUNC(void, ServerIncomingClient, v4d::networking::IncomingClientPtr client) {
+		LOG("Server: IncomingClient " << client->id)
+		NetworkGameObject::Id playerObjId;
+		v4d::scene::NetworkGameObjectPtr obj;
+		{
+			std::lock_guard lock(serverSideObjects->mutex);
+			obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Player);
+			obj->physicsClientID = client->id;
+			obj->isDynamic = true;
+			obj->clientIterations[client->id] = 0;
+			serverSideObjects->players[client->id] = obj;
+			playerObjId = obj->id;
+		}
+		
+		// // Set player position
+		// const glm::dvec3 sun1Position = {-1.496e+11,0, 0};
+		// auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
+		// auto forwardVector = glm::normalize(sun1Position);
+		// auto upVector = glm::normalize(worldPosition);
+		// auto rightVector = glm::cross(forwardVector, upVector);
+		// worldPosition += rightVector * (double)client->id;
+		// obj->SetTransform(worldPosition, forwardVector, upVector);
+		
+		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
+			stream << networking::action::ASSIGN_PLAYER_OBJ;
+			stream << playerObjId;
+		
+		ServerEnqueueAction(client->id, stream);
+	}
+	
+	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
+		auto action = stream->Read<networking::action::Action>();
+		switch (action) {
+			
+			case networking::action::TEST_OBJ:{
+				
+			}break;
+		
+			default: 
+				LOG_ERROR("Server ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
+		}
+	}
+	
+	V4D_MODULE_FUNC(void, ClientReceiveAction, v4d::io::SocketPtr stream) {
+		auto action = stream->Read<networking::action::Action>();
+		switch (action) {
+			case networking::action::ASSIGN_PLAYER_OBJ:{ // assign object to client for camera
+				auto id = stream->Read<NetworkGameObject::Id>();
+				
+				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for obj id " << id)
+				try {
+					std::lock_guard lock(clientSideObjects->mutex);
+					auto obj = clientSideObjects->objects.at(id);
+					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+						scene->cameraParent = entity;
+					}
+					// playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
+				} catch (std::exception& err) {
+					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
+				}
+			}break;
+			default: 
+				LOG_ERROR("Client ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
+		}
+	}
+	
+	
+	
+#pragma endregion
+
+#pragma region GameObjects
+	
+	// V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
+	// 	switch (obj->type) {
+	// 		case OBJECT_TYPE::Player:{
+	// 		}break;
+	// 	}
+	// }
+	
+	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
+		switch (obj->type) {
+			case OBJECT_TYPE::Player:{
+				auto entity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				obj->renderableGeometryEntityInstance = entity;
+				// entity->generator = [](auto* entity, auto* device){};
+				// entity->generator = cake;
+			}break;
+			// case OBJECT_TYPE::Ball:{
+			// 	auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+			// 	obj->renderableGeometryEntityInstance = entity;
+			// 	float radius = 0.5f;
+			// 	auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
+			// 	physics->SetSphereCollider(radius);
+			// 	physics->friction = 0.6;
+			// 	physics->bounciness = 0.7;
+			// 	entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
+			// 		RenderableGeometryEntity::Material mat {};
+			// 		mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
+			// 		mat.visibility.texFactors[0] = 255;
+			// 		mat.visibility.roughness = 0;
+			// 		mat.visibility.metallic = 1;
+			// 		entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
+			// 		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+			// 		entity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+			// 	};
+			// }break;
+		}
+	}
+	
+#pragma endregion
+	
+#pragma region Rendering
+
+	V4D_MODULE_FUNC(void, ConfigureShaders) {
+		mainRenderModule->GetPipelineLayout("pl_background")->AddPushConstant<GalaxyPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+		galaxyBackgroundShader->AddVertexInputBinding(sizeof(StarVertex), VK_VERTEX_INPUT_RATE_VERTEX, StarVertex::GetInputAttributes());
+		galaxyBackgroundShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyBackgroundShader->rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		galaxyBackgroundShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
+		galaxyBackgroundShader->depthStencilState.depthTestEnable = VK_FALSE;
+		galaxyBackgroundShader->depthStencilState.depthWriteEnable = VK_FALSE;
+	}
+
+	V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
+		const int nbColorAttachments = 1;
+		VkAttachmentDescription attachment {};
+		VkAttachmentReference colorAttachmentRef {};
+		
+		// Color attachment
+		attachment.format = img_background->format;
+		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+		attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+		colorAttachmentRef = {
+			galaxyBackgroundRenderPass.AddAttachment(attachment),
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+		};
+	
+		VkSubpassDescription subpass {};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = 1;
+			subpass.pColorAttachments = &colorAttachmentRef;
+		galaxyBackgroundRenderPass.AddSubpass(subpass);
+		
+		// Create the render pass
+		galaxyBackgroundRenderPass.Create(r->renderingDevice);
+		galaxyBackgroundRenderPass.CreateFrameBuffers(r->renderingDevice, *img_background);
+		
+		// Shader
+		galaxyBackgroundShader->SetRenderPass(img_background, galaxyBackgroundRenderPass.handle, 0);
+		galaxyBackgroundShader->AddColorBlendAttachmentState(
+			VK_TRUE//,
+			// VK_BLEND_FACTOR_ONE,
+			// VK_BLEND_FACTOR_ONE,
+			// VK_BLEND_OP_MAX,
+			// VK_BLEND_FACTOR_ONE,
+			// VK_BLEND_FACTOR_ONE,
+			// VK_BLEND_OP_MAX
+		);
+		galaxyBackgroundShader->CreatePipeline(r->renderingDevice);
+	}
+	
+	V4D_MODULE_FUNC(void, DestroyVulkanPipelines) {
+		galaxyBackgroundShader->DestroyPipeline(r->renderingDevice);
+		galaxyBackgroundRenderPass.DestroyFrameBuffers(r->renderingDevice);
+		galaxyBackgroundRenderPass.Destroy(r->renderingDevice);
+	}
+	
+	V4D_MODULE_FUNC(void, DestroyVulkanResources) {
+		for (auto&[pos, chunk] : galaxyChunks) {
+			chunk.Free();
+		}
+		galaxyChunks.clear();
+	}
+	
+	
+	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
+		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
+			if (auto cameraParentRoot = v4d::graphics::RenderableGeometryEntity::GetRoot(cameraParent); cameraParentRoot) {
+				GalacticPosition galacticPosition {cameraParentRoot->parentId};
+				galacticPosition.SetReferenceFrame(60'000, 2'000, 60'000);
+				// if (galacticPosition.IsValid()) {
+					// if (galacticPosition.IsCelestial()) {
+						//...
+					// }
+					playerPositionInGalaxy = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + /*M2LY*/(scene->camera.worldPosition);
+				// }
+			}
+		}
+	}
+	
+	V4D_MODULE_FUNC(void, BeginSecondaryFrameUpdate) {
+		if (playerPositionInGalaxy.x < 0 || playerPositionInGalaxy.y < 0 || playerPositionInGalaxy.z < 0) return;
+		
+		glm::ivec3 playerPos = glm::round(playerPositionInGalaxy / STAR_CHUNK_SIZE);
+		
+		for (int x = -1; x <= 1; ++x) {
+			for (int y = -1; y <= 1; ++y) {
+				for (int z = -1; z <= 1; ++z) {
+					auto pos = playerPos + glm::ivec3{x,y,z};
+					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE && galaxyChunks.count(pos) == 0) {
+						galaxyChunks[pos].GenerateStars(pos*glm::ivec3(STAR_CHUNK_SIZE));
+						goto Continue;
+					}
+				}
+			}
+		}
+		
+		Continue:
+		for (auto it = galaxyChunks.begin(); it != galaxyChunks.end();) {
+			auto&[pos, chunk] = *it;
+			if (glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) > STAR_MAX_VISIBLE_DISTANCE) {
+				chunk.Free();
+				it = galaxyChunks.erase(it);
+			} else {
+				chunk.pushConstant.relativePosition = glm::vec4(glm::dvec3(pos)*STAR_CHUNK_SIZE - glm::dvec3(playerPositionInGalaxy), 0);
+				++it;
+			}
+		}
+	}
+
+	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
+		for (auto&[pos, chunk] : galaxyChunks) {
+			chunk.Push(commandBuffer);
+		}
+		
+		{// Wait for BLAS to finish before building TLAS
+			VkMemoryBarrier memoryBarrier {
+				VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+				nullptr,// pNext
+				VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT,// VkAccessFlags srcAccessMask
+				VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,// VkAccessFlags dstAccessMask
+			};
+			r->renderingDevice->CmdPipelineBarrier(
+				commandBuffer, 
+				VK_PIPELINE_STAGE_TRANSFER_BIT, 
+				VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 
+				0, 
+				1, &memoryBarrier, 
+				0, 0, 
+				0, 0
+			);
+		}
+		
+		galaxyBackgroundRenderPass.Begin(r->renderingDevice, commandBuffer, *img_background, {{.0,.0,.0,.0}});
+			for (auto&[pos, chunk] : galaxyChunks) {
+				chunk.Draw(commandBuffer);
+			}
+		galaxyBackgroundRenderPass.End(r->renderingDevice, commandBuffer);
+	}
+	
+#pragma endregion
+	
+};

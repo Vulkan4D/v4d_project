@@ -14,6 +14,7 @@ using namespace v4d::modular;
 std::shared_ptr<ListeningServer> server = nullptr;
 std::shared_ptr<OutgoingConnection> client = nullptr;
 Scene* scene = nullptr;
+v4d::graphics::Renderer* r = nullptr;
 
 std::recursive_mutex serverActionQueueMutex;
 std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serverActionQueuePerClient {};
@@ -47,6 +48,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		client = _c;
 	}
 	
+	V4D_MODULE_FUNC(void, InitRenderer, v4d::graphics::Renderer* _r) {
+		r = _r;
+	}
+	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
 	}
@@ -63,14 +68,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(void, GameLoopUpdate, double deltaTime) {
+	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		// Update gameObject Positions on client-side
 		std::lock_guard lock(clientSideObjects.mutex);
 		for (auto& [objID, obj] : clientSideObjects.objects) {
 			if (obj->active && !obj->physicsControl && obj->posInit) {
-				obj->SmoothlyInterpolateGameObjectTransform(deltaTime * interpolationSpeed);
+				obj->SmoothlyInterpolateGameObjectTransform(r->deltaTime * interpolationSpeed);
 			}
 		}
+	}
+	
+	V4D_MODULE_FUNC(void, DrawUi2) {
+		#ifdef _ENABLE_IMGUI
+			ImGui::SliderFloat("Network interpolation smooth speed", &interpolationSpeed, 0.0f, 30.0f);
+		#endif
 	}
 	
 	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
@@ -85,12 +96,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		for (auto id : objectsToRemove) {
 			serverSideObjects.objects.erase(id);
 		}
-	}
-	
-	V4D_MODULE_FUNC(void, DrawUi2) {
-		#ifdef _ENABLE_IMGUI
-			ImGui::SliderFloat("Network interpolation smooth speed", &interpolationSpeed, 0.0f, 30.0f);
-		#endif
 	}
 	
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
@@ -122,6 +127,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							}
 							*stream << obj->parent;
 							*stream << obj->id;
+							*stream << obj->extra;
 							*stream << (obj->physicsClientID == client->id);
 							*stream << obj->GetAttributes();
 							*stream << obj->GetIteration();
@@ -208,7 +214,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				try {
 					std::lock_guard lock(serverSideObjects.mutex);
 					auto obj = serverSideObjects.objects.at(id);
-					if (obj->GetIteration() == iteration) {
+					if (obj->physicsClientID == client->id && obj->GetIteration() == iteration) {
 						obj->SetTransformFromNetwork(transform);
 						
 						auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
@@ -267,6 +273,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto type = stream->Read<NetworkGameObject::Type>();
 				auto parent = stream->Read<NetworkGameObject::Parent>();
 				auto id = stream->Read<NetworkGameObject::Id>();
+				auto extra = stream->Read<NetworkGameObject::Extra>();
 				auto physicsControl = stream->Read<bool>();
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
@@ -278,6 +285,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// LOG_DEBUG("Client ReceiveAction ADD_OBJECT for obj id " << id)
 					
 					auto obj = std::make_shared<NetworkGameObject>(moduleID, type, parent, id);
+					obj->extra = extra;
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
 					obj->SetIteration(iteration);
@@ -305,6 +313,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case UPDATE_OBJECT:{
 				auto parent = stream->Read<NetworkGameObject::Parent>();
 				auto id = stream->Read<NetworkGameObject::Id>();
+				auto extra = stream->Read<NetworkGameObject::Extra>();
 				auto physicsControl = stream->Read<bool>();
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
@@ -317,6 +326,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 					auto obj = clientSideObjects.objects.at(id);
 					obj->parent = parent;
+					obj->extra = extra;
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
 					obj->SetIteration(iteration);
