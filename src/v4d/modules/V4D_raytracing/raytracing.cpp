@@ -1649,6 +1649,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				deviceFeaturesToEnable->vulkan12DeviceFeatures.shaderInt8 = VK_TRUE;
 				deviceFeaturesToEnable->vulkan12DeviceFeatures.descriptorIndexing = VK_TRUE;
 				deviceFeaturesToEnable->vulkan12DeviceFeatures.storageBuffer8BitAccess = VK_TRUE;
+				deviceFeaturesToEnable->vulkan12DeviceFeatures.shaderOutputLayer = VK_TRUE;
 				deviceFeaturesToEnable->accelerationStructureFeatures.accelerationStructure = VK_TRUE;
 				deviceFeaturesToEnable->accelerationStructureFeatures.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
 				deviceFeaturesToEnable->rayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;

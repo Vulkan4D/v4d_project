@@ -58,6 +58,8 @@
 	constexpr double STAR_CHUNK_SIZE = 32;
 	constexpr double STAR_CHUNK_MAX_DENSITY = 0.2;
 	constexpr double STAR_MAX_VISIBLE_DISTANCE = 50; // light-years
+	constexpr int STAR_CHUNK_GEN_OFFSET = int(STAR_MAX_VISIBLE_DISTANCE / STAR_CHUNK_SIZE) + 1; // will try to generate chunks from -x to +x from current position in all axis
+	constexpr bool GALAXY_FADE = true;
 	
 	uint RandomInt(uint& seed) {
 		// LCG values from Numerical Recipes
@@ -78,6 +80,7 @@
 	
 	v4d::graphics::vulkan::RenderPass galaxyBackgroundRenderPass;
 	v4d::graphics::vulkan::RasterShaderPipeline* galaxyBackgroundShader = nullptr;
+	v4d::graphics::vulkan::RasterShaderPipeline* galaxyFadeShader = nullptr;
 	v4d::graphics::CubeMapImage* img_background = nullptr;
 	struct StarVertex {
 		glm::vec4 position;
@@ -90,11 +93,13 @@
 		}
 	};
 	struct GalaxyPushConstant {
+		// used for stars and fade
+		float screenSize = 0;
+		float brightnessFactor = 1.0;
+		// used only for stars
 		float minViewDistance = 0.1;
 		float maxViewDistance = STAR_MAX_VISIBLE_DISTANCE; // Light-years
-		float sizeFactor = 1.0;
-		float brightnessFactor = 1.0;
-		glm::vec4 relativePosition {0};
+		glm::vec4 relativePosition {0}; // w = sizeFactor
 	};
 	struct GalaxyChunk {
 		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_MAX_DENSITY*1.333)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
@@ -102,6 +107,8 @@
 		GalaxyPushConstant pushConstant;
 		bool allocated = false;
 		bool pushed = false;
+		float sizeFactor = 1.0;
+		
 		void Allocate() {
 			buffer.Allocate(r->renderingDevice);
 		}
@@ -110,6 +117,7 @@
 		}
 		void Push(VkCommandBuffer commandBuffer) {
 			if (!pushed) {
+				pushConstant.screenSize = img_background->width;
 				buffer.Push(commandBuffer, count);
 				pushed = true;
 			}
@@ -121,11 +129,11 @@
 			
 			float density = 1.0;
 			
-			const glm::vec3 bounds {STAR_CHUNK_SIZE/2};
+			const glm::ivec3 bounds {int(STAR_CHUNK_SIZE/2)};
 			// Galaxy Gen
-			for (float x = -bounds.x; x < bounds.x; ++x) {
-				for (float y = -bounds.y; y < bounds.y; ++y) {
-					for (float z = -bounds.z; z < bounds.z; ++z) {
+			for (int x = -bounds.x; x < bounds.x; ++x) {
+				for (int y = -bounds.y; y < bounds.y; ++y) {
+					for (int z = -bounds.z; z < bounds.z; ++z) {
 						if (RandomFloat(seed) < density*STAR_CHUNK_MAX_DENSITY) {
 							auto offset = RandomInUnitSphere(seed)*0.45f;
 							auto brightness = RandomFloat(seed);
@@ -150,7 +158,6 @@
 					}
 				}
 			}
-			assert(count <= 200'000);
 			LOG(count << " stars generated")
 		}
 		void Draw(VkCommandBuffer commandBuffer) {
@@ -191,11 +198,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.frag"),
 		});
 		mainRenderModule->AddShader("sg_background", galaxyBackgroundShader);
+		galaxyFadeShader = new v4d::graphics::vulkan::RasterShaderPipeline(*mainRenderModule->GetPipelineLayout("pl_background"), {
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.fade.vert"),
+			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.fade.frag"),
+		});
+		mainRenderModule->AddShader("sg_background", galaxyFadeShader);
 		img_background = (v4d::graphics::CubeMapImage*)mainRenderModule->GetImage("img_background");
 	}
 	
 	V4D_MODULE_FUNC(void, ModuleUnload) {
 		if (galaxyBackgroundShader) delete galaxyBackgroundShader;
+		if (galaxyFadeShader) delete galaxyFadeShader;
 	}
 	
 	V4D_MODULE_FUNC(void, InitWindow, v4d::graphics::Window* w) {
@@ -418,12 +431,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 
 	V4D_MODULE_FUNC(void, ConfigureShaders) {
 		mainRenderModule->GetPipelineLayout("pl_background")->AddPushConstant<GalaxyPushConstant>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-		galaxyBackgroundShader->AddVertexInputBinding(sizeof(StarVertex), VK_VERTEX_INPUT_RATE_VERTEX, StarVertex::GetInputAttributes());
+		
 		galaxyBackgroundShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 		galaxyBackgroundShader->rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		galaxyBackgroundShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
 		galaxyBackgroundShader->depthStencilState.depthTestEnable = VK_FALSE;
 		galaxyBackgroundShader->depthStencilState.depthWriteEnable = VK_FALSE;
+		galaxyBackgroundShader->AddVertexInputBinding(sizeof(StarVertex), VK_VERTEX_INPUT_RATE_VERTEX, StarVertex::GetInputAttributes());
+		
+		galaxyFadeShader->inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+		galaxyFadeShader->rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+		galaxyFadeShader->rasterizer.cullMode = VK_CULL_MODE_NONE;
+		galaxyFadeShader->depthStencilState.depthTestEnable = VK_FALSE;
+		galaxyFadeShader->depthStencilState.depthWriteEnable = VK_FALSE;
+		galaxyFadeShader->SetData(6);
 	}
 
 	V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
@@ -434,7 +455,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// Color attachment
 		attachment.format = img_background->format;
 		attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachment.loadOp = GALAXY_FADE? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		attachment.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 		attachment.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -453,22 +474,36 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		galaxyBackgroundRenderPass.Create(r->renderingDevice);
 		galaxyBackgroundRenderPass.CreateFrameBuffers(r->renderingDevice, *img_background);
 		
-		// Shader
+		// Stars shader
 		galaxyBackgroundShader->SetRenderPass(img_background, galaxyBackgroundRenderPass.handle, 0);
 		galaxyBackgroundShader->AddColorBlendAttachmentState(
-			VK_TRUE//,
-			// VK_BLEND_FACTOR_ONE,
-			// VK_BLEND_FACTOR_ONE,
-			// VK_BLEND_OP_MAX,
-			// VK_BLEND_FACTOR_ONE,
-			// VK_BLEND_FACTOR_ONE,
-			// VK_BLEND_OP_MAX
+			VK_TRUE
+			/*srcColorBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*dstColorBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*colorBlendOp*/			,VK_BLEND_OP_MAX
+			/*srcAlphaBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*dstAlphaBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*alphaBlendOp*/			,VK_BLEND_OP_MAX
 		);
 		galaxyBackgroundShader->CreatePipeline(r->renderingDevice);
+		
+		// Fade shader
+		galaxyFadeShader->SetRenderPass(img_background, galaxyBackgroundRenderPass.handle, 0);
+		galaxyFadeShader->AddColorBlendAttachmentState(
+			VK_TRUE
+			/*srcColorBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*dstColorBlendFactor*/		,VK_BLEND_FACTOR_ONE
+			/*colorBlendOp*/			,VK_BLEND_OP_REVERSE_SUBTRACT
+			/*srcAlphaBlendFactor*/		,VK_BLEND_FACTOR_ZERO
+			/*dstAlphaBlendFactor*/		,VK_BLEND_FACTOR_ZERO
+			/*alphaBlendOp*/			,VK_BLEND_OP_MIN
+		);
+		galaxyFadeShader->CreatePipeline(r->renderingDevice);
 	}
 	
 	V4D_MODULE_FUNC(void, DestroyVulkanPipelines) {
 		galaxyBackgroundShader->DestroyPipeline(r->renderingDevice);
+		galaxyFadeShader->DestroyPipeline(r->renderingDevice);
 		galaxyBackgroundRenderPass.DestroyFrameBuffers(r->renderingDevice);
 		galaxyBackgroundRenderPass.Destroy(r->renderingDevice);
 	}
@@ -479,7 +514,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		galaxyChunks.clear();
 	}
-	
 	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
@@ -501,11 +535,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		glm::ivec3 playerPos = glm::round(playerPositionInGalaxy / STAR_CHUNK_SIZE);
 		
-		for (int x = -1; x <= 1; ++x) {
-			for (int y = -1; y <= 1; ++y) {
-				for (int z = -1; z <= 1; ++z) {
+		for (int x = -STAR_CHUNK_GEN_OFFSET; x <= STAR_CHUNK_GEN_OFFSET; ++x) {
+			for (int y = -STAR_CHUNK_GEN_OFFSET; y <= STAR_CHUNK_GEN_OFFSET; ++y) {
+				for (int z = -STAR_CHUNK_GEN_OFFSET; z <= STAR_CHUNK_GEN_OFFSET; ++z) {
 					auto pos = playerPos + glm::ivec3{x,y,z};
-					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE && galaxyChunks.count(pos) == 0) {
+					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE*2 && galaxyChunks.count(pos) == 0) {
 						galaxyChunks[pos].GenerateStars(pos*glm::ivec3(STAR_CHUNK_SIZE));
 						goto Continue;
 					}
@@ -513,14 +547,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 		}
 		
-		Continue:
+		Continue: 
 		for (auto it = galaxyChunks.begin(); it != galaxyChunks.end();) {
 			auto&[pos, chunk] = *it;
-			if (glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) > STAR_MAX_VISIBLE_DISTANCE) {
+			if (glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) > STAR_MAX_VISIBLE_DISTANCE*2) {
 				chunk.Free();
 				it = galaxyChunks.erase(it);
 			} else {
-				chunk.pushConstant.relativePosition = glm::vec4(glm::dvec3(pos)*STAR_CHUNK_SIZE - glm::dvec3(playerPositionInGalaxy), 0);
+				chunk.pushConstant.relativePosition = glm::vec4(glm::dvec3(pos)*STAR_CHUNK_SIZE - glm::dvec3(playerPositionInGalaxy), chunk.sizeFactor);
 				++it;
 			}
 		}
@@ -550,6 +584,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		galaxyBackgroundRenderPass.Begin(r->renderingDevice, commandBuffer, *img_background, {{.0,.0,.0,.0}});
+			if (GALAXY_FADE) {
+				GalaxyPushConstant pushConstant {};
+				pushConstant.screenSize = img_background->width;
+				pushConstant.brightnessFactor = 1.0;
+				galaxyFadeShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+			}
 			for (auto&[pos, chunk] : galaxyChunks) {
 				chunk.Draw(commandBuffer);
 			}
