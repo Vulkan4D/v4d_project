@@ -2,6 +2,7 @@
 #include <v4d.h>
 
 #include "GalacticPosition.hpp"
+#include "GalaxyGenerator.hpp"
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
 
@@ -55,29 +56,9 @@
 
 #pragma region Galaxy
 
-	constexpr double STAR_CHUNK_SIZE = 32;
-	constexpr double STAR_CHUNK_MAX_DENSITY = 0.2;
-	constexpr double STAR_MAX_VISIBLE_DISTANCE = 50; // light-years
-	constexpr int STAR_CHUNK_GEN_OFFSET = int(STAR_MAX_VISIBLE_DISTANCE / STAR_CHUNK_SIZE) + 1; // will try to generate chunks from -x to +x from current position in all axis
-	constexpr bool GALAXY_FADE = true;
+	constexpr bool GALAXY_FADE = false;
 	
-	uint RandomInt(uint& seed) {
-		// LCG values from Numerical Recipes
-		return (seed = 1664525 * seed + 1013904223);
-	}
-	float RandomFloat(uint& seed) {
-		// Float version using bitmask from Numerical Recipes
-		const uint one = 0x3f800000;
-		const uint msk = 0x007fffff;
-		return glm::uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
-	}
-	glm::vec3 RandomInUnitSphere(uint& seed) {
-		for (;;) {
-			glm::vec3 p = 2.0f * glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1.0f;
-			if (dot(p, p) < 1) return p;
-		}
-	}
-	
+	GalaxyGenerator galaxyGenerator;
 	v4d::graphics::vulkan::RenderPass galaxyBackgroundRenderPass;
 	v4d::graphics::vulkan::RasterShaderPipeline* galaxyBackgroundShader = nullptr;
 	v4d::graphics::vulkan::RasterShaderPipeline* galaxyFadeShader = nullptr;
@@ -102,7 +83,7 @@
 		glm::vec4 relativePosition {0}; // w = sizeFactor
 	};
 	struct GalaxyChunk {
-		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_MAX_DENSITY*1.333)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE /*STAR_CHUNK_DENSITY_MULT*1.333*/)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
 		uint32_t count = 0;
 		GalaxyPushConstant pushConstant;
 		bool allocated = false;
@@ -125,40 +106,23 @@
 		void GenerateStars(glm::ivec3 pos) {
 			if (!allocated) Allocate();
 			
-			uint seed = pos.x + pos.y + pos.z;
-			
-			float density = 1.0;
-			
 			const glm::ivec3 bounds {int(STAR_CHUNK_SIZE/2)};
 			// Galaxy Gen
 			for (int x = -bounds.x; x < bounds.x; ++x) {
 				for (int y = -bounds.y; y < bounds.y; ++y) {
 					for (int z = -bounds.z; z < bounds.z; ++z) {
-						if (RandomFloat(seed) < density*STAR_CHUNK_MAX_DENSITY) {
-							auto offset = RandomInUnitSphere(seed)*0.45f;
-							auto brightness = RandomFloat(seed);
-							float starType = RandomFloat(seed);
-							glm::vec3 color;
-							if (starType <= 0.4) {
-								color = glm::vec3( 1.0 , 0.7 , 0.6 ); // 40% red
-								brightness *= 0.3;
-							} else if (starType > 0.4 && starType <= 0.7) {
-								color = glm::vec3( 1.0 , 1.0 , 0.8 ); // 30% yellow
-							} else if (starType > 0.7 && starType < 0.85) {
-								color = glm::vec3( 0.8 , 0.8 , 1.0 ); // 15% blue
-								brightness *= 2.0;
-							} else {
-								color = glm::vec3( 1.0 , 1.0 , 1.0 ); // 15% white
-							}
+						const glm::ivec3 posInGalaxy = pos + glm::ivec3(x,y,z);
+						if (galaxyGenerator.GetStarSystemPresence(posInGalaxy)) {
+							const auto offset = galaxyGenerator.GetStarSystemOffset(posInGalaxy);
+							const glm::vec4 color = galaxyGenerator.GetStarSystemColor(posInGalaxy);
 							buffer[count++] = {
-								{x+offset.x, y+offset.y, z+offset.z, brightness},
-								{color.r, color.g, color.b, brightness}
+								{x+offset.x, y+offset.y, z+offset.z, color.a},
+								color
 							};
 						}
 					}
 				}
 			}
-			LOG(count << " stars generated")
 		}
 		void Draw(VkCommandBuffer commandBuffer) {
 			galaxyBackgroundShader->SetData(buffer.GetDeviceLocalBuffer(), count);
@@ -519,7 +483,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
 			if (auto cameraParentRoot = v4d::graphics::RenderableGeometryEntity::GetRoot(cameraParent); cameraParentRoot) {
 				GalacticPosition galacticPosition {cameraParentRoot->parentId};
-				galacticPosition.SetReferenceFrame(60'000, 2'000, 60'000);
+				galacticPosition.SetReferenceFrame(131'000, 2'048, 131'000);
 				// if (galacticPosition.IsValid()) {
 					// if (galacticPosition.IsCelestial()) {
 						//...
@@ -538,7 +502,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		for (int x = -STAR_CHUNK_GEN_OFFSET; x <= STAR_CHUNK_GEN_OFFSET; ++x) {
 			for (int y = -STAR_CHUNK_GEN_OFFSET; y <= STAR_CHUNK_GEN_OFFSET; ++y) {
 				for (int z = -STAR_CHUNK_GEN_OFFSET; z <= STAR_CHUNK_GEN_OFFSET; ++z) {
-					auto pos = playerPos + glm::ivec3{x,y,z};
+					const auto pos = playerPos + glm::ivec3{x,y,z};
 					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE*2 && galaxyChunks.count(pos) == 0) {
 						galaxyChunks[pos].GenerateStars(pos*glm::ivec3(STAR_CHUNK_SIZE));
 						goto Continue;
