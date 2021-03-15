@@ -83,7 +83,7 @@
 		glm::vec4 relativePosition {0}; // w = sizeFactor
 	};
 	struct GalaxyChunk {
-		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE /*STAR_CHUNK_DENSITY_MULT*1.333*/)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+		v4d::graphics::StagingBuffer<StarVertex, uint(STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_SIZE*STAR_CHUNK_DENSITY_MULT*1.333)> buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
 		uint32_t count = 0;
 		GalaxyPushConstant pushConstant;
 		bool allocated = false;
@@ -105,7 +105,6 @@
 		}
 		void GenerateStars(glm::ivec3 pos) {
 			if (!allocated) Allocate();
-			
 			const glm::ivec3 bounds {int(STAR_CHUNK_SIZE/2)};
 			// Galaxy Gen
 			for (int x = -bounds.x; x < bounds.x; ++x) {
@@ -113,12 +112,16 @@
 					for (int z = -bounds.z; z < bounds.z; ++z) {
 						const glm::ivec3 posInGalaxy = pos + glm::ivec3(x,y,z);
 						if (galaxyGenerator.GetStarSystemPresence(posInGalaxy)) {
-							const auto offset = galaxyGenerator.GetStarSystemOffset(posInGalaxy);
-							const glm::vec4 color = galaxyGenerator.GetStarSystemColor(posInGalaxy);
-							buffer[count++] = {
-								{x+offset.x, y+offset.y, z+offset.z, color.a},
-								color
-							};
+							const StarSystem& starSystem(posInGalaxy);
+							glm::vec4 color = starSystem.GetVisibleColor();
+							if (color.a > 0.0001) {
+								const glm::dvec3& offset = starSystem.GetOffsetLY();
+								buffer[count++] = {
+									{x+offset.x, y+offset.y, z+offset.z, color.a},
+									color
+								};
+							}
+							galaxyGenerator.ClearStarSystemCache(posInGalaxy);
 						}
 					}
 				}
