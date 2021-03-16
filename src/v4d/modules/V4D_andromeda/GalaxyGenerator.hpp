@@ -595,7 +595,7 @@ const auto& StarSystem::GetCentralCelestialBodies() const {
 			centralCelestialBodies[2] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parentMass*/mass, /*parentRadius*/-2, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/centralCelestialBodies[1]->GetOrbitDistance(), maxChildOrbit, RandomInt(seed));
 			if (orbits == 3) {
 				childPosInGalaxy.level1 = 0;
-				centralCelestialBodies[0] = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, (centralCelestialBodies[1]->GetOrbitDistance() + centralCelestialBodies[2]->GetOrbitDistance()) * 12.0, maxChildOrbit, RandomInt(seed));
+				centralCelestialBodies[0] = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/centralCelestialBodies[1]->GetOrbitDistance() * 5.0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
 			}
 		}
 		_centralCelestialBodies = centralCelestialBodies;
@@ -762,6 +762,7 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 			double age = GetAge();
 			double mass = GetMass();
 			double orbitRadius = GetRadius();
+			if (orbitRadius == 0) orbitRadius = parentRadius;
 			double parentOrbitalPlaneTiltDegrees = GetOrbitalPlaneTiltDegrees();
 			double orbitDistance = GetOrbitDistance();
 			double maxChildOrbit = orbitDistance==0? this->maxChildOrbit : glm::min(this->maxChildOrbit, orbitDistance * 0.02);

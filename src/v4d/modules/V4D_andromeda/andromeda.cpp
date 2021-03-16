@@ -165,8 +165,8 @@
 			pushConstant.minViewDistance = 0;
 			pushConstant.maxViewDistance = 0;
 			pushConstant.relativePosition = glm::vec4(position, 2.0);
-			(*this)->position = glm::dvec4(0.0, 0.0, 0.0, 1.0);
-			(*this)->color = glm::vec4(1);
+			(*this)->position = glm::dvec4(0);
+			(*this)->color = glm::vec4(0);
 			switch (celestial->GetType()) {
 				case CelestialType::HyperGiant: // white
 					(*this)->color = glm::vec4(1,1,1,1);
@@ -194,6 +194,10 @@
 				case CelestialType::Asteroid: // orange
 					(*this)->color = glm::vec4(1,0.5,0,0.5);
 					(*this)->position.w = 0.5;
+					break;
+				case CelestialType::SuperMassiveBlackHole: // pink
+					(*this)->color = glm::vec4(1,0,1,1);
+					(*this)->position.w = 8.0;
 					break;
 			}
 		}
