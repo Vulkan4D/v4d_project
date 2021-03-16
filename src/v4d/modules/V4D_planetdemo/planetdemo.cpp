@@ -209,8 +209,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		// playerView->camSpeed = 100000;
-		auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
-		playerView->SetInitialPositionAndView(worldPosition, glm::normalize(sun1Position), glm::normalize(worldPosition), true);
+		scene->camera.worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
+		playerView->SetInitialViewDirection(glm::normalize(sun1Position), glm::normalize(scene->camera.worldPosition), true);
 	}
 	
 	V4D_MODULE_FUNC(void, InitRenderer, Renderer* _r) {

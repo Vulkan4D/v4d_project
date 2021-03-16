@@ -74,10 +74,10 @@ layout(location = 0) out vec4 out_color;
 
 vec3 pos = relativePosition.xyz + gl_in[0].gl_Position.xyz;
 float pointDistanceSqr = dot(pos, pos);
-float dd = clamp(smoothstep(maxDistanceSqr, minDistanceSqr, pointDistanceSqr), 0, 1);
-float dd2 = clamp(smoothstep(minDistanceSqr, 0, pointDistanceSqr), 0, 1);
+float dd = maxViewDistance==0? 1.0 : clamp(smoothstep(maxDistanceSqr, minDistanceSqr, pointDistanceSqr), 0, 1);
+float dd2 = maxViewDistance==0? 0.0 : clamp(smoothstep(minDistanceSqr, 0, pointDistanceSqr), 0, 1);
 vec4 pointColor = vec4(in_color[0].rgb, in_color[0].a * dd*dd * brightnessFactor * (1-dd2*dd2));
-float pointSize = max(1, gl_in[0].gl_Position.w * dd) * sizeFactor * 2.0 + (dd2*dd2*20);
+float pointSize = max(1, gl_in[0].gl_Position.w * dd*dd) * sizeFactor * 2.0 + (dd2*dd2*20);
 
 void EmmitStar(int layer, vec2 coord) {
 	gl_Layer = layer;
@@ -88,7 +88,7 @@ void EmmitStar(int layer, vec2 coord) {
 }
 
 void main(void) {
-	if (pointDistanceSqr > maxDistanceSqr)
+	if (maxViewDistance > 0 && pointDistanceSqr > maxDistanceSqr)
 		return;
 	if (pointColor.a < 0.001)
 		return;

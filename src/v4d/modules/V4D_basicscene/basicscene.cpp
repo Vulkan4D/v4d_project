@@ -197,7 +197,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
 		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
-		playerView->SetInitialPositionAndView({0,0,0}, {0,1,0}, {0,0,1});
+		playerView->SetInitialViewDirection({0,1,0}, {0,0,1});
 		playerView->useFreeFlyCam = false;
 	}
 	

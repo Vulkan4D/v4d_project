@@ -257,8 +257,8 @@ public:
 	// 	return {color, brightness};
 	// }
 	
-	static std::shared_ptr<Celestial> MakeCelestial(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double minOrbitRadius, double maxOrbitRadius, uint seed);
-	static std::shared_ptr<Celestial> MakeBinaryCenter(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double minOrbitRadius, double maxOrbitRadius, uint seed);
+	static std::shared_ptr<Celestial> MakeCelestial(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double forcedOrbitDistance, double maxOrbitRadius, uint seed);
+	static std::shared_ptr<Celestial> MakeBinaryCenter(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double forcedOrbitDistance, double maxOrbitRadius, uint seed);
 
 };
 
@@ -276,7 +276,7 @@ class StarSystem {
 public:
 	GalacticPosition posInGalaxy;
 	StarSystem(const glm::ivec3& posInGalaxy) : posInGalaxy(posInGalaxy) {}
-	explicit StarSystem(GalacticPosition posInGalaxy) : posInGalaxy(posInGalaxy) {
+	StarSystem(GalacticPosition posInGalaxy) : posInGalaxy(posInGalaxy) {
 		this->posInGalaxy.celestialId = 0;
 		this->posInGalaxy.isParentId = 0;
 	}
@@ -298,14 +298,14 @@ public:
 
 class Celestial {
 friend class StarSystem;
-protected:
+public:
 	GalacticPosition galacticPosition;
+protected:
 	double age;
 	double mass;
 	double parentMass;
-	double parentRadius;
+	double parentRadius; // special values may be -1 and -2 for the two binary members
 	double parentOrbitalPlaneTiltDegrees;
-	double minChildOrbit;
 	double maxChildOrbit;
 	uint seed;
 	
@@ -321,17 +321,16 @@ protected:
 	mutable std::optional<double> _initialRotation = std::nullopt;
 	mutable std::optional<std::vector<std::shared_ptr<Celestial>>> _children = std::nullopt;
 public:
-	Celestial(GalacticPosition posInGalaxy, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double minChildOrbit, double maxChildOrbit, uint seed)
+	Celestial(GalacticPosition posInGalaxy, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxChildOrbit, uint seed)
 	: galacticPosition(posInGalaxy)
 	, age(age)
 	, mass(mass)
 	, parentMass(parentMass)
 	, parentRadius(parentRadius)
 	, parentOrbitalPlaneTiltDegrees(parentOrbitalPlaneTiltDegrees)
-	, minChildOrbit(minChildOrbit)
 	, maxChildOrbit(maxChildOrbit)
 	, seed(seed)
-	{}
+	{if (forcedOrbitDistance > 0) _orbitDistance = forcedOrbitDistance;}
 	
 	double GetMass() const {return mass;} // Kg
 	double GetAge() const {return age;} // Billions of years
@@ -436,38 +435,38 @@ std::recursive_mutex GalaxyGenerator::cacheMutex {};
 std::unordered_map<uint64_t, std::shared_ptr<StarSystem>> GalaxyGenerator::starSystems {};
 std::unordered_map<uint64_t, std::shared_ptr<Celestial>> GalaxyGenerator::celestials {};
 
-std::shared_ptr<Celestial> GalaxyGenerator::MakeCelestial(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double minOrbitRadius, double maxOrbitRadius, uint seed) {
+std::shared_ptr<Celestial> GalaxyGenerator::MakeCelestial(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed) {
 	std::lock_guard lock(cacheMutex);
 	try {
 		return celestials.at(galacticPosition.rawValue);
 	} catch(std::out_of_range) {
 		if (mass < 1E21) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<Asteroid>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Asteroid>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
 		if (mass < 1E26) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<Planet>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Planet>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
 		if (mass < 1E28) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<GasGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<GasGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
 		if (mass < 1E29) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<BrownDwarf>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<BrownDwarf>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
 		if (mass < 1E32) {
-			if (RandomFloat(seed) < 0.002) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
-			return celestials[galacticPosition.rawValue] = std::make_shared<Star>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			if (RandomFloat(seed) < 0.002) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Star>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
 		if (mass < 1E35) {
-			if (RandomFloat(seed) < 0.0001) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
-			return celestials[galacticPosition.rawValue] = std::make_shared<HyperGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+			if (RandomFloat(seed) < 0.0001) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<HyperGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 		}
-		return celestials[galacticPosition.rawValue] = std::make_shared<SuperMassiveBlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+		return celestials[galacticPosition.rawValue] = std::make_shared<SuperMassiveBlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 	}
 }
 
-std::shared_ptr<Celestial> GalaxyGenerator::MakeBinaryCenter(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double minOrbitRadius, double maxOrbitRadius, uint seed) {
+std::shared_ptr<Celestial> GalaxyGenerator::MakeBinaryCenter(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed) {
 	std::lock_guard lock(cacheMutex);
-	return celestials[galacticPosition.rawValue] = std::make_shared<BinaryCenter>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, minOrbitRadius, maxOrbitRadius, seed);
+	return celestials[galacticPosition.rawValue] = std::make_shared<BinaryCenter>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
 }
 
 std::shared_ptr<Celestial> GalaxyGenerator::GetCelestial(GalacticPosition galacticPosition) {
@@ -570,6 +569,7 @@ uint StarSystem::GetPlanetarySeed() const {
 }
 const auto& StarSystem::GetCentralCelestialBodies() const {
 	if (!_centralCelestialBodies.has_value()) {
+		std::lock_guard lock(GalaxyGenerator::cacheMutex);
 		std::array<std::shared_ptr<Celestial>, 3> centralCelestialBodies {nullptr, nullptr, nullptr};
 		
 		GalacticPosition childPosInGalaxy = posInGalaxy;
@@ -578,7 +578,6 @@ const auto& StarSystem::GetCentralCelestialBodies() const {
 		double parentMass = GetMass();
 		double mass = parentMass * glm::mix(0.95, 0.999, RandomFloat(seed));
 		double parentOrbitalPlaneTiltDegrees = GetOrbitalPlaneTiltDegrees();
-		double minChildOrbit = 0;
 		double maxChildOrbit = GetRadius();
 		
 		int n = GetNbCentralBodies();
@@ -586,14 +585,14 @@ const auto& StarSystem::GetCentralCelestialBodies() const {
 		if (n == 1) {
 			// Single star
 			childPosInGalaxy.level1 = 1;
-			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, minChildOrbit, maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
 		} else if (n == 2) {
 			// Binary star
 			double massDiff = glm::pow(RandomFloat(seed), 2.0) * 0.17;
 			childPosInGalaxy.level1 = 1;
-			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5-massDiff), /*parentMass*/mass, /*parentRadius*/1, parentOrbitalPlaneTiltDegrees, minChildOrbit, maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5-massDiff), /*parentMass*/mass, /*parentRadius*/-1, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
 			childPosInGalaxy.level1 = 2;
-			centralCelestialBodies[2] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parentMass*/mass, /*parentRadius*/1, parentOrbitalPlaneTiltDegrees, minChildOrbit, maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[2] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parentMass*/mass, /*parentRadius*/-2, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/centralCelestialBodies[1]->GetOrbitDistance(), maxChildOrbit, RandomInt(seed));
 			if (orbits == 3) {
 				childPosInGalaxy.level1 = 0;
 				centralCelestialBodies[0] = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, (centralCelestialBodies[1]->GetOrbitDistance() + centralCelestialBodies[2]->GetOrbitDistance()) * 12.0, maxChildOrbit, RandomInt(seed));
@@ -674,16 +673,16 @@ double Celestial::GetOrbitDistance() const {
 			_orbitDistance = 0;
 		} else {
 			uint seed = this->seed + 2;
-			_orbitDistance = parentRadius * 1.1 + GetRadius() * glm::pow(10.0, glm::mix(+1.91, +3.3, glm::pow(RandomFloat(seed), 1.7)));
+			_orbitDistance = (glm::abs(parentRadius) * 1.1 + GetRadius() * glm::pow(10.0, glm::mix(+1.81, +3.2, glm::pow(RandomFloat(seed), 1.6)))) * (parentRadius < 0 ? 2.0 : 1.0);
 		}
 	}
 	return _orbitDistance.value();
 }
 double Celestial::GetOrbitPeriod() const {
 	if (!_orbitPeriod.has_value()) {
-		const double orbitRadius = GetOrbitDistance();
-		if (orbitRadius == 0) return 0;
-		return GalaxyGenerator::TWOPI * glm::sqrt(glm::pow(orbitRadius, 3.0) / (parentMass * GalaxyGenerator::G));
+		const double orbitDistance = GetOrbitDistance();
+		if (orbitDistance == 0) return 0;
+		return GalaxyGenerator::TWOPI * glm::sqrt(glm::pow(orbitDistance, 3.0) / (parentMass * GalaxyGenerator::G));
 	}
 	return _orbitPeriod.value();
 }
@@ -697,7 +696,13 @@ double Celestial::GetOrbitalPlaneTiltDegrees() const {
 double Celestial::GetInitialOrbitPosition() const {
 	if (!_initialOrbitPosition.has_value()) {
 		uint seed = this->seed + 4;
-		_initialOrbitPosition = 0; //TODO
+		if (parentRadius == -1) {
+			_initialOrbitPosition = 0;
+		} else if (parentRadius ==-2) {
+			_initialOrbitPosition = GalaxyGenerator::PI;
+		} else {
+			_initialOrbitPosition = RandomFloat(seed) * GalaxyGenerator::TWOPI;
+		}
 	}
 	return _initialOrbitPosition.value();
 }
@@ -756,8 +761,10 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 		if (maxChildren > 0) {
 			double age = GetAge();
 			double mass = GetMass();
-			double radius = GetRadius();
+			double orbitRadius = GetRadius();
 			double parentOrbitalPlaneTiltDegrees = GetOrbitalPlaneTiltDegrees();
+			double orbitDistance = GetOrbitDistance();
+			double maxChildOrbit = orbitDistance==0? this->maxChildOrbit : glm::min(this->maxChildOrbit, orbitDistance * 0.02);
 			
 			while (children.size() < maxChildren) {
 				GalacticPosition childPosInGalaxy = galacticPosition;
@@ -770,9 +777,9 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 						break;
 				}
 				
-				double childMass = mass * glm::pow(RandomFloat(seed), 2.0) * 0.02;
+				double childMass = mass * glm::pow(RandomFloat(seed), 10.0) * 0.02;
 				
-				if (mass < 1E12) break;
+				if (mass < 1E11) break; // don't make very small objects (like asteroids < 500m diameter)
 				
 				age *= 1.0 + glm::mix(-0.9, +0.85, CenterDistributedCurve(RandomFloat(seed)));
 				if (RandomFloat(seed) > 0.99) age = glm::mix(STARSYSTEM_AGE_MIN, STARSYSTEM_AGE_MAX, RandomFloat(seed)); // < 1% chances of being a foreign object (completely different age)
@@ -784,19 +791,19 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 					break; //TODO binary
 					
 				} else {
-					auto child = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, childMass, mass, radius, parentOrbitalPlaneTiltDegrees, 0, INFINITY, RandomInt(seed));
-					double childTotalRadius = child->GetOrbitDistance() + child->GetRadius() * 2.0;
-					radius += childTotalRadius * 1.33;
+					auto child = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, childMass, mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed));
+					double childTotalOrbitRadius = child->GetOrbitDistance() + child->GetRadius() * 2.0;
 					
 					// Check for errors
-					if (childTotalRadius > maxChildOrbit) {
+					if (childTotalOrbitRadius > maxChildOrbit) {
 						GalaxyGenerator::ClearCelestialCache(childPosInGalaxy.rawValue);
 						break;
 					}
 					children.push_back(child);
+					orbitRadius = childTotalOrbitRadius * 1.2;
 				}
 				
-				if (radius > maxChildOrbit) break;
+				if (orbitRadius > maxChildOrbit) break;
 			}
 		}
 		
@@ -806,15 +813,24 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 }
 
 glm::dvec3 Celestial::GetPositionInOrbit(double timestamp) {
-	const double orbitRadius = GetOrbitDistance();
-	if (orbitRadius == 0) return {0,0,0};
+	const double orbitDistance = GetOrbitDistance();
+	if (orbitDistance == 0) return {0,0,0};
+	
+	if (timestamp == 0) {
+		switch(GetLevel()) {
+			case 1: return {parentRadius==-2? -orbitDistance : orbitDistance,0,0};
+			case 2: return {0,orbitDistance,0};
+			case 3: return {0,0,orbitDistance};
+		}
+	}
+	
 	const double tilt = glm::radians(GetOrbitalPlaneTiltDegrees());
-	const double M = glm::sqrt(parentMass * GalaxyGenerator::G / glm::pow(orbitRadius, 3.0)) * timestamp + GetInitialOrbitPosition();
+	const double M = glm::sqrt(parentMass * GalaxyGenerator::G / glm::pow(orbitDistance, 3.0)) * timestamp + GetInitialOrbitPosition();
 	return glm::dvec3(
 		glm::cos(tilt) * glm::cos(M),
 		glm::sin(tilt) * glm::cos(M),
 		glm::sin(M)
-	) * orbitRadius;
+	) * orbitDistance;
 }
 
 #pragma endregion

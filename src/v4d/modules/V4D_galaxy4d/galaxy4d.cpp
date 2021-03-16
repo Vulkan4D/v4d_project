@@ -282,7 +282,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
 						scene->cameraParent = entity;
 					}
-					playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
+					scene->camera.worldPosition = worldPosition;
+					playerView->SetInitialViewDirection(forwardVector, upVector, true);
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
 				}

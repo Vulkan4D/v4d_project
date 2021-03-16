@@ -55,6 +55,9 @@ layout(set = 0, binding = 0) uniform Camera {
 	int accumulateFrames;
 	float denoise;
 	
+	i64vec3 originOffset;
+	dvec4 velocity; // w = speed as a ratio of C
+	
 	vec3 gravityVector;
 	
 } camera;

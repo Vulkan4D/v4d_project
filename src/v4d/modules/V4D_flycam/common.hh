@@ -7,7 +7,6 @@ struct PlayerView {
 	float mouseSensitivity = 5.0f;
 	double horizontalAngle = 0;
 	double verticalAngle = 0;
-	glm::dvec3 worldPosition {0};
 	glm::dvec3 velocity {0};
 	glm::dvec3 viewUp = {0,0,1};
 	glm::dvec3 viewForward {0,1,0};
@@ -26,8 +25,7 @@ struct PlayerView {
 		viewRightTarget = glm::cross(viewForwardTarget, viewUpTarget);
 	}
 	
-	void SetInitialPositionAndView(glm::dvec3 worldPosition, glm::dvec3 forward, glm::dvec3 up, bool prioritizeUp = false/* otherwise prioritize forward */) {
-		this->worldPosition = worldPosition;
+	void SetInitialViewDirection(glm::dvec3 forward, glm::dvec3 up, bool prioritizeUp = false/* otherwise prioritize forward */) {
 		auto right = glm::cross(forward, up);
 		if (prioritizeUp) {
 			forward = glm::cross(-right, up);

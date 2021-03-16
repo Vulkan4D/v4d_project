@@ -10,6 +10,8 @@ v4d::graphics::Renderer* r = nullptr;
 Scene* scene = nullptr;
 PlayerView player{};
 
+float timeWarp = 1.0;
+
 V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void*, ModuleGetCustomPtr, int) {
@@ -30,18 +32,31 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		scene = s;
 	}
 	
-	// V4D_MODULE_FUNC(void, PhysicsUpdate, double deltaTime) {
-	// 	std::lock_guard lock(player.mu);
-	// 	player.worldPosition += player.velocity * deltaTime;
-	// }
-	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		{std::lock_guard lock(player.mu);
-			player.worldPosition += player.velocity * r->previousDeltaTime;
-			scene->camera.MakeViewMatrix(player.worldPosition, player.viewForward, player.viewUp);
+			if (glm::length(player.velocity) > 1'000'000) {
+				scene->camera.originOffset += glm::i64vec3(player.velocity * r->previousDeltaTime);
+			} else {
+				scene->camera.worldPosition += player.velocity * r->previousDeltaTime;
+			}
+			{// Origin reset
+				const double MAX_WORLD_POS = 1'000'000'000.0;
+				glm::i64vec3 originOffsetOverflow = glm::i64vec3(scene->camera.worldPosition / MAX_WORLD_POS) * int64_t(MAX_WORLD_POS);
+				if (originOffsetOverflow.x != 0 || originOffsetOverflow.y != 0 || originOffsetOverflow.z != 0) {
+					scene->camera.originOffset += originOffsetOverflow;
+					scene->camera.worldPosition -= glm::dvec3(originOffsetOverflow);
+				}
+			}
+			scene->camera.MakeViewMatrix(scene->camera.worldPosition, player.viewForward, player.viewUp);
 		}
 		if (auto parent = scene->cameraParent.lock(); parent) {
 			parent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix) * glm::inverse(parent->cameraOffset));
+		}
+		
+		if (timeWarp == 0) {
+			scene->timestamp = 0;
+		} else {
+			scene->timestamp += r->deltaTime * timeWarp;
 		}
 	}
 	
@@ -51,7 +66,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			// ImGui::SetNextWindowSizeConstraints({380,90},{380,90});
 			// ImGui::Begin("Inputs");
-			ImGui::Text("Player Position %.2f, %.2f, %.2f", player.worldPosition.x, player.worldPosition.y, player.worldPosition.z);
+			ImGui::Text("Player Position %.2f, %.2f, %.2f", scene->camera.worldPosition.x, scene->camera.worldPosition.y, scene->camera.worldPosition.z);
 			float speed = (float)glm::length(player.velocity);
 			if (speed < 1.0) {
 				ImGui::Text("Movement speed: %d mm/s", (int)std::ceil(speed*1000.0));
@@ -67,6 +82,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			ImGui::SliderFloat("Sensitivity", &player.mouseSensitivity, 1.0f, 30.0f);
 			// ImGui::SetNextWindowPos({ImGui::GetWindowPos().x + ImGui::GetWindowSize().x + 5, 0});
 			// ImGui::End();
+			
+			ImGui::SliderFloat("Time Warp", &timeWarp, 0.0f, 1e12f, "%.1f", ImGuiSliderFlags_Logarithmic);
+			
 		#endif
 	}
 	

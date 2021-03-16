@@ -56,6 +56,8 @@
 
 #pragma region Galaxy
 
+	glm::dvec3 playerPositionInGalaxy {0}; // Light-Years grid
+
 	constexpr bool GALAXY_FADE = false;
 	
 	GalaxyGenerator galaxyGenerator;
@@ -92,9 +94,11 @@
 		
 		void Allocate() {
 			buffer.Allocate(r->renderingDevice);
+			allocated = true;
 		}
 		void Free() {
 			buffer.Free();
+			allocated = false;
 		}
 		void Push(VkCommandBuffer commandBuffer) {
 			if (!pushed) {
@@ -102,6 +106,9 @@
 				buffer.Push(commandBuffer, count);
 				pushed = true;
 			}
+		}
+		void Update(glm::dvec3 pos) {
+			pushConstant.relativePosition = glm::vec4(pos - glm::dvec3(playerPositionInGalaxy), sizeFactor);
 		}
 		void GenerateStars(glm::ivec3 pos) {
 			if (!allocated) Allocate();
@@ -132,8 +139,71 @@
 			galaxyBackgroundShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 		}
 	};
+	struct PlanetDebug {
+		v4d::graphics::Buffer buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(StarVertex)};
+		GalaxyPushConstant pushConstant;
+		bool allocated = false;
+		
+		void Allocate() {
+			buffer.Allocate(r->renderingDevice, v4d::graphics::MemoryUsage::MEMORY_USAGE_CPU_TO_GPU);
+			buffer.MapMemory(r->renderingDevice);
+			allocated = true;
+		}
+		void Free() {
+			if (allocated) {
+				buffer.UnmapMemory(r->renderingDevice);
+				buffer.Free(r->renderingDevice);
+				allocated = false;
+			}
+		}
+		StarVertex* operator->() {
+			if (!allocated) Allocate();
+			return (StarVertex*)buffer.data;
+		}
+		void Update(glm::dvec3 position, Celestial* celestial) {
+			pushConstant.brightnessFactor = 1.0;
+			pushConstant.minViewDistance = 0;
+			pushConstant.maxViewDistance = 0;
+			pushConstant.relativePosition = glm::vec4(position, 2.0);
+			(*this)->position = glm::dvec4(0.0, 0.0, 0.0, 1.0);
+			(*this)->color = glm::vec4(1);
+			switch (celestial->GetType()) {
+				case CelestialType::HyperGiant: // white
+					(*this)->color = glm::vec4(1,1,1,1);
+					(*this)->position.w = 8.0;
+					break;
+				case CelestialType::Star: // yellow
+					(*this)->color = glm::vec4(1,1,0,1);
+					(*this)->position.w = 4.0;
+					break;
+				case CelestialType::BrownDwarf: // red
+					(*this)->color = glm::vec4(1,0,0,1);
+					(*this)->position.w = 2.0;
+					break;
+				case CelestialType::Planet: // green
+					(*this)->color = glm::vec4(0,1,0,1);
+					break;
+				case CelestialType::GasGiant: // turquoise
+					(*this)->color = glm::vec4(0,1,1,1);
+					(*this)->position.w = 2.0;
+					break;
+				case CelestialType::BlackHole: // blue
+					(*this)->color = glm::vec4(0,0,1,1);
+					(*this)->position.w = 4.0;
+					break;
+				case CelestialType::Asteroid: // orange
+					(*this)->color = glm::vec4(1,0.5,0,0.5);
+					(*this)->position.w = 0.5;
+					break;
+			}
+		}
+		void Draw(VkCommandBuffer commandBuffer) {
+			galaxyBackgroundShader->SetData(buffer.buffer, 1);
+			galaxyBackgroundShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
+		}
+	};
+	std::unordered_map<uint64_t, PlanetDebug> planetsDebug {};
 	std::unordered_map<glm::ivec3, GalaxyChunk> galaxyChunks {};
-	glm::dvec3 playerPositionInGalaxy {0}; // Light-Years grid
 
 #pragma endregion
 
@@ -155,9 +225,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		playerView = (PlayerView*)V4D_Mod::LoadModule("V4D_flycam")->ModuleGetCustomPtr(0);
 		
-		playerView->SetInitialPositionAndView({0,0,0}, {0,1,0}, {0,0,1});
+		playerView->SetInitialViewDirection({0,1,0}, {0,0,1});
 		playerView->useFreeFlyCam = true;
-		playerView->camSpeed = 1;
+		playerView->camSpeed = LY2M(0.1);
 		
 		galaxyBackgroundShader = new v4d::graphics::vulkan::RasterShaderPipeline(*mainRenderModule->GetPipelineLayout("pl_background"), {
 			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.vert"),
@@ -304,6 +374,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// worldPosition += rightVector * (double)client->id;
 		// obj->SetTransform(worldPosition, forwardVector, upVector);
 		
+		GalacticPosition galacticPosition;
+		galacticPosition.SetReferenceFrame(130946, 2076, 130990);
+		obj->parent = galacticPosition.rawValue;
+		
 		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
 			stream << networking::action::ASSIGN_PLAYER_OBJ;
 			stream << playerObjId;
@@ -338,7 +412,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
 						scene->cameraParent = entity;
 					}
-					// playerView->SetInitialPositionAndView(worldPosition, forwardVector, upVector, true);
+					// scene->camera.worldPosition = ...
+					// playerView->SetInitialViewDirection(forwardVector, upVector, true);
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
 				}
@@ -480,19 +555,38 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			chunk.Free();
 		}
 		galaxyChunks.clear();
+		
+		for (auto&[id, planet] : planetsDebug) {
+			planet.Free();
+		}
+		planetsDebug.clear();
 	}
 	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
 			if (auto cameraParentRoot = v4d::graphics::RenderableGeometryEntity::GetRoot(cameraParent); cameraParentRoot) {
 				GalacticPosition galacticPosition {cameraParentRoot->parentId};
-				galacticPosition.SetReferenceFrame(131'000, 2'048, 131'000);
-				// if (galacticPosition.IsValid()) {
+				
+				{// Origin reset
+					glm::i64vec3 originOffsetLY = glm::round(M2LY(glm::dvec3(scene->camera.originOffset)));
+					if (originOffsetLY.x != 0 || originOffsetLY.y != 0 || originOffsetLY.z != 0) {
+						galacticPosition.posInGalaxy_x = uint64_t(int64_t(galacticPosition.posInGalaxy_x) + originOffsetLY.x);
+						galacticPosition.posInGalaxy_y = uint64_t(int64_t(galacticPosition.posInGalaxy_y) + originOffsetLY.y);
+						galacticPosition.posInGalaxy_z = uint64_t(int64_t(galacticPosition.posInGalaxy_z) + originOffsetLY.z);
+						scene->camera.originOffset.x -= LY2M_INT(originOffsetLY.x);
+						scene->camera.originOffset.y -= LY2M_INT(originOffsetLY.y);
+						scene->camera.originOffset.z -= LY2M_INT(originOffsetLY.z);
+						LOG(galacticPosition.posInGalaxy_x << ", " << galacticPosition.posInGalaxy_y << ", " << galacticPosition.posInGalaxy_z)
+					}
+				}
+				
+				if (galacticPosition.IsValid()) {
+					cameraParentRoot->parentId = galacticPosition.rawValue;
 					// if (galacticPosition.IsCelestial()) {
 						//...
 					// }
-					playerPositionInGalaxy = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + /*M2LY*/(scene->camera.worldPosition);
-				// }
+					playerPositionInGalaxy = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + M2LY(glm::dvec3(scene->camera.originOffset) + scene->camera.worldPosition);
+				}
 			}
 		}
 	}
@@ -500,31 +594,70 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, BeginSecondaryFrameUpdate) {
 		if (playerPositionInGalaxy.x < 0 || playerPositionInGalaxy.y < 0 || playerPositionInGalaxy.z < 0) return;
 		
-		glm::ivec3 playerPos = glm::round(playerPositionInGalaxy / STAR_CHUNK_SIZE);
+		GalacticPosition galacticPosition;
 		
-		for (int x = -STAR_CHUNK_GEN_OFFSET; x <= STAR_CHUNK_GEN_OFFSET; ++x) {
-			for (int y = -STAR_CHUNK_GEN_OFFSET; y <= STAR_CHUNK_GEN_OFFSET; ++y) {
-				for (int z = -STAR_CHUNK_GEN_OFFSET; z <= STAR_CHUNK_GEN_OFFSET; ++z) {
-					const auto pos = playerPos + glm::ivec3{x,y,z};
-					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE*2 && galaxyChunks.count(pos) == 0) {
-						galaxyChunks[pos].GenerateStars(pos*glm::ivec3(STAR_CHUNK_SIZE));
-						goto Continue;
+		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
+			if (auto cameraParentRoot = v4d::graphics::RenderableGeometryEntity::GetRoot(cameraParent); cameraParentRoot) {
+				galacticPosition = cameraParentRoot->parentId;
+			}
+		}
+		
+		if (galacticPosition.IsValid()) {
+			{// Stars
+				glm::ivec3 playerPos = glm::round(playerPositionInGalaxy / STAR_CHUNK_SIZE);
+				for (int x = -STAR_CHUNK_GEN_OFFSET; x <= STAR_CHUNK_GEN_OFFSET; ++x) {
+					for (int y = -STAR_CHUNK_GEN_OFFSET; y <= STAR_CHUNK_GEN_OFFSET; ++y) {
+						for (int z = -STAR_CHUNK_GEN_OFFSET; z <= STAR_CHUNK_GEN_OFFSET; ++z) {
+							const auto pos = playerPos + glm::ivec3{x,y,z};
+							if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) < STAR_MAX_VISIBLE_DISTANCE*2 && galaxyChunks.count(pos) == 0) {
+								galaxyChunks[pos].GenerateStars(pos*glm::ivec3(STAR_CHUNK_SIZE));
+								goto Continue;
+							}
+						}
+					}
+				}
+			Continue:
+				for (auto it = galaxyChunks.begin(); it != galaxyChunks.end();) {
+					auto&[pos, chunk] = *it;
+					if (glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) > STAR_MAX_VISIBLE_DISTANCE*2) {
+						chunk.Free();
+						it = galaxyChunks.erase(it);
+					} else {
+						chunk.Update(glm::dvec3(pos)*STAR_CHUNK_SIZE);
+						++it;
+					}
+				}
+			}
+			{// Celestials
+				double timestamp = scene->timestamp;
+				if (galaxyGenerator.GetStarSystemPresence(galacticPosition)) {
+					const StarSystem& starSystem(galacticPosition);
+					auto offset = starSystem.GetOffsetLY() - M2LY(glm::dvec3(scene->camera.originOffset) + scene->camera.worldPosition);
+					for (auto& level1 : starSystem.GetCentralCelestialBodies()) if (level1) {
+						auto level1PositionInOrbit = offset + M2LY(level1->GetPositionInOrbit(timestamp));
+						planetsDebug[level1->galacticPosition.rawValue].Update(level1PositionInOrbit, level1.get());
+						for (auto& level2 : level1->GetChildren()) {
+							auto level2PositionInOrbit = level1PositionInOrbit + M2LY(level2->GetPositionInOrbit(timestamp));
+							planetsDebug[level2->galacticPosition.rawValue].Update(level2PositionInOrbit, level2.get());
+							for (auto& level3 : level2->GetChildren()) {
+								auto level3PositionInOrbit = level2PositionInOrbit + M2LY(level3->GetPositionInOrbit(timestamp));
+								planetsDebug[level3->galacticPosition.rawValue].Update(level3PositionInOrbit, level3.get());
+							}
+						}
+					}
+				}
+				for (auto it = planetsDebug.begin(); it != planetsDebug.end();) {
+					auto&[pos, planet] = *it;
+					if (GalacticPosition(pos).posInGalaxy != galacticPosition.posInGalaxy) {
+						planet.Free();
+						it = planetsDebug.erase(it);
+					} else {
+						++it;
 					}
 				}
 			}
 		}
 		
-		Continue: 
-		for (auto it = galaxyChunks.begin(); it != galaxyChunks.end();) {
-			auto&[pos, chunk] = *it;
-			if (glm::distance(glm::dvec3(pos)*STAR_CHUNK_SIZE, playerPositionInGalaxy) > STAR_MAX_VISIBLE_DISTANCE*2) {
-				chunk.Free();
-				it = galaxyChunks.erase(it);
-			} else {
-				chunk.pushConstant.relativePosition = glm::vec4(glm::dvec3(pos)*STAR_CHUNK_SIZE - glm::dvec3(playerPositionInGalaxy), chunk.sizeFactor);
-				++it;
-			}
-		}
 	}
 
 	V4D_MODULE_FUNC(void, SecondaryRenderUpdate2, VkCommandBuffer commandBuffer) {
@@ -559,6 +692,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			for (auto&[pos, chunk] : galaxyChunks) {
 				chunk.Draw(commandBuffer);
+			}
+			for (auto&[id, planet] : planetsDebug) {
+				planet.Draw(commandBuffer);
 			}
 		galaxyBackgroundRenderPass.End(r->renderingDevice, commandBuffer);
 	}
