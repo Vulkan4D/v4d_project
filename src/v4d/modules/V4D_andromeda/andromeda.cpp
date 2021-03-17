@@ -212,8 +212,19 @@
 #pragma endregion
 
 
+
+
 #include "../V4D_flycam/common.hh"
 PlayerView* playerView = nullptr;
+
+GalacticPosition GetDefaultGalacticPosition() {
+	GalacticPosition defaultGalacticPosition;
+	defaultGalacticPosition.SetReferenceFrame(135983499432086); // very large system with over 300 bodies
+	// defaultGalacticPosition.SetReferenceFrame(139712601895775); // 8 stars
+	// defaultGalacticPosition.SetReferenceFrame(134436245599421); // very small system
+	return defaultGalacticPosition;
+}
+
 
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -376,11 +387,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// worldPosition += rightVector * (double)client->id;
 		// obj->SetTransform(worldPosition, forwardVector, upVector);
 		
-		GalacticPosition galacticPosition;
-		// galacticPosition.SetReferenceFrame(130946, 2076, 130990); // huge binary system with three orbital planes
-		// galacticPosition.SetReferenceFrame(124522378678244); // dense system around a high density star
-		galacticPosition.SetReferenceFrame(150943944539739); // lots of celestials
-		obj->parent = galacticPosition.rawValue;
+		obj->parent = GetDefaultGalacticPosition().rawValue;
 		
 		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
 			stream << networking::action::ASSIGN_PLAYER_OBJ;

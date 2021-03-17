@@ -8,7 +8,7 @@ double Celestial::GetDensity() const { // kg/m3
 		if (GetType() == CelestialType::BinaryCenter) {
 			_density = 0;
 		} else {
-			uint seed = this->seed + 1;
+			uint seed = this->seed + SEED_CELESTIAL_DENSITY;
 			switch (GetType()) {
 				case CelestialType::Asteroid:
 					_density = glm::mix(1000.0, 8000.0, CenterDistributedCurve(RandomFloat(seed)));
@@ -56,11 +56,11 @@ double Celestial::GetRadius() const {
 }
 double Celestial::GetOrbitDistance() const {
 	if (!_orbitDistance.has_value()) {
-		if (parentMass == 0 || parentRadius == 0) {
+		if (parentMass == 0 || (GetLevel() == 1 && GetType() == CelestialType::BinaryCenter)) {
 			_orbitDistance = 0;
 		} else {
-			uint seed = this->seed + 2;
-			_orbitDistance = (glm::abs(parentRadius) * 1.1 + GetRadius() * glm::pow(10.0, glm::mix(+1.81, +3.2, glm::pow(RandomFloat(seed), 1.6)))) * (parentRadius < 0 ? 2.0 : 1.0);
+			uint seed = this->seed + SEED_CELESTIAL_ORBIT_DISTANCE;
+			_orbitDistance = (parentRadius * 1.1 + GetRadius() * glm::pow(10.0, glm::mix(+1.81, +3.2, glm::pow(RandomFloat(seed), 1.6)))) * ((flags&CELESTIAL_FLAG_IS_BINARY_1 | flags&CELESTIAL_FLAG_IS_BINARY_2) ? 2.0 : 1.0);
 		}
 	}
 	return _orbitDistance.value();
@@ -75,18 +75,25 @@ double Celestial::GetOrbitPeriod() const {
 }
 double Celestial::GetOrbitalPlaneTiltDegrees() const {
 	if (!_orbitalPlaneTiltDegrees.has_value()) {
-		uint seed = this->seed + 3;
-		_orbitalPlaneTiltDegrees = parentOrbitalPlaneTiltDegrees; //TODO
+		uint seed = this->seed + SEED_CELESTIAL_ORBITAL_PLANE_TILT;
+		_orbitalPlaneTiltDegrees = parentOrbitalPlaneTiltDegrees + RandomFloat(seed) * GetIndex();
 	}
 	return _orbitalPlaneTiltDegrees.value();
 }
 double Celestial::GetInitialOrbitPosition() const {
 	if (!_initialOrbitPosition.has_value()) {
-		uint seed = this->seed + 4;
-		if (parentRadius == -1) {
-			_initialOrbitPosition = 0;
-		} else if (parentRadius ==-2) {
-			_initialOrbitPosition = PI;
+		uint seed = this->seed + SEED_CELESTIAL_ORBIT_INITIAL_POSITION;
+		uint parentSeed = this->parentSeed + SEED_CELESTIAL_ORBIT_INITIAL_POSITION_COMMON;
+		if (flags&CELESTIAL_FLAG_IS_BINARY_1) {
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI;
+		} else if (flags&CELESTIAL_FLAG_IS_BINARY_2) {
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + PI; // 180 degrees from BINARY_1
+		} else if (flags&CELESTIAL_FLAG_HAS_LAGRANGE_SIBLINGS) {
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI;
+		} else if (flags&CELESTIAL_FLAG_AT_L4) {
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/+3; // 60 degrees ahead of HAS_LAGRANGE_SIBLINGS
+		} else if (flags&CELESTIAL_FLAG_AT_L5) {
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/-3; // 60 degrees behind HAS_LAGRANGE_SIBLINGS
 		} else {
 			_initialOrbitPosition = RandomFloat(seed) * TWOPI;
 		}
@@ -95,104 +102,157 @@ double Celestial::GetInitialOrbitPosition() const {
 }
 bool Celestial::GetTidallyLocked() const {
 	if (!_tidallyLocked.has_value()) {
-		uint seed = this->seed + 5;
+		uint seed = this->seed + SEED_CELESTIAL_TIDALLY_LOCKED;
 		_tidallyLocked = false; //TODO
 	}
 	return _tidallyLocked.value();
 }
 double Celestial::GetTiltDegrees() const {
 	if (!_tiltDegrees.has_value()) {
-		uint seed = this->seed + 6;
+		uint seed = this->seed + SEED_CELESTIAL_TILT;
 		_tiltDegrees = 0; //TODO
 	}
 	return _tiltDegrees.value();
 }
 double Celestial::GetRotationPeriod() const {
 	if (!_rotationPeriod.has_value()) {
-		uint seed = this->seed + 7;
+		uint seed = this->seed + SEED_CELESTIAL_ROTATION_PERIOD;
 		_rotationPeriod = 0; //TODO
 	}
 	return _rotationPeriod.value();
 }
 double Celestial::GetInitialRotation() const {
 	if (!_initialRotation.has_value()) {
-		uint seed = this->seed + 8;
+		uint seed = this->seed + SEED_CELESTIAL_INITIAL_ROTATION;
 		_initialRotation = 0; //TODO
 	}
 	return _initialRotation.value();
 }
 const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 	if (!_children.has_value()) {
-		uint seed = this->seed + 9;
+		uint parentSeed = this->seed + SEED_CELESTIAL_CHILDREN_COMMON;
+		uint seed = parentSeed + SEED_CELESTIAL_CHILDREN;
 		std::lock_guard lock(GalaxyGenerator::cacheMutex);
 		std::vector<std::shared_ptr<Celestial>> children {};
 		
 		const int level = GetLevel();
-		int childLevel;
-		int maxChildren;
-		switch (level) {
-			case 0:
-			case 1:
-				maxChildren = glm::round(CenterDistributedCurve(RandomFloat(seed)) * GalacticPosition::MAX_PLANETS);
-				childLevel = 2;
-				break;
-			case 2:
-				maxChildren = glm::round(glm::pow(RandomFloat(seed), 2.0) * glm::mix(3.0, double(GalacticPosition::MAX_MOONS), glm::clamp(glm::smoothstep(23.0, 27.0, log10(GetMass())), 0.0, 1.0)));
-				childLevel = 3;
-				break;
-			case 3:
-				maxChildren = 0;
-				break;
-		}
 		
-		if (maxChildren > 0) {
+		if (level == 2 && GetType() == CelestialType::BinaryCenter) {
+			// Generate binary planets
 			double age = GetAge();
 			double mass = GetMass();
-			double orbitRadius = GetRadius();
-			if (orbitRadius == 0) orbitRadius = parentRadius;
-			double parentOrbitalPlaneTiltDegrees = GetOrbitalPlaneTiltDegrees();
-			double orbitDistance = GetOrbitDistance();
-			double maxChildOrbit = orbitDistance==0? this->maxChildOrbit : glm::min(this->maxChildOrbit, orbitDistance * 0.02);
+			double massDiff = glm::pow(RandomFloat(seed), 2.0) * 0.17;
+			GalacticPosition childPosInGalaxy = galacticPosition;
+			childPosInGalaxy.level3 = 1;
+			children.push_back(GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5-massDiff), /*parent*/mass, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed), this->seed, CELESTIAL_FLAG_IS_BINARY_1));
+			childPosInGalaxy.level3 = 2;
+			children.push_back(GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parent*/mass, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, children[0]->GetOrbitDistance(), maxChildOrbit, RandomInt(seed), this->seed, CELESTIAL_FLAG_IS_BINARY_2));
+		} else {
+			int childLevel;
+			int maxChildren;
+			switch (level) {
+				case 0:
+				case 1:
+					maxChildren = glm::round(CenterDistributedCurve(RandomFloat(seed)) * GalacticPosition::MAX_PLANETS);
+					childLevel = 2;
+					break;
+				case 2:
+					maxChildren = glm::round(glm::pow(RandomFloat(seed), 2.0) * glm::mix(3.0, double(GalacticPosition::MAX_MOONS), glm::clamp(glm::smoothstep(23.0, 27.0, log10(GetMass())), 0.0, 1.0)));
+					childLevel = 3;
+					break;
+				case 3:
+					maxChildren = 0;
+					break;
+			}
 			
-			while (children.size() < maxChildren) {
-				GalacticPosition childPosInGalaxy = galacticPosition;
-				switch (childLevel) {
-					case 2:
-						childPosInGalaxy.level2 = children.size() + 1;
-						break;
-					case 3:
-						childPosInGalaxy.level3 = children.size() + 1;
-						break;
-				}
+			if (maxChildren > 0) {
+				double age = GetAge();
+				double mass = GetMass();
+				double orbitRadius = GetRadius();
+				if (orbitRadius == 0) orbitRadius = parentRadius;
+				double parentOrbitalPlaneTiltDegrees = GetOrbitalPlaneTiltDegrees();
+				double orbitDistance = GetOrbitDistance();
+				double maxChildOrbit = orbitDistance==0? this->maxChildOrbit : glm::min(this->maxChildOrbit, orbitDistance * 0.02);
 				
-				double childMass = LogarithmicMix(1e12, mass * 0.04, RandomFloat(seed));
-				
-				age *= 1.0 + glm::mix(-0.9, +0.85, CenterDistributedCurve(RandomFloat(seed)));
-				if (RandomFloat(seed) > 0.99) age = glm::mix(STARSYSTEM_AGE_MIN, STARSYSTEM_AGE_MAX, RandomFloat(seed)); // < 1% chances of being a foreign object (completely different age)
-				
-				if (age < 0.0001) break; // early break, maybe this can be used in the future to to something cool instead without affecting existing stuff
-				
-				if (childLevel == 2 && RandomFloat(seed) > 0.99) {
-					// 1% chance of special stuff like binary planets and such, to be implemented in the future.
-					// It should not affect existing celestials, it will only add to them.
-					// This temporary 'break;' may explain the number of systems (~1%) that have zero or very few planets.
-					
-					break; //TODO remove this break and implement cool stuff here
-					
-				} else {
-					auto child = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, childMass, mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed));
-					double childTotalOrbitRadius = child->GetOrbitDistance() + child->GetRadius() * 2.0;
-					
-					// Check for errors
-					if (childTotalOrbitRadius > maxChildOrbit) {
-						GalaxyGenerator::ClearCelestialCache(childPosInGalaxy.rawValue);
-						break;
+				while (children.size() < maxChildren) {
+					GalacticPosition childPosInGalaxy = galacticPosition;
+					switch (childLevel) {
+						case 2:
+							childPosInGalaxy.level2 = children.size() + 1;
+							break;
+						case 3:
+							childPosInGalaxy.level3 = children.size() + 1;
+							break;
 					}
-					children.push_back(child);
+					
+					double childMass = LogarithmicMix(1e12, mass * 0.05, RandomFloat(seed));
+					
+					age *= 1.0 + glm::mix(-0.9, +0.85, CenterDistributedCurve(RandomFloat(seed)));
+					if (RandomFloat(seed) > 0.99) age = glm::mix(STARSYSTEM_AGE_MIN, STARSYSTEM_AGE_MAX, RandomFloat(seed)); // < 1% chances of being a foreign object (completely different age)
+					
+					if (age < 0.0001) break; // early break, maybe this can be used in the future to to something cool instead without affecting existing stuff
+					
+					bool mayHaveSiblingsInLagrangePoint = childLevel >= 2 && childMass > 1e23 && (mass / childMass) > 25.0 && children.size()+4 < maxChildren && RandomFloat(seed) > 0.5;
+					
+					std::shared_ptr<Celestial> child = nullptr;
+					double childTotalOrbitRadius;
+					
+					if (childLevel == 2 && RandomFloat(seed) > 0.95) { // 5% chances of having a binary planet
+						while (childMass >= 1e26) childMass /= 4.0; // no binary gas giants
+						
+						child = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, childMass, /*parent*/mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed), mayHaveSiblingsInLagrangePoint? this->seed : parentSeed, mayHaveSiblingsInLagrangePoint? CELESTIAL_FLAG_HAS_LAGRANGE_SIBLINGS : 0);
+						childTotalOrbitRadius = child->GetOrbitDistance() * 1.1;
+						
+						// Check for errors
+						if (childTotalOrbitRadius > maxChildOrbit) {
+							GalaxyGenerator::ClearCelestialCache(childPosInGalaxy.rawValue);
+							break;
+						}
+						children.push_back(child);
+					} else {
+						child = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, childMass, /*parent*/mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed), mayHaveSiblingsInLagrangePoint? this->seed : parentSeed, mayHaveSiblingsInLagrangePoint? CELESTIAL_FLAG_HAS_LAGRANGE_SIBLINGS : 0);
+						childTotalOrbitRadius = child->GetOrbitDistance() + child->GetRadius() * 2.0;
+						
+						// Check for errors
+						if (childTotalOrbitRadius > maxChildOrbit) {
+							GalaxyGenerator::ClearCelestialCache(childPosInGalaxy.rawValue);
+							break;
+						}
+						children.push_back(child);
+					}
+					
 					orbitRadius = childTotalOrbitRadius * 1.2;
+					
+					// L4 & L5 lagrange points
+					if (mayHaveSiblingsInLagrangePoint) {
+						if (RandomFloat(seed) > 0.3) {
+							// Add L4
+							switch (childLevel) {
+								case 2:
+									childPosInGalaxy.level2 = children.size() + 1;
+									break;
+								case 3:
+									childPosInGalaxy.level3 = children.size() + 1;
+									break;
+							}
+							children.push_back(GalaxyGenerator::MakeCelestial(childPosInGalaxy, LogarithmicMix(0.0001, age * 0.1, RandomFloat(seed)), childMass * RandomFloat(seed) * 0.04, /*parent*/mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, child->GetOrbitDistance(), maxChildOrbit, RandomInt(seed), this->seed, CELESTIAL_FLAG_AT_L4));
+						}
+						if (RandomFloat(seed) > 0.3) {
+							// Add L5
+							switch (childLevel) {
+								case 2:
+									childPosInGalaxy.level2 = children.size() + 1;
+									break;
+								case 3:
+									childPosInGalaxy.level3 = children.size() + 1;
+									break;
+							}
+							children.push_back(GalaxyGenerator::MakeCelestial(childPosInGalaxy, LogarithmicMix(0.0001, age * 0.1, RandomFloat(seed)), childMass * RandomFloat(seed) * 0.04, /*parent*/mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, child->GetOrbitDistance(), maxChildOrbit, RandomInt(seed), this->seed, CELESTIAL_FLAG_AT_L5));
+						}
+					}
+					
+					if (orbitRadius > maxChildOrbit) break;
 				}
-				
-				if (orbitRadius > maxChildOrbit) break;
 			}
 		}
 		
@@ -207,9 +267,9 @@ glm::dvec3 Celestial::GetPositionInOrbit(double timestamp) {
 	
 	if (timestamp == 0) {
 		switch(GetLevel()) {
-			case 1: return {parentRadius==-2? -orbitDistance : orbitDistance,0,0};
-			case 2: return {0,orbitDistance,0};
-			case 3: return {0,0,orbitDistance};
+			case 1: return {(flags&CELESTIAL_FLAG_IS_BINARY_2)? -orbitDistance : orbitDistance,0,0};
+			case 2: return {(flags&CELESTIAL_FLAG_AT_L4)? +orbitDistance*0.2 : ((flags&CELESTIAL_FLAG_AT_L5)? -orbitDistance*0.2 : 0) ,orbitDistance,0};
+			case 3: return {(flags&CELESTIAL_FLAG_AT_L4)? +orbitDistance*0.2 : ((flags&CELESTIAL_FLAG_AT_L5)? -orbitDistance*0.2 : 0) ,0,(flags&CELESTIAL_FLAG_IS_BINARY_2)? -orbitDistance : orbitDistance};
 		}
 	}
 	

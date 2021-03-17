@@ -5,6 +5,7 @@
 static constexpr double G = 6.67408E-11;
 static constexpr double PI = 3.14159265359;
 static constexpr double TWOPI = 2.0 * PI;
+static constexpr double HALFPI = 0.5 * PI;
 
 static uint RandomInt(uint& seed) {
 	// LCG values from Numerical Recipes

@@ -89,38 +89,38 @@ void GalaxyGenerator::ClearCelestialCache(GalacticPosition posInGalaxy) {
 }
 
 
-std::shared_ptr<Celestial> GalaxyGenerator::MakeCelestial(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed) {
+std::shared_ptr<Celestial> GalaxyGenerator::MakeCelestial(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed, uint parentSeed, uint32_t flags) {
 	std::lock_guard lock(cacheMutex);
 	try {
 		return celestials.at(galacticPosition.rawValue);
 	} catch(std::out_of_range) {
 		if (mass < 1E21) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<Asteroid>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Asteroid>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
 		if (mass < 1E26) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<Planet>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Planet>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
 		if (mass < 1E28) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<GasGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<GasGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
 		if (mass < 1E29) {
-			return celestials[galacticPosition.rawValue] = std::make_shared<BrownDwarf>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			return celestials[galacticPosition.rawValue] = std::make_shared<BrownDwarf>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
 		if (mass < 1E32) {
-			if (RandomFloat(seed) < 0.002) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
-			return celestials[galacticPosition.rawValue] = std::make_shared<Star>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			if (RandomFloat(seed) < 0.002) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
+			return celestials[galacticPosition.rawValue] = std::make_shared<Star>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
 		if (mass < 1E35) {
-			if (RandomFloat(seed) < 0.0001) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
-			return celestials[galacticPosition.rawValue] = std::make_shared<HyperGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+			if (RandomFloat(seed) < 0.0001) return celestials[galacticPosition.rawValue] = std::make_shared<BlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
+			return celestials[galacticPosition.rawValue] = std::make_shared<HyperGiant>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 		}
-		return celestials[galacticPosition.rawValue] = std::make_shared<SuperMassiveBlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+		return celestials[galacticPosition.rawValue] = std::make_shared<SuperMassiveBlackHole>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 	}
 }
 
-std::shared_ptr<Celestial> GalaxyGenerator::MakeBinaryCenter(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed) {
+std::shared_ptr<Celestial> GalaxyGenerator::MakeBinaryCenter(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed, uint parentSeed, uint32_t flags) {
 	std::lock_guard lock(cacheMutex);
-	return celestials[galacticPosition.rawValue] = std::make_shared<BinaryCenter>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed);
+	return celestials[galacticPosition.rawValue] = std::make_shared<BinaryCenter>(galacticPosition, age, mass, parentMass, parentRadius, parentOrbitalPlaneTiltDegrees, forcedOrbitDistance, maxOrbitRadius, seed, parentSeed, flags);
 }
 
 std::shared_ptr<Celestial> GalaxyGenerator::GetCelestial(GalacticPosition galacticPosition) {

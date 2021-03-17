@@ -3,6 +3,13 @@
 #include "celestials/CelestialType.hh"
 #include "GalacticPosition.hpp"
 
+static const uint32_t CELESTIAL_FLAG_IS_CENTER_STAR = 1;
+static const uint32_t CELESTIAL_FLAG_IS_BINARY_1 = 1<<1;
+static const uint32_t CELESTIAL_FLAG_IS_BINARY_2 = 1<<2;
+static const uint32_t CELESTIAL_FLAG_HAS_LAGRANGE_SIBLINGS = 1<<3;
+static const uint32_t CELESTIAL_FLAG_AT_L4 = 1<<4;
+static const uint32_t CELESTIAL_FLAG_AT_L5 = 1<<5;
+
 class Celestial {
 friend class StarSystem;
 public:
@@ -11,10 +18,12 @@ protected:
 	double age;
 	double mass;
 	double parentMass;
-	double parentRadius; // special values may be -1 and -2 for the two binary members
+	double parentRadius;
 	double parentOrbitalPlaneTiltDegrees;
 	double maxChildOrbit;
 	uint seed;
+	uint parentSeed;
+	uint32_t flags;
 	
 	mutable std::optional<double> _density = std::nullopt;
 	mutable std::optional<double> _radius = std::nullopt;
@@ -28,7 +37,7 @@ protected:
 	mutable std::optional<double> _initialRotation = std::nullopt;
 	mutable std::optional<std::vector<std::shared_ptr<Celestial>>> _children = std::nullopt;
 public:
-	Celestial(GalacticPosition posInGalaxy, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxChildOrbit, uint seed)
+	Celestial(GalacticPosition posInGalaxy, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxChildOrbit, uint seed, uint parentSeed, uint32_t flags)
 	: galacticPosition(posInGalaxy)
 	, age(age)
 	, mass(mass)
@@ -37,6 +46,8 @@ public:
 	, parentOrbitalPlaneTiltDegrees(parentOrbitalPlaneTiltDegrees)
 	, maxChildOrbit(maxChildOrbit)
 	, seed(seed)
+	, parentSeed(parentSeed)
+	, flags(flags)
 	{if (forcedOrbitDistance > 0) _orbitDistance = forcedOrbitDistance;}
 	
 	double GetMass() const {return mass;} // Kg
@@ -61,6 +72,17 @@ public:
 		if (galacticPosition.level2) return 2;
 		if (galacticPosition.level1) return 1;
 		return 0;
+	}
+	
+	constexpr int GetIndex() const {
+		if (galacticPosition.level3) return galacticPosition.level3;
+		if (galacticPosition.level2) return galacticPosition.level2;
+		if (galacticPosition.level1) return galacticPosition.level1;
+		return 0;
+	}
+	
+	constexpr bool Is(uint32_t flag) const {
+		return flags & flag;
 	}
 	
 	std::shared_ptr<Celestial> GetChild(uint64_t index) const {

@@ -79,7 +79,7 @@ public:
 	// 	return {color, brightness};
 	// }
 	
-	static std::shared_ptr<Celestial> MakeCelestial(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double forcedOrbitDistance, double maxOrbitRadius, uint seed);
-	static std::shared_ptr<Celestial> MakeBinaryCenter(GalacticPosition galacticPosition, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double age, double forcedOrbitDistance, double maxOrbitRadius, uint seed);
+	static std::shared_ptr<Celestial> MakeCelestial(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed, uint parentSeed, uint32_t flags);
+	static std::shared_ptr<Celestial> MakeBinaryCenter(GalacticPosition galacticPosition, double age, double mass, double parentMass, double parentRadius, double parentOrbitalPlaneTiltDegrees, double forcedOrbitDistance, double maxOrbitRadius, uint seed, uint parentSeed, uint32_t flags);
 
 };

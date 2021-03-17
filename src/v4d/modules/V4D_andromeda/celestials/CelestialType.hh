@@ -1,14 +1,14 @@
 #pragma once
 
 enum class CelestialType {
-	BinaryCenter,
-	RingObject,
-	Asteroid,
-	Planet,
-	GasGiant,
-	BrownDwarf,
-	Star,
 	HyperGiant,
+	Star,
+	BrownDwarf,
+	GasGiant,
+	Planet,
+	Asteroid,
 	BlackHole,
 	SuperMassiveBlackHole,
+	BinaryCenter,
+	RingObject,
 };

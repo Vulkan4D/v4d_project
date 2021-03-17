@@ -65,7 +65,7 @@ int StarSystem::GetNbCentralBodies() const {
 }
 uint StarSystem::GetPlanetarySeed() const {
 	if (!_planetarySeed.has_value()) {
-		_planetarySeed = UniformFloatFromStarPos(posInGalaxy, SEED_STARSYSTEM_PLANETARY_SEED) * SEED_STARSYSTEM_PLANETARY_SEED_2;
+		_planetarySeed = (int)glm::round(double(UniformFloatFromStarPos(posInGalaxy, SEED_STARSYSTEM_PLANETARY_SEED)) * SEED_STARSYSTEM_PLANETARY_SEED_2);
 	}
 	return _planetarySeed.value();
 }
@@ -75,7 +75,8 @@ const StarSystem::CentralCelestialBodyList& StarSystem::GetCentralCelestialBodie
 		std::array<std::shared_ptr<Celestial>, 3> centralCelestialBodies {nullptr, nullptr, nullptr};
 		
 		GalacticPosition childPosInGalaxy = posInGalaxy;
-		uint seed = GetPlanetarySeed();
+		uint parentSeed = GetPlanetarySeed();
+		uint seed = parentSeed + SEED_STARSYSTEM_CENTRAL_BODIES;
 		double age = GetAge();
 		double parentMass = GetMass();
 		double mass = parentMass * glm::mix(0.95, 0.999, RandomFloat(seed));
@@ -87,17 +88,17 @@ const StarSystem::CentralCelestialBodyList& StarSystem::GetCentralCelestialBodie
 		if (n == 1) {
 			// Single star
 			childPosInGalaxy.level1 = 1;
-			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed), parentSeed, CELESTIAL_FLAG_IS_CENTER_STAR);
 		} else if (n == 2) {
 			// Binary star
 			double massDiff = glm::pow(RandomFloat(seed), 2.0) * 0.17;
 			childPosInGalaxy.level1 = 1;
-			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5-massDiff), /*parentMass*/mass, /*parentRadius*/-1, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[1] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5-massDiff), /*parentMass*/mass, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed), parentSeed, CELESTIAL_FLAG_IS_BINARY_1);
 			childPosInGalaxy.level1 = 2;
-			centralCelestialBodies[2] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parentMass*/mass, /*parentRadius*/-2, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/centralCelestialBodies[1]->GetOrbitDistance(), maxChildOrbit, RandomInt(seed));
+			centralCelestialBodies[2] = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, mass * (0.5+massDiff), /*parentMass*/mass, /*parentRadius*/0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/centralCelestialBodies[1]->GetOrbitDistance(), maxChildOrbit, RandomInt(seed), parentSeed, CELESTIAL_FLAG_IS_BINARY_2);
 			if (orbits == 3) {
 				childPosInGalaxy.level1 = 0;
-				centralCelestialBodies[0] = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/centralCelestialBodies[1]->GetOrbitDistance() * 5.0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed));
+				centralCelestialBodies[0] = GalaxyGenerator::MakeBinaryCenter(childPosInGalaxy, age, mass, /*parentMass*/0, /*parentRadius*/centralCelestialBodies[1]->GetOrbitDistance() * 5.0, parentOrbitalPlaneTiltDegrees, /*forcedOrbitDistance*/0, maxChildOrbit, RandomInt(seed), parentSeed, 0);
 			}
 		}
 		_centralCelestialBodies = centralCelestialBodies;
