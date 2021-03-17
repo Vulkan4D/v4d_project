@@ -8,13 +8,13 @@
 #define M2LY(n)		((n) * 1.0E-16)
 #define LY2M_INT(n)		((n) * int64_t(1.0E+16))
 #define M2LY_INT(n)		((n) / int64_t(1.0E+16))
+#define AU2M(n)		((n) * 149597870700)
+#define M2AU(n)		((n) * 6.6845871222684E-12)
 
 // #define AU2LY(n)	((n) * 1.5812056939013E-5)
 // #define LY2AU(n)	((n) * 63242.878763782)
 // #define AU2KM(n)	((n) * 149597870.7)
 // #define KM2AU(n)	((n) * 6.6845871222684E-9)
-// #define AU2M(n)		((n) * 149597870700)
-// #define M2AU(n)		((n) * 6.6845871222684E-12)
 // #define LY2KM(n)	((n) * 9461000000000)
 // #define KM2LY(n)	((n) * 1.056970721911E-13)
 

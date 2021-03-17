@@ -1,4 +1,3 @@
-#define _V4D_MODULE
 #include <v4d.h>
 
 #include "GalaxyGenerator.h"
@@ -62,7 +61,6 @@
 
 	constexpr bool GALAXY_FADE = false;
 	
-	GalaxyGenerator galaxyGenerator;
 	v4d::graphics::vulkan::RenderPass galaxyBackgroundRenderPass;
 	v4d::graphics::vulkan::RasterShaderPipeline* galaxyBackgroundShader = nullptr;
 	v4d::graphics::vulkan::RasterShaderPipeline* galaxyFadeShader = nullptr;
@@ -120,7 +118,7 @@
 				for (int y = -bounds.y; y < bounds.y; ++y) {
 					for (int z = -bounds.z; z < bounds.z; ++z) {
 						const glm::ivec3 posInGalaxy = pos + glm::ivec3(x,y,z);
-						if (galaxyGenerator.GetStarSystemPresence(posInGalaxy)) {
+						if (GalaxyGenerator::GetStarSystemPresence(posInGalaxy)) {
 							const StarSystem& starSystem(posInGalaxy);
 							glm::vec4 color = starSystem.GetVisibleColor();
 							if (color.a > 0.0001) {
@@ -130,7 +128,7 @@
 									color
 								};
 							}
-							galaxyGenerator.ClearStarSystemCache(posInGalaxy);
+							GalaxyGenerator::ClearStarSystemCache(posInGalaxy);
 						}
 					}
 				}
@@ -224,7 +222,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(int, OrderIndex) {return -10;}
 	
-	V4D_MODULE_FUNC(void, ModuleLoad) {
+	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* _s) {
+		scene = _s;
+		
 		// Load Dependencies
 		mainRenderModule = V4D_Mod::LoadModule(APP_MAIN_RENDER_MODULE);
 		mainMultiplayerModule = V4D_Mod::LoadModule(APP_MAIN_MULTIPLAYER_MODULE);
@@ -249,7 +249,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		img_background = (v4d::graphics::CubeMapImage*)mainRenderModule->GetImage("img_background");
 	}
 	
-	V4D_MODULE_FUNC(void, ModuleUnload) {
+	V4D_MODULE_FUNC(void, UnloadScene) {
 		if (galaxyBackgroundShader) delete galaxyBackgroundShader;
 		if (galaxyFadeShader) delete galaxyFadeShader;
 	}
@@ -272,10 +272,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		clientSideObjects = (ClientSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_CLIENT_OBJECTS);
 	}
 	
-	V4D_MODULE_FUNC(void, LoadScene, v4d::scene::Scene* _s) {
-		scene = _s;
-	}
-
 #pragma endregion
 	
 #pragma region Input
@@ -381,7 +377,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		// obj->SetTransform(worldPosition, forwardVector, upVector);
 		
 		GalacticPosition galacticPosition;
-		galacticPosition.SetReferenceFrame(130946, 2076, 130990);
+		// galacticPosition.SetReferenceFrame(130946, 2076, 130990); // huge binary system with three orbital planes
+		// galacticPosition.SetReferenceFrame(124522378678244); // dense system around a high density star
+		galacticPosition.SetReferenceFrame(150943944539739); // lots of celestials
 		obj->parent = galacticPosition.rawValue;
 		
 		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
@@ -582,7 +580,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						scene->camera.originOffset.x -= LY2M_INT(originOffsetLY.x);
 						scene->camera.originOffset.y -= LY2M_INT(originOffsetLY.y);
 						scene->camera.originOffset.z -= LY2M_INT(originOffsetLY.z);
-						LOG(galacticPosition.posInGalaxy_x << ", " << galacticPosition.posInGalaxy_y << ", " << galacticPosition.posInGalaxy_z)
+						LOG(galacticPosition.posInGalaxy_x << " " << galacticPosition.posInGalaxy_y << " " << galacticPosition.posInGalaxy_z)
 					}
 				}
 				
@@ -636,7 +634,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}
 			{// Celestials
 				double timestamp = scene->timestamp;
-				if (galaxyGenerator.GetStarSystemPresence(galacticPosition)) {
+				if (GalaxyGenerator::GetStarSystemPresence(galacticPosition)) {
 					const StarSystem& starSystem(galacticPosition);
 					auto offset = starSystem.GetOffsetLY() - M2LY(glm::dvec3(scene->camera.originOffset) + scene->camera.worldPosition);
 					for (auto& level1 : starSystem.GetCentralCelestialBodies()) if (level1) {

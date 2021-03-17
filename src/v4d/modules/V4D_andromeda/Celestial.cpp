@@ -165,18 +165,19 @@ const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 						break;
 				}
 				
-				double childMass = mass * glm::pow(RandomFloat(seed), 10.0) * 0.02;
-				
-				if (mass < 1E11) break; // don't make very small objects (like asteroids < 500m diameter)
+				double childMass = LogarithmicMix(1e12, mass * 0.04, RandomFloat(seed));
 				
 				age *= 1.0 + glm::mix(-0.9, +0.85, CenterDistributedCurve(RandomFloat(seed)));
 				if (RandomFloat(seed) > 0.99) age = glm::mix(STARSYSTEM_AGE_MIN, STARSYSTEM_AGE_MAX, RandomFloat(seed)); // < 1% chances of being a foreign object (completely different age)
 				
-				if (age < 0.0001) break;
+				if (age < 0.0001) break; // early break, maybe this can be used in the future to to something cool instead without affecting existing stuff
 				
 				if (childLevel == 2 && RandomFloat(seed) > 0.99) {
+					// 1% chance of special stuff like binary planets and such, to be implemented in the future.
+					// It should not affect existing celestials, it will only add to them.
+					// This temporary 'break;' may explain the number of systems (~1%) that have zero or very few planets.
 					
-					break; //TODO binary
+					break; //TODO remove this break and implement cool stuff here
 					
 				} else {
 					auto child = GalaxyGenerator::MakeCelestial(childPosInGalaxy, age, childMass, mass, /*parent*/orbitRadius, parentOrbitalPlaneTiltDegrees, 0, maxChildOrbit, RandomInt(seed));

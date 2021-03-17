@@ -13,6 +13,7 @@ cmake_minimum_required(VERSION 3.10)
 # Options
 option(COMPILE_APP "Build Demo/Project" ON)
 option(COMPILE_TESTS "Build Unit Tests" ON)
+option(COMPILE_CONSOLE_CLI "Build Console CLI" ON)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
 option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
@@ -153,6 +154,25 @@ if(COMPILE_TESTS)
 		PRIVATE -D_V4D_PROJECT
 	)
 	set_target_properties(tests 
+		PROPERTIES 
+			COMPILE_FLAGS ${BUILD_FLAGS}
+			LINK_FLAGS "-Wl,-rpath,./"
+	)
+endif()
+
+
+# Console CLI
+if(COMPILE_CONSOLE_CLI)
+	add_executable(console
+		"${PROJECT_SOURCE_DIR}/src/console.cxx"
+	)
+	target_link_libraries(console
+		v4d
+	)
+	target_compile_definitions(console
+		PRIVATE -D_V4D_PROJECT
+	)
+	set_target_properties(console 
 		PROPERTIES 
 			COMPILE_FLAGS ${BUILD_FLAGS}
 			LINK_FLAGS "-Wl,-rpath,./"

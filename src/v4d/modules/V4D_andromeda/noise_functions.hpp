@@ -11,6 +11,10 @@ static uint RandomInt(uint& seed) {
 	return (seed = 1664525 * seed + 1013904223);
 }
 
+static uint RandomInt(uint& seed, int min, int max) {
+	return (RandomInt(seed) % (max - min)) + min;
+}
+
 static float RandomFloat(uint& seed) {
 	// Float version using bitmask from Numerical Recipes
 	const uint one = 0x3f800000;

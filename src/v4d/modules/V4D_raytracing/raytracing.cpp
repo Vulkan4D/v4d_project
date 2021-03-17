@@ -1,4 +1,3 @@
-#define _V4D_MODULE
 #define V4D_RAYTRACING_RENDERER_MODULE
 
 #include <v4d.h>

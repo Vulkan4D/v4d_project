@@ -1,4 +1,3 @@
-#define _V4D_MODULE
 #include <v4d.h>
 #include "common.hh"
 #include "actions.hh"
