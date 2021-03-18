@@ -208,8 +208,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			return starsystem(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
 		}
 		if (argc == 2 && std::string("starsystem") == argv[0]) {
-			GalacticPosition galacticPosition;
-			galacticPosition.SetReferenceFrame(atol(argv[1]));
+			GalacticPosition galacticPosition(atol(argv[1]));
 			return starsystem(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z);
 		}
 		if (argc == 1 && std::string("stats") == argv[0]) {

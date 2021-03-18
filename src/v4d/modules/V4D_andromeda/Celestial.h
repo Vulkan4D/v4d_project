@@ -2,6 +2,7 @@
 #include <v4d.h>
 #include "celestials/CelestialType.hh"
 #include "GalacticPosition.hpp"
+#include "GalaxyGenerator.h"
 
 static const uint32_t CELESTIAL_FLAG_IS_CENTER_STAR = 1;
 static const uint32_t CELESTIAL_FLAG_IS_BINARY_1 = 1<<1;
@@ -93,6 +94,22 @@ public:
 	}
 	
 	glm::dvec3 GetPositionInOrbit(double timestamp);
+	
+	template<typename T = glm::dvec3>
+	T GetAbsolutePositionInOrbit(double timestamp) {
+		T positionInOrbit = GetPositionInOrbit(timestamp);
+		GalacticPosition galacticPosition = this->galacticPosition;
+		if (GetLevel() > 2) {
+			galacticPosition.level3 = 0;
+			positionInOrbit += GalaxyGenerator::GetCelestial(galacticPosition)->GetPositionInOrbit(timestamp);
+		}
+		if (GetLevel() > 1) {
+			galacticPosition.level2 = 0;
+			positionInOrbit += GalaxyGenerator::GetCelestial(galacticPosition)->GetPositionInOrbit(timestamp);
+		}
+		return positionInOrbit;
+	}
+
 	
 };
 

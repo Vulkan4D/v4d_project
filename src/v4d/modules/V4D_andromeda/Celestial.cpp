@@ -2,6 +2,7 @@
 #include "noise_functions.hpp"
 #include "seeds.hh"
 #include "GalaxyGenerator.h"
+#include "StarSystem.h"
 
 double Celestial::GetDensity() const { // kg/m3
 	if (!_density.has_value()) {
