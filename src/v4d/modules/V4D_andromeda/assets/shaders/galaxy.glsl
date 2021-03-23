@@ -76,13 +76,12 @@ vec3 pos = relativePosition.xyz + gl_in[0].gl_Position.xyz;
 float pointDistanceSqr = dot(pos, pos);
 float dd = maxViewDistance==0? 1.0 : clamp(smoothstep(maxDistanceSqr, minDistanceSqr, pointDistanceSqr), 0, 1);
 float dd2 = maxViewDistance==0? 0.0 : clamp(smoothstep(minDistanceSqr, 0, pointDistanceSqr), 0, 1);
-vec4 pointColor = vec4(in_color[0].rgb, in_color[0].a * dd*dd * brightnessFactor * (1-dd2*dd2));
-float pointSize = max(1, gl_in[0].gl_Position.w * dd*dd) * sizeFactor * 2.0 + (dd2*dd2*20);
+vec4 pointColor = vec4(in_color[0].rgb, clamp(in_color[0].a * dd*dd * brightnessFactor * (1-dd2*dd2), 0.0, 3.5));
 
 void EmmitStar(int layer, vec2 coord) {
 	gl_Layer = layer;
 	gl_Position = vec4(coord,0,1);
-	gl_PointSize = pointSize * (1.0+sin(dot(coord.xy, coord.xy))); // adjust point size for corners
+	gl_PointSize = gl_in[0].gl_Position.w * sizeFactor * (1.5 + sin(dot(coord.xy, coord.xy))); // adjust point size for corners
 	out_color = pointColor;
 	EmitVertex();
 }
@@ -119,7 +118,7 @@ layout(location = 0) out vec4 out_color;
 void main() {
 	if (out_color.a < 0.001) discard;
 	float center = max(0, 1.0 - pow(length(gl_PointCoord * 2 - 1), 1.0 / max(0.7, in_color.a)));
-	out_color = vec4(in_color.rgb * in_color.a, in_color.a) * center*center;
+	out_color = vec4(in_color.rgb * in_color.a, in_color.a) * pow(center, 4.0-in_color.a);
 }
 
 

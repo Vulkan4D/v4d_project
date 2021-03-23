@@ -9,6 +9,9 @@
 int starsystem(uint32_t x, uint32_t y, uint32_t z) {
 	std::string tabs {""};
 	auto displayCelestialInfo = [&tabs](Celestial* celestial) {
+		
+		std::cout << tabs << celestial->GetID() << "\n";
+		
 		switch (celestial->GetType()) {
 			case CelestialType::BinaryCenter:
 				std::cout << tabs << "Binary Center" << "\n";

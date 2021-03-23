@@ -106,7 +106,7 @@ const StarSystem::CentralCelestialBodyList& StarSystem::GetCentralCelestialBodie
 	return _centralCelestialBodies.value();
 }
 glm::vec4 StarSystem::GetVisibleColor() const {
-	return glm::vec4(1,1,1, glm::pow(log10(GetMass()) - 28, 2.0) * 0.01); // Very quick approximation for performance reasons, good enough for now...
+	return glm::vec4(1,1,1, glm::pow(log10(GetMass()) - 28, 8.0) * 0.02); // Very quick approximation for performance reasons, good enough for now...
 }
 std::shared_ptr<Celestial> StarSystem::GetChild(uint64_t index) const {
 	if (index <= GalacticPosition::MAX_CENTRAL_BODIES) {

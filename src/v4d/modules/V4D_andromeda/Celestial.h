@@ -51,6 +51,10 @@ public:
 	, flags(flags)
 	{if (forcedOrbitDistance > 0) _orbitDistance = forcedOrbitDistance;}
 	
+	~Celestial() {
+		RenderDelete();
+	}
+	
 	double GetMass() const {return mass;} // Kg
 	double GetAge() const {return age;} // Billions of years
 	
@@ -66,7 +70,22 @@ public:
 	virtual double GetInitialRotation() const;
 	virtual const std::vector<std::shared_ptr<Celestial>>& GetChildren() const;
 	
+	mutable std::unordered_map<std::string, std::shared_ptr<v4d::graphics::RenderableGeometryEntity>> renderableEntities {};
+	
 	virtual CelestialType GetType() const = 0;
+	
+	virtual void RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double sizeInScreen) const;
+	
+	virtual void RenderDelete() const {
+		for (auto&[name, entity] : renderableEntities) if (entity) {
+			entity->Destroy();
+		}
+		renderableEntities.clear();
+	}
+	
+	constexpr uint64_t GetID() const {
+		return galacticPosition.value;
+	}
 	
 	constexpr int GetLevel() const {
 		if (galacticPosition.level3) return 3;
@@ -116,4 +135,5 @@ public:
 class BinaryCenter : public Celestial {
 	using Celestial::Celestial;
 	virtual CelestialType GetType() const override {return CelestialType::BinaryCenter;}
+	virtual void RenderUpdate(glm::dvec3, glm::dvec3, double) const override {}
 };

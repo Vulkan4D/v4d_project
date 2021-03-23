@@ -24,3 +24,4 @@ static constexpr uint SEED_CELESTIAL_ROTATION_PERIOD = 7;
 static constexpr uint SEED_CELESTIAL_INITIAL_ROTATION = 8;
 static constexpr uint SEED_CELESTIAL_CHILDREN_COMMON = 4;
 static constexpr uint SEED_CELESTIAL_CHILDREN = 9;
+static constexpr double SEED_TIMESTAMP_OFFSET = 15'768'000'000'000; // 500'000 years

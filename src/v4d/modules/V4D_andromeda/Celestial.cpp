@@ -92,9 +92,9 @@ double Celestial::GetInitialOrbitPosition() const {
 		} else if (flags&CELESTIAL_FLAG_HAS_LAGRANGE_SIBLINGS) {
 			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI;
 		} else if (flags&CELESTIAL_FLAG_AT_L4) {
-			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/+3; // 60 degrees ahead of HAS_LAGRANGE_SIBLINGS
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/+6; // 30 degrees ahead of HAS_LAGRANGE_SIBLINGS
 		} else if (flags&CELESTIAL_FLAG_AT_L5) {
-			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/-3; // 60 degrees behind HAS_LAGRANGE_SIBLINGS
+			_initialOrbitPosition = RandomFloat(parentSeed)*TWOPI + TWOPI/-6; // 30 degrees behind HAS_LAGRANGE_SIBLINGS
 		} else {
 			_initialOrbitPosition = RandomFloat(seed) * TWOPI;
 		}
@@ -275,10 +275,24 @@ glm::dvec3 Celestial::GetPositionInOrbit(double timestamp) {
 	}
 	
 	const double tilt = glm::radians(GetOrbitalPlaneTiltDegrees());
-	const double M = glm::sqrt(parentMass * G / glm::pow(orbitDistance, 3.0)) * timestamp + GetInitialOrbitPosition();
+	const double M = glm::sqrt(parentMass * G / glm::pow(orbitDistance, 3.0)) * (timestamp + SEED_TIMESTAMP_OFFSET) + GetInitialOrbitPosition();
 	return glm::dvec3(
 		glm::cos(tilt) * glm::cos(M),
 		glm::sin(tilt) * glm::cos(M),
 		glm::sin(M)
 	) * orbitDistance;
+}
+
+void Celestial::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double sizeInScreen/* > 0.001 */) const {
+	auto& sphere = renderableEntities["sphere"];
+	if (!sphere) {
+		sphere = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, GetID());
+		sphere->generator = [this](v4d::graphics::RenderableGeometryEntity* entity, v4d::graphics::vulkan::Device* device){
+			double radius = GetRadius();
+			entity->Allocate(device, "V4D_raytracing:aabb_sphere");
+			entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+			entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,0,0,255});
+		};
+	}
+	sphere->SetWorldTransform(glm::translate(glm::dmat4(1), position));
 }

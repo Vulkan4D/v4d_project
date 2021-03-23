@@ -4,8 +4,23 @@
 #include "Celestial.h"
 #include "StarSystem.h"
 
+#include "TerrainGeneratorLib.h"
+
 #include "../V4D_multiplayer/ServerSideObjects.hh"
 #include "../V4D_multiplayer/ClientSideObjects.hh"
+
+
+
+GalacticPosition GetDefaultGalacticPosition() {
+	GalacticPosition defaultGalacticPosition;
+	// defaultGalacticPosition.SetReferenceFrame(135983499432086); // very large trinary system with over 300 bodies
+	defaultGalacticPosition = 2950733266538646; // earth-like planet
+	// defaultGalacticPosition.SetReferenceFrame(139712601895775); // 8 stars
+	// defaultGalacticPosition.SetReferenceFrame(134436245599421); // very small system
+	return defaultGalacticPosition;
+}
+
+
 
 #pragma region Global Pointers
 
@@ -59,17 +74,19 @@
 
 	struct GalaxySnapshot {
 		GalacticPosition galacticPosition;
-		glm::dvec3 positionInStarSystem;
+		glm::i64vec3 positionInStarSystem;
 		glm::dvec3 positionInGalaxyLY;
+		glm::dvec3 cameraPosition;
 		double timestamp;
 		
 		mutable std::mutex mu;
 		std::unique_lock<std::mutex> Lock() const {return std::unique_lock<std::mutex>(mu);}
-		void Set(const GalacticPosition& galacticPosition, const glm::dvec3& positionInStarSystem, const glm::dvec3& positionInGalaxyLY, const double& timestamp) {
+		void Set(const GalacticPosition& galacticPosition, const glm::i64vec3& positionInStarSystem, const glm::dvec3& positionInGalaxyLY, const glm::dvec3& cameraPosition, const double& timestamp) {
 			std::lock_guard lock(mu);
 			this->galacticPosition = galacticPosition;
 			this->positionInStarSystem = positionInStarSystem;
 			this->positionInGalaxyLY = positionInGalaxyLY;
+			this->cameraPosition = cameraPosition;
 			this->timestamp = timestamp;
 		}
 		GalaxySnapshot() = default;
@@ -78,6 +95,7 @@
 			this->galacticPosition = snapshot.galacticPosition;
 			this->positionInStarSystem = snapshot.positionInStarSystem;
 			this->positionInGalaxyLY = snapshot.positionInGalaxyLY;
+			this->cameraPosition = snapshot.cameraPosition;
 			this->timestamp = snapshot.timestamp;
 		}
 	} currentGalaxySnapshot;
@@ -103,7 +121,7 @@
 		float screenSize = 0;
 		float brightnessFactor = 1.0;
 		// used only for stars
-		float minViewDistance = 0.1;
+		float minViewDistance = 0.5;
 		float maxViewDistance = STAR_MAX_VISIBLE_DISTANCE; // Light-years
 		glm::vec4 relativePosition {0}; // w = sizeFactor
 	};
@@ -131,6 +149,7 @@
 			}
 		}
 		void Update(glm::dvec3 pos) {
+			pushConstant.brightnessFactor = 0.002;
 			pushConstant.relativePosition = glm::vec4(pos, sizeFactor);
 		}
 		void GenerateStars(glm::ivec3 pos) {
@@ -147,7 +166,7 @@
 							if (color.a > 0.0001) {
 								const glm::dvec3& offset = starSystem.GetOffsetLY();
 								buffer[count++] = {
-									{x+offset.x, y+offset.y, z+offset.z, color.a},
+									{x+offset.x, y+offset.y, z+offset.z, 1.0},
 									color
 								};
 							}
@@ -156,12 +175,13 @@
 				}
 			}
 		}
-		void Draw(VkCommandBuffer commandBuffer) {
+		void DrawDotInCubemap(VkCommandBuffer commandBuffer) {
 			galaxyBackgroundShader->SetData(buffer.GetDeviceLocalBuffer(), count);
 			galaxyBackgroundShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 		}
 	};
-	struct PlanetDebug {
+	struct RenderableCelestial {
+		// For cubemap dot
 		v4d::graphics::Buffer buffer {VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(StarVertex)};
 		GalaxyPushConstant pushConstant;
 		bool allocated = false;
@@ -182,53 +202,63 @@
 			if (!allocated) Allocate();
 			return (StarVertex*)buffer.data;
 		}
-		void Update(glm::dvec3 position, Celestial* celestial) {
+		void Update(glm::dvec3 position, glm::dvec3 cameraPosition, Celestial* celestial) {
+			
+			glm::dvec3 worldPosition = glm::dvec3(position);
+			
 			pushConstant.brightnessFactor = 1.0;
 			pushConstant.minViewDistance = 0;
 			pushConstant.maxViewDistance = 0;
-			pushConstant.relativePosition = glm::vec4(position, 2.0);
+			pushConstant.relativePosition = glm::vec4(position - cameraPosition, 2.0);
 			(*this)->position = glm::dvec4(0);
 			(*this)->color = glm::vec4(0);
-			switch (celestial->GetType()) {
-				case CelestialType::HyperGiant: // white
-					(*this)->color = glm::vec4(1,1,1,1);
-					(*this)->position.w = 8.0;
-					break;
-				case CelestialType::Star: // yellow
-					(*this)->color = glm::vec4(1,1,0,1);
-					(*this)->position.w = 4.0;
-					break;
-				case CelestialType::BrownDwarf: // red
-					(*this)->color = glm::vec4(1,0,0,1);
-					(*this)->position.w = 2.0;
-					break;
-				case CelestialType::Planet: // green
-					(*this)->color = glm::vec4(0,1,0,1);
-					break;
-				case CelestialType::GasGiant: // turquoise
-					(*this)->color = glm::vec4(0,1,1,1);
-					(*this)->position.w = 2.0;
-					break;
-				case CelestialType::BlackHole: // blue
-					(*this)->color = glm::vec4(0,0,1,1);
-					(*this)->position.w = 4.0;
-					break;
-				case CelestialType::Asteroid: // orange
-					(*this)->color = glm::vec4(1,0.5,0,0.5);
-					(*this)->position.w = 0.5;
-					break;
-				case CelestialType::SuperMassiveBlackHole: // pink
-					(*this)->color = glm::vec4(1,0,1,1);
-					(*this)->position.w = 8.0;
-					break;
+			
+			double sizeInScreen = scene->camera.GetFixedBoundingSizeInScreen(position - celestial->GetRadius(), position + celestial->GetRadius());
+			if (sizeInScreen > 0.001) {
+				celestial->RenderUpdate(position, cameraPosition, sizeInScreen);
+			} else {
+				celestial->RenderDelete();
+				switch (celestial->GetType()) {
+					case CelestialType::HyperGiant: // white
+						(*this)->color = glm::vec4(1,1,1,1);
+						(*this)->position.w = 8.0;
+						break;
+					case CelestialType::Star: // yellow
+						(*this)->color = glm::vec4(1,1,0,1);
+						(*this)->position.w = 4.0;
+						break;
+					case CelestialType::BrownDwarf: // red
+						(*this)->color = glm::vec4(1,0,0,1);
+						(*this)->position.w = 2.0;
+						break;
+					case CelestialType::Planet: // green
+						(*this)->color = glm::vec4(0,1,0,1);
+						break;
+					case CelestialType::GasGiant: // turquoise
+						(*this)->color = glm::vec4(0,1,1,1);
+						(*this)->position.w = 2.0;
+						break;
+					case CelestialType::BlackHole: // blue
+						(*this)->color = glm::vec4(0,0,1,1);
+						(*this)->position.w = 4.0;
+						break;
+					case CelestialType::Asteroid: // orange
+						(*this)->color = glm::vec4(1,0.5,0,0.5);
+						(*this)->position.w = 0.5;
+						break;
+					case CelestialType::SuperMassiveBlackHole: // pink
+						(*this)->color = glm::vec4(1,0,1,1);
+						(*this)->position.w = 8.0;
+						break;
+				}
 			}
 		}
-		void Draw(VkCommandBuffer commandBuffer) {
+		void DrawDotInCubemap(VkCommandBuffer commandBuffer) {
 			galaxyBackgroundShader->SetData(buffer.buffer, 1);
 			galaxyBackgroundShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 		}
 	};
-	std::unordered_map<uint64_t, PlanetDebug> planetsDebug {};
+	std::unordered_map<uint64_t, RenderableCelestial> renderableCelestials {};
 	std::unordered_map<glm::ivec3, GalaxyChunk> galaxyChunks {};
 
 #pragma endregion
@@ -238,14 +268,6 @@
 
 #include "../V4D_flycam/common.hh"
 PlayerView* playerView = nullptr;
-
-GalacticPosition GetDefaultGalacticPosition() {
-	GalacticPosition defaultGalacticPosition;
-	defaultGalacticPosition.SetReferenceFrame(135983499432086); // very large trinary system with over 300 bodies
-	// defaultGalacticPosition.SetReferenceFrame(139712601895775); // 8 stars
-	// defaultGalacticPosition.SetReferenceFrame(134436245599421); // very small system
-	return defaultGalacticPosition;
-}
 
 
 
@@ -266,7 +288,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		playerView->SetInitialViewDirection({0,1,0}, {0,0,1});
 		playerView->useFreeFlyCam = true;
-		playerView->camSpeed = LY2M(0.1);
 		
 		galaxyBackgroundShader = new v4d::graphics::vulkan::RasterShaderPipeline(*mainRenderModule->GetPipelineLayout("pl_background"), {
 			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.vert"),
@@ -303,6 +324,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<OutgoingConnection> _c) {
 		client = _c;
 		clientSideObjects = (ClientSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_CLIENT_OBJECTS);
+	}
+	
+	V4D_MODULE_FUNC(void, CreateVulkanResources2, Device* device) {
+		// Chunk Generator
+		PlanetTerrain::renderingDevice = r->renderingDevice;
+		TerrainGeneratorLib::Start();
+		PlanetTerrain::StartChunkGenerator();
+	}
+	
+	V4D_MODULE_FUNC(void, DestroyVulkanResources2, Device* device) {
+		// Chunk Generator
+		PlanetTerrain::EndChunkGenerator();
+		TerrainGeneratorLib::Stop();
+		for (auto&[id,terrain] : PlanetTerrain::terrains) if (terrain) {
+			delete terrain;
+			terrain = nullptr;
+		}
+		PlanetTerrain::terrains.clear();
+		PlanetTerrain::renderingDevice = nullptr;
 	}
 	
 #pragma endregion
@@ -400,20 +440,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			playerObjId = obj->id;
 		}
 		
-		// // Set player position
-		// const glm::dvec3 sun1Position = {-1.496e+11,0, 0};
-		// auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
-		// auto forwardVector = glm::normalize(sun1Position);
-		// auto upVector = glm::normalize(worldPosition);
-		// auto rightVector = glm::cross(forwardVector, upVector);
-		// worldPosition += rightVector * (double)client->id;
-		// obj->SetTransform(worldPosition, forwardVector, upVector);
+		GalacticPosition defaultPosition = GetDefaultGalacticPosition();
+		obj->parent = defaultPosition.rawValue;
 		
-		obj->parent = GetDefaultGalacticPosition().rawValue;
+		// Set player position
+		auto worldPosition = glm::dvec3(0,0, defaultPosition.IsCelestial()? GalaxyGenerator::GetCelestial(defaultPosition)->GetRadius() : 1);
+		auto forwardVector = glm::dvec3(0,1,0);
+		auto upVector = glm::normalize(worldPosition);
+		auto rightVector = glm::cross(forwardVector, upVector);
+		worldPosition += rightVector * (double)client->id;
+		obj->SetTransform(worldPosition, forwardVector, upVector);
 		
 		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
 			stream << networking::action::ASSIGN_PLAYER_OBJ;
 			stream << playerObjId;
+			stream << v4d::Timer::GetCurrentTimestamp();
+			stream << worldPosition;
+			stream << forwardVector;
+			stream << upVector;
+			stream << defaultPosition.IsCelestial();
 		
 		ServerEnqueueAction(client->id, stream);
 	}
@@ -437,6 +482,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		switch (action) {
 			case networking::action::ASSIGN_PLAYER_OBJ:{ // assign object to client for camera
 				auto id = stream->Read<NetworkGameObject::Id>();
+				double timestamp = stream->Read<double>();
+				auto worldPosition = stream->Read<glm::dvec3>();
+				auto forwardVector = stream->Read<glm::dvec3>();
+				auto upVector = stream->Read<glm::dvec3>();
+				bool isReferenceCelestial = stream->Read<bool>();
 				
 				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for obj id " << id)
 				try {
@@ -444,9 +494,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					auto obj = clientSideObjects->objects.at(id);
 					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
 						scene->cameraParent = entity;
+						scene->timestamp = timestamp;
 					}
-					// scene->camera.worldPosition = ...
-					// playerView->SetInitialViewDirection(forwardVector, upVector, true);
+					scene->camera.worldPosition = worldPosition;
+					playerView->camSpeed = isReferenceCelestial? 10'000.0 : LY2M(0.1);
+					playerView->SetInitialViewDirection(forwardVector, upVector, true);
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
 				}
@@ -501,6 +553,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 #pragma endregion
+
+#pragma region Physics
+
+	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
+		
+	}
+
+#pragma endregion
 	
 #pragma region Rendering
 
@@ -520,6 +580,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		galaxyFadeShader->depthStencilState.depthTestEnable = VK_FALSE;
 		galaxyFadeShader->depthStencilState.depthWriteEnable = VK_FALSE;
 		galaxyFadeShader->SetData(6);
+		
+		// PlanetRenderer
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "planet.terrain");
+		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "atmosphere");
 	}
 
 	V4D_MODULE_FUNC(void, CreateVulkanPipelines) {
@@ -589,10 +653,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		galaxyChunks.clear();
 		
-		for (auto&[id, planet] : planetsDebug) {
+		for (auto&[id, planet] : renderableCelestials) {
 			planet.Free();
 		}
-		planetsDebug.clear();
+		renderableCelestials.clear();
 	}
 	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
@@ -618,9 +682,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							LOG(galacticPosition.posInGalaxy_x << " " << galacticPosition.posInGalaxy_y << " " << galacticPosition.posInGalaxy_z)
 						}
 					}
-					glm::dvec3 playerPositionInStarSystem = glm::dvec3(scene->camera.originOffset) + scene->camera.worldPosition;
-					glm::dvec3 playerPositionInGalaxyLY = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + M2LY(playerPositionInStarSystem);
-					currentGalaxySnapshot.Set(galacticPosition, playerPositionInStarSystem, playerPositionInGalaxyLY, playerPositionTimestamp);
+					glm::i64vec3 playerPositionInStarSystem = scene->camera.originOffset;
+					glm::dvec3 cameraPosition = scene->camera.worldPosition;
+					glm::dvec3 playerPositionInGalaxyLY = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + M2LY(glm::dvec3(playerPositionInStarSystem) + cameraPosition);
+					currentGalaxySnapshot.Set(galacticPosition, playerPositionInStarSystem, playerPositionInGalaxyLY, cameraPosition, playerPositionTimestamp);
 				} else {
 					LOG_ERROR("Galactic Position is INVALID")
 				}
@@ -662,25 +727,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			{// Celestials
 				if (GalaxyGenerator::GetStarSystemPresence(galaxySnapshot.galacticPosition)) {
 					const auto& starSystem = GalaxyGenerator::GetStarSystem(galaxySnapshot.galacticPosition);
-					glm::dvec3 offset = starSystem->GetOffsetLY() - M2LY(galaxySnapshot.positionInStarSystem);
+					glm::i64vec3 offset = glm::i64vec3(LY2M(starSystem->GetOffsetLY())) - galaxySnapshot.positionInStarSystem;
 					for (auto& level1 : starSystem->GetCentralCelestialBodies()) if (level1) {
-						glm::dvec3 level1PositionInOrbit = offset + M2LY(level1->GetPositionInOrbit(galaxySnapshot.timestamp));
-						planetsDebug[level1->galacticPosition.rawValue].Update(level1PositionInOrbit, level1.get());
+						glm::i64vec3 level1PositionInOrbit = offset + glm::i64vec3(level1->GetPositionInOrbit(galaxySnapshot.timestamp));
+						renderableCelestials[level1->galacticPosition.rawValue].Update(level1PositionInOrbit, galaxySnapshot.cameraPosition, level1.get());
 						for (auto& level2 : level1->GetChildren()) {
-							glm::dvec3 level2PositionInOrbit = level1PositionInOrbit + M2LY(level2->GetPositionInOrbit(galaxySnapshot.timestamp));
-							planetsDebug[level2->galacticPosition.rawValue].Update(level2PositionInOrbit, level2.get());
+							glm::i64vec3 level2PositionInOrbit = level1PositionInOrbit + glm::i64vec3(level2->GetPositionInOrbit(galaxySnapshot.timestamp));
+							renderableCelestials[level2->galacticPosition.rawValue].Update(level2PositionInOrbit, galaxySnapshot.cameraPosition, level2.get());
 							for (auto& level3 : level2->GetChildren()) {
-								glm::dvec3 level3PositionInOrbit = level2PositionInOrbit + M2LY(level3->GetPositionInOrbit(galaxySnapshot.timestamp));
-								planetsDebug[level3->galacticPosition.rawValue].Update(level3PositionInOrbit, level3.get());
+								glm::i64vec3 level3PositionInOrbit = level2PositionInOrbit + glm::i64vec3(level3->GetPositionInOrbit(galaxySnapshot.timestamp));
+								renderableCelestials[level3->galacticPosition.rawValue].Update(level3PositionInOrbit, galaxySnapshot.cameraPosition, level3.get());
 							}
 						}
 					}
 				}
-				for (auto it = planetsDebug.begin(); it != planetsDebug.end();) {
+				for (auto it = renderableCelestials.begin(); it != renderableCelestials.end();) {
 					auto&[pos, planet] = *it;
 					if (GalacticPosition(pos).posInGalaxy != galaxySnapshot.galacticPosition.posInGalaxy) {
 						planet.Free();
-						it = planetsDebug.erase(it);
+						it = renderableCelestials.erase(it);
 					} else {
 						++it;
 					}
@@ -721,10 +786,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				galaxyFadeShader->Execute(r->renderingDevice, commandBuffer, 1, &pushConstant);
 			}
 			for (auto&[pos, chunk] : galaxyChunks) {
-				chunk.Draw(commandBuffer);
+				chunk.DrawDotInCubemap(commandBuffer);
 			}
-			for (auto&[id, planet] : planetsDebug) {
-				planet.Draw(commandBuffer);
+			for (auto&[id, planet] : renderableCelestials) {
+				planet.DrawDotInCubemap(commandBuffer);
 			}
 		galaxyBackgroundRenderPass.End(r->renderingDevice, commandBuffer);
 	}

@@ -72,8 +72,8 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/debug/console",
-            "args": ["V4D_andromeda", "stats"],
-            // "args": ["V4D_andromeda", "starsystem", "135983499432086"], // very large system with over 300 bodies
+            // "args": ["V4D_andromeda", "stats"],
+            "args": ["V4D_andromeda", "starsystem", "135983499432086"], // very large system with over 300 bodies
             // "args": ["V4D_andromeda", "starsystem", "139712601895775"], // 8 stars
             // "args": ["V4D_andromeda", "starsystem", "134436245599421"], // very small system
             "stopAtEntry": false,
