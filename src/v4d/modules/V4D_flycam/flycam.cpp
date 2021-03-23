@@ -9,7 +9,7 @@ v4d::graphics::Renderer* r = nullptr;
 Scene* scene = nullptr;
 PlayerView player{};
 
-float timeWarp = 1.0;
+float timeWarp = 0.0;
 
 V4D_MODULE_CLASS(V4D_Mod) {
 	

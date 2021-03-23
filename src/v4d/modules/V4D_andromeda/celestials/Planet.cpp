@@ -71,11 +71,33 @@ double Planet::GetAtmosphereRadius() const {
 	return _atmosphereRadius.value();
 }
 
+std::shared_ptr<PlanetTerrain> Planet::GetPlanetTerrain() const {
+	if (!_planetTerrain) {
+		_planetTerrain = PlanetTerrain::terrains[GetID()];
+		if (!_planetTerrain) {
+			{
+				std::lock_guard generatorLock(TerrainGeneratorLib::mu);
+				_planetTerrain = std::make_shared<PlanetTerrain>(
+					  GetRadius()
+					, GetTerrainRadius()
+					, GetTerrainHeightVariation()
+					, GetAtmosphereRadius()
+					, GetAtmosphereThickness()
+					, /*visibilityDistance*/1'000'000
+					, /*rayleighHeight*/GetAtmosphereThickness()/20.0 // maximum of 10% atmosphereThickness
+					, /*mieHeight*/GetAtmosphereThickness()/40.0 // maximum of 10% atmosphereThickness
+				);
+			}
+			PlanetTerrain::terrains[GetID()] = _planetTerrain;
+		}
+	}
+	return _planetTerrain;
+}
+
 void Planet::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double sizeInScreen/* > 0.001 */) const {
 	const double sizeInScreenThreshold = 0.004;
 	
 	auto& sphere = renderableEntities["sphere"];
-	auto& terrain = PlanetTerrain::terrains[GetID()];
 	// auto& atmosphere = renderableEntities["atmosphere"];
 	
 	// Sphere
@@ -99,19 +121,7 @@ void Planet::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double
 	
 	// Terrain
 	if (sizeInScreen > sizeInScreenThreshold) {
-		if (!terrain) {
-			std::lock_guard generatorLock(TerrainGeneratorLib::mu);
-			terrain = new PlanetTerrain {
-				  GetRadius()
-				, GetTerrainRadius()
-				, GetTerrainHeightVariation()
-				, GetAtmosphereRadius()
-				, GetAtmosphereThickness()
-				, /*visibilityDistance*/1'000'000
-				, /*rayleighHeight*/GetAtmosphereThickness()/20.0 // maximum of 10% atmosphereThickness
-				, /*mieHeight*/GetAtmosphereThickness()/40.0 // maximum of 10% atmosphereThickness
-			};
-		}
+		auto terrain = GetPlanetTerrain();
 		
 		std::lock_guard lock(terrain->chunksMutex);
 		
@@ -125,9 +135,9 @@ void Planet::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double
 		}
 		
 	} else {
-		if (terrain) {
-			delete terrain;
-			terrain = nullptr;
+		if (_planetTerrain) {
+			_planetTerrain->RemoveBaseChunks();
+			_planetTerrain = nullptr;
 		}
 	}
 }

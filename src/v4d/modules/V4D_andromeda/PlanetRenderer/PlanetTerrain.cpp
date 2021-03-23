@@ -16,4 +16,4 @@ glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;
 bool PlanetTerrain::generateAabbChunks = false;
 float PlanetTerrain::targetVertexSeparationInMeters = 0.50; // 0.02 - 0.50
 
-std::unordered_map<uint64_t, PlanetTerrain*> PlanetTerrain::terrains {};
+std::unordered_map<uint64_t, std::shared_ptr<PlanetTerrain>> PlanetTerrain::terrains {};

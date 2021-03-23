@@ -3,8 +3,7 @@
 // Modules
 	#define APP_MAIN_RENDER_MODULE "V4D_raytracing"
 	#define APP_MAIN_MULTIPLAYER_MODULE "V4D_multiplayer"
-	// #define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_sample","V4D_flycam","V4D_galaxy4d","V4D_planetdemo","V4D_buildsystem" //,"V4D_avatar"
-	#define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_andromeda","V4D_flycam"
+	#define APP_DEFAULT_MODULES APP_MAIN_RENDER_MODULE,APP_MAIN_MULTIPLAYER_MODULE,"V4D_andromeda","V4D_flycam","V4D_buildsystem","V4D_galaxy4d"//,"V4D_avatar"
 	
 	#define APP_DEFAULT_MODULES_SAVE_TO_MODULES_TXT_WHEN_EMPTY
 

@@ -1,4 +1,3 @@
-#define _V4D_MODULE
 #include <v4d.h>
 #include "../V4D_flycam/common.hh"
 #include "../V4D_multiplayer/ServerSideObjects.hh"

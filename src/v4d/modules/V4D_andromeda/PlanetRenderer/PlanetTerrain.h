@@ -51,7 +51,7 @@ struct PlanetTerrain {
 	float chunkSubdivisionDistanceFactor = 1.0; // low=0.5, normal=1.0, medium=1.5, high=4.0
 	
 	static Device* renderingDevice;public:
-	static std::unordered_map<uint64_t, PlanetTerrain*> terrains;
+	static std::unordered_map<uint64_t, std::shared_ptr<PlanetTerrain>> terrains;
 	
 	// Cache
 	glm::dvec3 lastOptimizePosition {0};
@@ -1200,7 +1200,7 @@ struct PlanetTerrain {
 	static double (*generatorFunction)(glm::dvec3* const, double solidRadius, double heightVariation);
 	static glm::vec3 (*generateColor)(double heightMap);
 	
-	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize) {
+	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize = 1.0) {
 		double height = solidRadius;
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*heightVariation;
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*heightVariation/10.0;

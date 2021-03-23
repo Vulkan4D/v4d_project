@@ -4,6 +4,8 @@
 #include "Celestial.h"
 #include "StarSystem.h"
 
+#include "celestials/Planet.h"
+
 #include "TerrainGeneratorLib.h"
 
 #include "../V4D_multiplayer/ServerSideObjects.hh"
@@ -18,6 +20,10 @@ GalacticPosition GetDefaultGalacticPosition() {
 	// defaultGalacticPosition.SetReferenceFrame(139712601895775); // 8 stars
 	// defaultGalacticPosition.SetReferenceFrame(134436245599421); // very small system
 	return defaultGalacticPosition;
+}
+
+glm::dvec4 GetDefaultWorldPosition() {
+	return {/*PositionOnPlanet*/0,0,1, /*altitude*/5};
 }
 
 
@@ -338,11 +344,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		PlanetTerrain::EndChunkGenerator();
 		TerrainGeneratorLib::Stop();
 		for (auto&[id,terrain] : PlanetTerrain::terrains) if (terrain) {
-			delete terrain;
+			terrain->RemoveBaseChunks();
 			terrain = nullptr;
 		}
 		PlanetTerrain::terrains.clear();
 		PlanetTerrain::renderingDevice = nullptr;
+		GalaxyGenerator::ClearCache();
 	}
 	
 #pragma endregion
@@ -444,7 +451,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		obj->parent = defaultPosition.rawValue;
 		
 		// Set player position
-		auto worldPosition = glm::dvec3(0,0, defaultPosition.IsCelestial()? GalaxyGenerator::GetCelestial(defaultPosition)->GetRadius() : 1);
+		glm::dvec3 worldPosition = GetDefaultWorldPosition();
+		if (defaultPosition.IsCelestial()) {
+			auto celestial = GalaxyGenerator::GetCelestial(defaultPosition);
+			Planet* planet = dynamic_cast<Planet*>(celestial.get());
+			if (planet) {
+				worldPosition = glm::normalize(worldPosition) * (planet->GetPlanetTerrain()->GetHeightMap(glm::normalize(worldPosition)) + GetDefaultWorldPosition().w);
+			}
+		}
 		auto forwardVector = glm::dvec3(0,1,0);
 		auto upVector = glm::normalize(worldPosition);
 		auto rightVector = glm::cross(forwardVector, upVector);
@@ -497,7 +511,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						scene->timestamp = timestamp;
 					}
 					scene->camera.worldPosition = worldPosition;
-					playerView->camSpeed = isReferenceCelestial? 10'000.0 : LY2M(0.1);
+					playerView->camSpeed = isReferenceCelestial? 10.0 : LY2M(0.1);
 					playerView->SetInitialViewDirection(forwardVector, upVector, true);
 				} catch (std::exception& err) {
 					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())

@@ -1,4 +1,3 @@
-#define _V4D_MODULE
 #include <v4d.h>
 #include "common.hh"
 #include "actions.hh"
@@ -80,40 +79,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
-	}
-	
-	V4D_MODULE_FUNC(void, ServerIncomingClient, IncomingClientPtr client) {
-		LOG("Server: IncomingClient " << client->id)
-		NetworkGameObject::Id playerObjId;
-		v4d::scene::NetworkGameObjectPtr obj;
-		{
-			std::lock_guard lock(serverSideObjects->mutex);
-			obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Player);
-			obj->physicsClientID = client->id;
-			obj->isDynamic = true;
-			obj->clientIterations[client->id] = 0;
-			serverSideObjects->players[client->id] = obj;
-			playerObjId = obj->id;
-		}
-		
-		// Set player position
-		const glm::dvec3 sun1Position = {-1.496e+11,0, 0};
-		auto worldPosition = glm::dvec3{-493804, -7.27024e+06, 3.33978e+06};
-		auto forwardVector = glm::normalize(sun1Position);
-		auto upVector = glm::normalize(worldPosition);
-		auto rightVector = glm::cross(forwardVector, upVector);
-		worldPosition += rightVector * (double)client->id;
-		obj->SetTransform(worldPosition, forwardVector, upVector);
-		
-		v4d::data::WriteOnlyStream stream(sizeof(ASSIGN_PLAYER_OBJ) + sizeof(playerObjId));
-			stream << ASSIGN_PLAYER_OBJ;
-			stream << playerObjId;
-			stream << worldPosition;
-			stream << forwardVector;
-			stream << upVector;
-		
-		std::lock_guard lock(serverActionQueueMutex);
-		serverActionQueuePerClient[client->id].emplace(stream);
 	}
 	
 	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
@@ -269,25 +234,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ClientReceiveAction, v4d::io::SocketPtr stream) {
 		auto action = stream->Read<Action>();
 		switch (action) {
-			case ASSIGN_PLAYER_OBJ:{ // assign object to client for camera
-				auto id = stream->Read<NetworkGameObject::Id>();
-				auto worldPosition = stream->Read<glm::dvec3>();
-				auto forwardVector = stream->Read<glm::dvec3>();
-				auto upVector = stream->Read<glm::dvec3>();
-				
-				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for obj id " << id)
-				try {
-					std::lock_guard lock(clientSideObjects->mutex);
-					auto obj = clientSideObjects->objects.at(id);
-					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
-						scene->cameraParent = entity;
-					}
-					scene->camera.worldPosition = worldPosition;
-					playerView->SetInitialViewDirection(forwardVector, upVector, true);
-				} catch (std::exception& err) {
-					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
-				}
-			}break;
 			default: 
 				LOG_ERROR("Client ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
 			break;
@@ -305,7 +251,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		#ifdef _ENABLE_IMGUI
 			ImGui::Checkbox("Player visible", &playerVisible);
-			ImGui::SliderFloat("Terrain dig sphere radius (10 to the power of)", &terrainNegationSphereRadiusPower, 0.0f, 7.0f);
+			// ImGui::SliderFloat("Terrain dig sphere radius (10 to the power of)", &terrainNegationSphereRadiusPower, 0.0f, 7.0f);
 			
 			// {
 			// 	ImGui::Separator();
@@ -420,16 +366,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 2;
+				float intensity = 100000.0f;
 				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
 				physics->SetSphereCollider(radius);
 				physics->friction = 0.6;
 				physics->bounciness = 0.7;
-				entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = 100000.0f;
+				entity->generator = [radius,intensity](RenderableGeometryEntity* entity, Device* device){
+					entity->Allocate(device, "V4D_raytracing:aabb_sphere.light")->material.visibility.emission = intensity;
 					entity->rayTracingMask = RAY_TRACED_ENTITY_LIGHT;
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,255});
-					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, 100000.0f);
+					entity->Add_lightSource(glm::vec3{0,0,0}, glm::vec3{1}, radius, intensity);
 				};
 			}break;
 			case OBJECT_TYPE::Drone:{
@@ -459,10 +406,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						{ 0.0, 0.0, 1.0},
 					});
 					entity->Add_meshVertexColorU8()->AllocateBuffersFromList(device, {
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
-						{255, 255, 255, 16},
+						{255, 255, 255, 48},
+						{255, 255, 255, 48},
+						{255, 255, 255, 48},
+						{255, 255, 255, 48},
 					});
 					entity->Add_meshIndices16()->AllocateBuffersFromList(device, {
 						0, 1, 2, 2, 3, 0,
