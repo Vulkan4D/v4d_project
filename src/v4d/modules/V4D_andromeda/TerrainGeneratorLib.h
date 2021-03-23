@@ -1,7 +1,7 @@
 #pragma once
 #include "PlanetRenderer/PlanetTerrain.h"
 
-class V4DLIB TerrainGenerator {
+class TerrainGenerator {
 	V4D_MODULE_CLASS_HEADER(TerrainGenerator
 		,Init
 		,GetHeightMap
@@ -12,7 +12,7 @@ class V4DLIB TerrainGenerator {
 	V4D_MODULE_FUNC_DECLARE(glm::vec3, GetColor, double heightMap)
 };
 
-struct V4DLIB TerrainGeneratorLib {
+struct TerrainGeneratorLib {
 	static bool running;
 	static TerrainGenerator* generatorLib;
 	static std::thread* autoReloaderThread;
