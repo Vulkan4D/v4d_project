@@ -92,7 +92,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+				&& (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow) || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
 			std::lock_guard lock(player.mu);
@@ -116,7 +116,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, InputScrollCallback, double x, double y) {
 		if (true
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 			&& player.canChangeVelocity
 		) {
@@ -138,7 +138,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (true
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 		) {
 			if (glfwGetKey(window->GetHandle(), GLFW_KEY_W)) {
@@ -165,7 +165,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (glfwGetInputMode(window->GetHandle(), GLFW_CURSOR) == GLFW_CURSOR_DISABLED
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 		) {
 			double x, y;

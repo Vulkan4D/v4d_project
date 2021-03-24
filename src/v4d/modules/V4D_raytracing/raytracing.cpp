@@ -2454,7 +2454,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 		) {
 			switch (key) {

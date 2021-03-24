@@ -296,3 +296,9 @@ void Celestial::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, dou
 	}
 	sphere->SetWorldTransform(glm::translate(glm::dmat4(1), position));
 }
+
+
+double Celestial::GetRevolutionTime(double orbitRadius, double parentMass) {
+	if (orbitRadius == 0) return 0;
+	return 2.0 * PI * glm::sqrt(glm::pow(orbitRadius, 3.0) / (parentMass * G));
+}

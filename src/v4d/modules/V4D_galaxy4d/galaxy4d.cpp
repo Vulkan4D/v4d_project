@@ -428,7 +428,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+				&& (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow) || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
 			std::lock_guard lock(playerView->mu);

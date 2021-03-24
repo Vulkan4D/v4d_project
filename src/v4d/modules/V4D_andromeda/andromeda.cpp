@@ -361,7 +361,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+				&& (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow) || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
 			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
@@ -387,7 +387,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
 		if (action == GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 		) {
 			switch (button) {

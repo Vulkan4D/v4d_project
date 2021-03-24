@@ -129,7 +129,7 @@ public:
 		return positionInOrbit;
 	}
 
-	
+	static double GetRevolutionTime(double orbitRadius, double parentMass);
 };
 
 class BinaryCenter : public Celestial {

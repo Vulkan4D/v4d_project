@@ -188,7 +188,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SetCursorPos({5, 100});
 				ImGui::SetNextItemWidth(90);
 				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==0? activeColor : inactiveColor);
-				if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				if (ImGui::InputFloat("X", &buildInterface.blockSize[buildInterface.selectedBlockType][0], 0.2f, 1.0f, "%.1f", ImGuiInputTextFlags_None)) {
 					buildInterface.isDirty = true;
 				}
 				ImGui::PopStyleColor();
@@ -196,7 +196,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SetCursorPos({135, 100});
 				ImGui::SetNextItemWidth(90);
 				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==1? activeColor : inactiveColor);
-				if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				if (ImGui::InputFloat("Y", &buildInterface.blockSize[buildInterface.selectedBlockType][1], 0.2f, 1.0f, "%.1f", ImGuiInputTextFlags_None)) {
 					buildInterface.isDirty = true;
 				}
 				ImGui::PopStyleColor();
@@ -204,7 +204,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ImGui::SetCursorPos({260, 100});
 				ImGui::SetNextItemWidth(90);
 				ImGui::PushStyleColor(ImGuiCol_Text, buildInterface.selectedEditValue==2? activeColor : inactiveColor);
-				if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, 1, ImGuiInputTextFlags_None)) {
+				if (ImGui::InputFloat("Z", &buildInterface.blockSize[buildInterface.selectedBlockType][2], 0.2f, 1.0f, "%.1f", ImGuiInputTextFlags_None)) {
 					buildInterface.isDirty = true;
 				}
 				ImGui::PopStyleColor();
@@ -434,7 +434,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (action != GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsAnyWindowFocused() || key == GLFW_KEY_ESCAPE)
+				&& (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow) || key == GLFW_KEY_ESCAPE)
 			#endif
 		) {
 			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
@@ -528,7 +528,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		if (action == GLFW_RELEASE
 			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsAnyWindowFocused()
+				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
 			#endif
 		) {
 			switch (button) {
