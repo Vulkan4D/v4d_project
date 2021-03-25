@@ -1,5 +1,7 @@
 #include <v4d.h>
 
+#include <execution>
+
 #include "GalaxyGenerator.h"
 #include "Celestial.h"
 #include "StarSystem.h"
@@ -27,6 +29,10 @@ glm::dvec4 GetDefaultWorldPosition() {
 }
 
 
+#include "../V4D_flycam/common.hh"
+PlayerView* playerView = nullptr;
+
+
 
 #pragma region Global Pointers
 
@@ -39,6 +45,35 @@ glm::dvec4 GetDefaultWorldPosition() {
 	ServerSideObjects* serverSideObjects = nullptr;
 	std::shared_ptr<OutgoingConnection> client = nullptr;
 	ClientSideObjects* clientSideObjects = nullptr;
+
+#pragma endregion
+
+#pragma Physics
+
+struct ColliderData {
+	uint64_t entity;
+	glm::dvec3 worldPosition;
+	double boundingRadius;
+};
+struct LinearPhysicsData {
+	uint64_t entity;
+	double invMass;
+	glm::dvec3 force;
+	glm::dvec3 linearAcceleration;
+	glm::dvec3 linearVelocity;
+	glm::dvec3 position;
+};
+struct AngularPhysicsData {
+	uint64_t entity;
+	glm::dmat3x3 invInertia;
+	glm::dvec3 torque;
+	glm::dvec3 angularAcceleration;
+	glm::dvec3 angularVelocity;
+	glm::dquat orientation;
+};
+std::unordered_map<uint64_t, std::vector<ColliderData>> colliderData {};
+std::vector<LinearPhysicsData> linearPhysicsData {};
+std::vector<AngularPhysicsData> angularPhysicsData {};
 
 #pragma endregion
 
@@ -268,13 +303,6 @@ glm::dvec4 GetDefaultWorldPosition() {
 	std::unordered_map<glm::ivec3, GalaxyChunk> galaxyChunks {};
 
 #pragma endregion
-
-
-
-
-#include "../V4D_flycam/common.hh"
-PlayerView* playerView = nullptr;
-
 
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -571,6 +599,65 @@ V4D_MODULE_CLASS(V4D_Mod) {
 #pragma region Physics
 
 	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
+		
+		{// Prepare data
+			std::lock_guard lock(serverSideObjects->mutex);
+			for (auto&[id,obj] : serverSideObjects->objects) {
+				colliderData[obj->parent].push_back({uint64_t(id), glm::dvec3(obj->GetTransform()[3]), 1.0});
+				linearPhysicsData.push_back({uint64_t(id), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, obj->GetVelocity(), glm::dvec3(obj->GetTransform()[3])});
+				angularPhysicsData.push_back({uint64_t(id), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, glm::quat_cast(obj->GetTransform())});
+			}
+		}
+		
+		{// Broad Phase Collision Detection
+			//...
+		}
+		
+		{// Narrow Phase Collision Detection
+			//...
+		}
+		
+		{// Collision Response
+			//...
+		}
+		
+		{// Apply Gravity
+			//...
+		}
+		
+		{// Apply Constraints
+			//...
+		}
+		
+		{// Integrate Linear motion
+			std::for_each(/*std::execution::par_unseq, */std::begin(linearPhysicsData), std::end(linearPhysicsData), [&deltaTime](LinearPhysicsData& data){
+				data.linearAcceleration += data.invMass * data.force;
+				data.linearVelocity += data.linearAcceleration * deltaTime;
+				data.position += data.linearVelocity * deltaTime;
+			});
+		}
+		
+		{// Integrate Angular motion
+			std::for_each(/*std::execution::par_unseq, */std::begin(angularPhysicsData), std::end(angularPhysicsData), [&deltaTime](AngularPhysicsData& data){
+				data.angularAcceleration += data.invInertia * data.torque;
+				data.angularVelocity += data.angularAcceleration * deltaTime;
+				data.orientation = glm::normalize(data.orientation + glm::dquat(0.0, data.angularVelocity * deltaTime / 2.0) * data.orientation);
+			});
+		}
+		
+		{// Update entity
+			std::lock_guard lock(serverSideObjects->mutex);
+			for (auto& linear : linearPhysicsData) {
+				serverSideObjects->objects[linear.entity]->SetVelocity(linear.linearVelocity);
+				serverSideObjects->objects[linear.entity]->SetTransform(glm::translate(glm::dmat4(1), linear.position));
+			}
+		}
+		
+		{// Clear data
+			linearPhysicsData.clear();
+			angularPhysicsData.clear();
+			colliderData.clear();
+		}
 		
 	}
 

@@ -97,7 +97,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*20.0);
 					ball->isDynamic = true;
-					ball->physicsClientID = client->id;
+					ball->physicsClientID = 0;//client->id;
 				}
 				else if (key == "glassBall") {
 					auto dir = stream->Read<DVector3>();
@@ -108,7 +108,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*10.0);
 					ball->isDynamic = true;
-					ball->physicsClientID = client->id;
+					ball->physicsClientID = 0;//client->id;
 				}
 				else if (key == "TerrainDigSphere") {
 					auto dir = stream->Read<DVector3>();
@@ -138,7 +138,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
-						ball->physicsClientID = client->id;
+						ball->physicsClientID = 0;//client->id;
 					}
 				}
 				else if (key == "light") {
@@ -150,7 +150,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
-					ball->physicsClientID = client->id;
+					ball->physicsClientID = 0;//client->id;
 				}
 				else if (key == "drone") {
 					auto dir = stream->Read<DVector3>();
@@ -160,7 +160,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					drone->isDynamic = false;
-					drone->physicsClientID = client->id;
+					drone->physicsClientID = 0;//client->id;
 				}
 				else if (key == "glass") {
 					auto dir = stream->Read<DVector3>();
@@ -169,7 +169,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
 					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
 					drone->isDynamic = false;
-					drone->physicsClientID = client->id;
+					drone->physicsClientID = 0;//client->id;
 				}
 				else if (key == "clear") {
 					std::lock_guard lock(serverSideObjects->mutex);

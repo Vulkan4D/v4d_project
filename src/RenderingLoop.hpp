@@ -56,6 +56,7 @@ namespace app {
 						ImGui::Text("Input thread : %.1f avg FPS (limited)", app::inputAvgFrameRate);
 						ImGui::Text("Game Loop thread : %.1f avg FPS (limited)", app::gameLoopAvgFrameRate);
 						ImGui::Text("Slow Loop thread : %.1f avg FPS (limited)", app::slowLoopAvgFrameRate);
+						ImGui::Text("Server Physics thread : %.1f avg FPS (limited)", app::serverPhysicsLoopAvgFrameRate);
 					#endif
 					ImGui::Checkbox("Show other UI windows", &showOtherUI);
 					
