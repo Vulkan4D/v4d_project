@@ -1,4 +1,11 @@
 #include <v4d.h>
+#include <V4D_Mod.h>
+
+#include "utilities/io/Logger.h"
+#include "utilities/scene/GltfModelLoader.h"
+
+#include <unordered_set>
+
 #include "common.hh"
 #include "actions.hh"
 #include "../V4D_flycam/common.hh"

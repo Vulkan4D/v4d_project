@@ -1,5 +1,11 @@
 #pragma once
 #include <v4d.h>
+#include <optional>
+#include <vector>
+#include <memory>
+#include <unordered_map>
+#include "utilities/graphics/RenderableGeometryEntity.h"
+
 #include "celestials/CelestialType.hh"
 #include "GalacticPosition.hpp"
 #include "GalaxyGenerator.h"

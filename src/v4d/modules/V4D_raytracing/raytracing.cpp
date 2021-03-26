@@ -1,6 +1,13 @@
 #define V4D_RAYTRACING_RENDERER_MODULE
 
 #include <v4d.h>
+#include <V4D_Mod.h>
+
+#include "utilities/io/Logger.h"
+#include "utilities/graphics/vulkan/ComputeShaderPipeline.h"
+#include "utilities/graphics/vulkan/StagingBuffer.hpp"
+#include "utilities/graphics/vulkan/RenderPass.h"
+
 #include "Texture2D.hpp"
 #include "camera_options.hh"
 #include "substances.hh"

@@ -1,5 +1,3 @@
-#include <v4d.h>
-
 int var1 = 0;
 
 extern "C" {

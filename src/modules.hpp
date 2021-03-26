@@ -3,6 +3,7 @@
 #include "networking.hh"
 #include "Server.hpp"
 #include "Client.hpp"
+#include "utilities/io/StringListFile.h"
 
 namespace app::modules {
 

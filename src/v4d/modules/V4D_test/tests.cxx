@@ -1,5 +1,16 @@
 #include <v4d.h>
 
+// Dependencies for Modular
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <mutex>
+#include <vector>
+#include <functional>
+#include <filesystem>
+#include "utilities/io/FilePath.h"
+#include "utilities/io/Logger.h"
+
 class V4D_Test {
 	V4D_MODULE_CLASS_HEADER(V4D_Test, init, test1, test2)
 	V4D_MODULE_FUNC_DECLARE(void, init)

@@ -1,4 +1,5 @@
 #include <v4d.h>
+#include <V4D_Mod.h>
 
 int main(const int argc, const char** argv) {
 	int ret = 0;

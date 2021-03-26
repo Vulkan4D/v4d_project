@@ -1,4 +1,9 @@
 #include <v4d.h>
+#include <V4D_Mod.h>
+
+#include "utilities/io/Logger.h"
+#include "utilities/graphics/vulkan/RenderPass.h"
+#include "utilities/graphics/vulkan/StagingBuffer.hpp"
 
 #include <execution>
 

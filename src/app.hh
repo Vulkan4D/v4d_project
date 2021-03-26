@@ -1,5 +1,13 @@
 #pragma once
 #include <v4d.h>
+#include <V4D_Mod.h>
+#include "utilities/io/Logger.h"
+
+#include <thread>
+#include <string>
+#include <mutex>
+#include <unordered_map>
+
 #include "settings.hh"
 
 namespace app {

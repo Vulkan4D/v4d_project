@@ -1,5 +1,11 @@
 #pragma once
 #include <v4d.h>
+#include "utilities/io/Logger.h"
+#include "utilities/io/BinaryFileStream.h"
+#include "utilities/graphics/Mesh.hpp"
+#include "utilities/graphics/RenderableGeometryEntity.h"
+
+#include <condition_variable>
 
 #include "CubeToSphere.hpp"
 // #include "Noise.hpp"

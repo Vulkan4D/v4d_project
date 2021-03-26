@@ -1,4 +1,8 @@
 #include <v4d.h>
+#include <V4D_Mod.h>
+
+#include "utilities/io/Logger.h"
+
 #include "common.hh"
 
 using namespace v4d::graphics;

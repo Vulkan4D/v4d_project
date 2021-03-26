@@ -1,5 +1,12 @@
 #pragma once
+
 #include <v4d.h>
+#include <V4D_Mod.h>
+
+#include <set>
+#include <mutex>
+#include <memory>
+#include <optional>
 
 struct BuildInterface {
 	v4d::scene::Scene* scene = nullptr;
