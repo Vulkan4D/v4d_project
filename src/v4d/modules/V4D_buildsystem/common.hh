@@ -113,11 +113,11 @@ struct CachedData {
 	
 	// Client-Only
 	std::mutex objectMapsMutex;
-	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::vector<Block>> buildBlocks {};
-	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::shared_ptr<Build>> builds {};
+	std::unordered_map<uint64_t, std::vector<Block>> buildBlocks {};
+	std::unordered_map<uint64_t, std::shared_ptr<Build>> builds {};
 
 	// Server-Only
 	std::mutex serverObjectMapsMutex;
-	std::unordered_map<v4d::scene::NetworkGameObject::Id, std::vector<Block>> serverBuildBlocks {};
+	std::unordered_map<uint64_t, std::vector<Block>> serverBuildBlocks {};
 
 };

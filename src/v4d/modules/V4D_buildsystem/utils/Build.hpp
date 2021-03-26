@@ -6,9 +6,9 @@ class Build {
 	mutable std::recursive_mutex blocksMutex;
 	
 public:
-	v4d::scene::NetworkGameObject::Id networkId;
+	uint64_t networkId;
 
-	Build(v4d::scene::NetworkGameObject::Id networkId) : networkId(networkId) {}
+	Build(uint64_t networkId) : networkId(networkId) {}
 	
 	~Build() {
 		if (entity) entity->Destroy();

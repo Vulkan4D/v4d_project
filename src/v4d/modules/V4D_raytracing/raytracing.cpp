@@ -1271,7 +1271,7 @@ void ConfigureRasterShaders() {
 						rayTracingInstanceBuffer[index].mask = entity->rayTracingMask;
 						rayTracingInstanceBuffer[index].flags = entity->rayTracingFlags;
 						rayTracingInstanceBuffer[index].transform = glm::transpose(entity->entityInstanceInfo.modelViewTransform);
-						renderableEntityInstanceBuffer[entity->GetIndex()] = entity->entityInstanceInfo;
+						renderableEntityInstanceBuffer[(size_t)entity->GetIndex()] = entity->entityInstanceInfo;
 					}
 					
 					// Light Source
@@ -1367,7 +1367,7 @@ void ConfigureRasterShaders() {
 						if (entity->raster_transparent && entity->sharedGeometryData) {
 							uint32_t i = 0;
 							for (auto& geometry : entity->sharedGeometryData->geometries) {
-								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+								RasterPushConstant pushConstant {entity->raster_wireframe_color, (int32_t)entity->GetIndex(), i++};
 								s->Bind(r->renderingDevice, commandBuffer);
 								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
 								if (geometry.vertexCount > 0) {
@@ -1388,7 +1388,7 @@ void ConfigureRasterShaders() {
 						if ((entity->raster_wireframe || (DEBUG_OPTIONS::WIREFRAME && entity->rayTracingMask)) && entity->sharedGeometryData) {
 							uint32_t i = 0;
 							for (auto& geometry : entity->sharedGeometryData->geometries) {
-								RasterPushConstant pushConstant {entity->raster_wireframe_color, entity->GetIndex(), i++};
+								RasterPushConstant pushConstant {entity->raster_wireframe_color, (int32_t)entity->GetIndex(), i++};
 								r->renderingDevice->CmdSetLineWidth(commandBuffer, std::max(1.0f, entity->raster_wireframe));
 								s->Bind(r->renderingDevice, commandBuffer);
 								s->PushConstant(r->renderingDevice, commandBuffer, &pushConstant, 0);
