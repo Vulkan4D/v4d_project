@@ -12,6 +12,7 @@ cmake_minimum_required(VERSION 3.10)
 
 # Options
 option(COMPILE_APP "Build Demo/Project" ON)
+option(COMPILE_GAME "Compile game.dll/game.so" ON)
 option(COMPILE_TESTS "Build Unit Tests" ON)
 option(COMPILE_CONSOLE_CLI "Build Console CLI" ON)
 option(COMPILE_GLFW "Compile GLFW from source instead of linking with installed library" ON)
@@ -19,6 +20,7 @@ option(COMPILE_V4D_CORE "Compile Vulkan4D Core library from source" ON)
 option(COMPILE_V4D_MODULES "Compile all Vulkan4D Modules from source" ON)
 option(COMPILE_ASSETS "Compile all assets" ON)
 option(MODULES_LINK_WITH_V4D_CORE "Link all modules with v4d.dll/v4d.so" ON)
+option(MODULES_LINK_WITH_GAME "Link all modules with game.dll/game.so" ON)
 option(USE_CCACHE "Use ccache" ON)
 option(ENABLE_IMGUI "Enable ImGUI" ON)
 option(ADDRESS_SANITIZER "Enable Address Sanitizer" OFF)
@@ -110,6 +112,12 @@ if(COMPILE_V4D_CORE)
 endif()
 
 
+# Game
+if(COMPILE_GAME)
+	add_subdirectory(src/v4d/game)
+endif()
+
+
 # V4D Modules
 if(COMPILE_V4D_MODULES)
 	add_subdirectory(src/v4d/modules)
@@ -130,6 +138,7 @@ if(COMPILE_APP)
 	)
 	target_link_libraries(${APP_NAME}
 		v4d
+		game
 	)
 	target_compile_definitions(${APP_NAME}
 		PRIVATE -D_V4D_PROJECT
@@ -149,6 +158,7 @@ if(COMPILE_TESTS)
 	)
 	target_link_libraries(tests
 		v4d
+		game
 	)
 	target_compile_definitions(tests
 		PRIVATE -D_V4D_PROJECT
@@ -168,6 +178,7 @@ if(COMPILE_CONSOLE_CLI)
 	)
 	target_link_libraries(console
 		v4d
+		game
 	)
 	target_compile_definitions(console
 		PRIVATE -D_V4D_PROJECT

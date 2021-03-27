@@ -20,7 +20,8 @@
                 "_V4D_MODULE",
                 "_VULKAN_LOAD_AT_RUNTIME",
                 "_ENABLE_IMGUI",
-                "THIS_MODULE=\"<VENDOR>_<modulename>\""
+                "THIS_MODULE=\"<VENDOR>_<modulename>\"",
+                "APPLICATION_NAME"
             ],
             "compilerPath": "/bin/g++",
             "cppStandard": "c++17",

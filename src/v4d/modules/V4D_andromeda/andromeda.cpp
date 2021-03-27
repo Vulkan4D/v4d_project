@@ -1,5 +1,6 @@
 #include <v4d.h>
 #include <V4D_Mod.h>
+#include "v4d/game/Entity.h"
 
 #include "utilities/io/Logger.h"
 #include "utilities/graphics/vulkan/RenderPass.h"
@@ -14,9 +15,6 @@
 #include "celestials/Planet.h"
 
 #include "TerrainGeneratorLib.h"
-
-#include "../V4D_multiplayer/ServerSideObjects.hh"
-#include "../V4D_multiplayer/ClientSideObjects.hh"
 
 
 
@@ -46,14 +44,12 @@ PlayerView* playerView = nullptr;
 	v4d::graphics::Window* window = nullptr;
 	v4d::graphics::Renderer* r = nullptr;
 	v4d::scene::Scene* scene = nullptr;
-	std::shared_ptr<ListeningServer> server = nullptr;
-	ServerSideObjects* serverSideObjects = nullptr;
-	std::shared_ptr<OutgoingConnection> client = nullptr;
-	ClientSideObjects* clientSideObjects = nullptr;
+	std::shared_ptr<v4d::networking::ListeningServer> server = nullptr;
+	std::shared_ptr<v4d::networking::OutgoingConnection> client = nullptr;
 
 #pragma endregion
 
-#pragma Physics
+#pragma region Physics
 
 struct ColliderData {
 	uint64_t entity;
@@ -355,14 +351,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		r = _r;
 	}
 	
-	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<ListeningServer> _srv) {
+	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<v4d::networking::ListeningServer> _srv) {
 		server = _srv;
-		serverSideObjects = (ServerSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_SERVER_OBJECTS);
 	}
 	
-	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<OutgoingConnection> _c) {
+	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<v4d::networking::OutgoingConnection> _c) {
 		client = _c;
-		clientSideObjects = (ClientSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_CLIENT_OBJECTS);
 	}
 	
 	V4D_MODULE_FUNC(void, CreateVulkanResources2, Device* device) {
@@ -440,7 +434,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 #pragma region Networking
 	
-	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, v4d::networking::IncomingClientPtr client) {
 		std::scoped_lock lock(serverActionQueueMutex);
 		auto& actionQueue = serverActionQueuePerClient[client->id];
 		while (actionQueue.size()) {
@@ -467,24 +461,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	// V4D_MODULE_FUNC(void, StreamReceiveEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::ReadOnlyStream& stream) {}
 	
 	V4D_MODULE_FUNC(void, ServerIncomingClient, v4d::networking::IncomingClientPtr client) {
-		LOG("Server: IncomingClient " << client->id)
-		NetworkGameObject::Id playerObjId;
-		v4d::scene::NetworkGameObjectPtr obj;
-		{
-			std::lock_guard lock(serverSideObjects->mutex);
-			obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Player);
-			obj->physicsClientID = client->id;
-			obj->isDynamic = true;
-			obj->clientIterations[client->id] = 0;
-			serverSideObjects->players[client->id] = obj;
-			playerObjId = obj->id;
-		}
-		
 		GalacticPosition defaultPosition = GetDefaultGalacticPosition();
-		obj->parent = defaultPosition.rawValue;
+		glm::dvec3 worldPosition = GetDefaultWorldPosition();
+		
+		LOG("Server: IncomingClient " << client->id)
+		Entity::Id playerEntityId;
+		ServerSidePlayer::Ptr player = ServerSidePlayer::Create(client->id);
+		ServerSideEntity::Ptr entity = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Player, defaultPosition.rawValue);
+		playerEntityId = entity->GetID();
+		entity->isDynamic = true;
+		entity->clientIterations[client->id] = 0;
+		player->parentEntityId = playerEntityId;
 		
 		// Set player position
-		glm::dvec3 worldPosition = GetDefaultWorldPosition();
 		if (defaultPosition.IsCelestial()) {
 			auto celestial = GalaxyGenerator::GetCelestial(defaultPosition);
 			Planet* planet = dynamic_cast<Planet*>(celestial.get());
@@ -496,11 +485,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto upVector = glm::normalize(worldPosition);
 		auto rightVector = glm::cross(forwardVector, upVector);
 		worldPosition += rightVector * (double)client->id;
-		obj->position = worldPosition;
+		entity->position = worldPosition;
 		
-		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
+		entity->Activate();
+		
+		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerEntityId));
 			stream << networking::action::ASSIGN_PLAYER_OBJ;
-			stream << playerObjId;
+			stream << playerEntityId;
 			stream << v4d::Timer::GetCurrentTimestamp();
 			stream << worldPosition;
 			stream << forwardVector;
@@ -510,7 +501,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		ServerEnqueueAction(client->id, stream);
 	}
 	
-	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
+	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, v4d::networking::IncomingClientPtr client) {
 		auto action = stream->Read<networking::action::Action>();
 		switch (action) {
 			
@@ -528,26 +519,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto action = stream->Read<networking::action::Action>();
 		switch (action) {
 			case networking::action::ASSIGN_PLAYER_OBJ:{ // assign object to client for camera
-				auto id = stream->Read<NetworkGameObject::Id>();
+				auto id = stream->Read<Entity::Id>();
 				double timestamp = stream->Read<double>();
 				auto worldPosition = stream->Read<glm::dvec3>();
 				auto forwardVector = stream->Read<glm::dvec3>();
 				auto upVector = stream->Read<glm::dvec3>();
 				bool isReferenceCelestial = stream->Read<bool>();
 				
-				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for obj id " << id)
-				try {
-					std::lock_guard lock(clientSideObjects->mutex);
-					auto obj = clientSideObjects->objects.at(id);
-					if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
-						scene->cameraParent = entity;
+				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for entity id " << id)
+				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
+					if (v4d::graphics::RenderableGeometryEntity::Ptr renderableEntity = entity->renderableGeometryEntityInstance.lock(); renderableEntity) {
+						scene->cameraParent = renderableEntity;
 						scene->timestamp = timestamp;
 					}
 					scene->camera.worldPosition = worldPosition;
 					playerView->camSpeed = isReferenceCelestial? 10.0 : LY2M(0.1);
 					playerView->SetInitialViewDirection(forwardVector, upVector, true);
-				} catch (std::exception& err) {
-					LOG_ERROR("Client ReceiveAction ASSIGN_PLAYER_OBJ ("<<id<<") : " << err.what())
 				}
 			}break;
 			default: 
@@ -565,11 +552,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, CreateEntity, int64_t entityUniqueID, uint64_t type) {
 		switch (type) {
 			case OBJECT_TYPE::Player:{
-				auto entity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				auto& obj = clientSideObjects->objects.at(entityUniqueID);
-				obj->renderableGeometryEntityInstance = entity;
-				// entity->generator = [](auto* entity, auto* device){};
-				// entity->generator = cake;
+				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(entityUniqueID); entity) {
+					auto renderableEntity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+					entity->renderableGeometryEntityInstance = renderableEntity;
+					// renderableEntity->generator = [](auto* renderableEntity, auto* device){};
+					// renderableEntity->generator = cake;
+				}
 			}break;
 		}
 	}
@@ -581,12 +569,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
 		
 		{// Prepare data
-			std::lock_guard lock(serverSideObjects->mutex);
-			for (auto&[id,obj] : serverSideObjects->objects) {
-				colliderData[obj->parent].push_back({uint64_t(id), obj->position, 1.0/*boundingRadius*/});
-				linearPhysicsData.push_back({uint64_t(id), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, glm::dvec3{0,0,1}/*velocity*/, obj->position});
-				angularPhysicsData.push_back({uint64_t(id), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, obj->orientation});
-			}
+			ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
+				colliderData[entity->referenceFrame].push_back({uint64_t(entity->GetID()), entity->position, 1.0/*boundingRadius*/});
+				linearPhysicsData.push_back({uint64_t(entity->GetID()), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, glm::dvec3{0,0,1}/*velocity*/, entity->position});
+				angularPhysicsData.push_back({uint64_t(entity->GetID()), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, entity->orientation});
+			});
 		}
 		
 		{// Broad Phase Collision Detection
@@ -626,14 +613,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		{// Update entity
-			std::lock_guard lock(serverSideObjects->mutex);
 			for (auto& linear : linearPhysicsData) {
-				// serverSideObjects->objects[linear.entity]->SetVelocity(linear.linearVelocity);
-				serverSideObjects->objects[linear.entity]->position = linear.position;
+				// ServerSideEntity::Get(linear.entity)->SetVelocity(linear.linearVelocity);
+				ServerSideEntity::Get(linear.entity)->position = linear.position;
 			}
 			for (auto& angular : angularPhysicsData) {
-				// serverSideObjects->objects[angular.entity]->SetVelocity(angular.angularVelocity);
-				serverSideObjects->objects[angular.entity]->orientation = angular.orientation;
+				// ServerSideEntity::Get(angular.entity)->SetVelocity(angular.angularVelocity);
+				ServerSideEntity::Get(angular.entity)->orientation = angular.orientation;
 			}
 		}
 		
@@ -746,34 +732,32 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
-			if (auto cameraParentRoot = v4d::graphics::RenderableGeometryEntity::GetRoot(cameraParent); cameraParentRoot) {
-				GalacticPosition galacticPosition {cameraParentRoot->parentId};
-				
-				if (galacticPosition.IsValid()) {
-					double playerPositionTimestamp = scene->timestamp;
-					if (galacticPosition.IsCelestial()) {
-						scene->camera.originOffset = GalaxyGenerator::GetCelestial(galacticPosition)->GetAbsolutePositionInOrbit<glm::i64vec3>(playerPositionTimestamp) + glm::i64vec3(LY2M(GalaxyGenerator::GetStarSystem(galacticPosition)->GetOffsetLY()));
-					} else {
-						// Origin reset
-						glm::i64vec3 originOffsetLY = glm::round(M2LY(glm::dvec3(scene->camera.originOffset)));
-						if (originOffsetLY.x != 0 || originOffsetLY.y != 0 || originOffsetLY.z != 0) {
-							galacticPosition.posInGalaxy_x = uint64_t(int64_t(galacticPosition.posInGalaxy_x) + originOffsetLY.x);
-							galacticPosition.posInGalaxy_y = uint64_t(int64_t(galacticPosition.posInGalaxy_y) + originOffsetLY.y);
-							galacticPosition.posInGalaxy_z = uint64_t(int64_t(galacticPosition.posInGalaxy_z) + originOffsetLY.z);
-							scene->camera.originOffset.x -= LY2M_INT(originOffsetLY.x);
-							scene->camera.originOffset.y -= LY2M_INT(originOffsetLY.y);
-							scene->camera.originOffset.z -= LY2M_INT(originOffsetLY.z);
-							cameraParentRoot->parentId = galacticPosition.rawValue;
-							LOG(galacticPosition.posInGalaxy_x << " " << galacticPosition.posInGalaxy_y << " " << galacticPosition.posInGalaxy_z)
-						}
-					}
-					glm::i64vec3 playerPositionInStarSystem = scene->camera.originOffset;
-					glm::dvec3 cameraPosition = scene->camera.worldPosition;
-					glm::dvec3 playerPositionInGalaxyLY = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + M2LY(glm::dvec3(playerPositionInStarSystem) + cameraPosition);
-					currentGalaxySnapshot.Set(galacticPosition, playerPositionInStarSystem, playerPositionInGalaxyLY, cameraPosition, playerPositionTimestamp);
+			GalacticPosition galacticPosition {cameraParent->parentId};
+			
+			if (galacticPosition.IsValid()) {
+				double playerPositionTimestamp = scene->timestamp;
+				if (galacticPosition.IsCelestial()) {
+					scene->camera.originOffset = GalaxyGenerator::GetCelestial(galacticPosition)->GetAbsolutePositionInOrbit<glm::i64vec3>(playerPositionTimestamp) + glm::i64vec3(LY2M(GalaxyGenerator::GetStarSystem(galacticPosition)->GetOffsetLY()));
 				} else {
-					LOG_ERROR("Galactic Position is INVALID")
+					// Origin reset
+					glm::i64vec3 originOffsetLY = glm::round(M2LY(glm::dvec3(scene->camera.originOffset)));
+					if (originOffsetLY.x != 0 || originOffsetLY.y != 0 || originOffsetLY.z != 0) {
+						galacticPosition.posInGalaxy_x = uint64_t(int64_t(galacticPosition.posInGalaxy_x) + originOffsetLY.x);
+						galacticPosition.posInGalaxy_y = uint64_t(int64_t(galacticPosition.posInGalaxy_y) + originOffsetLY.y);
+						galacticPosition.posInGalaxy_z = uint64_t(int64_t(galacticPosition.posInGalaxy_z) + originOffsetLY.z);
+						scene->camera.originOffset.x -= LY2M_INT(originOffsetLY.x);
+						scene->camera.originOffset.y -= LY2M_INT(originOffsetLY.y);
+						scene->camera.originOffset.z -= LY2M_INT(originOffsetLY.z);
+						cameraParent->parentId = galacticPosition.rawValue;
+						LOG(galacticPosition.posInGalaxy_x << " " << galacticPosition.posInGalaxy_y << " " << galacticPosition.posInGalaxy_z)
+					}
 				}
+				glm::i64vec3 playerPositionInStarSystem = scene->camera.originOffset;
+				glm::dvec3 cameraPosition = scene->camera.worldPosition;
+				glm::dvec3 playerPositionInGalaxyLY = glm::dvec3(galacticPosition.posInGalaxy_x, galacticPosition.posInGalaxy_y, galacticPosition.posInGalaxy_z) + M2LY(glm::dvec3(playerPositionInStarSystem) + cameraPosition);
+				currentGalaxySnapshot.Set(galacticPosition, playerPositionInStarSystem, playerPositionInGalaxyLY, cameraPosition, playerPositionTimestamp);
+			} else {
+				LOG_ERROR("Galactic Position is INVALID")
 			}
 		}
 	}

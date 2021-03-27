@@ -25,8 +25,11 @@ namespace app::modules {
 			}
 		}
 		for (auto module : app::modulesList) if (module[0] != '#') {
-			LOG("Loading module " << module)
-			V4D_Mod::LoadModule(module);
+			if (V4D_Mod::LoadModule(module, true)) {
+				LOG("Loaded module " << module)
+			} else {
+				LOG_ERROR("Failed to load module " << module)
+			}
 		}
 		// Sort Modules
 		V4D_Mod::SortModules([](auto* a, auto* b){
