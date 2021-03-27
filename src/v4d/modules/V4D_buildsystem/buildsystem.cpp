@@ -8,6 +8,7 @@
 #include "../V4D_flycam/common.hh"
 #include "../V4D_raytracing/Texture2D.hpp"
 #include "../V4D_multiplayer/ServerSideObjects.hh"
+#include "../V4D_multiplayer/ClientSideObjects.hh"
 
 using namespace v4d::scene;
 using namespace networking::actions;
@@ -43,6 +44,7 @@ std::shared_ptr<v4d::networking::ListeningServer> server = nullptr;
 ServerSideObjects* serverSideObjects = nullptr;
 
 std::shared_ptr<OutgoingConnection> client = nullptr;
+ClientSideObjects* clientSideObjects = nullptr;
 std::recursive_mutex clientActionQueueMutex;
 std::queue<v4d::data::Stream> clientActionQueue {};
 
@@ -72,53 +74,47 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		buildInterface.scene = scene;
 	}
 	
-	V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
+	V4D_MODULE_FUNC(void, CreateEntity, int64_t entityUniqueID, uint64_t type) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
-		switch (obj->type) {
+		switch (type) {
 			case OBJECT_TYPE::Build:{
-				cachedData.builds[obj->id] = std::make_shared<Build>(obj->id);
-				cachedData.buildBlocks[obj->id] = {};
+				cachedData.builds[entityUniqueID] = std::make_shared<Build>(entityUniqueID);
+				cachedData.buildBlocks[entityUniqueID] = {};
 			}break;
 		}
 	}
-	V4D_MODULE_FUNC(void, DestroyGameObject, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
+	V4D_MODULE_FUNC(void, DestroyEntity, int64_t entityUniqueID, uint64_t type) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
-		switch (obj->type) {
+		switch (type) {
 			case OBJECT_TYPE::Build:{
-				try {cachedData.builds.erase(obj->id);} catch(...){}
-				try {cachedData.buildBlocks.erase(obj->id);} catch(...){}
-			}break;
-		}
-	}
-	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
-		std::lock_guard lock(cachedData.objectMapsMutex);
-		switch (obj->type) {
-			case OBJECT_TYPE::Build:{
-				obj->renderableGeometryEntityInstance = cachedData.builds[obj->id]->CreateEntity();
+				try {cachedData.builds.erase(entityUniqueID);} catch(...){}
+				try {cachedData.buildBlocks.erase(entityUniqueID);} catch(...){}
 			}break;
 		}
 	}
 	
 	// Server-Only
-	V4D_MODULE_FUNC(void, SendStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {
+	V4D_MODULE_FUNC(void, StreamSendEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::WriteOnlyStream& stream) {
 		std::lock_guard lock1(cachedData.serverObjectMapsMutex);
 		{// Data over network
-			stream.Write(cachedData.serverBuildBlocks[obj->id]);
+			stream.Write(cachedData.serverBuildBlocks[entityUniqueID]);
 		}
 	}
 	
 	// Client-Only
-	V4D_MODULE_FUNC(void, ReceiveStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {
+	V4D_MODULE_FUNC(void, StreamReceiveEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::ReadOnlyStream& stream) {
 		std::lock_guard lock(cachedData.objectMapsMutex);
 		{// Data over network
-			cachedData.buildBlocks[obj->id] = stream.Read<std::vector<Block>>();
+			cachedData.buildBlocks[entityUniqueID] = stream.Read<std::vector<Block>>();
 		}
 		try { // Update build in-game
-			auto& build = cachedData.builds.at(obj->id);
+			auto& obj = clientSideObjects->objects.at(entityUniqueID);
+			auto& build = cachedData.builds.at(entityUniqueID);
 			if (build) {
-				auto& blocks = cachedData.buildBlocks.at(obj->id);
+				auto& blocks = cachedData.buildBlocks.at(entityUniqueID);
 				obj->renderableGeometryEntityInstance = build->SwapBlocksAndRebuild(blocks);
 				obj->posInit = false;
+				obj->renderableGeometryEntityInstance = cachedData.builds[entityUniqueID]->CreateEntity();
 			}
 		} catch(...){}
 	}
@@ -296,12 +292,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			case CREATE_NEW_BUILD:{
 				// Network data
-				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto position = stream->Read<NetworkGameObject::Position>();
+				auto orientation = stream->Read<NetworkGameObject::Orientation>();
 				auto block = stream->Read<Block>();
 				//
 				std::scoped_lock lock(serverSideObjects->mutex, cachedData.serverObjectMapsMutex);
 				auto obj = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Build);
-				obj->SetTransformFromNetwork(transform);
+				obj->position = position;
+				obj->orientation = orientation;
 				obj->isDynamic = true;
 				obj->physicsClientID = client->id;
 				cachedData.serverBuildBlocks[obj->id].push_back(block);
@@ -415,6 +413,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, InitClient, std::shared_ptr<OutgoingConnection> _c) {
 		client = _c;
+		clientSideObjects = (ClientSideObjects*)mainMultiplayerModule->ModuleGetCustomPtr(CUSTOM_PTR_CLIENT_OBJECTS);
 	}
 	
 	V4D_MODULE_FUNC(void, ClientSendActions, v4d::io::SocketPtr stream) {
@@ -553,12 +552,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 									stream << block;
 								ClientEnqueueAction(stream);
 							} else if (buildInterface.createMode && !parent) {
-								NetworkGameObjectTransform transform {};
-								transform.SetFromTransformAndVelocity(buildInterface.GetTmpBuildWorldTransform(), {0,0,0});
+								auto t = buildInterface.GetTmpBuildWorldTransform();
+								NetworkGameObject::Position position = t[3];
+								NetworkGameObject::Orientation orientation = glm::quat_cast(t);
 								v4d::data::WriteOnlyStream stream(256);
 									stream << CREATE_NEW_BUILD;
 									// Network data 
-									stream << transform;
+									stream << position;
+									stream << orientation;
 									stream << block;
 								ClientEnqueueAction(stream);
 							}

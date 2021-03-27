@@ -463,8 +463,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
-	// V4D_MODULE_FUNC(void, SendStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {}
-	// V4D_MODULE_FUNC(void, ReceiveStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {}
+	// V4D_MODULE_FUNC(void, StreamSendEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::WriteOnlyStream& stream) {}
+	// V4D_MODULE_FUNC(void, StreamReceiveEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::ReadOnlyStream& stream) {}
 	
 	V4D_MODULE_FUNC(void, ServerIncomingClient, v4d::networking::IncomingClientPtr client) {
 		LOG("Server: IncomingClient " << client->id)
@@ -496,7 +496,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto upVector = glm::normalize(worldPosition);
 		auto rightVector = glm::cross(forwardVector, upVector);
 		worldPosition += rightVector * (double)client->id;
-		obj->SetTransform(worldPosition, forwardVector, upVector);
+		obj->position = worldPosition;
 		
 		v4d::data::WriteOnlyStream stream(sizeof(networking::action::Action) + sizeof(playerObjId));
 			stream << networking::action::ASSIGN_PLAYER_OBJ;
@@ -560,42 +560,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 #pragma endregion
 
-#pragma region GameObjects
+#pragma region Entities
 	
-	// V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
-	// 	switch (obj->type) {
-	// 		case OBJECT_TYPE::Player:{
-	// 		}break;
-	// 	}
-	// }
-	
-	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
-		switch (obj->type) {
+	V4D_MODULE_FUNC(void, CreateEntity, int64_t entityUniqueID, uint64_t type) {
+		switch (type) {
 			case OBJECT_TYPE::Player:{
-				auto entity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				auto entity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				auto& obj = clientSideObjects->objects.at(entityUniqueID);
 				obj->renderableGeometryEntityInstance = entity;
 				// entity->generator = [](auto* entity, auto* device){};
 				// entity->generator = cake;
 			}break;
-			// case OBJECT_TYPE::Ball:{
-			// 	auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
-			// 	obj->renderableGeometryEntityInstance = entity;
-			// 	float radius = 0.5f;
-			// 	auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
-			// 	physics->SetSphereCollider(radius);
-			// 	physics->friction = 0.6;
-			// 	physics->bounciness = 0.7;
-			// 	entity->generator = [radius](RenderableGeometryEntity* entity, Device* device){
-			// 		RenderableGeometryEntity::Material mat {};
-			// 		mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
-			// 		mat.visibility.texFactors[0] = 255;
-			// 		mat.visibility.roughness = 0;
-			// 		mat.visibility.metallic = 1;
-			// 		entity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
-			// 		entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
-			// 		entity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
-			// 	};
-			// }break;
 		}
 	}
 	
@@ -608,9 +583,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		{// Prepare data
 			std::lock_guard lock(serverSideObjects->mutex);
 			for (auto&[id,obj] : serverSideObjects->objects) {
-				colliderData[obj->parent].push_back({uint64_t(id), glm::dvec3(obj->GetTransform()[3]), 1.0});
-				linearPhysicsData.push_back({uint64_t(id), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, obj->GetVelocity(), glm::dvec3(obj->GetTransform()[3])});
-				angularPhysicsData.push_back({uint64_t(id), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, glm::quat_cast(obj->GetTransform())});
+				colliderData[obj->parent].push_back({uint64_t(id), obj->position, 1.0/*boundingRadius*/});
+				linearPhysicsData.push_back({uint64_t(id), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, glm::dvec3{0,0,1}/*velocity*/, obj->position});
+				angularPhysicsData.push_back({uint64_t(id), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, obj->orientation});
 			}
 		}
 		
@@ -653,8 +628,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		{// Update entity
 			std::lock_guard lock(serverSideObjects->mutex);
 			for (auto& linear : linearPhysicsData) {
-				serverSideObjects->objects[linear.entity]->SetVelocity(linear.linearVelocity);
-				serverSideObjects->objects[linear.entity]->SetTransform(glm::translate(glm::dmat4(1), linear.position));
+				// serverSideObjects->objects[linear.entity]->SetVelocity(linear.linearVelocity);
+				serverSideObjects->objects[linear.entity]->position = linear.position;
+			}
+			for (auto& angular : angularPhysicsData) {
+				// serverSideObjects->objects[angular.entity]->SetVelocity(angular.angularVelocity);
+				serverSideObjects->objects[angular.entity]->orientation = angular.orientation;
 			}
 		}
 		

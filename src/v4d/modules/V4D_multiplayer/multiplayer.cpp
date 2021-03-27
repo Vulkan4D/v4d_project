@@ -134,16 +134,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							*stream << (obj->physicsClientID == client->id);
 							*stream << obj->GetAttributes();
 							*stream << obj->GetIteration();
-							*stream << obj->GetNetworkTransform();
+							*stream << obj->position;
+							*stream << obj->orientation;
 							
 							auto mod = V4D_Mod::GetModule(obj->moduleID.String());
 							
 							tmpStream.ClearWriteBuffer();
-							if (mod && mod->SendStreamCustomGameObjectData) mod->SendStreamCustomGameObjectData(obj, tmpStream);
+							if (mod && mod->StreamSendEntityData) mod->StreamSendEntityData(obj->id, obj->type, tmpStream);
 							stream->WriteStream(tmpStream);
 							
 							tmpStream.ClearWriteBuffer();
-							if (mod && mod->SendStreamCustomGameObjectTransformData) mod->SendStreamCustomGameObjectTransformData(obj, tmpStream);
+							if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(obj->id, obj->type, tmpStream);
 							stream->WriteStream(tmpStream);
 							
 						stream->End();
@@ -182,12 +183,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
 						*stream << obj->GetIteration();
-						*stream << obj->GetNetworkTransform();
+						*stream << obj->position;
+						*stream << obj->orientation;
 						
 						auto mod = V4D_Mod::GetModule(obj->moduleID.String());
 						
 						tmpStream.ClearWriteBuffer();
-						if (mod && mod->SendStreamCustomGameObjectTransformData) mod->SendStreamCustomGameObjectTransformData(obj, tmpStream);
+						if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(obj->id, obj->type, tmpStream);
 						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Server::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
 						stream->WriteStream(tmpStream);
 						
@@ -212,17 +214,19 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case SYNC_OBJECT_TRANSFORM:{
 				auto id = stream->Read<NetworkGameObject::Id>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
-				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto position = stream->Read<NetworkGameObject::Position>();
+				auto orientation = stream->Read<NetworkGameObject::Orientation>();
 				auto tmpStream = stream->ReadStream();
 				try {
 					std::lock_guard lock(serverSideObjects.mutex);
 					auto obj = serverSideObjects.objects.at(id);
 					if (obj->physicsClientID == client->id && obj->GetIteration() == iteration) {
-						obj->SetTransformFromNetwork(transform);
+						obj->position = position;
+						obj->orientation = orientation;
 						
 						auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
 						if (mod) {
-							if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream);
+							if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(obj->id, obj->type, tmpStream);
 						}
 						
 					}
@@ -251,12 +255,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						*stream << SYNC_OBJECT_TRANSFORM;
 						*stream << obj->id;
 						*stream << obj->GetIteration();
-						*stream << obj->GetNetworkTransform();
+						*stream << obj->position;
+						*stream << obj->orientation;
 						
 						auto mod = V4D_Mod::GetModule(obj->moduleID.String());
 						
 						tmpStream.ClearWriteBuffer();
-						if (mod && mod->SendStreamCustomGameObjectTransformData) mod->SendStreamCustomGameObjectTransformData(obj, tmpStream);
+						if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(obj->id, obj->type, tmpStream);
 						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Client::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << obj->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_OBJECT_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
 						stream->WriteStream(tmpStream);
 						
@@ -280,7 +285,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto physicsControl = stream->Read<bool>();
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
-				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto position = stream->Read<NetworkGameObject::Position>();
+				auto orientation = stream->Read<NetworkGameObject::Orientation>();
 				auto tmpStream1 = stream->ReadStream();
 				auto tmpStream2 = stream->ReadStream();
 				if (moduleID.IsValid()) {
@@ -292,23 +298,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
 					obj->SetIteration(iteration);
-					obj->SetTransformFromNetwork(transform);
+					obj->targetPosition = position;
+					obj->targetOrientation = orientation;
+					clientSideObjects.objects[id] = obj;
 					
 					auto* mod = V4D_Mod::GetModule(moduleID.String());
 					if (mod) {
-						if (mod->CreateGameObject) mod->CreateGameObject(obj);
-						if (mod->ReceiveStreamCustomGameObjectData) mod->ReceiveStreamCustomGameObjectData(obj, tmpStream1);
-						if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream2);
-						if (mod->AddGameObjectToScene) {
-							mod->AddGameObjectToScene(obj, scene);
-							obj->UpdateGameObject();
-							obj->UpdateGameObjectTransform();
-						}
+						if (mod->CreateEntity) mod->CreateEntity(obj->id, obj->type);
+						if (mod->StreamReceiveEntityData) mod->StreamReceiveEntityData(obj->id, obj->type, tmpStream1);
+						if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(obj->id, obj->type, tmpStream2);
 					} else {
 						LOG_ERROR("Client ReceiveAction ADD_OBJECT : module " << moduleID.String() << " is not loaded")
 					}
-					
-					clientSideObjects.objects[id] = obj;
+				
+					obj->UpdateGameObject();
+					obj->UpdateGameObjectTransform();
+				
 				} else {
 					LOG_ERROR("Client ReceiveAction ADD_OBJECT : moduleID is not valid")
 				}
@@ -320,7 +325,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto physicsControl = stream->Read<bool>();
 				auto attributes = stream->Read<NetworkGameObject::Attributes>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
-				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto position = stream->Read<NetworkGameObject::Position>();
+				auto orientation = stream->Read<NetworkGameObject::Orientation>();
 				auto tmpStream1 = stream->ReadStream();
 				auto tmpStream2 = stream->ReadStream();
 				try {
@@ -333,15 +339,18 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					obj->physicsControl = physicsControl;
 					obj->SetAttributes(attributes);
 					obj->SetIteration(iteration);
-					obj->SetTransformFromNetwork(transform);
+					obj->targetPosition = position;
+					obj->targetOrientation = orientation;
 					
 					auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
 					if (mod) {
-						if (mod->ReceiveStreamCustomGameObjectData) mod->ReceiveStreamCustomGameObjectData(obj, tmpStream1);
-						if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream2);
+						if (mod->StreamReceiveEntityData) mod->StreamReceiveEntityData(obj->id, obj->type, tmpStream1);
+						if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(obj->id, obj->type, tmpStream2);
 					}
+					
 					obj->UpdateGameObject();
 					obj->UpdateGameObjectTransform();
+					
 				} catch(std::exception& err) {
 					LOG_ERROR("Client ReceiveAction UPDATE_OBJECT : " << err.what())
 				}
@@ -356,7 +365,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					
 					auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
 					if (mod) {
-						if (mod->DestroyGameObject) mod->DestroyGameObject(obj, scene);
+						if (mod->DestroyEntity) mod->DestroyEntity(obj->id, obj->type);
 					}
 					
 					obj->RemoveGameObject();
@@ -379,19 +388,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case SYNC_OBJECT_TRANSFORM:{
 				auto id = stream->Read<NetworkGameObject::Id>();
 				auto iteration = stream->Read<NetworkGameObject::Iteration>();
-				auto transform = stream->Read<NetworkGameObjectTransform>();
+				auto position = stream->Read<NetworkGameObject::Position>();
+				auto orientation = stream->Read<NetworkGameObject::Orientation>();
 				auto tmpStream = stream->ReadStream();
 				try {
 					std::lock_guard lock(clientSideObjects.mutex);
 					// LOG_DEBUG("Client ReceiveBurst for obj id " << id)
 					auto obj = clientSideObjects.objects.at(id);
 					if (obj->GetIteration() == iteration) {
-						obj->SetTransformFromNetwork(transform);
+						obj->targetPosition = position;
+						obj->targetOrientation = orientation;
 						
 						auto* mod = V4D_Mod::GetModule(obj->moduleID.String());
 						if (mod) {
-							if (mod->ReceiveStreamCustomGameObjectTransformData) mod->ReceiveStreamCustomGameObjectTransformData(obj, tmpStream);
+							if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(obj->id, obj->type, tmpStream);
 						}
+						
 						obj->UpdateGameObjectTransform();
 					}
 				} catch(std::exception& err) {

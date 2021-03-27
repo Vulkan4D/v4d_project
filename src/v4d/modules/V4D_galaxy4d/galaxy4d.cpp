@@ -96,85 +96,85 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto key = stream->Read<std::string>();
 				
 				if (key == "ball") {
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*20.0);
+					ball->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+					// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*20.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = 0;//client->id;
 				}
 				else if (key == "glassBall") {
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch glass ball
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::GlassBall);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*10.0);
+					ball->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+					// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*10.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = 0;//client->id;
 				}
-				else if (key == "TerrainDigSphere") {
-					auto dir = stream->Read<DVector3>();
-					float radius = stream->Read<float>();
-					glm::dvec3 pos = glm::dvec3{dir.x, dir.y, dir.z} * double(radius)/2.0;
-					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					auto transform = glm::translate(playerObj->GetTransform(), pos);
-					glm::i32vec4 sphereHash = glm::i32vec4{glm::round(transform[3].x*20), glm::round(transform[3].y*20), glm::round(transform[3].z*20), glm::round(radius)};
-					static std::unordered_set<glm::i32vec4> existingSpheres {};
-					std::lock_guard lock(serverSideObjects->mutex);
-					if (!existingSpheres.count(sphereHash)) {
-						existingSpheres.emplace(sphereHash);
-						// Dig in terrain
-						auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
-						digSphere->entityData = radius;
-						digSphere->SetTransform(transform);
-						digSphere->isDynamic = false;
-					}
-				}
+				// else if (key == "TerrainDigSphere") {
+				// 	auto dir = stream->Read<glm::vec3>();
+				// 	float radius = stream->Read<float>();
+				// 	glm::dvec3 pos = glm::dvec3{dir.x, dir.y, dir.z} * double(radius)/2.0;
+				// 	NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
+				// 	auto transform = glm::translate(playerObj->GetTransform(), pos);
+				// 	glm::i32vec4 sphereHash = glm::i32vec4{glm::round(transform[3].x*20), glm::round(transform[3].y*20), glm::round(transform[3].z*20), glm::round(radius)};
+				// 	static std::unordered_set<glm::i32vec4> existingSpheres {};
+				// 	std::lock_guard lock(serverSideObjects->mutex);
+				// 	if (!existingSpheres.count(sphereHash)) {
+				// 		existingSpheres.emplace(sphereHash);
+				// 		// Dig in terrain
+				// 		auto digSphere = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::TerrainDigSphere);
+				// 		digSphere->entityData = radius;
+				// 		digSphere->SetTransform(transform);
+				// 		digSphere->isDynamic = false;
+				// 	}
+				// }
 				else if (key == "balls") {
 					std::lock_guard lock(serverSideObjects->mutex);
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					// Launch 10 balls
 					for (int i = 0; i < 10; ++i) {
 						auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Ball);
 						NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-						ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-						ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
+						ball->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+						// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
 						ball->isDynamic = true;
 						ball->physicsClientID = 0;//client->id;
 					}
 				}
 				else if (key == "light") {
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch light
 					auto ball = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Light);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					ball->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
-					ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+					ball->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+					// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
 					ball->isDynamic = true;
 					ball->physicsClientID = 0;//client->id;
 				}
 				else if (key == "drone") {
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					// Launch drone
 					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Drone);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					drone->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 					drone->isDynamic = false;
 					drone->physicsClientID = 0;//client->id;
 				}
 				else if (key == "glass") {
-					auto dir = stream->Read<DVector3>();
+					auto dir = stream->Read<glm::vec3>();
 					std::lock_guard lock(serverSideObjects->mutex);
 					auto drone = serverSideObjects->Add(THIS_MODULE, OBJECT_TYPE::Glass);
 					NetworkGameObjectPtr playerObj = serverSideObjects->players.at(client->id);
-					drone->SetTransform(glm::translate(glm::dmat4(1), glm::dvec3{dir.x, dir.y, dir.z} * 5.0) * playerObj->GetTransform());
+					drone->position = playerObj->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 					drone->isDynamic = false;
 					drone->physicsClientID = 0;//client->id;
 				}
@@ -193,13 +193,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(void, SendStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::WriteOnlyStream& stream) {
-		if (obj->type == OBJECT_TYPE::TerrainDigSphere) {
+	V4D_MODULE_FUNC(void, StreamSendEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::WriteOnlyStream& stream) {
+		if (type == OBJECT_TYPE::TerrainDigSphere) {
 			try {
+				auto& obj = clientSideObjects->objects.at(entityUniqueID);
 				float radius = std::any_cast<float>(obj->entityData);
 				// Data over network
 				stream.Write(radius);
-			} catch(std::bad_any_cast& e){}
+			} catch(...){}
 		}
 	}
 	
@@ -220,10 +221,18 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma region Client
 	
-	V4D_MODULE_FUNC(void, ReceiveStreamCustomGameObjectData, v4d::scene::NetworkGameObjectPtr obj, v4d::data::ReadOnlyStream& stream) {
-		if (obj->type == OBJECT_TYPE::TerrainDigSphere) {
-			// Data over network
-			obj->entityData = stream.Read<float>();
+	V4D_MODULE_FUNC(void, StreamReceiveEntityData, int64_t entityUniqueID, uint64_t type, v4d::data::ReadOnlyStream& stream) {
+		if (type == OBJECT_TYPE::TerrainDigSphere) {
+			try {
+				auto& obj = clientSideObjects->objects.at(entityUniqueID);
+				// Data over network
+				float radius = stream.Read<float>();
+				obj->entityData = radius;
+				if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
+					entity->generator = TerrainDigSphere{radius};
+					entity->generated = false;
+				}
+			} catch(...){}
 		}
 	}
 	
@@ -307,26 +316,26 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma region GameObjects
 	
-	V4D_MODULE_FUNC(void, CreateGameObject, v4d::scene::NetworkGameObjectPtr obj) {
-		switch (obj->type) {
-			case OBJECT_TYPE::TerrainDigSphere:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
-				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN_NEGATE;
-				obj->renderableGeometryEntityInstance = entity;
-				obj->entityData = 0.0f;
-			}break;
-		}
-	}
-	V4D_MODULE_FUNC(void, AddGameObjectToScene, v4d::scene::NetworkGameObjectPtr obj, v4d::scene::Scene* scene) {
-		switch (obj->type) {
+	V4D_MODULE_FUNC(void, CreateEntity, int64_t entityUniqueID, uint64_t type) {
+		auto& obj = clientSideObjects->objects.at(entityUniqueID);
+		switch (type) {
 			case OBJECT_TYPE::Player:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				obj->renderableGeometryEntityInstance = entity;
 				entity->generator = cake;
 				entity->Remove_physics();
 			}break;
+			case OBJECT_TYPE::TerrainDigSphere:{
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN_NEGATE;
+				try {
+					auto& obj = clientSideObjects->objects.at(entityUniqueID);
+					obj->renderableGeometryEntityInstance = entity;
+					obj->entityData = 0.0f;
+				} catch(...) {}
+			}break;
 			case OBJECT_TYPE::Ball:{
-				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
+				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				obj->renderableGeometryEntityInstance = entity;
 				float radius = 0.5f;
 				auto physics = entity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
@@ -344,6 +353,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
 			}break;
+			
 			case OBJECT_TYPE::GlassBall:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
 				obj->renderableGeometryEntityInstance = entity;
@@ -360,14 +370,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					entity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
 					entity->Add_meshVertexColorU8()->AllocateBuffers(device, {255,255,255,16});
 				};
-			}break;
-			case OBJECT_TYPE::TerrainDigSphere:{
-				if (auto entity = obj->renderableGeometryEntityInstance.lock(); entity) {
-					try {
-						float radius = std::any_cast<float>(obj->entityData);
-						entity->generator = TerrainDigSphere{radius};
-					} catch(std::bad_any_cast& e){}
-				}
 			}break;
 			case OBJECT_TYPE::Light:{
 				auto entity = RenderableGeometryEntity::Create(THIS_MODULE, obj->id);
@@ -446,21 +448,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("ball");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_H:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("glassBall");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_O:{
 					v4d::data::WriteOnlyStream stream(64);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("TerrainDigSphere");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 						stream << std::pow(10.0f, terrainNegationSphereRadiusPower);
 					ClientEnqueueAction(stream);
 				}break;
@@ -468,28 +470,28 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("balls");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("light");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_INSERT:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("drone");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_G:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("glass");
-						stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_DELETE:{
