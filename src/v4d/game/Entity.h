@@ -12,6 +12,9 @@ struct Rigidbody {
 	double mass;
 	glm::dmat3 inertiaMatrix;
 	
+	// Broadphase Collision detection
+	double boundingRadius = 0;
+	
 	// Linear physics
 	double invMass;
 	glm::dvec3 force {0,0,0};
@@ -113,24 +116,19 @@ struct Rigidbody {
 	}
 };
 
-// struct Collider {
-// 	uint64_t id; //TODO static increment like physicsInfo
-// 	uint64_t referenceFrame;
-// 	glm::dmat4 offset;
-// 	// shape...
-// };
-// struct ColliderBroadphaseIntegration {
-// 	uint64_t referenceFrame;
-// 	glm::dvec3 boundingBoxMin;
-// 	glm::dvec3 boundingBoxMax;
-// };
+struct Collider {
+	uint64_t id; //TODO static increment like physicsInfo
+	uint64_t referenceFrame;
+	glm::dmat4 offset;
+	// shape...
+	glm::dvec3 boundingBoxMin;
+	glm::dvec3 boundingBoxMax;
+};
 
 // struct Renderable {
 // 	uint32_t id; //TODO static increment like physicsInfo
 // 	glm::dmat4 offset;
 // 	// geometries, ....
-// };
-// struct RenderableIntegration {
 // 	glm::dmat4 worldTransform;
 // 	glm::mat4 modelViewTransform;
 // };
@@ -218,11 +216,8 @@ struct Entity {
 
 struct V4DGAME ServerSideEntity : Entity {
 	V4D_ENTITY_DECLARE_CLASS_MAP(ServerSideEntity)
-	
 	V4D_ENTITY_DECLARE_COMPONENT(ServerSideEntity, Rigidbody, rigidbody)
-	
-	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, Collider, collider)
-	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, ColliderBroadphaseIntegration, colliderBroadphaseIntegration)
+	V4D_ENTITY_DECLARE_COMPONENT_MAP(ServerSideEntity, std::string_view, Collider, collider)
 	
 	bool active = false;
 	bool isDynamic = false;
@@ -241,9 +236,7 @@ struct V4DGAME ServerSideEntity : Entity {
 
 struct V4DGAME ClientSideEntity : Entity {
 	V4D_ENTITY_DECLARE_CLASS_MAP(ClientSideEntity)
-	
-	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, Renderable, renderable)
-	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, RenderableIntegration, renderableIntegration)
+	// V4D_ENTITY_DECLARE_COMPONENT_MAP(ClientSideEntity, std::string_view, Renderable, renderable)
 	
 	Iteration iteration {0};
 

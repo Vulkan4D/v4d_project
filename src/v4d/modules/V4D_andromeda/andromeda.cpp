@@ -11,7 +11,6 @@
 #include "StarSystem.h"
 
 #include "celestials/Planet.h"
-
 #include "TerrainGeneratorLib.h"
 
 
@@ -579,66 +578,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 #pragma endregion
 
-#pragma region Physics
-
-	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
-		
-		{// Prepare data
-			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
-				rigidbody.position = entity->position;
-				rigidbody.orientation = entity->orientation;
-			});
-		}
-		
-		{// Broad Phase Collision Detection
-			//...
-		}
-		
-		{// Narrow Phase Collision Detection
-			//...
-		}
-		
-		{// Collision Response
-			//...
-		}
-		
-		{// Apply Gravity
-			//...
-		}
-		
-		{// Apply Constraints
-			//...
-		}
-		
-		{// Integrate motion
-			ServerSideEntity::rigidbodyComponents.ForEach([deltaTime](Entity::Id id, Rigidbody& rigidbody){
-				// Linear integration
-				rigidbody.linearAcceleration += rigidbody.invMass * rigidbody.force;
-				rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
-				rigidbody.position += rigidbody.linearVelocity * deltaTime;
-				// Angular integration
-				rigidbody.angularAcceleration += rigidbody.invInertiaMatrix * rigidbody.torque;
-				rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
-				rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
-			});
-		}
-		
-		{// Update entity
-			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
-				entity->position = rigidbody.position;
-				entity->orientation = rigidbody.orientation;
-				// Clear forces
-				rigidbody.force = {0,0,0};
-				rigidbody.linearAcceleration = {0,0,0};
-				rigidbody.torque = {0,0,0};
-				rigidbody.angularAcceleration = {0,0,0};
-			});
-		}
-		
-	}
-
-#pragma endregion
-	
 #pragma region Rendering
 
 	V4D_MODULE_FUNC(void, ConfigureShaders) {

@@ -94,6 +94,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ball, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						rigidbody->boundingRadius = 0.5;
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity = playerRigidbody->linearVelocity;
 						}
