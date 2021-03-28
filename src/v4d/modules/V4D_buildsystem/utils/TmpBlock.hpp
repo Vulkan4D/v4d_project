@@ -16,7 +16,7 @@ public:
 		entity = RenderableGeometryEntity::Create(THIS_MODULE);
 		entity->generator = [this](RenderableGeometryEntity* entity, Device* device){
 			std::lock_guard lock(blocksMutex);
-			if (entity->GetIndex() == -1) {
+			if (entity->IsDestroyed()) {
 				entity->generated = false;
 				LOG_ERROR("Entity generator executed for destroyed entity")
 				return;

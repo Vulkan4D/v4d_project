@@ -92,8 +92,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ServerSideEntity::Ptr playerEntity;
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ball, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*20.0);
+						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity = playerRigidbody->linearVelocity;
+						}
+						rigidbody->ApplyForce(dir*500.0f, {-0.1,0,0.1});
 						ball->isDynamic = true;
 						ball->Activate();
 					}
@@ -393,42 +397,42 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("ball");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_H:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("glassBall");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_N:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("balls");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("light");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_INSERT:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("drone");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_G:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("glass");
-						stream << glm::vec3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
+						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
 				case GLFW_KEY_DELETE:{

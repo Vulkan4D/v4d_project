@@ -6,8 +6,6 @@
 #include "utilities/graphics/vulkan/RenderPass.h"
 #include "utilities/graphics/vulkan/StagingBuffer.hpp"
 
-#include <execution>
-
 #include "GalaxyGenerator.h"
 #include "Celestial.h"
 #include "StarSystem.h"
@@ -34,7 +32,13 @@ glm::dvec4 GetDefaultWorldPosition() {
 
 #include "../V4D_flycam/common.hh"
 PlayerView* playerView = nullptr;
-
+double playerAccelerateUp = 0;
+double playerAccelerateDown = 0;
+double playerAccelerateRight = 0;
+double playerAccelerateLeft = 0;
+double playerAccelerateForward = 0;
+double playerAccelerateBackward = 0;
+Entity::Id clientSidePlayerEntityID = -1;
 
 
 #pragma region Global Pointers
@@ -49,35 +53,6 @@ PlayerView* playerView = nullptr;
 
 #pragma endregion
 
-#pragma region Physics
-
-struct ColliderData {
-	uint64_t entity;
-	glm::dvec3 worldPosition;
-	double boundingRadius;
-};
-struct LinearPhysicsData {
-	uint64_t entity;
-	double invMass;
-	glm::dvec3 force;
-	glm::dvec3 linearAcceleration;
-	glm::dvec3 linearVelocity;
-	glm::dvec3 position;
-};
-struct AngularPhysicsData {
-	uint64_t entity;
-	glm::dmat3x3 invInertia;
-	glm::dvec3 torque;
-	glm::dvec3 angularAcceleration;
-	glm::dvec3 angularVelocity;
-	glm::dquat orientation;
-};
-std::unordered_map<uint64_t, std::vector<ColliderData>> colliderData {};
-std::vector<LinearPhysicsData> linearPhysicsData {};
-std::vector<AngularPhysicsData> angularPhysicsData {};
-
-#pragma endregion
-
 #pragma region Networking
 
 	namespace networking::action {
@@ -85,9 +60,10 @@ std::vector<AngularPhysicsData> angularPhysicsData {};
 		// const Action EXTENDED_ACTION = 0;
 
 		// Action stream Only (TCP)
-		const Action ASSIGN_PLAYER_OBJ = 0; // + (objectID) = 4
+		const Action ASSIGN_PLAYER_OBJ = 0;
 		
-		const Action TEST_OBJ = 101; // + (string) = variable size
+		// Burst streams only (TCP & UDP)
+		const Action SYNC_PLAYER_MOTION = 1;
 
 	}
 
@@ -323,6 +299,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		playerView->SetInitialViewDirection({0,1,0}, {0,0,1});
 		playerView->useFreeFlyCam = true;
+		playerView->canMovePosition = false;
 		
 		galaxyBackgroundShader = new v4d::graphics::vulkan::RasterShaderPipeline(*mainRenderModule->GetPipelineLayout("pl_background"), {
 			V4D_MODULE_ASSET_PATH(THIS_MODULE, "shaders/galaxy.vert"),
@@ -472,6 +449,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		entity->isDynamic = true;
 		entity->clientIterations[client->id] = 0;
 		player->parentEntityId = playerEntityId;
+		entity->Add_rigidbody(10.0);
 		
 		// Set player position
 		if (defaultPosition.IsCelestial()) {
@@ -505,10 +483,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto action = stream->Read<networking::action::Action>();
 		switch (action) {
 			
-			case networking::action::TEST_OBJ:{
-				
-			}break;
-		
 			default: 
 				LOG_ERROR("Server ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
 			break;
@@ -532,6 +506,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						scene->cameraParent = renderableEntity;
 						scene->timestamp = timestamp;
 					}
+					clientSidePlayerEntityID = id;
 					scene->camera.worldPosition = worldPosition;
 					playerView->camSpeed = isReferenceCelestial? 10.0 : LY2M(0.1);
 					playerView->SetInitialViewDirection(forwardVector, upVector, true);
@@ -543,6 +518,46 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
+	V4D_MODULE_FUNC(void, ServerReceiveBurst, v4d::io::SocketPtr stream, v4d::networking::IncomingClientPtr client) {
+		using namespace networking::action;
+		auto action = stream->Read<Action>();
+		switch (action) {
+			case SYNC_PLAYER_MOTION:{
+				auto id = stream->Read<Entity::Id>();
+				auto orientation = stream->Read<Entity::Orientation>();
+				auto acceleration = stream->Read<typeof(playerView->velocity)>();
+				if (ServerSidePlayer::Ptr player = ServerSidePlayer::Get(client->id); player && player->parentEntityId == id) {
+					if (ServerSideEntity::Ptr entity = ServerSideEntity::Get(id); entity) {
+						entity->orientation = orientation;
+						if (auto rigidbody = entity->rigidbody.Lock(); rigidbody) {
+							rigidbody->linearAcceleration = acceleration;
+						}
+					}
+				}
+			}break;
+			
+			default: 
+				LOG_ERROR("Server ReceiveBurst UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
+			break;
+		}
+	}
+	
+	V4D_MODULE_FUNC(void, ClientSendBursts, v4d::io::SocketPtr stream) {
+		using namespace networking::action;
+		if (clientSidePlayerEntityID != -1) {
+			if (ClientSideEntity::Ptr playerEntity = ClientSideEntity::Get(clientSidePlayerEntityID); playerEntity) {
+				if (auto renderableEntity = playerEntity->renderableGeometryEntityInstance.lock(); renderableEntity) {
+					// Look Direction and Acceleration
+					stream->Begin();
+						*stream << SYNC_PLAYER_MOTION;
+						*stream << clientSidePlayerEntityID;
+						*stream << (Entity::Orientation)glm::quat_cast(renderableEntity->GetWorldTransform());
+						*stream << playerView->velocity; // this is the acceleration in this case
+					stream->End();
+				}
+			}
+		}
+	}
 	
 	
 #pragma endregion
@@ -569,10 +584,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
 		
 		{// Prepare data
-			ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
-				colliderData[entity->referenceFrame].push_back({uint64_t(entity->GetID()), entity->position, 1.0/*boundingRadius*/});
-				linearPhysicsData.push_back({uint64_t(entity->GetID()), 1.0/*InvMass*/, glm::dvec3{0,0,0}/*force*/, glm::dvec3{0,0,0}/*linearAcceleration*/, glm::dvec3{0,0,1}/*velocity*/, entity->position});
-				angularPhysicsData.push_back({uint64_t(entity->GetID()), glm::dmat3x3{1}/*invInertia*/, glm::dvec3{0,0,0}/*torque*/, glm::dvec3{0,0,0}/*angularAcceleration*/, glm::dvec3{0,0,0}/*angularVelocity*/, entity->orientation});
+			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
+				rigidbody.position = entity->position;
+				rigidbody.orientation = entity->orientation;
 			});
 		}
 		
@@ -596,37 +610,29 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			//...
 		}
 		
-		{// Integrate Linear motion
-			std::for_each(/*std::execution::par_unseq, */std::begin(linearPhysicsData), std::end(linearPhysicsData), [&deltaTime](LinearPhysicsData& data){
-				data.linearAcceleration += data.invMass * data.force;
-				data.linearVelocity += data.linearAcceleration * deltaTime;
-				data.position += data.linearVelocity * deltaTime;
-			});
-		}
-		
-		{// Integrate Angular motion
-			std::for_each(/*std::execution::par_unseq, */std::begin(angularPhysicsData), std::end(angularPhysicsData), [&deltaTime](AngularPhysicsData& data){
-				data.angularAcceleration += data.invInertia * data.torque;
-				data.angularVelocity += data.angularAcceleration * deltaTime;
-				data.orientation = glm::normalize(data.orientation + glm::dquat(0.0, data.angularVelocity * deltaTime / 2.0) * data.orientation);
+		{// Integrate motion
+			ServerSideEntity::rigidbodyComponents.ForEach([deltaTime](Entity::Id id, Rigidbody& rigidbody){
+				// Linear integration
+				rigidbody.linearAcceleration += rigidbody.invMass * rigidbody.force;
+				rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
+				rigidbody.position += rigidbody.linearVelocity * deltaTime;
+				// Angular integration
+				rigidbody.angularAcceleration += rigidbody.invInertiaMatrix * rigidbody.torque;
+				rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
+				rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
 			});
 		}
 		
 		{// Update entity
-			for (auto& linear : linearPhysicsData) {
-				// ServerSideEntity::Get(linear.entity)->SetVelocity(linear.linearVelocity);
-				ServerSideEntity::Get(linear.entity)->position = linear.position;
-			}
-			for (auto& angular : angularPhysicsData) {
-				// ServerSideEntity::Get(angular.entity)->SetVelocity(angular.angularVelocity);
-				ServerSideEntity::Get(angular.entity)->orientation = angular.orientation;
-			}
-		}
-		
-		{// Clear data
-			linearPhysicsData.clear();
-			angularPhysicsData.clear();
-			colliderData.clear();
+			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
+				entity->position = rigidbody.position;
+				entity->orientation = rigidbody.orientation;
+				// Clear forces
+				rigidbody.force = {0,0,0};
+				rigidbody.linearAcceleration = {0,0,0};
+				rigidbody.torque = {0,0,0};
+				rigidbody.angularAcceleration = {0,0,0};
+			});
 		}
 		
 	}

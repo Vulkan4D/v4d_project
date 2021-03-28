@@ -25,11 +25,11 @@ float interpolationSpeed = 15.0;
 
 V4D_MODULE_CLASS(V4D_Mod) {
 	
+	#pragma region Init
+	
 	V4D_MODULE_FUNC(int, OrderIndex) {
 		return -1000;
 	}
-	
-	#pragma region Server
 	
 	V4D_MODULE_FUNC(void, InitServer, std::shared_ptr<ListeningServer> _srv) {
 		server = _srv;
@@ -53,6 +53,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		ClientSideEntity::ClearAll();
 	}
 	
+	#pragma endregion
+	
+	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
+		ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
+			if (!entity->active && entity->iteration > 0 && entity->clientIterations.size() == 0) {
+				entity->Destroy();
+			}
+		});
+		ServerSideEntity::CleanupOnThisThread();
+		ClientSideEntity::CleanupOnThisThread();
+		ServerSidePlayer::CleanupOnThisThread();
+	}
+	
+	#pragma region Rendeering
+	
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		// Smoothly Interpolate position and orientation
 		double delta = r->deltaTime * interpolationSpeed;
@@ -66,7 +81,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->posInit = true;
 			}
 			
-			entity->UpdateRenderable(); // Temporary
+			entity->UpdateRenderable();
 		});
 	}
 	
@@ -76,16 +91,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		#endif
 	}
 	
-	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
-		ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
-			if (!entity->active && entity->iteration > 0 && entity->clientIterations.size() == 0) {
-				entity->Destroy();
-			}
-		});
-		ServerSideEntity::CleanupOnThisThread();
-		ClientSideEntity::CleanupOnThisThread();
-		ServerSidePlayer::CleanupOnThisThread();
-	}
+	#pragma endregion
+	
+	#pragma region Server
 	
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_DATA_INITIAL_STREAM_SIZE);
@@ -157,94 +165,46 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ServerSendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE);
-		ServerSideEntity::ForEach([&stream, &client, &tmpStream](ServerSideEntity::Ptr entity){
-			if (entity->active && entity->isDynamic) {
-				if (entity->iteration == entity->clientIterations[client->id]) {
-					stream->Begin();
-						*stream << SYNC_ENTITY_TRANSFORM;
-						*stream << entity->GetID();
-						*stream << entity->iteration;
-						*stream << entity->position;
-						*stream << entity->orientation;
-						
-						auto mod = V4D_Mod::GetModule(entity->moduleID.String());
-						
-						tmpStream.ClearWriteBuffer();
-						if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(entity->GetID(), entity->type, tmpStream);
-						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Server::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << entity->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
-						stream->WriteStream(tmpStream); // must send stream even the module did not define the function to write to it, because at the other end we are trying to read it anyways
-						
-					stream->End();
+		stream->Begin();
+			*stream << SYNC_ENTITIES_TRANSFORM;
+			ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){
+				if (entity->active && entity->isDynamic) {
+					*stream << entity->GetID();
+					*stream << entity->position;
+					*stream << entity->orientation;
 				}
-			}
-		});
-	}
-	
-	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		auto action = stream->Read<Action>();
-		switch (action) {
-			default: 
-				LOG_ERROR("Server ReceiveAction UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
-			break;
-		}
-	}
-	
-	V4D_MODULE_FUNC(void, ServerReceiveBurst, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		auto action = stream->Read<Action>();
-		switch (action) {
-			case SYNC_ENTITY_TRANSFORM:{
-				auto id = stream->Read<Entity::Id>();
-				auto iteration = stream->Read<Entity::Iteration>();
-				auto position = stream->Read<Entity::Position>();
-				auto orientation = stream->Read<Entity::Orientation>();
-				auto tmpStream = stream->ReadStream();
-				if (ServerSideEntity::Ptr entity = ServerSideEntity::Get(id); entity) {
-					if (entity->iteration == iteration /*TODO && client->player->parentEntityId == id*/) {
-						entity->position = position;
-						entity->orientation = orientation;
-						auto* mod = V4D_Mod::GetModule(entity->moduleID.String());
-						if (mod) {
-							if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(entity->GetID(), entity->type, tmpStream);
-						}
-					}
-				}
-			}break;
-			
-			default: 
-				LOG_ERROR("Server ReceiveBurst UNRECOGNIZED MODULE ACTION " << std::to_string((int)action))
-			break;
-		}
+			});
+			*stream << (Entity::Id)-1;
+		stream->End();
+		
+		
+		// ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){
+		// 	v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE);
+		// 	if (entity->active && entity->isDynamic) {
+		// 		if (entity->iteration == entity->clientIterations[client->id]) {
+		// 			stream->Begin();
+		// 				*stream << SYNC_ENTITY_TRANSFORM;
+		// 				*stream << entity->GetID();
+		// 				*stream << entity->iteration;
+		// 				*stream << entity->position;
+		// 				*stream << entity->orientation;
+						
+		// 				auto mod = V4D_Mod::GetModule(entity->moduleID.String());
+						
+		// 				tmpStream.ClearWriteBuffer();
+		// 				if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(entity->GetID(), entity->type, tmpStream);
+		// 				DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Server::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << entity->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
+		// 				stream->WriteStream(tmpStream); // must send stream even the module did not define the function to write to it, because at the other end we are trying to read it anyways
+						
+		// 			stream->End();
+		// 		}
+		// 	}
+		// });
 	}
 	
 	#pragma endregion
 	
 	#pragma region Client
-	
-	V4D_MODULE_FUNC(void, ClientSendBursts, v4d::io::SocketPtr stream) {
-		v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE);
-		ClientSideEntity::ForEach([&stream, &tmpStream](ClientSideEntity::Ptr entity){
-			if (false /*TODO obj->physicsControl*/) {
-				if (false /*TODO position was modified*/) {
-					stream->Begin();
-						*stream << SYNC_ENTITY_TRANSFORM;
-						*stream << entity->GetID();
-						*stream << entity->iteration;
-						*stream << entity->position;
-						*stream << entity->orientation;
-						
-						auto mod = V4D_Mod::GetModule(entity->moduleID.String());
-						
-						tmpStream.ClearWriteBuffer();
-						if (mod && mod->StreamSendEntityTransformData) mod->StreamSendEntityTransformData(entity->GetID(), entity->type, tmpStream);
-						DEBUG_ASSERT_WARN(tmpStream.GetWriteBufferSize() <= CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE, "V4D_Client::SendBursts for module '" << mod->ModuleName() << "', CustomTransformData for Object type " << entity->type << " stream size was " << tmpStream.GetWriteBufferSize() << " bytes, but should be at most " << CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE << " bytes")
-						stream->WriteStream(tmpStream);
-						
-					stream->End();
-				}
-			}
-		});
-	}
 	
 	V4D_MODULE_FUNC(void, ClientReceiveAction, v4d::io::SocketPtr stream) {
 		auto action = stream->Read<Action>();
@@ -275,8 +235,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					} else {
 						LOG_ERROR("Client ReceiveAction ADD_ENTITY : module " << moduleID.String() << " is not loaded")
 					}
-					
-					entity->UpdateRenderable(); // Temporary
 				
 				} else {
 					LOG_ERROR("Client ReceiveAction ADD_ENTITY : moduleID is not valid")
@@ -307,8 +265,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (mod->StreamReceiveEntityData) mod->StreamReceiveEntityData(id, entity->type, tmpStream1);
 						if (mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(id, entity->type, tmpStream2);
 					}
-					
-					entity->UpdateRenderable(); // Temporary
 				}
 			}break;
 			case REMOVE_ENTITY:{
@@ -332,22 +288,33 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ClientReceiveBurst, v4d::io::SocketPtr stream) {
 		auto action = stream->Read<Action>();
 		switch (action) {
-			case SYNC_ENTITY_TRANSFORM:{
-				auto id = stream->Read<Entity::Id>();
-				auto iteration = stream->Read<Entity::Iteration>();
-				auto position = stream->Read<Entity::Position>();
-				auto orientation = stream->Read<Entity::Orientation>();
-				auto tmpStream = stream->ReadStream();
-				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
-					// LOG_DEBUG("Client ReceiveBurst for obj id " << id)
-					if (entity->iteration == iteration) {
+			// case SYNC_ENTITY_TRANSFORM:{
+			// 	auto id = stream->Read<Entity::Id>();
+			// 	auto iteration = stream->Read<Entity::Iteration>();
+			// 	auto position = stream->Read<Entity::Position>();
+			// 	auto orientation = stream->Read<Entity::Orientation>();
+			// 	auto tmpStream = stream->ReadStream();
+			// 	if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
+			// 		// LOG_DEBUG("Client ReceiveBurst for obj id " << id)
+			// 		if (entity->iteration == iteration) {
+			// 			entity->targetPosition = position;
+			// 			entity->targetOrientation = orientation;
+						
+			// 			auto* mod = V4D_Mod::GetModule(entity->moduleID.String());
+			// 			if (mod && mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(id, entity->type, tmpStream);
+			// 		}
+			// 	}
+			// }break;
+			case SYNC_ENTITIES_TRANSFORM:{
+				auto entitiesLock = ClientSideEntity::GetLock();
+				for (;;) {
+					auto id = stream->Read<Entity::Id>();
+					if (id < 0) break;
+					auto position = stream->Read<Entity::Position>();
+					auto orientation = stream->Read<Entity::Orientation>();
+					if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
 						entity->targetPosition = position;
 						entity->targetOrientation = orientation;
-						
-						auto* mod = V4D_Mod::GetModule(entity->moduleID.String());
-						if (mod && mod->StreamReceiveEntityTransformData) mod->StreamReceiveEntityTransformData(id, entity->type, tmpStream);
-						
-						entity->UpdateRenderable(); // Temporary
 					}
 				}
 			}break;

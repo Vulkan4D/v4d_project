@@ -18,6 +18,7 @@ struct PlayerView {
 	float flyCamSmoothness = 0.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};
 	bool canChangeVelocity = true;
+	bool canMovePosition = true;
 	
 	void RefreshViewTarget() {
 		viewUpTarget = glm::normalize(glm::dvec3(glm::inverse(freeFlyCamRotationMatrix) * glm::dvec4(0,1,0, 0)));

@@ -4,32 +4,114 @@
 #include <string_view>
 #include "utilities/io/Logger.h"
 #include "utilities/graphics/vulkan/Loader.h"
-#include "utilities/data/EntityComponentSystem.hpp"
 
 #include "utilities/graphics/RenderableGeometryEntity.h"
 
-// struct Rigidbody {
-// 	double mass;
-// 	glm::dmat3 inertia;
-// 	glm::dvec3 centerOfMass;
-// };
-// struct RigidbodyIntegration {
-// 	// Initial Data
-// 	double invMass;
-// 	glm::dmat3 invInertia;
+struct Rigidbody {
+	// Initial information
+	double mass;
+	glm::dmat3 inertiaMatrix;
 	
-// 	// Integration Data
-// 	glm::dvec3 force;
-// 	glm::dvec3 torque;
-// 	glm::dvec3 linearAcceleration;
-// 	glm::dvec3 angularAcceleration;
-// 	glm::dvec3 linearVelocity;
-// 	glm::dvec3 angularVelocity;
+	// Linear physics
+	double invMass;
+	glm::dvec3 force {0,0,0};
+	glm::dvec3 linearAcceleration {0,0,0};
+	glm::dvec3 linearVelocity {0,0,0};
+	glm::dvec3 position {0,0,0};
 	
-// 	// Final Data
-// 	glm::dvec3 position;
-// 	glm::dquat orientation;
-// };
+	// Angular physics
+	glm::dmat3 invInertiaMatrix;
+	glm::dvec3 torque {0,0,0};
+	glm::dvec3 angularAcceleration {0,0,0};
+	glm::dvec3 angularVelocity {0,0,0};
+	glm::dquat orientation {1,0,0,0};
+	
+	// Constructor
+	Rigidbody(double mass, glm::dmat3 inertiaMatrix = glm::dmat3{1})
+		: mass(mass>0? mass:0)
+		, inertiaMatrix(inertiaMatrix)
+		, invMass(mass>0? (1.0/mass) : 0.0)
+		, invInertiaMatrix(glm::inverse(inertiaMatrix))
+	{}
+	
+	// Inertia matrix functions
+	struct Inertia {double mass; glm::dmat3 inertiaMatrix;};
+	Rigidbody(Inertia&& inertia) : Rigidbody(inertia.mass, inertia.inertiaMatrix) {}
+	struct SphereInertia : Inertia {
+		// https://scienceworld.wolfram.com/physics/MomentofInertiaSphere.html
+		SphereInertia(double mass, double radius) {
+			const double I = 2.0/5 * mass * radius*radius;
+			this->mass = mass;
+			this->inertiaMatrix = glm::dmat3{0};
+			this->inertiaMatrix[0][0] = I;
+			this->inertiaMatrix[1][1] = I;
+			this->inertiaMatrix[2][2] = I;
+		}
+	};
+	struct BoxInertia : Inertia {
+		// https://en.wikipedia.org/wiki/List_of_moments_of_inertia
+		BoxInertia(double mass, double sizeX, double sizeY, double sizeZ) {
+			const double Im = mass / 12;
+			const double xx = sizeX*sizeX;
+			const double yy = sizeY*sizeY;
+			const double zz = sizeZ*sizeZ;
+			this->mass = mass;
+			this->inertiaMatrix = glm::dmat3{0};
+			this->inertiaMatrix[0][0] = Im * (yy+zz);
+			this->inertiaMatrix[1][1] = Im * (xx+zz);
+			this->inertiaMatrix[2][2] = Im * (xx+yy);
+		}
+	};
+	struct ConeInertia : Inertia {
+		// https://scienceworld.wolfram.com/physics/MomentofInertiaCone.html
+		ConeInertia(double mass, double radiusXY, double heightZ) {
+			const double mr2 = mass * radiusXY*radiusXY;
+			const double mh2 = mass * heightZ*heightZ;
+			const double Ibase = 3.0/20 * mr2 + mh2/10;
+			const double Iheight = 3.0/10 * mr2;
+			this->mass = mass;
+			this->inertiaMatrix = glm::dmat3{0};
+			this->inertiaMatrix[0][0] = Ibase;
+			this->inertiaMatrix[1][1] = Ibase;
+			this->inertiaMatrix[2][2] = Iheight;
+		}
+	};
+	struct CylinderInertia : Inertia {
+		// https://scienceworld.wolfram.com/physics/MomentofInertiaCylinder.html
+		CylinderInertia(double mass, double radiusXY, double heightZ) {
+			const double mr2 = mass * radiusXY*radiusXY;
+			const double mh2 = mass * heightZ*heightZ;
+			const double Ibase = mr2/4 + mh2/12;
+			const double Iheight = mr2/2;
+			this->mass = mass;
+			this->inertiaMatrix = glm::dmat3{0};
+			this->inertiaMatrix[0][0] = Ibase;
+			this->inertiaMatrix[1][1] = Ibase;
+			this->inertiaMatrix[2][2] = Iheight;
+		}
+	};
+	struct CylinderShellInertia : Inertia {
+		// https://en.wikipedia.org/wiki/List_of_moments_of_inertia
+		CylinderShellInertia(double mass, double innerRadiusXY, double outerRadiusXY, double heightZ) {
+			const double rr = innerRadiusXY*innerRadiusXY + outerRadiusXY*outerRadiusXY;
+			const double Ibase = mass/12 * (rr*3 + heightZ*heightZ);
+			const double Iheight = mass/2 * rr;
+			this->mass = mass;
+			this->inertiaMatrix = glm::dmat3{0};
+			this->inertiaMatrix[0][0] = Ibase;
+			this->inertiaMatrix[1][1] = Ibase;
+			this->inertiaMatrix[2][2] = Iheight;
+		}
+	};
+	
+	// Useful functions
+	void ApplyForce(glm::dvec3 force, glm::dvec3 point = {0,0,0}) {
+		this->force += force;
+		if (force.x != 0 || force.y != 0 || force.z != 0) {
+			torque += glm::cross(point, force);
+		}
+	}
+};
 
 // struct Collider {
 // 	uint64_t id; //TODO static increment like physicsInfo
@@ -68,10 +150,25 @@
 	// 	return attrs;
 	// }
 
+	
+	// bool NetworkGameObject::ReverseUpdateGameObjectTransform() {
+	// 	std::lock_guard lock(mu);
+	// 	if (auto entity = renderableGeometryEntityInstance.lock(); entity) {
+	// 		const auto& t = entity->GetLocalTransform();
+	// 		targetPosition = t[3];
+	// 		targetOrientation = glm::quat_cast(t);
+	// 		if (position != targetPosition || orientation != targetOrientation) {
+	// 			position = targetPosition;
+	// 			orientation = targetOrientation;
+	// 			return true;
+	// 		}
+	// 	}
+	// 	return false;
+	// }
 
 
 struct Entity {
-	using Id = v4d::data::EntityComponentSystem::EntityIndex_T;
+	using Id = v4d::ECS::EntityIndex_T;
 	using Type = uint64_t;
 	
 	using ReferenceFrame = uint64_t;
@@ -122,8 +219,7 @@ struct Entity {
 struct V4DGAME ServerSideEntity : Entity {
 	V4D_ENTITY_DECLARE_CLASS_MAP(ServerSideEntity)
 	
-	// V4D_ENTITY_DECLARE_COMPONENT(Entity, Rigidbody, rigidbody)
-	// V4D_ENTITY_DECLARE_COMPONENT(Entity, RigidbodyIntegration, rigidbodyIntegration)
+	V4D_ENTITY_DECLARE_COMPONENT(ServerSideEntity, Rigidbody, rigidbody)
 	
 	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, Collider, collider)
 	// V4D_ENTITY_DECLARE_COMPONENT_MAP(Entity, std::string_view, ColliderBroadphaseIntegration, colliderBroadphaseIntegration)
@@ -166,14 +262,14 @@ struct V4DGAME ClientSideEntity : Entity {
 	
 	inline void operator()(v4d::modular::ModuleID moduleID, Type type, ReferenceFrame referenceFrame, Position position, Orientation orientation = {1,0,0,0}) {
 		Entity::operator()(moduleID, type, referenceFrame, position, orientation);
-		this->targetPosition = targetPosition;
-		this->targetOrientation = targetOrientation;
+		this->targetPosition = position;
+		this->targetOrientation = orientation;
 		this->posInit = true;
 	}
 	inline void operator()(v4d::modular::ModuleID moduleID, Type type, ReferenceFrame referenceFrame, ReferenceFrameExtra referenceFrameExtra, Position position, Orientation orientation = {1,0,0,0}) {
 		Entity::operator()(moduleID, type, referenceFrame, referenceFrameExtra, position, orientation);
-		this->targetPosition = targetPosition;
-		this->targetOrientation = targetOrientation;
+		this->targetPosition = position;
+		this->targetOrientation = orientation;
 		this->posInit = true;
 	}
 	inline void operator()(v4d::modular::ModuleID moduleID, Type type, ReferenceFrame referenceFrame, ReferenceFrameExtra referenceFrameExtra, Position position, Orientation orientation, Iteration iteration) {
