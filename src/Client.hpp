@@ -39,75 +39,73 @@ namespace app {
 		
 		#ifdef APP_ENABLE_BURST_STREAMS
 			static bool HandleIncomingBurst(v4d::io::SocketPtr socket) {
-				BURST_ACTION action;
 				try {
-					action = socket->Read<BURST_ACTION>();
-				} catch (...) {
+					BURST_ACTION action = socket->Read<BURST_ACTION>();
+					switch (action) {
+						case BURST_ACTION::QUIT: return false;
+						
+						case BURST_ACTION::MODULE:{
+							auto _vendor = socket->Read<typeof ModuleID::vendor>();
+							auto _module = socket->Read<typeof ModuleID::module>();
+							ModuleID moduleID(_vendor, _module);
+							auto module = V4D_Mod::GetModule(moduleID.String());
+							DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
+							if (module && module->ClientReceiveBurst) {
+								module->ClientReceiveBurst(socket);
+							}
+						}break;
+						
+						case BURST_ACTION::INIT:
+							LOG("CLIENT Received Server initial burst")
+						break;
+						
+						default: 
+							LOG_ERROR("Client ReceiveBurst UNRECOGNIZED ACTION " << std::to_string((int)action))
+							return false;
+						break;
+					}
+					return true;
+				} catch (v4d::io::Socket::disconnected_error&) {
 					LOG_ERROR("Client : burst read error")
 					return false;
 				}
-				switch (action) {
-					case BURST_ACTION::QUIT: return false;
-					
-					case BURST_ACTION::MODULE:{
-						auto _vendor = socket->Read<typeof ModuleID::vendor>();
-						auto _module = socket->Read<typeof ModuleID::module>();
-						ModuleID moduleID(_vendor, _module);
-						auto module = V4D_Mod::GetModule(moduleID.String());
-						DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingBurst : Module '" << moduleID.String() << "' is not loaded")
-						if (module && module->ClientReceiveBurst) {
-							module->ClientReceiveBurst(socket);
-						}
-					}break;
-					
-					case BURST_ACTION::INIT:
-						LOG("CLIENT Received Server initial burst")
-					break;
-					
-					default: 
-						LOG_ERROR("Client ReceiveBurst UNRECOGNIZED ACTION " << std::to_string((int)action))
-						return false;
-					break;
-				}
-				return true;
 			}
 		#endif
 		
 		static bool HandleIncomingAction(v4d::io::SocketPtr socket) {
-			ACTION action;
 			try {
-				action = socket->Read<ACTION>();
-			} catch (...) {
-				LOG_ERROR("Client : server disconnected suddenly")
+				ACTION action = socket->Read<ACTION>();
+				switch (action) {
+					case ACTION::QUIT: return false;
+					
+					case ACTION::MODULE:{
+						auto _vendor = socket->Read<typeof ModuleID::vendor>();
+						auto _module = socket->Read<typeof ModuleID::module>();
+						ModuleID moduleID(_vendor, _module);
+						auto module = V4D_Mod::GetModule(moduleID.String());
+						DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
+						if (module && module->ClientReceiveAction) {
+							module->ClientReceiveAction(socket);
+						}
+					}break;
+					
+					#ifdef APP_ENABLE_BURST_STREAMS
+						case ACTION::BURST:
+							LOG("Client incoming burst from socket " << socket->GetFd())
+							HandleIncomingBurst(socket);
+						break;
+					#endif
+					
+					default: 
+						LOG_ERROR("Client ReceiveAction UNRECOGNIZED ACTION " << std::to_string((int)action))
+						return false;
+					break;
+				}
+				return true;
+			} catch (v4d::io::Socket::disconnected_error&) {
+				LOG_ERROR("Client : server disconnected")
 				return false;
 			}
-			switch (action) {
-				case ACTION::QUIT: return false;
-				
-				case ACTION::MODULE:{
-					auto _vendor = socket->Read<typeof ModuleID::vendor>();
-					auto _module = socket->Read<typeof ModuleID::module>();
-					ModuleID moduleID(_vendor, _module);
-					auto module = V4D_Mod::GetModule(moduleID.String());
-					DEBUG_ASSERT_ERROR(module, "Client::HandleIncomingAction : Module '" << moduleID.String() << "' is not loaded")
-					if (module && module->ClientReceiveAction) {
-						module->ClientReceiveAction(socket);
-					}
-				}break;
-				
-				#ifdef APP_ENABLE_BURST_STREAMS
-					case ACTION::BURST:
-						LOG("Client incoming burst from socket " << socket->GetFd())
-						HandleIncomingBurst(socket);
-					break;
-				#endif
-				
-				default: 
-					LOG_ERROR("Client ReceiveAction UNRECOGNIZED ACTION " << std::to_string((int)action))
-					return false;
-				break;
-			}
-			return true;
 		}
 		
 		virtual void Run(v4d::io::SocketPtr socket) override {
@@ -256,8 +254,7 @@ namespace app {
 							} else {
 								try {
 									if (socket->Read<app::networking::ACTION>() != app::networking::ACTION::BURST) {
-										LOG_ERROR("Client ReceiveBursts on TCP burst socket : did not receive BURST ACTION")
-										throw std::runtime_error("");
+										throw std::runtime_error("Client ReceiveBursts on TCP burst socket : did not receive BURST ACTION");
 									}
 								} catch(...) {
 									break;
