@@ -96,9 +96,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
-							rigidbody->linearVelocity = playerRigidbody->linearVelocity;
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
-						rigidbody->ApplyForce(dir*500.0f, {-0.1,0,0.1});
+						rigidbody->ApplyForce(dir*500.0f , {-0.1,0,0.1} );
 						ball->isDynamic = true;
 						ball->Activate();
 					}
@@ -110,8 +110,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ServerSideEntity::Ptr playerEntity;
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::GlassBall, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*10.0);
+						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(0.2/*mass*/, 0.5/*radius*/));
+						rigidbody->boundingRadius = 0.5;
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						}
 						ball->isDynamic = true;
 						ball->Activate();
 					}
@@ -138,18 +142,24 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				// }
 				else if (key == "balls") {
 					auto dir = stream->Read<glm::vec3>();
-					// Launch 10 balls
-					ServerSidePlayer::Ptr player;
-					ServerSideEntity::Ptr playerEntity;
-					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
-						for (int i = 0; i < 10; ++i) {
-							ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ball, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-							ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-							// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*100.0);
-							ball->isDynamic = true;
-							ball->Activate();
-						}
-					}
+					// // Launch 10 balls
+					// ServerSidePlayer::Ptr player;
+					// ServerSideEntity::Ptr playerEntity;
+					// if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+					// 	glm::dvec3 playerVelocity {0,0,0};
+					// 	if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+					// 		playerVelocity = playerRigidbody->linearVelocity;
+					// 	}
+					// 	for (int i = 0; i < 10; ++i) {
+					// 		ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ball, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+					// 		ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+					// 		auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+					// 		rigidbody->boundingRadius = 0.5;
+					// 		rigidbody->linearVelocity += playerVelocity;
+					// 		ball->isDynamic = true;
+					// 		ball->Activate();
+					// 	}
+					// }
 				}
 				else if (key == "light") {
 					auto dir = stream->Read<glm::vec3>();
@@ -159,7 +169,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Light, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						// ball->SetVelocity(glm::dvec3{dir.x, dir.y, dir.z}*40.0);
+						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(5.0/*mass*/, 2.0/*radius*/));
+						rigidbody->boundingRadius = 2.0;
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						}
 						ball->isDynamic = true;
 						ball->Activate();
 					}
@@ -199,6 +213,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			break;
 		}
 	}
+	
+	// V4D_MODULE_FUNC(void, OnCollisionHit, int64_t entityUniqueID, uint64_t type, glm::dvec3 contactPoint, double contactSpeed) {
+	// 	LOG("Collision hit " << entityUniqueID << ": contactSpeed: " << contactSpeed)
+	// }
 	
 	#pragma endregion
 	

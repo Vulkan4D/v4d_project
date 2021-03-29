@@ -11,6 +11,8 @@ struct Rigidbody {
 	// Initial information
 	double mass;
 	glm::dmat3 inertiaMatrix;
+	double restitution = 0.7;
+	double friction = 0.7;
 	
 	// Broadphase Collision detection
 	double boundingRadius = 0;
@@ -29,15 +31,16 @@ struct Rigidbody {
 	glm::dvec3 angularVelocity {0,0,0};
 	glm::dquat orientation {1,0,0,0};
 	
-	// Constructor
+	#pragma region Constructor
 	Rigidbody(double mass, glm::dmat3 inertiaMatrix = glm::dmat3{1})
 		: mass(mass>0? mass:0)
 		, inertiaMatrix(inertiaMatrix)
 		, invMass(mass>0? (1.0/mass) : 0.0)
 		, invInertiaMatrix(glm::inverse(inertiaMatrix))
 	{}
+	#pragma endregion
 	
-	// Inertia matrix functions
+	#pragma region Inertia matrix functions
 	struct Inertia {double mass; glm::dmat3 inertiaMatrix;};
 	Rigidbody(Inertia&& inertia) : Rigidbody(inertia.mass, inertia.inertiaMatrix) {}
 	struct SphereInertia : Inertia {
@@ -106,14 +109,25 @@ struct Rigidbody {
 			this->inertiaMatrix[2][2] = Iheight;
 		}
 	};
+	#pragma endregion
 	
-	// Useful functions
+	#pragma region Forces & Impulses
 	void ApplyForce(glm::dvec3 force, glm::dvec3 point = {0,0,0}) {
 		this->force += force;
-		if (force.x != 0 || force.y != 0 || force.z != 0) {
-			torque += glm::cross(point, force);
+		if (point.x != 0 || point.y != 0 || point.z != 0) {
+			this->torque += glm::cross(point, force);
 		}
 	}
+	void ApplyAcceleration(glm::dvec3 acceleration) {
+		this->linearAcceleration += acceleration;
+	}
+	void ApplyImpulse(glm::dvec3 impulse, glm::dvec3 point = {0,0,0}) {
+		this->linearVelocity += this->invMass * impulse;
+		if (point.x != 0 || point.y != 0 || point.z != 0) {
+			this->angularVelocity += this->invInertiaMatrix * glm::cross(point, impulse);
+		}
+	}
+	#pragma endregion
 };
 
 struct Collider {
