@@ -131,12 +131,24 @@ struct Rigidbody {
 };
 
 struct Collider {
-	uint64_t id; //TODO static increment like physicsInfo
-	uint64_t referenceFrame;
 	glm::dmat4 offset;
-	// shape...
-	glm::dvec3 boundingBoxMin;
-	glm::dvec3 boundingBoxMax;
+	glm::vec3 shape;
+	enum class Type : uint8_t {
+		SPHERE = 1 << 0,
+		BOX = 1 << 1,
+		// CONE = 1 << 2,
+		// CYLINDER = 1 << 3,
+		// CYLINDER_SHELL = 1 << 4,
+		// TRIANGLE = 1 << 5,
+		// TERRAIN = 1 << 6,
+		// ? = 1 << 7,
+	} type;
+	
+	Collider(glm::dmat4 offset, glm::vec3 shape, Type type)
+	: offset(offset)
+	, shape(shape)
+	, type(type)
+	{}
 };
 
 // struct Renderable {
@@ -231,12 +243,13 @@ struct Entity {
 struct V4DGAME ServerSideEntity : Entity {
 	V4D_ENTITY_DECLARE_CLASS_MAP(ServerSideEntity)
 	V4D_ENTITY_DECLARE_COMPONENT(ServerSideEntity, Rigidbody, rigidbody)
-	V4D_ENTITY_DECLARE_COMPONENT_MAP(ServerSideEntity, std::string_view, Collider, collider)
 	
 	bool active = false;
 	bool isDynamic = false;
 	std::atomic<Iteration> iteration {0};
 	std::unordered_map<uint64_t/*clientID*/, Iteration /*iteration*/> clientIterations {};
+
+	std::vector<Collider> colliders {};
 
 	Iteration Iterate() {
 		return ++iteration;
