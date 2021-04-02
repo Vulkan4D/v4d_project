@@ -1203,7 +1203,7 @@ struct PlanetTerrain {
 	std::mutex planetMutex;
 	std::vector<Chunk*> chunks {};
 	
-	static double (*generatorFunction)(glm::dvec3* const, double solidRadius, double heightVariation);
+	static double (*generatorFunction)(const glm::dvec3&, double solidRadius, double heightVariation);
 	static glm::vec3 (*generateColor)(double heightMap);
 	
 	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize = 1.0) {
@@ -1217,7 +1217,7 @@ struct PlanetTerrain {
 		// if (triangleSize < 30)
 		// 	height += v4d::noise::FastSimplexFractal(normalizedPos*solidRadius, 3)/5.0;
 		
-		if (generatorFunction) height += generatorFunction(&normalizedPos, solidRadius, heightVariation);
+		if (generatorFunction) height += generatorFunction(normalizedPos, solidRadius, heightVariation);
 		else {
 			LOG_ERROR("Tried to generate heightmap but terrainGenerator dynamic library is not loaded")
 		}

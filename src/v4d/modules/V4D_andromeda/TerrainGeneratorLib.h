@@ -8,7 +8,7 @@ class TerrainGenerator {
 		,GetColor
 	)
 	V4D_MODULE_FUNC_DECLARE(void, Init)
-	V4D_MODULE_FUNC_DECLARE(double, GetHeightMap, glm::dvec3* const pos, double solidRadius, double heightVariation)
+	V4D_MODULE_FUNC_DECLARE(double, GetHeightMap, const glm::dvec3& pos, double solidRadius, double heightVariation)
 	V4D_MODULE_FUNC_DECLARE(glm::vec3, GetColor, double heightMap)
 };
 

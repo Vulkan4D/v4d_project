@@ -131,24 +131,97 @@ struct Rigidbody {
 };
 
 struct Collider {
-	glm::dmat4 offset;
-	glm::vec3 shape;
 	enum class Type : uint8_t {
 		SPHERE = 1 << 0,
-		BOX = 1 << 1,
-		// CONE = 1 << 2,
-		// CYLINDER = 1 << 3,
-		// CYLINDER_SHELL = 1 << 4,
-		// TRIANGLE = 1 << 5,
-		// TERRAIN = 1 << 6,
-		// ? = 1 << 7,
+		TRIANGLE = 1 << 1,
+		CYLINDER = 1 << 2,
+		RING = 1 << 3,
+		BOX = 1 << 4,
 	} type;
+
+	glm::dvec3 position;
+	glm::dmat3 rotation;
 	
-	Collider(glm::dmat4 offset, glm::vec3 shape, Type type)
-	: offset(offset)
-	, shape(shape)
-	, type(type)
-	{}
+	union {
+		struct {
+			float radius;
+		} sphere;
+		struct { // triangle should be oriented with vertices 0-1 towards +Y, and 1-2 towards +X
+			float vertex1_y;
+			glm::vec2 vertex2;
+		} triangle;
+		struct {
+			float length;
+			float radius;
+		} cylinder;
+		struct {
+			float length;
+			float innerRadius;
+			float outerRadius;
+		} ring;
+		struct {
+			glm::vec3 halfSize;
+		} box;
+	};
+	
+	// Sphere at center
+	Collider(float radius)
+	: type(Type::SPHERE)
+	, position(0,0,0)
+	, rotation(1)
+	{
+		sphere.radius = radius;
+	}
+	
+	// Sphere
+	Collider(glm::dvec3 position, float radius)
+	: type(Type::SPHERE)
+	, position(position)
+	, rotation(1)
+	{
+		sphere.radius = radius;
+	}
+	
+	// Triangle
+	Collider(glm::dvec3 position, glm::dmat3 rotation, float vertex1_y, glm::vec2 vertex2_xy)
+	: type(Type::TRIANGLE)
+	, position(position)
+	, rotation(rotation)
+	{
+		triangle.vertex1_y = vertex1_y;
+		triangle.vertex2 = vertex2_xy;
+	}
+	
+	// Cylinder
+	Collider(glm::dvec3 position, glm::dmat3 rotation, float length, float radius)
+	: type(Type::CYLINDER)
+	, position(position)
+	, rotation(rotation)
+	{
+		cylinder.length = length;
+		cylinder.radius = radius;
+	}
+	
+	// Ring
+	Collider(glm::dvec3 position, glm::dmat3 rotation, float length, float innerRadius, float outerRadius)
+	: type(Type::RING)
+	, position(position)
+	, rotation(rotation)
+	{
+		ring.length = length;
+		ring.innerRadius = innerRadius;
+		ring.outerRadius = outerRadius;
+	}
+	
+	// Box
+	Collider(glm::dvec3 position, glm::dmat3 rotation, glm::vec3 halfSize)
+	: type(Type::BOX)
+	, position(position)
+	, rotation(rotation)
+	{
+		box.halfSize = halfSize;
+	}
+	
 };
 
 // struct Renderable {

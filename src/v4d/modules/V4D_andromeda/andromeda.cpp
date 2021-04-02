@@ -448,7 +448,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		entity->isDynamic = true;
 		entity->clientIterations[client->id] = 0;
 		player->parentEntityId = playerEntityId;
-		entity->Add_rigidbody(10.0);
+		entity->Add_rigidbody(10.0)->boundingRadius = 1;
+		entity->colliders.emplace_back(1);
 		
 		// Set player position
 		if (defaultPosition.IsCelestial()) {
@@ -530,6 +531,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						entity->orientation = orientation;
 						if (auto rigidbody = entity->rigidbody.Lock(); rigidbody) {
 							rigidbody->linearAcceleration = acceleration;
+							rigidbody->angularVelocity = {0,0,0};
 						}
 					}
 				}

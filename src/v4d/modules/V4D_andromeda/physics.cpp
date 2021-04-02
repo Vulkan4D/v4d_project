@@ -6,11 +6,11 @@
 #include <vector>
 #include <unordered_map>
 
-// #include "GalaxyGenerator.h"
-// #include "Celestial.h"
-// #include "StarSystem.h"
-// #include "celestials/Planet.h"
-// #include "TerrainGeneratorLib.h"
+#include "GalaxyGenerator.h"
+#include "Celestial.h"
+#include "StarSystem.h"
+#include "celestials/Planet.h"
+#include "TerrainGeneratorLib.h"
 
 struct BroadphaseCollider {
 	glm::dvec3 position;
@@ -43,127 +43,493 @@ struct Collision {
 std::unordered_map<uint64_t, std::vector<BroadphaseCollider>> cachedBroadphaseColliders {};
 std::vector<Collision> potentialCollisions {};
 
-bool SphereSphereIntersect(Collision& collision, const Collider& a, const Collider& b) {
-	return true;
+#pragma region Shape-Ray intersections
+
+bool SphereRayIntersect(const Collider& sphere, double& t1, double& t2) {
+	//TODO
+	return false;
 }
 
-bool BoxBoxIntersect(Collision& collision, const Collider& a, const Collider& b) {
-	return true;
+bool TriangleRayIntersect(const Collider& triangle, double& t1, double& t2) {
+	//TODO
+	return false;
 }
 
-bool BoxSphereIntersect(Collision& collision, const Collider& box, const Collider& sphere) {
-	return true;
+bool CylinderRayIntersect(const Collider& cylinder, double& t1, double& t2) {
+	//TODO
+	return false;
 }
 
-void SolveCollision(Collision& collision) {
-	if (auto entityA = ServerSideEntity::Get(cachedBroadphaseColliders[collision.referenceFrame][collision.a].id); entityA) {
-		if (auto entityB = ServerSideEntity::Get(cachedBroadphaseColliders[collision.referenceFrame][collision.b].id); entityB) {
+bool RingRayIntersect(const Collider& ring, double& t1, double& t2) {
+	//TODO
+	return false;
+}
+
+bool BoxRayIntersect(const Collider& box, double& t1, double& t2) {
+	//TODO
+	return false;
+}
+
+#pragma endregion
+
+#pragma region Base colliders
+
+bool SphereIntersect(Collision& collision, const Collider& a, const Collider& b) {
+	const float radiusSum = a.sphere.radius + b.sphere.radius;
+	const glm::vec3 d = b.position - a.position;
+	if (glm::dot(d,d) < radiusSum*radiusSum) {
+		collision.normal = glm::normalize(d);
+		collision.penetration = radiusSum - glm::length(d);
+		collision.contactA = +collision.normal * a.sphere.radius;
+		collision.contactB = -collision.normal * b.sphere.radius;
+		return true;
+	}
+	return false;
+}
+
+bool TriangleIntersect(Collision& collision, const Collider& a, const Collider& b) {
+	//TODO
+	return false;
+}
+
+bool CylinderIntersect(Collision& collision, const Collider& a, const Collider& b) {
+	//TODO
+	return false;
+}
+
+bool RingIntersect(Collision& collision, const Collider& a, const Collider& b) {
+	//TODO
+	return false;
+}
+
+bool BoxIntersect(Collision& collision, const Collider& a, const Collider& b) {
+	//TODO
+	return false;
+}
+
+bool TriangleSphereIntersect(Collision& collision, const Collider& aTriangle, const Collider& bSphere) {
+	//TODO
+	return false;
+}
+
+bool CylinderSphereIntersect(Collision& collision, const Collider& aCylinder, const Collider& bSphere) {
+	//TODO
+	return false;
+}
+
+bool RingSphereIntersect(Collision& collision, const Collider& aRing, const Collider& bSphere) {
+	//TODO
+	return false;
+}
+
+bool BoxSphereIntersect(Collision& collision, const Collider& aBox, const Collider& bSphere) {
+	const glm::vec3& boxHalfSize = aBox.box.halfSize;
+	const float& sphereRadius = bSphere.sphere.radius;
+	
+	const glm::dmat3 boxInverseRotationMatrix = glm::inverse(aBox.rotation);
+	const glm::dvec3 relSpherePosition = boxInverseRotationMatrix * bSphere.position;
+	const glm::vec3 d = relSpherePosition - aBox.position;
+	if (glm::dot(d,d) < sphereRadius*sphereRadius) {
+		const glm::vec3 closestPointOnBox = glm::clamp(d, -boxHalfSize, +boxHalfSize);
+		collision.normal = glm::normalize(glm::mat3(aBox.rotation) * glm::normalize(d - closestPointOnBox));
+		collision.penetration = sphereRadius - glm::length(d);
+		collision.contactA = glm::normalize(glm::mat3(aBox.rotation) * glm::normalize(closestPointOnBox)) * length(closestPointOnBox);
+		collision.contactB = glm::normalize(glm::mat3(aBox.rotation) * -collision.normal) * sphereRadius;
+		return true;
+	}
+	return false;
+}
+
+bool CylinderTriangleIntersect(Collision& collision, const Collider& aCylinder, const Collider& bTriangle) {
+	//TODO
+	return false;
+}
+
+bool RingTriangleIntersect(Collision& collision, const Collider& aRing, const Collider& bTriangle) {
+	//TODO
+	return false;
+}
+
+bool BoxTriangleIntersect(Collision& collision, const Collider& aBox, const Collider& bTriangle) {
+	//TODO
+	return false;
+}
+
+bool RingCylinderIntersect(Collision& collision, const Collider& aRing, const Collider& bCylinder) {
+	//TODO
+	return false;
+}
+
+bool BoxCylinderIntersect(Collision& collision, const Collider& aBox, const Collider& bCylinder) {
+	//TODO
+	return false;
+}
+
+bool BoxRingIntersect(Collision& collision, const Collider& aBox, const Collider& bRing) {
+	//TODO
+	return false;
+}
+
+#pragma endregion
+
+#pragma region Terrain colliders
+
+bool TerrainSphereIntersect(Collision& collision, const Collider& sphere, Planet* planet) {
+	const glm::dvec3 normalizedPos = glm::normalize(sphere.position);
+	const double terrainHeight = planet->GetTerrainHeightAtPos(normalizedPos);
+	const double altitudeAboveTerrain = glm::length(sphere.position) - sphere.sphere.radius - terrainHeight;
+	
+	if (altitudeAboveTerrain < 0) {
+		glm::dvec3 tangentXPos = glm::normalize(glm::cross(normalizedPos, {0,1,0}));
+		glm::dvec3 tangentYPos = glm::normalize(glm::cross(normalizedPos, tangentXPos));
+		tangentXPos = glm::normalize(sphere.position + tangentXPos*double(sphere.sphere.radius*0.5));
+		tangentYPos = glm::normalize(sphere.position + tangentYPos*double(sphere.sphere.radius*0.5));
+		const glm::dvec3 tangentX = glm::normalize(tangentXPos*(planet->GetTerrainHeightAtPos(tangentXPos)) - normalizedPos*terrainHeight);
+		const glm::dvec3 tangentY = glm::normalize(tangentYPos*(planet->GetTerrainHeightAtPos(tangentYPos)) - normalizedPos*terrainHeight);
+		
+		collision.normal = glm::normalize(glm::cross(tangentX, tangentY));
+		collision.penetration = float(-altitudeAboveTerrain);
+		collision.contactA = sphere.position;
+		collision.contactB = -collision.normal * float(sphere.sphere.radius);
+		
+		return true;
+	}
+	return false;
+}
+
+bool TerrainTriangleIntersect(Collision& collision, const Collider& triangle, Planet* planet) {
+	//TODO
+	return false;
+}
+
+bool TerrainCylinderIntersect(Collision& collision, const Collider& cylinder, Planet* planet) {
+	//TODO
+	return false;
+}
+
+bool TerrainRingIntersect(Collision& collision, const Collider& cylinder, Planet* planet) {
+	//TODO
+	return false;
+}
+
+bool TerrainBoxIntersect(Collision& collision, const Collider& cylinder, Planet* planet) {
+	//TODO
+	return false;
+}
+
+#pragma endregion
+
+#pragma region Collision response
+
+void RespondToCollision(ServerSideEntity::Ptr& entityA, ServerSideEntity::Ptr& entityB, Collision& collision) {
+	double contactSpeed {0};
+	
+	// This should be the only place where we lock two rigidbodies simultaneously. Doing it on any other thread could result in a deadlock.
+	if (auto rbA = entityA->rigidbody.Lock(); rbA) {
+		if (auto rbB = entityB->rigidbody.Lock(); rbB) {
 			
-			////////////////////////////////////////////////////
-			// Narrow phase collision detection
+			// Projection method (separate the two bodies so that they don't penetrate anymore)
+			const glm::dvec3 separation = glm::dvec3(collision.normal * collision.penetration) / (rbA->invMass + rbB->invMass);
+			// Reposition rigidbody
+			rbA->position -= separation * rbA->invMass;
+			rbB->position += separation * rbB->invMass;
 			
-			if (entityA->colliders.size() > 0 || entityB->colliders.size() > 0) {
-				collision.penetration = 0;
-				int aIndex = 0, bIndex = 0;
-				Collider a {glm::dmat4{1}, {cachedBroadphaseColliders[collision.referenceFrame][collision.a].radius,0,0}, Collider::Type::SPHERE};
-				Collider b {glm::dmat4{1}, {cachedBroadphaseColliders[collision.referenceFrame][collision.b].radius,0,0}, Collider::Type::SPHERE};
-				do {
-					if (entityA->colliders.size() > 0) {
-						a = entityA->colliders[aIndex];
-						// a.offset = ....
-					}
-					do {
-						if (entityB->colliders.size() > 0) {
-							b = entityB->colliders[bIndex];
-							// b.offset = ....
-						}
-						
-						switch (a.type | b.type) {
-							default:
-							case Collider::Type::SPHERE:
-								if (SphereSphereIntersect(collision, a, b)) goto CollisionResponse;
-							break;
-							case Collider::Type::BOX:
-								if (BoxBoxIntersect(collision, a, b)) goto CollisionResponse;
-							break;
-							case Collider::Type::BOX | Collider::Type::SPHERE:
-								if (BoxSphereIntersect(collision, a.type==Collider::Type::BOX? a : b, a.type==Collider::Type::SPHERE? b : a)) goto CollisionResponse;
-							break;
-						}
-						
-					} while(++aIndex < entityA->colliders.size());
-				} while(++bIndex < entityB->colliders.size());
-			}
+			// Impulse method (Adjust linear and angular velocities to simulate a bounce)
+			const glm::dvec3 normal = collision.normal;
+			const glm::dvec3 contactA = collision.contactA;
+			const glm::dvec3 contactB = collision.contactB;
+			const glm::dvec3 angularVelocityA = glm::cross(rbA->angularVelocity, contactA);
+			const glm::dvec3 angularVelocityB = glm::cross(rbB->angularVelocity, contactB);
+			const glm::dvec3 totalVelocityA = rbA->linearVelocity + angularVelocityA;
+			const glm::dvec3 totalVelocityB = rbB->linearVelocity + angularVelocityB;
+			const glm::dvec3 contactVelocity = totalVelocityB - totalVelocityA;
+			const glm::dvec3 inertiaA = glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, normal), contactA);
+			const glm::dvec3 inertiaB = glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, normal), contactB);
+			contactSpeed = -glm::dot(contactVelocity, normal);
+			const double J = contactSpeed * (rbA->restitution * rbB->restitution + 1.0) / (rbA->invMass + rbB->invMass + glm::dot(inertiaA + inertiaB, normal));
+			const glm::dvec3 impulse = J * normal;
 			
-			// No collision
-			if (collision.penetration == 0) return;
+			// Apply impulses to rigidbody
+			rbA->ApplyImpulse(-impulse, contactA);
+			rbB->ApplyImpulse(+impulse, contactB);
 			
-			////////////////////////////////////////////////////
-			// Collision Response
-			
-			CollisionResponse:{
-			
-				double contactSpeed {0};
-				
-				// This should be the only place where we lock two rigidbodies simultaneously. Doing it on any other thread could result in a deadlock.
-				if (auto rbA = entityA->rigidbody.Lock(); rbA) {
-					if (auto rbB = entityB->rigidbody.Lock(); rbB) {
-						
-						// Projection method (separate the two bodies so that they don't penetrate anymore)
-						const glm::dvec3 separation = glm::dvec3(collision.normal * collision.penetration) / (rbA->invMass + rbB->invMass);
-						// Reposition rigidbody
-						rbA->position += separation * rbA->invMass;
-						rbB->position -= separation * rbB->invMass;
-						
-						// Impulse method (Adjust linear and angular velocities to simulate a bounce)
-						const glm::dvec3 normal = collision.normal;
-						const glm::dvec3 contactA = collision.contactA;
-						const glm::dvec3 contactB = collision.contactB;
-						const glm::dvec3 angularVelocityA = glm::cross(rbA->angularVelocity, contactA);
-						const glm::dvec3 angularVelocityB = glm::cross(rbB->angularVelocity, contactB);
-						const glm::dvec3 totalVelocityA = rbA->linearVelocity + angularVelocityA;
-						const glm::dvec3 totalVelocityB = rbB->linearVelocity + angularVelocityB;
-						const glm::dvec3 contactVelocity = totalVelocityB - totalVelocityA;
-						const glm::dvec3 inertiaA = glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, normal), contactA);
-						const glm::dvec3 inertiaB = glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, normal), contactB);
-						contactSpeed = -glm::dot(contactVelocity, normal);
-						const double J = contactSpeed * (rbA->restitution * rbB->restitution + 1.0) / (rbA->invMass + rbB->invMass + glm::dot(inertiaA + inertiaB, normal));
-						const glm::dvec3 impulse = J * normal;
-						
-						// Apply impulses to rigidbody
-						rbA->ApplyImpulse(-impulse, contactA);
-						rbB->ApplyImpulse(+impulse, contactB);
-						
-						// Friction
-						glm::dvec3 tangent = contactVelocity - normal * glm::dot(contactVelocity, normal);
-						const double tangentLength = glm::length(tangent);
-						if (tangentLength > 1e-6) {
-							tangent /= tangentLength;
-							const double frictionalMass = (rbA->invMass + rbB->invMass) + glm::dot(tangent, glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, tangent), contactA) + glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, tangent), contactB));
-							if (frictionalMass > 0) {
-								const double frictionCoeficient = rbA->friction * rbB->friction;
-								const glm::dvec3 frictionImpulse = tangent * double(-glm::dot(contactVelocity, tangent) * frictionCoeficient / frictionalMass);
-								// Apply impulses from friction
-								rbA->ApplyImpulse(-frictionImpulse, contactA);
-								rbB->ApplyImpulse(+frictionImpulse, contactB);
-							}
-						}
-						
-					}
-				}
-				
-				// Trigger collision events on entities
-				if (auto mod = V4D_Mod::GetModule(entityA->moduleID.String()); mod && mod->OnCollisionHit) {
-					mod->OnCollisionHit(entityA->GetID(), entityA->type, collision.contactA, glm::max(0.0, contactSpeed));
-				}
-				if (auto mod = V4D_Mod::GetModule(entityB->moduleID.String()); mod && mod->OnCollisionHit) {
-					mod->OnCollisionHit(entityB->GetID(), entityB->type, collision.contactB, glm::max(0.0, contactSpeed));
+			// Friction
+			glm::dvec3 tangent = contactVelocity - normal * glm::dot(contactVelocity, normal);
+			const double tangentLength = glm::length(tangent);
+			if (tangentLength > 1e-6) {
+				tangent /= tangentLength;
+				const double frictionalMass = (rbA->invMass + rbB->invMass) + glm::dot(tangent, glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, tangent), contactA) + glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, tangent), contactB));
+				if (frictionalMass > 0) {
+					const double frictionCoeficient = rbA->friction * rbB->friction;
+					const glm::dvec3 frictionImpulse = tangent * double(-glm::dot(contactVelocity, tangent) * frictionCoeficient / frictionalMass);
+					// Apply impulses from friction
+					rbA->ApplyImpulse(-frictionImpulse, contactA);
+					rbB->ApplyImpulse(+frictionImpulse, contactB);
 				}
 			}
 			
 		}
 	}
+	
+	// Trigger collision events on entities
+	if (auto mod = V4D_Mod::GetModule(entityA->moduleID.String()); mod && mod->OnCollisionHit) {
+		mod->OnCollisionHit(entityA->GetID(), entityA->type, collision.contactA, glm::max(0.0, contactSpeed));
+	}
+	if (auto mod = V4D_Mod::GetModule(entityB->moduleID.String()); mod && mod->OnCollisionHit) {
+		mod->OnCollisionHit(entityB->GetID(), entityB->type, collision.contactB, glm::max(0.0, contactSpeed));
+	}
 }
+
+void RespondToCollisionWithTerrain(ServerSideEntity::Ptr& entity, Collision& collision, float terrainRestitution, float terrainFriction) {
+	double contactSpeed {0};
+	
+	// This should be the only place where we lock two rigidbodies simultaneously. Doing it on any other thread could result in a deadlock.
+	if (auto rb = entity->rigidbody.Lock(); rb) {
+
+		// Projection method (separate the two bodies so that they don't penetrate anymore)
+		const glm::dvec3 separation = glm::dvec3(collision.normal * collision.penetration) / rb->invMass;
+		// Reposition rigidbody
+		rb->position += separation * rb->invMass;
+		
+		// Impulse method (Adjust linear and angular velocities to simulate a bounce)
+		const glm::dvec3 normal = collision.normal;
+		const glm::dvec3 contactB = collision.contactB;
+		const glm::dvec3 angularVelocityB = glm::cross(rb->angularVelocity, contactB);
+		const glm::dvec3 totalVelocityB = rb->linearVelocity + angularVelocityB;
+		const glm::dvec3 contactVelocity = totalVelocityB;
+		const glm::dvec3 inertiaB = glm::cross(rb->invInertiaMatrix * glm::cross(contactB, normal), contactB);
+		contactSpeed = -glm::dot(contactVelocity, normal);
+		const double J = contactSpeed * (terrainRestitution * rb->restitution + 1.0) / (rb->invMass + glm::dot(inertiaB, normal));
+		const glm::dvec3 impulse = J * normal;
+		
+		// Apply impulses to rigidbody
+		rb->ApplyImpulse(+impulse, contactB);
+		
+		// Friction
+		glm::dvec3 tangent = contactVelocity - normal * glm::dot(contactVelocity, normal);
+		const double tangentLength = glm::length(tangent);
+		if (tangentLength > 1e-6) {
+			tangent /= tangentLength;
+			const double frictionalMass = (rb->invMass) + glm::dot(tangent, glm::cross(rb->invInertiaMatrix * glm::cross(contactB, tangent), contactB));
+			if (frictionalMass > 0) {
+				const double frictionCoeficient = terrainFriction * rb->friction;
+				const glm::dvec3 frictionImpulse = tangent * double(-glm::dot(contactVelocity, tangent) * frictionCoeficient / frictionalMass);
+				// Apply impulses from friction
+				rb->ApplyImpulse(+frictionImpulse, contactB);
+			}
+		}
+		
+	}
+	
+	// Trigger collision events on entities
+	if (auto mod = V4D_Mod::GetModule(entity->moduleID.String()); mod && mod->OnCollisionHit) {
+		mod->OnCollisionHit(entity->GetID(), entity->type, collision.contactB, glm::max(0.0, contactSpeed));
+	}
+}
+
+#pragma endregion
+
+#pragma region Collision solvers
+
+void SolveCollisionBetweenTwoRigidbodies(Collision& collision) {
+	if (auto entityA = ServerSideEntity::Get(cachedBroadphaseColliders[collision.referenceFrame][collision.a].id); entityA) {
+		if (auto entityB = ServerSideEntity::Get(cachedBroadphaseColliders[collision.referenceFrame][collision.b].id); entityB) {
+			if (entityA->colliders.size() > 0 || entityB->colliders.size() > 0) {
+				int aIndex = 0, bIndex = 0;
+				Collider a {float(cachedBroadphaseColliders[collision.referenceFrame][collision.a].radius)};
+				Collider b {float(cachedBroadphaseColliders[collision.referenceFrame][collision.b].radius)};
+				
+				do {
+					if (entityA->colliders.size() > 0) {
+						a = entityA->colliders[aIndex];
+						a.position += entityA->position;
+						a.rotation = glm::mat3_cast(entityA->orientation) * a.rotation;
+					}
+					do {
+						if (entityB->colliders.size() > 0) {
+							b = entityB->colliders[bIndex];
+							b.position += entityB->position;
+							b.rotation = glm::mat3_cast(entityB->orientation) * b.rotation;
+						}
+						
+						switch (a.type | b.type) {
+							default:
+							case Collider::Type::SPHERE:
+								if (SphereIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+							break;
+							case Collider::Type::TRIANGLE:
+								if (TriangleIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+							break;
+							case Collider::Type::CYLINDER:
+								if (CylinderIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+							break;
+							case Collider::Type::RING:
+								if (RingIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+							break;
+							case Collider::Type::BOX:
+								if (BoxIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+							break;
+							case Collider::Type::TRIANGLE | Collider::Type::SPHERE:
+								if (a.type == Collider::Type::TRIANGLE) {
+									if (TriangleSphereIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (TriangleSphereIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::CYLINDER | Collider::Type::SPHERE:
+								if (a.type == Collider::Type::CYLINDER) {
+									if (CylinderSphereIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (CylinderSphereIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::RING | Collider::Type::SPHERE:
+								if (a.type == Collider::Type::RING) {
+									if (RingSphereIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (RingSphereIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::BOX | Collider::Type::SPHERE:
+								if (a.type == Collider::Type::BOX) {
+									if (BoxSphereIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (BoxSphereIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::CYLINDER | Collider::Type::TRIANGLE:
+								if (a.type == Collider::Type::CYLINDER) {
+									if (CylinderTriangleIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (CylinderTriangleIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::RING | Collider::Type::TRIANGLE:
+								if (a.type == Collider::Type::RING) {
+									if (RingTriangleIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (RingTriangleIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::BOX | Collider::Type::TRIANGLE:
+								if (a.type == Collider::Type::BOX) {
+									if (BoxTriangleIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (BoxTriangleIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::RING | Collider::Type::CYLINDER:
+								if (a.type == Collider::Type::RING) {
+									if (RingCylinderIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (RingCylinderIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::BOX | Collider::Type::CYLINDER:
+								if (a.type == Collider::Type::BOX) {
+									if (BoxCylinderIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (BoxCylinderIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+							case Collider::Type::BOX | Collider::Type::RING:
+								if (a.type == Collider::Type::BOX) {
+									if (BoxRingIntersect(collision, a, b)) RespondToCollision(entityA, entityB, collision);
+								} else {
+									if (BoxRingIntersect(collision, b, a)) {
+										collision.contactB = std::exchange(collision.contactA, collision.contactB);
+										collision.normal *= -1;
+										RespondToCollision(entityA, entityB, collision);
+									}
+								}
+							break;
+						}
+						
+					} while(++aIndex < entityA->colliders.size());
+				} while(++bIndex < entityB->colliders.size());
+			} else {
+				RespondToCollision(entityA, entityB, collision);
+			}
+		}
+	}
+}
+
+void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, Planet* planet) {
+	glm::dvec3 normalizedPos = glm::normalize(entity->position);
+	auto terrainType = planet->GetTerrainTypeAtPos(normalizedPos);
+	Collision collision { planet->GetID(), 0, 0, normalizedPos, 0.001, entity->position, -normalizedPos };
+	
+	if (entity->colliders.size() > 0) {
+		for (Collider collider : entity->colliders) {
+			collider.position += entity->position;
+			collider.rotation = glm::mat3_cast(entity->orientation) * collider.rotation;
+			
+			switch (collider.type) {
+				default:
+				case Collider::Type::SPHERE:
+					if (TerrainSphereIntersect(collision, collider, planet))
+						RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+				break;
+				case Collider::Type::TRIANGLE:
+					if (TerrainTriangleIntersect(collision, collider, planet))
+						RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+				break;
+				case Collider::Type::CYLINDER:
+					if (TerrainCylinderIntersect(collision, collider, planet))
+						RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+				break;
+				case Collider::Type::RING:
+					if (TerrainRingIntersect(collision, collider, planet))
+						RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+				break;
+				case Collider::Type::BOX:
+					if (TerrainBoxIntersect(collision, collider, planet))
+						RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+				break;
+			}
+		}
+	} else {
+		RespondToCollisionWithTerrain(entity, collision, terrainType.restitution, terrainType.friction);
+	}
+}
+
+#pragma endregion
 
 V4D_MODULE_CLASS(V4D_Mod) {
 	
@@ -189,14 +555,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					for (size_t j = i+1; j < colliders.size(); ++j) {
 						const float radiusSum = colliders[i].radius + colliders[j].radius;
 						const glm::vec3 d = colliders[j].position - colliders[i].position;
-						const float contactDistanceSqr = glm::dot(d,d) - radiusSum*radiusSum;
-						if (contactDistanceSqr < 0) {
+						if (glm::dot(d,d) < radiusSum*radiusSum) {
 							const glm::dvec3 normal = glm::normalize(d);
 							potentialCollisions.emplace_back(
 								referenceFrame,
 								i, j,
 								normal,
-								(glm::length(d) - radiusSum),
+								radiusSum - glm::length(d),
 								+normal*colliders[i].radius,
 								-normal*colliders[j].radius
 							);
@@ -207,11 +572,38 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		{// Narrow-phase Collision detection and response
-			std::for_each(potentialCollisions.begin(), potentialCollisions.end(), SolveCollision);
+			std::for_each(potentialCollisions.begin(), potentialCollisions.end(), SolveCollisionBetweenTwoRigidbodies);
 		}
 		
-		{// Apply Gravity
-			//...   rigidbody.linearAcceleration += m/s2
+		{// Apply Gravity and Collision with terrain
+			for (const auto&[referenceFrame, colliders] : cachedBroadphaseColliders) {
+				const GalacticPosition galacticPosition(referenceFrame);
+				if (galacticPosition.IsCelestial()) {
+					auto celestial = GalaxyGenerator::GetCelestial(galacticPosition);
+					if (celestial->GetType() == CelestialType::Planet) {
+						Planet* planet = (Planet*)celestial.get();
+						if (PlanetTerrain::generatorFunction) {
+							for (auto collider : colliders) {
+								const double distanceFromPlanetCenter = glm::length(collider.position);
+								if (distanceFromPlanetCenter > 0) {
+									if (auto entity = ServerSideEntity::Get(collider.id); entity) {
+										glm::dvec3 normalizedPos = glm::normalize(collider.position);
+										{// Gravity
+											if (auto rb = entity->rigidbody.Lock(); rb) {
+												rb->linearAcceleration += -normalizedPos * planet->GetGravityAcceleration(distanceFromPlanetCenter);
+											}
+										}
+										constexpr double radiusMarginFactor = 2.0; // added margins to catch collisions on very steep slopes
+										if (distanceFromPlanetCenter - collider.radius*radiusMarginFactor - planet->GetTerrainHeightAtPos(normalizedPos) < 0) {
+											SolveCollisionWithTerrain(entity, planet);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 		
 		{// Apply aerodynamics

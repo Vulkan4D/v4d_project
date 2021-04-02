@@ -95,10 +95,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
+						ball->colliders.emplace_back(rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
-						rigidbody->ApplyForce(dir*500.0f , {-0.1,0,0.1} );
+						rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
 						ball->isDynamic = true;
 						ball->Activate();
 					}
@@ -113,6 +114,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(0.2/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
+						ball->colliders.emplace_back(rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -171,6 +173,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(5.0/*mass*/, 2.0/*radius*/));
 						rigidbody->boundingRadius = 2.0;
+						ball->colliders.emplace_back(rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -202,9 +205,15 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 				else if (key == "clear") {
-					ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
-						entity->active = false;
-					});
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::ForEach([&playerEntity](ServerSideEntity::Ptr entity){
+							if (playerEntity->GetID() != entity->GetID()) {
+								entity->active = false;
+							}
+						});
+					}
 				}
 			}break;
 		

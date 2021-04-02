@@ -48,7 +48,7 @@ void RefreshChunk(PlanetTerrain::Chunk* chunk) {
 
 double Planet::GetTerrainHeightVariation() const {
 	if (!_terrainHeightVariation.has_value()) {
-		_terrainHeightVariation = 1'000; //TODO 4'000 - 12'000
+		_terrainHeightVariation = 10'000; //TODO 4'000 - 12'000
 	}
 	return _terrainHeightVariation.value();
 }

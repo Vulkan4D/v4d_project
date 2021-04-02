@@ -443,8 +443,7 @@ extern "C" {
 	}*/
 	
 	
-	double GetHeightMap(dvec3* const pos, double solidRadius, double heightVariation) {
-		dvec3& normalizedPos = *pos;
+	double GetHeightMap(const dvec3& normalizedPos, double solidRadius, double heightVariation) {
 		double res = 0;
 		
 		double biome = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5);

@@ -74,6 +74,7 @@ public:
 	virtual double GetTiltDegrees() const;
 	virtual double GetRotationPeriod() const; // Seconds
 	virtual double GetInitialRotation() const;
+	virtual double GetGravityAcceleration(double radius) const; // m/s2
 	virtual const std::vector<std::shared_ptr<Celestial>>& GetChildren() const;
 	
 	mutable std::unordered_map<std::string, std::shared_ptr<v4d::graphics::RenderableGeometryEntity>> renderableEntities {};

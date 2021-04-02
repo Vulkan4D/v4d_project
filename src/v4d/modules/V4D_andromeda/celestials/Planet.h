@@ -2,6 +2,12 @@
 #include "../Celestial.h"
 #include "../PlanetRenderer/PlanetTerrain.h"
 
+struct TerrainType {
+	double restitution = 0.4;
+	double friction = 0.8;
+	//...
+};
+
 class Planet : public Celestial {
 	using Celestial::Celestial;
 	virtual CelestialType GetType() const override {return CelestialType::Planet;}
@@ -20,5 +26,13 @@ public:
 	virtual double GetTerrainRadius() const;
 	virtual double GetAtmosphereRadius() const;
 	virtual std::shared_ptr<PlanetTerrain> GetPlanetTerrain() const;
+	
+	inline virtual double GetTerrainHeightAtPos(const glm::dvec3& normalizedPos) {
+		if (!PlanetTerrain::generatorFunction) return GetTerrainRadius();
+		return GetTerrainRadius() + PlanetTerrain::generatorFunction(normalizedPos, GetTerrainRadius(), GetTerrainHeightVariation());
+	}
+	inline virtual TerrainType GetTerrainTypeAtPos(const glm::dvec3& normalizedPos) {
+		return {}; //TODO
+	}
 
 };

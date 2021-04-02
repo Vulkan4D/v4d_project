@@ -129,6 +129,9 @@ double Celestial::GetInitialRotation() const {
 	}
 	return _initialRotation.value();
 }
+double Celestial::GetGravityAcceleration(double radius) const {
+	return (G * GetMass()) / (radius*radius);
+}
 const std::vector<std::shared_ptr<Celestial>>& Celestial::GetChildren() const {
 	if (!_children.has_value()) {
 		uint parentSeed = this->seed + SEED_CELESTIAL_CHILDREN_COMMON;
