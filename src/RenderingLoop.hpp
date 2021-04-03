@@ -56,7 +56,11 @@ namespace app {
 						ImGui::Text("Input thread : %.1f avg FPS (limited)", app::inputAvgFrameRate);
 						ImGui::Text("Game Loop thread : %.1f avg FPS (limited)", app::gameLoopAvgFrameRate);
 						ImGui::Text("Slow Loop thread : %.1f avg FPS (limited)", app::slowLoopAvgFrameRate);
-						ImGui::Text("Server Physics thread : %.1f avg FPS (limited)", app::serverPhysicsLoopAvgFrameRate);
+						if (settings->framerate_limit_physics) {
+							ImGui::Text("Server Physics thread : %.1f avg FPS (limited)", app::serverPhysicsLoopAvgFrameRate);
+						} else {
+							ImGui::Text("Server Physics thread : %.1f avg FPS (unlimited)", app::serverPhysicsLoopAvgFrameRate);
+						}
 					#endif
 					ImGui::Checkbox("Show other UI windows", &showOtherUI);
 					

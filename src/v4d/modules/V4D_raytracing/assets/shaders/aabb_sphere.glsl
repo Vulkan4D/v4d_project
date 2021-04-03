@@ -23,14 +23,14 @@ void main() {
 	const float a = dot(gl_ObjectRayDirectionEXT, gl_ObjectRayDirectionEXT);
 	const float b = dot(oc, gl_ObjectRayDirectionEXT);
 	const float c = dot(oc, oc) - sphereRadius*sphereRadius;
-	const float discriminant = b * b - a * c;
+	const float discriminantSqr = b * b - a * c;
 	
 	// If we hit the sphere
-	if (discriminant >= 0) {
-		const float discriminantSqrt = sqrt(discriminant);
+	if (discriminantSqr >= 0) {
+		const float discriminant = sqrt(discriminantSqr);
 		
-		sphereAttr.t1 = (-b - discriminantSqrt) / a;
-		sphereAttr.t2 = (-b + discriminantSqrt) / a;
+		sphereAttr.t1 = (-b - discriminant) / a;
+		sphereAttr.t2 = (-b + discriminant) / a;
 		sphereAttr.radius = sphereRadius;
 		
 		// Outside of sphere

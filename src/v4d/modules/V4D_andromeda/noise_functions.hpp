@@ -7,30 +7,45 @@ static constexpr double PI = 3.14159265359;
 static constexpr double TWOPI = 2.0 * PI;
 static constexpr double HALFPI = 0.5 * PI;
 
-static uint RandomInt(uint& seed) {
+inline static uint RandomInt(uint& seed) {
 	// LCG values from Numerical Recipes
 	return (seed = 1664525 * seed + 1013904223);
 }
 
-static uint RandomInt(uint& seed, int min, int max) {
+inline static uint RandomInt(uint& seed, int min, int max) {
 	return (RandomInt(seed) % (max - min)) + min;
 }
 
-static float RandomFloat(uint& seed) {
+inline static float RandomFloat(uint& seed) {
 	// Float version using bitmask from Numerical Recipes
 	const uint one = 0x3f800000;
 	const uint msk = 0x007fffff;
 	return glm::uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
 }
 
-static glm::vec3 RandomInUnitSphere(uint& seed) {
+inline static glm::vec3 RandomInUnitSphere(uint& seed) {
 	for (;;) {
 		glm::vec3 p = 2.0f * glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1.0f;
 		if (dot(p, p) < 1) return p;
 	}
 }
 
-static glm::vec3 _random3(const glm::vec3& pos) {
+inline static glm::vec3 RandomInUnitCube(uint& seed) {
+	return glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) * 2.0f - 1.0f;
+}
+
+template<int N = 3, typename FLOAT = float>
+inline static glm::vec<N, FLOAT> RandomInTriangle(uint& seed, glm::vec<N, FLOAT> vertex1, glm::vec<N, FLOAT> vertex2) { // vertex0 is assumed at origin
+	FLOAT u1 = RandomFloat(seed);
+	FLOAT u2 = RandomFloat(seed);
+	if (u1+u2 > 1) {
+		u1 = 1.0 - u1;
+		u2 = 1.0 - u2;
+	}
+	return vertex1*u1 + vertex2*u2;
+}
+
+inline static glm::vec3 _random3(const glm::vec3& pos) {
 	using namespace glm;
 	float j = 4096.0*sin(dot(pos,vec3(17.0, 59.4, 15.0)));
 	vec3 r;

@@ -146,10 +146,10 @@ struct Collider {
 		struct {
 			float radius;
 		} sphere;
-		struct { // triangle should be oriented with vertices 0-1 towards +Y, and 1-2 towards +X
+		struct {
 			float vertex1_y;
 			glm::vec2 vertex2;
-		} triangle;
+		} triangle; // triangle should be oriented with line 0-1 towards +Y, and 0-2 towards +X+Y. Up is +Z, triangle lays flat on Z=0.
 		struct {
 			float length;
 			float radius;
@@ -190,6 +190,17 @@ struct Collider {
 	{
 		triangle.vertex1_y = vertex1_y;
 		triangle.vertex2 = vertex2_xy;
+	}
+	Collider(glm::dvec3 vertex0, glm::dvec3 vertex1, glm::dvec3 vertex2)
+	: type(Type::TRIANGLE)
+	, position(vertex0)
+	, rotation(1)
+	{
+		const glm::dvec3 v1 = vertex1 - vertex0;
+		const glm::dvec3 v2 = vertex2 - vertex0;
+		rotation = glm::mat3_cast(glm::quatLookAt(glm::normalize(glm::cross(glm::normalize(v1), glm::normalize(v2))), glm::normalize(v1)));
+		triangle.vertex1_y = float((glm::inverse(rotation) * v1).y);
+		triangle.vertex2 = glm::inverse(rotation) * v2;
 	}
 	
 	// Cylinder

@@ -24,7 +24,7 @@ namespace app {
 							if (mod->ServerPhysicsUpdate) mod->ServerPhysicsUpdate(deltaTime);
 						});
 						
-						LIMIT_FRAMERATE_FRAMETIME(200, app::serverPhysicsLoopFrameTime)
+						if (settings->framerate_limit_physics) LIMIT_FRAMERATE_FRAMETIME(settings->framerate_limit_physics, app::secondaryFrameTime)
 					}
 				}THREAD_END(true)
 			}};

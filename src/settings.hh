@@ -25,6 +25,9 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 	double bursts_server_max_send_fps = 15;
 	double bursts_client_max_send_fps = 25;
 	
+	// Physics
+	int framerate_limit_physics = 200;
+	
 private:
 	void ReadConfig() override {
 		CONFIGFILE_READ_FROM_INI_WRITE(
@@ -43,6 +46,10 @@ private:
 			, bursts_force_tcp
 			, bursts_server_max_send_fps
 			, bursts_client_max_send_fps
+		)
+		CONFIGFILE_READ_FROM_INI_WRITE(
+			"physics"
+			, framerate_limit_physics
 		)
 		
 		LOGGER_INSTANCE->SetVerbose(log_verbose);
@@ -64,6 +71,10 @@ private:
 			, bursts_force_tcp
 			, bursts_server_max_send_fps
 			, bursts_client_max_send_fps
+		)
+		CONFIGFILE_WRITE_TO_INI(
+			"physics"
+			, framerate_limit_physics
 		)
 	}
 };
