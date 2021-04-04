@@ -13,6 +13,9 @@
 #include "TerrainGeneratorLib.h"
 #include "noise_functions.hpp"
 
+extern V4D_Mod* mainRenderModule;
+extern v4d::scene::Scene* scene;
+
 #define DOUBLE_EPSILON 0.000000001
 
 struct BroadphaseCollider {
@@ -717,6 +720,23 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						rigidbody.boundingRadius,
 						entity->GetID()
 					);
+					
+					
+					// // Debug Colliders
+					// for (auto& collider : entity->colliders) {
+					// 	switch (collider.type) {
+					// 		case Collider::Type::TRIANGLE:{
+					// 			const glm::dvec3& p0 = collider.position + entity->position;
+					// 			const glm::dvec3 p1 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{0,collider.triangle.vertex1_y,0};
+					// 			const glm::dvec3 p2 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{collider.triangle.vertex2,0};
+					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p1, 1), glm::vec4{1}, 2.0);
+					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p1, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+					// 		}break;
+					// 	}
+					// }
+					
+					
 				}
 			});
 		}

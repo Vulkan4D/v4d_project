@@ -198,10 +198,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ServerSidePlayer::Ptr player;
 					ServerSideEntity::Ptr playerEntity;
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
-						auto drone = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Glass, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-						drone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						drone->isDynamic = false;
-						drone->Activate();
+						auto glass = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Glass, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						glass->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+						glass->Add_rigidbody(10)->boundingRadius = 2;
+						glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0});
+						glass->colliders.emplace_back(glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{-2.0, 2.0, 0.0}, glm::dvec3{-2.0,-2.0, 0.0});
+						glass->isDynamic = true;
+						glass->Activate();
 					}
 				}
 				else if (key == "clear") {
@@ -373,7 +376,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Glass:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				entity->renderableGeometryEntityInstance = renderableEntity;
-				renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
+				// renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				renderableEntity->generator = [](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};
 					mat.visibility.indexOfRefraction = 1.02 * 50;

@@ -131,12 +131,10 @@ struct PlanetTerrain {
 		#pragma region States
 		std::atomic<bool> active = false;
 		std::atomic<bool> render = false;
-		std::atomic<int> computedLevel = 0;
 
 		std::atomic<bool> meshEnqueuedForGeneration = false;
 		std::atomic<bool> meshGenerating = false;
 		std::atomic<bool> meshGenerated = false;
-		std::atomic<bool> colliderActive = false;
 
 		// std::recursive_mutex stateMutex;
 		std::recursive_mutex subChunksMutex;
@@ -305,8 +303,7 @@ struct PlanetTerrain {
 			if (aabb) {
 				
 				entity->Allocate(renderingDevice, "V4D_andromeda:planet.terrain.aabb");
-				entity->rayTracingMask = 0;
-				// entity->Add_physics();
+				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN;
 				auto buffersWriteLock = entity->GetBuffersWriteLock();
 					auto aabbVertices = entity->Add_proceduralVertexAABB()->AllocateBuffersCount(renderingDevice, nbAabbPerChunk);
 					auto vertexNormals = entity->Add_meshVertexNormal()->AllocateBuffersCount(renderingDevice, nbAabbPerChunk);
@@ -521,8 +518,7 @@ struct PlanetTerrain {
 				material.visibility.textures[0] = Renderer::sbtOffsets["call:tex_rough_normal"];
 				material.visibility.texFactors[0] = 255;
 				entity->Allocate(renderingDevice, "V4D_andromeda:planet.terrain")->material = material;
-				entity->rayTracingMask = 0;
-				entity->Add_physics();
+				entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN;
 				auto buffersWriteLock = entity->GetBuffersWriteLock();
 					auto meshIndices = entity->Add_meshIndices16()->AllocateBuffersCount(renderingDevice, nbIndicesPerChunk);
 					auto vertexPositions = entity->Add_meshVertexPosition()->AllocateBuffersCount(renderingDevice, nbVerticesPerChunk);
@@ -888,10 +884,6 @@ struct PlanetTerrain {
 					#endif
 				}
 				
-				// Add physics component and assign collider mesh
-				auto physics = entity->physics.Lock();
-				if (!physics) return;
-				physics->colliderMeshIndices16 = colliderIndices;
 			}
 		
 			// #ifdef _DEBUG
@@ -899,9 +891,11 @@ struct PlanetTerrain {
 				planet->totalChunkTime += (float)timer.GetElapsedMilliseconds();
 			// #endif
 			
-			computedLevel = 1;
-			meshGenerated = true;
-			colliderActive = false;
+			entityLock.lock();
+				meshGenerated = true;
+				entity->SetWorldTransform(planet->matrix * transform);
+				entity->generator = [](auto* entity, Device*){};
+			entityLock.unlock();
 		}
 		
 		void AddSubChunks() {
@@ -983,26 +977,27 @@ struct PlanetTerrain {
 					ChunkGeneratorCancel(this, recursive);
 				}
 				render = false;
-				computedLevel = 0;
 				meshGenerated = false;
-				colliderActive = false;
 			}
 			if (entity) {
-				entity->Remove_physics();
 				entity->Destroy();
 				entity = nullptr;
 			}
-			std::scoped_lock lock(subChunksMutex);
-			if (recursive && subChunks.size() > 0) {
-				for (auto* subChunk : subChunks) {
-					subChunk->Remove(true);
-					delete subChunk;
+			if (recursive) {
+				std::scoped_lock lock(subChunksMutex);
+				if (subChunks.size() > 0) {
+					for (auto* subChunk : subChunks) {
+						subChunk->Remove(true);
+						delete subChunk;
+					}
+					subChunks.clear();
 				}
-				subChunks.clear();
 			}
 		}
 		
 		bool Process() {
+			RefreshDistanceFromCamera();
+			
 			// Angle Culling
 			double angleThreshold = -(planet->heightVariation*2 / planet->solidRadius);
 			bool chunkVisibleByAngle = glm::distance(planet->cameraPos, centerPos) < std::max(chunkSize, std::max(planet->heightVariation*2, highestAltitude - lowestAltitude))
@@ -1069,27 +1064,34 @@ struct PlanetTerrain {
 				Remove(true);
 			}
 			
-			return render || allSubchunksRendered;
+			if (render) {
+				entity->SetWorldTransform(planet->matrix * transform);
+			}
+			
+			return (render && entity->generated) || allSubchunksRendered;
 		}
 		
-		void BeforeRender() {
-			{
-				// std::scoped_lock lock(stateMutex);
-				RefreshDistanceFromCamera();
-				if (meshGenerated && entity && entity->generated) {
-					if (render) {
-						entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN;
-						entity->SetWorldTransform(planet->matrix * transform);
-					} else {
-						entity->rayTracingMask = 0;
-					}
-				}
-			}
-			std::scoped_lock lock(subChunksMutex);
-			for (auto* subChunk : subChunks) {
-				subChunk->BeforeRender();
-			}
-		}
+		// void BeforeRender() {
+		// 	{
+		// 		// std::scoped_lock lock(stateMutex);
+		// 		RefreshDistanceFromCamera();
+				
+		// 		if (meshGenerated && entity) {
+		// 			if (entity->generated) {
+		// 				if (render) {
+		// 					entity->rayTracingMask = RAY_TRACED_ENTITY_TERRAIN;
+		// 					entity->SetWorldTransform(planet->matrix * transform);
+		// 				} else {
+		// 					entity->rayTracingMask = 0;
+		// 				}
+		// 			}
+		// 		}
+		// 	}
+		// 	std::scoped_lock lock(subChunksMutex);
+		// 	for (auto* subChunk : subChunks) {
+		// 		subChunk->BeforeRender();
+		// 	}
+		// }
 		
 		void SortSubChunks() {
 			std::lock_guard lock(subChunksMutex);
@@ -1305,6 +1307,7 @@ struct PlanetTerrain {
 	}
 	
 	void Update() {
+		std::lock_guard lock(chunksMutex);
 		
 		auto terrainHeightAtThisPosition = GetHeightMap(glm::normalize(cameraPos), 0.5);
 		cameraAltitudeAboveTerrain = glm::length(cameraPos) - terrainHeightAtThisPosition;
@@ -1318,9 +1321,9 @@ struct PlanetTerrain {
 			chunk->Process();
 		}
 		
-		for (auto* chunk : chunks) {
-			chunk->BeforeRender();
-		}
+		// for (auto* chunk : chunks) {
+		// 	chunk->BeforeRender();
+		// }
 		
 	}
 	

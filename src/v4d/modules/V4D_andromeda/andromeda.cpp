@@ -25,7 +25,7 @@ GalacticPosition GetDefaultGalacticPosition() {
 }
 
 glm::dvec4 GetDefaultWorldPosition() {
-	return {/*PositionOnPlanet*/0,0,1, /*altitude*/5};
+	return {/*PositionOnPlanet*/0.4,-0.8,1, /*altitude*/5};
 }
 
 

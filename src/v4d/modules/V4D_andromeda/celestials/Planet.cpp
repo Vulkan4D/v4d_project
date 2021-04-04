@@ -3,49 +3,6 @@
 #include "../TerrainGeneratorLib.h"
 #include "../../V4D_raytracing/camera_options.hh"
 
-void RefreshChunk(PlanetTerrain::Chunk* chunk) {
-	if (chunk->active) {
-		{// subChunks
-			std::scoped_lock lock(chunk->subChunksMutex);
-			for (auto* subChunk : chunk->subChunks) {
-				RefreshChunk(subChunk);
-			}
-		}
-		if (chunk->entity) {
-			if (chunk->computedLevel == 1) {
-				auto lock = RenderableGeometryEntity::GetLock();
-				chunk->computedLevel = 2;
-				chunk->entity->generator = [](RenderableGeometryEntity*, Device*){};
-			} else if (chunk->computedLevel == 2) {
-				// if (!chunk->colliderActive) {
-				// 	if (chunk->distanceFromCamera < distanceFromChunkToGenerateCollider) {
-				// 		auto physics = chunk->entity->physics.Lock();
-				// 		if (physics) {
-				// 			physics->rigidbodyType = PhysicsInfo::RigidBodyType::STATIC;
-				// 			physics->colliderType = PhysicsInfo::ColliderType::MESH;
-				// 			physics->friction = 1;
-				// 			physics->colliderDirty = true;
-				// 			physics->physicsDirty = true;
-				// 			chunk->colliderActive = true;
-				// 		}
-				// 	}
-				// } else {
-				// 	if (chunk->distanceFromCamera > distanceFromChunkToGenerateCollider*2.0) {
-				// 		auto physics = chunk->entity->physics.Lock();
-				// 		if (physics) {
-				// 			physics->rigidbodyType = PhysicsInfo::RigidBodyType::NONE;
-				// 			physics->colliderType = PhysicsInfo::ColliderType::NONE;
-				// 			physics->physicsDirty = true;
-				// 			physics->colliderDirty = true;
-				// 			chunk->colliderActive = false;
-				// 		}
-				// 	}
-				// }
-			}
-		}
-	}
-}
-
 double Planet::GetTerrainHeightVariation() const {
 	if (!_terrainHeightVariation.has_value()) {
 		_terrainHeightVariation = 10'000; //TODO 4'000 - 12'000
@@ -123,16 +80,10 @@ void Planet::RenderUpdate(glm::dvec3 position, glm::dvec3 cameraPosition, double
 	if (sizeInScreen > sizeInScreenThreshold) {
 		auto terrain = GetPlanetTerrain();
 		
-		std::lock_guard lock(terrain->chunksMutex);
-		
 		terrain->matrix = glm::translate(glm::dmat4(1), position);
 		terrain->cameraPos = glm::inverse(terrain->matrix) * glm::dvec4(cameraPosition, 1);
 		
 		terrain->Update();
-	
-		for (auto* chunk : terrain->chunks) {
-			RefreshChunk(chunk);
-		}
 		
 	} else {
 		if (_planetTerrain) {

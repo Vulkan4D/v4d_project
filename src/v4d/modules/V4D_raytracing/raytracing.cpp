@@ -2004,6 +2004,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		V4D_MODULE_FUNC(void, DrawOverlayLine, float x1, float y1, float x2, float y2, glm::vec4 color, float lineWidth) {
 			AddOverlayLine(x1, y1, x2, y2, color, lineWidth);
 		}
+		V4D_MODULE_FUNC(void, DrawOverlayLineViewSpace, glm::dvec3 line1, glm::dvec3 line2, glm::vec4 color, float lineWidth) {
+			AddOverlayLine(line1, line2, color, lineWidth);
+		}
 		V4D_MODULE_FUNC(void, DrawOverlayText, const char* text, float x, float y, glm::vec4 color, float size) {
 			AddOverlayText(std::string(text), x, y, color, uint16_t(size));
 		}
