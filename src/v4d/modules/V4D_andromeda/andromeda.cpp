@@ -14,6 +14,9 @@
 #include "TerrainGeneratorLib.h"
 
 
+#include "utilities/scene/GltfModelLoader.h"
+v4d::scene::GltfModelLoader cake {V4D_MODULE_ASSET_PATH("V4D_galaxy4d", "resources/cake.glb")};
+
 
 GalacticPosition GetDefaultGalacticPosition() {
 	GalacticPosition defaultGalacticPosition;
@@ -448,8 +451,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		entity->isDynamic = true;
 		entity->clientIterations[client->id] = 0;
 		player->parentEntityId = playerEntityId;
-		entity->Add_rigidbody(10.0)->boundingRadius = 1;
-		entity->colliders.emplace_back(1);
+		entity->Add_rigidbody(10.0)->boundingRadius = 0.4;
+		entity->colliders.emplace_back(0.4);
 		
 		// Set player position
 		if (defaultPosition.IsCelestial()) {
@@ -571,8 +574,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(entityUniqueID); entity) {
 					auto renderableEntity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 					entity->renderableGeometryEntityInstance = renderableEntity;
-					// renderableEntity->generator = [](auto* renderableEntity, auto* device){};
-					// renderableEntity->generator = cake;
+					renderableEntity->generator = [](auto* renderableEntity, auto* device){};
+					renderableEntity->generator = cake;
 				}
 			}break;
 		}

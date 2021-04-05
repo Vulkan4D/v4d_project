@@ -22,8 +22,8 @@ std::recursive_mutex serverActionQueueMutex;
 std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serverActionQueuePerClient {};
 
 inline const size_t BURST_SYNC_POSITIONS_PLUS_ROTATIONS_GROUP_SIZE = 14;
-inline const size_t BURST_SYNC_POSITIONS_GROUP_SIZE = 16; // max 28;
-inline const size_t BURST_SYNC_ROTATIONS_GROUP_SIZE = 16; // max 24;
+inline const size_t BURST_SYNC_POSITIONS_GROUP_SIZE = 28; // max 28;
+inline const size_t BURST_SYNC_ROTATIONS_GROUP_SIZE = 24; // max 24;
 inline const size_t BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE = 32;
 inline const double BURST_SYNC_MAX_DISTANCE = 10'000; // 10 km
 
@@ -220,43 +220,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			});
 			
 			
-			{// Sync positions in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
+			{// Sync positions+rotations in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
 				int frameDivider = 1;
 				size_t start = 0;
 				size_t end = 0;
 				while (nearbyEntities.size() > end) {
 					start = end;
-					end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_GROUP_SIZE * frameDivider);
+					end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_PLUS_ROTATIONS_GROUP_SIZE * frameDivider);
 					
 					stream->Begin();
-						*stream << SYNC_GROUPED_ENTITIES_POSITIONS;
+						*stream << SYNC_GROUPED_ENTITIES_POSITIONS_ROTATIONS;
 						
 						*stream << glm::dvec3(basePosition);
 						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
 							*stream << nearbyEntities[n].id;
 							*stream << nearbyEntities[n].position;
-						}
-						*stream << (int32_t)-1;
-						
-					stream->End();
-					
-					frameDivider *= 2;
-				}
-			}
-			
-			{// Sync rotations in groups of base N, half as often as positions. First group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, next group of N*8 is synced every 8 frames, and so on...
-				int frameDivider = 2;
-				size_t start = 0;
-				size_t end = 0;
-				while (nearbyEntities.size() > end) {
-					start = end;
-					end = std::min(nearbyEntities.size(), start + BURST_SYNC_ROTATIONS_GROUP_SIZE * frameDivider);
-					
-					stream->Begin();
-						*stream << SYNC_GROUPED_ENTITIES_ROTATIONS;
-						
-						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
-							*stream << nearbyEntities[n].id;
 							*stream << nearbyEntities[n].orientation;
 						}
 						*stream << (int32_t)-1;
@@ -266,6 +244,54 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					frameDivider *= 2;
 				}
 			}
+			
+			
+			// {// Sync positions in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
+			// 	int frameDivider = 1;
+			// 	size_t start = 0;
+			// 	size_t end = 0;
+			// 	while (nearbyEntities.size() > end) {
+			// 		start = end;
+			// 		end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_GROUP_SIZE * frameDivider);
+					
+			// 		stream->Begin();
+			// 			*stream << SYNC_GROUPED_ENTITIES_POSITIONS;
+						
+			// 			*stream << glm::dvec3(basePosition);
+			// 			for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
+			// 				*stream << nearbyEntities[n].id;
+			// 				*stream << nearbyEntities[n].position;
+			// 			}
+			// 			*stream << (int32_t)-1;
+						
+			// 		stream->End();
+					
+			// 		frameDivider *= 2;
+			// 	}
+			// }
+			
+			// {// Sync rotations in groups of base N, half as often as positions. First group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, next group of N*8 is synced every 8 frames, and so on...
+			// 	int frameDivider = 2;
+			// 	size_t start = 0;
+			// 	size_t end = 0;
+			// 	while (nearbyEntities.size() > end) {
+			// 		start = end;
+			// 		end = std::min(nearbyEntities.size(), start + BURST_SYNC_ROTATIONS_GROUP_SIZE * frameDivider);
+					
+			// 		stream->Begin();
+			// 			*stream << SYNC_GROUPED_ENTITIES_ROTATIONS;
+						
+			// 			for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
+			// 				*stream << nearbyEntities[n].id;
+			// 				*stream << nearbyEntities[n].orientation;
+			// 			}
+			// 			*stream << (int32_t)-1;
+						
+			// 		stream->End();
+					
+			// 		frameDivider *= 2;
+			// 	}
+			// }
 			
 		
 		// ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){
