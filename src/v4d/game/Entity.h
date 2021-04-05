@@ -9,10 +9,10 @@
 
 struct Rigidbody {
 	// Initial information
-	double mass;
-	glm::dmat3 inertiaMatrix;
-	double restitution = 0.7;
-	double friction = 0.7;
+	float mass;
+	glm::vec3 localInertiaVector;
+	float restitution = 0.7f;
+	float friction = 0.7f;
 	
 	// Broadphase Collision detection
 	double boundingRadius = 0;
@@ -25,7 +25,7 @@ struct Rigidbody {
 	glm::dvec3 position {0,0,0};
 	
 	// Angular physics
-	glm::dmat3 invInertiaMatrix;
+	glm::dmat3 invInertiaTensorWorld;
 	glm::dvec3 torque {0,0,0};
 	glm::dvec3 angularAcceleration {0,0,0};
 	glm::dvec3 angularVelocity {0,0,0};
@@ -34,81 +34,98 @@ struct Rigidbody {
 	bool initialized = false;
 	
 	#pragma region Constructor
-	Rigidbody(double mass, glm::dmat3 inertiaMatrix = glm::dmat3{1})
+	Rigidbody(float mass, glm::vec3 localInertiaVector = glm::vec3{1})
 		: mass(mass>0? mass:0)
-		, inertiaMatrix(inertiaMatrix)
+		, localInertiaVector(localInertiaVector)
 		, invMass(mass>0? (1.0/mass) : 0.0)
-		, invInertiaMatrix(glm::inverse(inertiaMatrix))
-	{}
+	{
+		ComputeInvInertiaTensorWorld();
+	}
 	#pragma endregion
 	
+	void ComputeInvInertiaTensorWorld() {
+		glm::dvec3 invInertiaVector = localInertiaVector;
+			if (invInertiaVector.x != 0) invInertiaVector.x = 1.0 / invInertiaVector.x;
+			if (invInertiaVector.y != 0) invInertiaVector.y = 1.0 / invInertiaVector.y;
+			if (invInertiaVector.z != 0) invInertiaVector.z = 1.0 / invInertiaVector.z;
+		
+		glm::dmat3 rotationMatrix = glm::mat3_cast(orientation);
+		glm::dmat3 invInertiaMatrix = glm::transpose(rotationMatrix);
+			invInertiaMatrix[0].x *= invInertiaVector.x;
+			invInertiaMatrix[0].y *= invInertiaVector.y;
+			invInertiaMatrix[0].z *= invInertiaVector.z;
+			invInertiaMatrix[1].x *= invInertiaVector.x;
+			invInertiaMatrix[1].y *= invInertiaVector.y;
+			invInertiaMatrix[1].z *= invInertiaVector.z;
+			invInertiaMatrix[2].x *= invInertiaVector.x;
+			invInertiaMatrix[2].y *= invInertiaVector.y;
+			invInertiaMatrix[2].z *= invInertiaVector.z;
+		
+		invInertiaTensorWorld = invInertiaMatrix * rotationMatrix;
+	}
+	
 	#pragma region Inertia matrix functions
-	struct Inertia {double mass; glm::dmat3 inertiaMatrix;};
-	Rigidbody(Inertia&& inertia) : Rigidbody(inertia.mass, inertia.inertiaMatrix) {}
+	struct Inertia {float mass; glm::vec3 localInertiaVector;};
+	Rigidbody(Inertia&& inertia) : Rigidbody(inertia.mass, inertia.localInertiaVector) {}
 	struct SphereInertia : Inertia {
 		// https://scienceworld.wolfram.com/physics/MomentofInertiaSphere.html
-		SphereInertia(double mass, double radius) {
-			const double I = 2.0/5 * mass * radius*radius;
+		SphereInertia(float mass, float radius) {
+			const float I = 2.0f/5 * mass * radius*radius;
 			this->mass = mass;
-			this->inertiaMatrix = glm::dmat3{0};
-			this->inertiaMatrix[0][0] = I;
-			this->inertiaMatrix[1][1] = I;
-			this->inertiaMatrix[2][2] = I;
+			this->localInertiaVector.x = I;
+			this->localInertiaVector.y = I;
+			this->localInertiaVector.z = I;
 		}
 	};
 	struct BoxInertia : Inertia {
 		// https://en.wikipedia.org/wiki/List_of_moments_of_inertia
-		BoxInertia(double mass, double sizeX, double sizeY, double sizeZ) {
-			const double Im = mass / 12;
-			const double xx = sizeX*sizeX;
-			const double yy = sizeY*sizeY;
-			const double zz = sizeZ*sizeZ;
+		BoxInertia(float mass, float sizeX, float sizeY, float sizeZ) {
+			const float Im = mass / 12;
+			const float xx = sizeX*sizeX;
+			const float yy = sizeY*sizeY;
+			const float zz = sizeZ*sizeZ;
 			this->mass = mass;
-			this->inertiaMatrix = glm::dmat3{0};
-			this->inertiaMatrix[0][0] = Im * (yy+zz);
-			this->inertiaMatrix[1][1] = Im * (xx+zz);
-			this->inertiaMatrix[2][2] = Im * (xx+yy);
+			this->localInertiaVector.x = Im * (yy+zz);
+			this->localInertiaVector.y = Im * (xx+zz);
+			this->localInertiaVector.z = Im * (xx+yy);
 		}
 	};
 	struct ConeInertia : Inertia {
 		// https://scienceworld.wolfram.com/physics/MomentofInertiaCone.html
-		ConeInertia(double mass, double radiusXY, double heightZ) {
-			const double mr2 = mass * radiusXY*radiusXY;
-			const double mh2 = mass * heightZ*heightZ;
-			const double Ibase = 3.0/20 * mr2 + mh2/10;
-			const double Iheight = 3.0/10 * mr2;
+		ConeInertia(float mass, float radiusXY, float heightZ) {
+			const float mr2 = mass * radiusXY*radiusXY;
+			const float mh2 = mass * heightZ*heightZ;
+			const float Ibase = 3.0f/20 * mr2 + mh2/10;
+			const float Iheight = 3.0f/10 * mr2;
 			this->mass = mass;
-			this->inertiaMatrix = glm::dmat3{0};
-			this->inertiaMatrix[0][0] = Ibase;
-			this->inertiaMatrix[1][1] = Ibase;
-			this->inertiaMatrix[2][2] = Iheight;
+			this->localInertiaVector.x = Ibase;
+			this->localInertiaVector.y = Ibase;
+			this->localInertiaVector.z = Iheight;
 		}
 	};
 	struct CylinderInertia : Inertia {
 		// https://scienceworld.wolfram.com/physics/MomentofInertiaCylinder.html
-		CylinderInertia(double mass, double radiusXY, double heightZ) {
-			const double mr2 = mass * radiusXY*radiusXY;
-			const double mh2 = mass * heightZ*heightZ;
-			const double Ibase = mr2/4 + mh2/12;
-			const double Iheight = mr2/2;
+		CylinderInertia(float mass, float radiusXY, float heightZ) {
+			const float mr2 = mass * radiusXY*radiusXY;
+			const float mh2 = mass * heightZ*heightZ;
+			const float Ibase = mr2/4 + mh2/12;
+			const float Iheight = mr2/2;
 			this->mass = mass;
-			this->inertiaMatrix = glm::dmat3{0};
-			this->inertiaMatrix[0][0] = Ibase;
-			this->inertiaMatrix[1][1] = Ibase;
-			this->inertiaMatrix[2][2] = Iheight;
+			this->localInertiaVector.x = Ibase;
+			this->localInertiaVector.y = Ibase;
+			this->localInertiaVector.z = Iheight;
 		}
 	};
 	struct CylinderShellInertia : Inertia {
 		// https://en.wikipedia.org/wiki/List_of_moments_of_inertia
-		CylinderShellInertia(double mass, double innerRadiusXY, double outerRadiusXY, double heightZ) {
-			const double rr = innerRadiusXY*innerRadiusXY + outerRadiusXY*outerRadiusXY;
-			const double Ibase = mass/12 * (rr*3 + heightZ*heightZ);
-			const double Iheight = mass/2 * rr;
+		CylinderShellInertia(float mass, float innerRadiusXY, float outerRadiusXY, float heightZ) {
+			const float rr = innerRadiusXY*innerRadiusXY + outerRadiusXY*outerRadiusXY;
+			const float Ibase = mass/12 * (rr*3 + heightZ*heightZ);
+			const float Iheight = mass/2 * rr;
 			this->mass = mass;
-			this->inertiaMatrix = glm::dmat3{0};
-			this->inertiaMatrix[0][0] = Ibase;
-			this->inertiaMatrix[1][1] = Ibase;
-			this->inertiaMatrix[2][2] = Iheight;
+			this->localInertiaVector.x = Ibase;
+			this->localInertiaVector.y = Ibase;
+			this->localInertiaVector.z = Iheight;
 		}
 	};
 	#pragma endregion
@@ -126,7 +143,7 @@ struct Rigidbody {
 	void ApplyImpulse(glm::dvec3 impulse, glm::dvec3 point = {0,0,0}) {
 		this->linearVelocity += this->invMass * impulse;
 		if (point.x != 0 || point.y != 0 || point.z != 0) {
-			this->angularVelocity += this->invInertiaMatrix * glm::cross(point, impulse);
+			this->angularVelocity += this->invInertiaTensorWorld * glm::cross(point, impulse);
 		}
 	}
 	#pragma endregion

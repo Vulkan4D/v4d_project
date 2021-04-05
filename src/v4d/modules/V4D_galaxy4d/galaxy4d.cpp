@@ -200,9 +200,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto glass = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Glass, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						glass->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						glass->Add_rigidbody(10)->boundingRadius = 2;
+						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.01))->boundingRadius = 2;
 						glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0});
 						glass->colliders.emplace_back(glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{-2.0, 2.0, 0.0}, glm::dvec3{-2.0,-2.0, 0.0});
+						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, 0.2);
+						// glass->colliders.emplace_back(glm::dvec3{+2.0,-2.0, 0.0}, 0.2);
+						// glass->colliders.emplace_back(glm::dvec3{+2.0,+2.0, 0.0}, 0.2);
+						// glass->colliders.emplace_back(glm::dvec3{-2.0,+2.0, 0.0}, 0.2);
 						glass->isDynamic = true;
 						glass->Activate();
 					}

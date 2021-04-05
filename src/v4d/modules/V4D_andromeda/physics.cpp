@@ -325,19 +325,18 @@ bool TerrainTriangleIntersect(TerrainCollision& collision, const Collider& trian
 		goto FoundIntersection;
 	}
 	
-	{// Add a Random point for good measure...
-		const glm::dvec3 pRandom = triangle.position + triangle.rotation * glm::dvec3(RandomInTriangle(randomSeed, glm::vec2{0,triangle.triangle.vertex1_y}, triangle.triangle.vertex2), 0);
-		const glm::dvec3 normalizedPosRandom = glm::normalize(pRandom);
-		const double terrainHeightRandom = planet->GetTerrainHeightAtPos(normalizedPosRandom);
-		const double altitudeAboveTerrainRandom = glm::length(pRandom) - terrainHeightRandom;
-		
-		if (altitudeAboveTerrainRandom < 0) {
-			collision.penetration = float(-altitudeAboveTerrainRandom);
-			collision.contactTerrain = pRandom;
-			collision.contactB = pRandom - p0;
-			goto FoundIntersection;
-		}
-	}
+	// for (int i = 0; i < 4; ++i) {// Add a few Random points for good measure... //TODO maybe have a logic that makes it depend on the size of the triangles
+	// 	const glm::dvec3 pRandom = triangle.position + triangle.rotation * glm::dvec3(RandomInTriangle(randomSeed, glm::vec2{0,triangle.triangle.vertex1_y}, triangle.triangle.vertex2), 0);
+	// 	const glm::dvec3 normalizedPosRandom = glm::normalize(pRandom);
+	// 	const double terrainHeightRandom = planet->GetTerrainHeightAtPos(normalizedPosRandom);
+	// 	const double altitudeAboveTerrainRandom = glm::length(pRandom) - terrainHeightRandom;
+	// 	if (altitudeAboveTerrainRandom < 0) {
+	// 		collision.penetration = float(-altitudeAboveTerrainRandom);
+	// 		collision.contactTerrain = pRandom;
+	// 		collision.contactB = pRandom - p0;
+	// 		goto FoundIntersection;
+	// 	}
+	// }
 	
 	return false;
 	
@@ -397,8 +396,8 @@ void RespondToCollision(ServerSideEntity::Ptr& entityA, ServerSideEntity::Ptr& e
 			const glm::dvec3 totalVelocityA = rbA->linearVelocity + angularVelocityA;
 			const glm::dvec3 totalVelocityB = rbB->linearVelocity + angularVelocityB;
 			const glm::dvec3 contactVelocity = totalVelocityB - totalVelocityA;
-			const glm::dvec3 inertiaA = glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, normal), contactA);
-			const glm::dvec3 inertiaB = glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, normal), contactB);
+			const glm::dvec3 inertiaA = glm::cross(rbA->invInertiaTensorWorld * glm::cross(contactA, normal), contactA);
+			const glm::dvec3 inertiaB = glm::cross(rbB->invInertiaTensorWorld * glm::cross(contactB, normal), contactB);
 			contactSpeed = -glm::dot(contactVelocity, normal);
 			const double J = contactSpeed * (rbA->restitution * rbB->restitution + 1.0) / (rbA->invMass + rbB->invMass + glm::dot(inertiaA + inertiaB, normal));
 			const glm::dvec3 impulse = J * normal;
@@ -412,7 +411,7 @@ void RespondToCollision(ServerSideEntity::Ptr& entityA, ServerSideEntity::Ptr& e
 			const double tangentLength = glm::length(tangent);
 			if (tangentLength > 1e-6) {
 				tangent /= tangentLength;
-				const double frictionalMass = (rbA->invMass + rbB->invMass) + glm::dot(tangent, glm::cross(rbA->invInertiaMatrix * glm::cross(contactA, tangent), contactA) + glm::cross(rbB->invInertiaMatrix * glm::cross(contactB, tangent), contactB));
+				const double frictionalMass = (rbA->invMass + rbB->invMass) + glm::dot(tangent, glm::cross(rbA->invInertiaTensorWorld * glm::cross(contactA, tangent), contactA) + glm::cross(rbB->invInertiaTensorWorld * glm::cross(contactB, tangent), contactB));
 				if (frictionalMass > 0) {
 					const double frictionCoeficient = rbA->friction * rbB->friction;
 					const glm::dvec3 frictionImpulse = tangent * double(-glm::dot(contactVelocity, tangent) * frictionCoeficient / frictionalMass);
@@ -451,7 +450,7 @@ void RespondToCollisionWithTerrain(ServerSideEntity::Ptr& entity, TerrainCollisi
 		const glm::dvec3 angularVelocityB = glm::cross(rb->angularVelocity, contactB);
 		const glm::dvec3 totalVelocityB = rb->linearVelocity + angularVelocityB;
 		const glm::dvec3 contactVelocity = totalVelocityB;
-		const glm::dvec3 inertiaB = glm::cross(rb->invInertiaMatrix * glm::cross(contactB, normal), contactB);
+		const glm::dvec3 inertiaB = glm::cross(rb->invInertiaTensorWorld * glm::cross(contactB, normal), contactB);
 		contactSpeed = -glm::dot(contactVelocity, normal);
 		const double J = contactSpeed * (collision.terrainType.restitution * rb->restitution + 1.0) / (rb->invMass + glm::dot(inertiaB, normal));
 		const glm::dvec3 impulse = J * normal;
@@ -464,7 +463,7 @@ void RespondToCollisionWithTerrain(ServerSideEntity::Ptr& entity, TerrainCollisi
 		const double tangentLength = glm::length(tangent);
 		if (tangentLength > 1e-6) {
 			tangent /= tangentLength;
-			const double frictionalMass = (rb->invMass) + glm::dot(tangent, glm::cross(rb->invInertiaMatrix * glm::cross(contactB, tangent), contactB));
+			const double frictionalMass = (rb->invMass) + glm::dot(tangent, glm::cross(rb->invInertiaTensorWorld * glm::cross(contactB, tangent), contactB));
 			if (frictionalMass > 0) {
 				const double frictionCoeficient = collision.terrainType.friction * rb->friction;
 				const glm::dvec3 frictionImpulse = tangent * double(-glm::dot(contactVelocity, tangent) * frictionCoeficient / frictionalMass);
@@ -497,14 +496,14 @@ void SolveCollisionBetweenTwoRigidbodies(Collision& collision) {
 					if (entityA->colliders.size() > 0) {
 						a = entityA->colliders[aIndex];
 						// Transform colliders position and rotation to World space
-						a.position += entityA->position;
+						a.position = entityA->position + glm::mat3_cast(entityA->orientation) * a.position;
 						a.rotation = glm::mat3_cast(entityA->orientation) * a.rotation;
 					}
 					do {
 						if (entityB->colliders.size() > 0) {
 							b = entityB->colliders[bIndex];
 							// Transform colliders position and rotation to World space
-							b.position += entityB->position;
+							b.position = entityB->position + glm::mat3_cast(entityB->orientation) * b.position;
 							b.rotation = glm::mat3_cast(entityB->orientation) * b.rotation;
 						}
 						
@@ -645,7 +644,6 @@ void SolveCollisionBetweenTwoRigidbodies(Collision& collision) {
 							if (entityB->colliders.size() > 0) collision.contactB += entityB->colliders[bIndex].position;
 							// Respond to the colision
 							RespondToCollision(entityA, entityB, collision);
-							return;
 							
 					} while(++aIndex < entityA->colliders.size());
 				} while(++bIndex < entityB->colliders.size());
@@ -663,7 +661,7 @@ void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, Planet* planet) {
 	if (entity->colliders.size() > 0) {
 		for (Collider collider : entity->colliders) {
 			// Transform colliders position and rotation to World space
-			collider.position += entity->position;
+			collider.position = entity->position + glm::mat3_cast(entity->orientation) * collider.position;
 			collider.rotation = glm::mat3_cast(entity->orientation) * collider.rotation;
 			
 			switch (collider.type) {
@@ -697,7 +695,7 @@ void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, Planet* planet) {
 				collision.contactB += collider.position - entity->position;
 				// Respond to the colision
 				RespondToCollisionWithTerrain(entity, collision);
-				return;
+				
 		}
 	} else {
 		RespondToCollisionWithTerrain(entity, collision);
@@ -715,7 +713,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (entity->active) {
 					rigidbody.position = entity->position;
 					rigidbody.orientation = entity->orientation;
-					rigidbody.initialized = true;
+					if (!rigidbody.initialized) {
+						rigidbody.ComputeInvInertiaTensorWorld();
+						rigidbody.initialized = true;
+					}
 					
 					if (rigidbody.boundingRadius > 0) {
 						
@@ -730,12 +731,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						// for (auto& collider : entity->colliders) {
 						// 	switch (collider.type) {
 						// 		case Collider::Type::TRIANGLE:{
-						// 			const glm::dvec3& p0 = collider.position + entity->position;
-						// 			const glm::dvec3 p1 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{0,collider.triangle.vertex1_y,0};
-						// 			const glm::dvec3 p2 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{collider.triangle.vertex2,0};
-						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p1, 1), glm::vec4{1}, 2.0);
-						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
-						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p1, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+						// 			const glm::dvec3& p0 = collider.position;
+						// 			const glm::dvec3 p1 = p0 + collider.rotation * glm::dvec3{0,collider.triangle.vertex1_y,0};
+						// 			const glm::dvec3 p2 = p0 + collider.rotation * glm::dvec3{collider.triangle.vertex2,0};
+						// 			const glm::dmat4 modelMatrix = glm::translate(glm::dmat4(1), entity->position) * glm::mat4_cast(entity->orientation);
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * modelMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * modelMatrix * glm::dvec4(p1, 1), glm::vec4{1}, 2.0);
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * modelMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * modelMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * modelMatrix * glm::dvec4(p1, 1), scene->camera.viewMatrix * modelMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
 						// 		}break;
 						// 	}
 						// }
@@ -819,9 +821,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
 					rigidbody.position += rigidbody.linearVelocity * deltaTime;
 					// Angular integration
-					rigidbody.angularAcceleration += rigidbody.invInertiaMatrix * rigidbody.torque;
+					rigidbody.angularAcceleration += rigidbody.invInertiaTensorWorld * rigidbody.torque;
 					rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
 					rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
+					rigidbody.ComputeInvInertiaTensorWorld();
 				}
 			});
 		}
