@@ -711,32 +711,37 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
 		
 		{// Prepare data
-			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
-				rigidbody.position = entity->position;
-				rigidbody.orientation = entity->orientation;
-				if (rigidbody.boundingRadius > 0) {
-					cachedBroadphaseColliders[entity->referenceFrame].emplace_back(
-						rigidbody.position,
-						rigidbody.boundingRadius,
-						entity->GetID()
-					);
+			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody) {
+				if (entity->active) {
+					rigidbody.position = entity->position;
+					rigidbody.orientation = entity->orientation;
+					rigidbody.initialized = true;
 					
-					
-					// // Debug Colliders
-					// for (auto& collider : entity->colliders) {
-					// 	switch (collider.type) {
-					// 		case Collider::Type::TRIANGLE:{
-					// 			const glm::dvec3& p0 = collider.position + entity->position;
-					// 			const glm::dvec3 p1 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{0,collider.triangle.vertex1_y,0};
-					// 			const glm::dvec3 p2 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{collider.triangle.vertex2,0};
-					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p1, 1), glm::vec4{1}, 2.0);
-					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
-					// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p1, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
-					// 		}break;
-					// 	}
-					// }
-					
-					
+					if (rigidbody.boundingRadius > 0) {
+						
+						cachedBroadphaseColliders[entity->referenceFrame].emplace_back(
+							rigidbody.position,
+							rigidbody.boundingRadius,
+							entity->GetID()
+						);
+						
+						
+						// // Debug Colliders
+						// for (auto& collider : entity->colliders) {
+						// 	switch (collider.type) {
+						// 		case Collider::Type::TRIANGLE:{
+						// 			const glm::dvec3& p0 = collider.position + entity->position;
+						// 			const glm::dvec3 p1 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{0,collider.triangle.vertex1_y,0};
+						// 			const glm::dvec3 p2 = p0 + (glm::mat3_cast(entity->orientation) * collider.rotation) * glm::dvec3{collider.triangle.vertex2,0};
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p1, 1), glm::vec4{1}, 2.0);
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p0, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+						// 			mainRenderModule->DrawOverlayLineViewSpace(scene->camera.viewMatrix * glm::dvec4(p1, 1), scene->camera.viewMatrix * glm::dvec4(p2, 1), glm::vec4{1}, 2.0);
+						// 		}break;
+						// 	}
+						// }
+						
+						
+					}
 				}
 			});
 		}
@@ -808,26 +813,30 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		{// Integrate motion
 			ServerSideEntity::rigidbodyComponents.ForEach([deltaTime](Entity::Id id, Rigidbody& rigidbody){
-				// Linear integration
-				rigidbody.linearAcceleration += rigidbody.invMass * rigidbody.force;
-				rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
-				rigidbody.position += rigidbody.linearVelocity * deltaTime;
-				// Angular integration
-				rigidbody.angularAcceleration += rigidbody.invInertiaMatrix * rigidbody.torque;
-				rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
-				rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
+				if (rigidbody.initialized) {
+					// Linear integration
+					rigidbody.linearAcceleration += rigidbody.invMass * rigidbody.force;
+					rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
+					rigidbody.position += rigidbody.linearVelocity * deltaTime;
+					// Angular integration
+					rigidbody.angularAcceleration += rigidbody.invInertiaMatrix * rigidbody.torque;
+					rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
+					rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
+				}
 			});
 		}
 		
 		{// Update entity
 			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody){
-				entity->position = rigidbody.position;
-				entity->orientation = rigidbody.orientation;
-				// Clear forces
-				rigidbody.force = {0,0,0};
-				rigidbody.linearAcceleration = {0,0,0};
-				rigidbody.torque = {0,0,0};
-				rigidbody.angularAcceleration = {0,0,0};
+				if (rigidbody.initialized) {
+					entity->position = rigidbody.position;
+					entity->orientation = rigidbody.orientation;
+					// Clear forces
+					rigidbody.force = {0,0,0};
+					rigidbody.linearAcceleration = {0,0,0};
+					rigidbody.torque = {0,0,0};
+					rigidbody.angularAcceleration = {0,0,0};
+				}
 			});
 		}
 		

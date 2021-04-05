@@ -129,6 +129,8 @@ namespace app {
 								}
 							}
 							
+							uint64_t frame = 0;
+							
 							while(burstSocket->IsConnected()) {
 								THREAD_TICK
 								
@@ -136,7 +138,7 @@ namespace app {
 								{std::lock_guard lock(BurstCache::burstMutex);
 									currentBurstSocket = (BurstCache::burstClientSocketTypes[client->id] == v4d::io::UDP ? burstSocket : socket);
 								}
-								V4D_Mod::ForEachSortedModule([client, currentBurstSocket](auto* mod){
+								V4D_Mod::ForEachSortedModule([client, currentBurstSocket, frame](auto* mod){
 									ModuleID moduleID(mod->ModuleName());
 									if (mod->ServerSendBursts) {
 										currentBurstSocket->LockWrite();
@@ -159,14 +161,16 @@ namespace app {
 											DEBUG_ASSERT_WARN(currentBurstSocket->GetWriteBufferSize() <= APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE, "V4D_Mod::ServerSendBursts for module " << mod->ModuleName() << " stream size was " << currentBurstSocket->GetWriteBufferSize() << " bytes, but should be at most " << APP_NETWORKING_BURST_BUFFER_MAXIMUM_SIZE << " bytes")
 											currentBurstSocket->Flush();
 										};
-										mod->ServerSendBursts(currentBurstSocket, client);
+										mod->ServerSendBursts(currentBurstSocket, client, frame);
 										currentBurstSocket->UnlockWrite();
 									}
 								});
 								
+								++frame;
+								
 								LIMIT_FRAMERATE(std::min(app::settings->bursts_server_max_send_fps, (double)APP_NETWORKING_SERVER_SEND_MAX_BURST_STREAMS_PER_SECOND))
 							}
-								
+							
 							LOG_ERROR("Server SendBursts thread STOPPED for client " << client->id)
 							
 						}THREAD_END(app::isClient)

@@ -11,6 +11,8 @@ namespace networking::action {
 
 	// Burst streams only (TCP & UDP)
 	const Action SYNC_ENTITY_TRANSFORM = 16;
-	const Action SYNC_ENTITIES_TRANSFORM = 17;
+	const Action SYNC_GROUPED_ENTITIES_POSITIONS_ROTATIONS = 17;
+	const Action SYNC_GROUPED_ENTITIES_POSITIONS = 18;
+	const Action SYNC_GROUPED_ENTITIES_ROTATIONS = 19;
 
 }

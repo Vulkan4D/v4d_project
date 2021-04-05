@@ -31,6 +31,8 @@ struct Rigidbody {
 	glm::dvec3 angularVelocity {0,0,0};
 	glm::dquat orientation {1,0,0,0};
 	
+	bool initialized = false;
+	
 	#pragma region Constructor
 	Rigidbody(double mass, glm::dmat3 inertiaMatrix = glm::dmat3{1})
 		: mass(mass>0? mass:0)
@@ -343,6 +345,10 @@ struct V4DGAME ServerSideEntity : Entity {
 		active = true;
 		Iterate();
 	}
+	void Deactivate() {
+		active = false;
+		Iterate();
+	}
 };
 
 struct V4DGAME ClientSideEntity : Entity {
@@ -357,10 +363,15 @@ struct V4DGAME ClientSideEntity : Entity {
 	
 	// Temporary
 		v4d::graphics::RenderableGeometryEntity::WeakPtr renderableGeometryEntityInstance;
-		void UpdateRenderable() {
+		inline void UpdateRenderable() {
 			if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
 				renderableEntity->parentId = referenceFrame;
 				renderableEntity->SetLocalTransform(glm::translate(glm::dmat4(1), position) * glm::mat4_cast(orientation));
+			}
+		}
+		inline void DestroyRenderable() {
+			if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
+				renderableEntity->Destroy();
 			}
 		}
 	

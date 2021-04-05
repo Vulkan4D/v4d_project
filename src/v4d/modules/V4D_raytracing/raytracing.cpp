@@ -1067,22 +1067,22 @@ void ConfigureRasterShaders() {
 			}
 		}
 		
-		{// Catch Collisions (captured during the previous frame)
-			if (collisionLineCount > 0) {
-				for (size_t i = 0; i < collisionLineCount; ++i) {
-					auto& collision = collisionBuffer[i];
-					auto entityA = RenderableGeometryEntity::Get(collision.collisionInstance >> 8);
-					auto entityB = RenderableGeometryEntity::Get(collision.objectInstanceB >> 8);
-					if (entityA && entityB && collision.objectGeometryA != -1 && collision.objectGeometryB != -1) {
-						if (auto physicsA = entityA->physics.Lock(); physicsA) {
-							//TODO catch collision events here
-							physicsA->collisionTest.collisions.push_back(collision);
-						}
-					}
-				}
-			}
-			collisionLineCount = 0;
-		}
+		// {// Catch Collisions (captured during the previous frame)
+		// 	if (collisionLineCount > 0) {
+		// 		for (size_t i = 0; i < collisionLineCount; ++i) {
+		// 			auto& collision = collisionBuffer[i];
+		// 			auto entityA = RenderableGeometryEntity::Get(collision.collisionInstance >> 8);
+		// 			auto entityB = RenderableGeometryEntity::Get(collision.objectInstanceB >> 8);
+		// 			if (entityA && entityB && collision.objectGeometryA != -1 && collision.objectGeometryB != -1) {
+		// 				if (auto physicsA = entityA->physics.Lock(); physicsA) {
+		// 					//TODO catch collision events here
+		// 					physicsA->collisionTest.collisions.push_back(collision);
+		// 				}
+		// 			}
+		// 		}
+		// 	}
+		// 	collisionLineCount = 0;
+		// }
 		
 		// Cleanup/Reset stuff
 		RenderableGeometryEntity::CleanupOnThisThread();
@@ -1119,145 +1119,145 @@ void ConfigureRasterShaders() {
 				if (nbRayTracingInstances < RAY_TRACING_TLAS_MAX_INSTANCES) {
 					glm::dmat4 worldTransform = entity->GetWorldTransform();
 					
-					// Physics/Collisions
-					if (auto physics = entity->physics.Lock(); physics && physics->mass > 0.0 && physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
+					// // Physics/Collisions
+					// if (auto physics = entity->physics.Lock(); physics && physics->mass > 0.0 && physics->rigidbodyType == v4d::scene::PhysicsInfo::RigidBodyType::DYNAMIC) {
 						
-						{// Apply collision/transform from previous frame's collision test
-							if (physics->collisionTest.collisions.size() > 0) {
-								// Collision!!!
+					// 	{// Apply collision/transform from previous frame's collision test
+					// 		if (physics->collisionTest.collisions.size() > 0) {
+					// 			// Collision!!!
 								
-								// Get avg hit as collision point
-								int collisionCount = 0;
-								glm::dvec3 hitNormal {0};
-								glm::dvec3 offset {0};
-								for (auto& collision : physics->collisionTest.collisions) {
-									hitNormal += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.normalB)));
-									offset += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.direction))) * double(collision.normalB.w);
-									++collisionCount;
-								}
-								hitNormal = glm::normalize(hitNormal/double(collisionCount));
-								offset /= double(collisionCount);
+					// 			// Get avg hit as collision point
+					// 			int collisionCount = 0;
+					// 			glm::dvec3 hitNormal {0};
+					// 			glm::dvec3 offset {0};
+					// 			for (auto& collision : physics->collisionTest.collisions) {
+					// 				hitNormal += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.normalB)));
+					// 				offset += glm::normalize(glm::transpose(glm::dmat3(scene->camera.historyViewMatrix)) * glm::normalize(glm::dvec3(collision.direction))) * double(collision.normalB.w);
+					// 				++collisionCount;
+					// 			}
+					// 			hitNormal = glm::normalize(hitNormal/double(collisionCount));
+					// 			offset /= double(collisionCount);
 								
-								// Bounce & Drag
-								do {physics->linearVelocity = glm::reflect(physics->linearVelocity, hitNormal);}
-								while (glm::dot(glm::normalize(physics->linearVelocity), hitNormal) < 0);
-								physics->linearVelocity *= 0.6; // restitution
+					// 			// Bounce & Drag
+					// 			do {physics->linearVelocity = glm::reflect(physics->linearVelocity, hitNormal);}
+					// 			while (glm::dot(glm::normalize(physics->linearVelocity), hitNormal) < 0);
+					// 			physics->linearVelocity *= 0.6; // restitution
 								
-								// Offset position to collision point
-								if (physics->collisionTest.worldTransformAfter.has_value()) {
-									worldTransform = glm::translate(glm::dmat4(1), offset) * physics->collisionTest.worldTransformAfter.value();
-									entity->SetWorldTransform(worldTransform);
-								}
+					// 			// Offset position to collision point
+					// 			if (physics->collisionTest.worldTransformAfter.has_value()) {
+					// 				worldTransform = glm::translate(glm::dmat4(1), offset) * physics->collisionTest.worldTransformAfter.value();
+					// 				entity->SetWorldTransform(worldTransform);
+					// 			}
 								
-							} else {
-								// Collision tested, No collision occured
-								if (physics->collisionTest.worldTransformAfter.has_value()) {
-									worldTransform = physics->collisionTest.worldTransformAfter.value();
-									entity->SetWorldTransform(worldTransform);
-								}
-							}
-						}
+					// 		} else {
+					// 			// Collision tested, No collision occured
+					// 			if (physics->collisionTest.worldTransformAfter.has_value()) {
+					// 				worldTransform = physics->collisionTest.worldTransformAfter.value();
+					// 				entity->SetWorldTransform(worldTransform);
+					// 			}
+					// 		}
+					// 	}
 						
-						{// Solve constraints
-							//... may reset position and velocity here
-						}
+					// 	{// Solve constraints
+					// 		//... may reset position and velocity here
+					// 	}
 						
-						{// Apply Gravity
-							physics->linearVelocity += scene->gravityVector * r->deltaTime;
-						}
+					// 	{// Apply Gravity
+					// 		physics->linearVelocity += scene->gravityVector * r->deltaTime;
+					// 	}
 						
-						{// Apply Forces
-							if (physics->addedForce || physics->physicsForceImpulses.size() > 0) {
-								if (physics->physicsForceImpulses.size() > 0) {
-									auto&[impulseDir, atPoint] = physics->physicsForceImpulses.front();
-									// if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
-										// rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
-										physics->linearVelocity += impulseDir / double(physics->mass);
-									// } else {
-									// 	rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
-									// }
-									physics->physicsForceImpulses.pop();
-								}
-							}
-						}
+					// 	{// Apply Forces
+					// 		if (physics->addedForce || physics->physicsForceImpulses.size() > 0) {
+					// 			if (physics->physicsForceImpulses.size() > 0) {
+					// 				auto&[impulseDir, atPoint] = physics->physicsForceImpulses.front();
+					// 				// if (atPoint.x == 0 && atPoint.y == 0 && atPoint.z == 0) {
+					// 					// rb->applyCentralImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z));
+					// 					physics->linearVelocity += impulseDir / double(physics->mass);
+					// 				// } else {
+					// 				// 	rb->applyImpulse(btVector3(impulseDir.x, impulseDir.y, impulseDir.z), btVector3(atPoint.x, atPoint.y, atPoint.z));
+					// 				// }
+					// 				physics->physicsForceImpulses.pop();
+					// 			}
+					// 		}
+					// 	}
 						
-						{// Prepare ray-traced collision detection
-							physics->collisionTest = {worldTransform, physics->linearVelocity, r->deltaTime};
+					// 	{// Prepare ray-traced collision detection
+					// 		physics->collisionTest = {worldTransform, physics->linearVelocity, r->deltaTime};
 							
-							glm::dvec3 velocityDir = glm::normalize(glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(physics->linearVelocity));
-							glm::dvec3 gravityDir = glm::normalize(glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(scene->gravityVector));
+					// 		glm::dvec3 velocityDir = glm::normalize(glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(physics->linearVelocity));
+					// 		glm::dvec3 gravityDir = glm::normalize(glm::inverse(glm::transpose(glm::mat3(scene->camera.viewMatrix))) * glm::normalize(scene->gravityVector));
 							
-							// Test collision towards velocity (Continuous collisions detection)
-							if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
-								glm::dvec3 direction = velocityDir;
-								glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
-								double speed = glm::length(physics->linearVelocity);
-								collisionBuffer[collisionLineCount++] = Collision {
-									(uint32_t)entity->GetIndex(),
-									0, // Collision Flags
-									RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
-									{position.x, position.y, position.z, physics->boundingDistance + speed * r->deltaTime}, 
-									{direction.x, direction.y, direction.z, 0}, 
-								};
-								if (DEBUG_OPTIONS::PHYSICS) {
-									AddOverlayLine(position, position + direction * (speed + physics->boundingDistance), {0, 1, 0, 1}, 4);
-								}
-							}
+					// 		// Test collision towards velocity (Continuous collisions detection)
+					// 		if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+					// 			glm::dvec3 direction = velocityDir;
+					// 			glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
+					// 			double speed = glm::length(physics->linearVelocity);
+					// 			collisionBuffer[collisionLineCount++] = Collision {
+					// 				(uint32_t)entity->GetIndex(),
+					// 				0, // Collision Flags
+					// 				RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
+					// 				{position.x, position.y, position.z, physics->boundingDistance + speed * r->deltaTime}, 
+					// 				{direction.x, direction.y, direction.z, 0}, 
+					// 			};
+					// 			if (DEBUG_OPTIONS::PHYSICS) {
+					// 				AddOverlayLine(position, position + direction * (speed + physics->boundingDistance), {0, 1, 0, 1}, 4);
+					// 			}
+					// 		}
 							
-							// Test collision downwards (using gravity vector)
-							if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
-								glm::dvec3 direction = gravityDir;
-								glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
-								collisionBuffer[collisionLineCount++] = Collision {
-									(uint32_t)entity->GetIndex(),
-									0, // Collision Options
-									RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
-									{position.x, position.y, position.z, physics->boundingDistance}, 
-									{direction.x, direction.y, direction.z, 0}, 
-								};
-								if (DEBUG_OPTIONS::PHYSICS) {
-									AddOverlayLine(position, position + direction * double(physics->boundingDistance), {0, 0, 1, 1}, 1);
-								}
-							}
+					// 		// Test collision downwards (using gravity vector)
+					// 		if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+					// 			glm::dvec3 direction = gravityDir;
+					// 			glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
+					// 			collisionBuffer[collisionLineCount++] = Collision {
+					// 				(uint32_t)entity->GetIndex(),
+					// 				0, // Collision Options
+					// 				RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
+					// 				{position.x, position.y, position.z, physics->boundingDistance}, 
+					// 				{direction.x, direction.y, direction.z, 0}, 
+					// 			};
+					// 			if (DEBUG_OPTIONS::PHYSICS) {
+					// 				AddOverlayLine(position, position + direction * double(physics->boundingDistance), {0, 0, 1, 1}, 1);
+					// 			}
+					// 		}
 							
-							// Test if under terrain (launch a ray upwards to find terrain)
-							if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
-								glm::dvec3 direction = -gravityDir;
-								glm::dvec3 position = glm::dvec3((scene->camera.viewMatrix * worldTransform)[3]) - direction * double(physics->boundingDistance);
-								collisionBuffer[collisionLineCount++] = Collision {
-									(uint32_t)entity->GetIndex(),
-									0, // Collision Flags
-									RAY_TRACED_ENTITY_TERRAIN,
-									{position.x, position.y, position.z, 0}, 
-									{direction.x, direction.y, direction.z, 10000}, 
-								};
-								if (DEBUG_OPTIONS::PHYSICS) {
-									AddOverlayLine(position, position + direction*double(physics->boundingDistance)*4.0, {1, 0, 0, 1}, 2);
-								}
-							}
+					// 		// Test if under terrain (launch a ray upwards to find terrain)
+					// 		if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+					// 			glm::dvec3 direction = -gravityDir;
+					// 			glm::dvec3 position = glm::dvec3((scene->camera.viewMatrix * worldTransform)[3]) - direction * double(physics->boundingDistance);
+					// 			collisionBuffer[collisionLineCount++] = Collision {
+					// 				(uint32_t)entity->GetIndex(),
+					// 				0, // Collision Flags
+					// 				RAY_TRACED_ENTITY_TERRAIN,
+					// 				{position.x, position.y, position.z, 0}, 
+					// 				{direction.x, direction.y, direction.z, 10000}, 
+					// 			};
+					// 			if (DEBUG_OPTIONS::PHYSICS) {
+					// 				AddOverlayLine(position, position + direction*double(physics->boundingDistance)*4.0, {1, 0, 0, 1}, 2);
+					// 			}
+					// 		}
 							
-							// Test collision stochastically by throwing rays randomly within the collider
-							for (int i = 0; i < nbStochasticRayTracedCollisions; ++i) {
-								if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
-									glm::dvec3 direction = glm::normalize(glm::dvec3(uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator)));
-									glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
-									// if (glm::dot(direction, velocityDir) < 0) direction *= -1; //TODO uncomment this when collisions are correctly applied to both rigidbodies
-									collisionBuffer[collisionLineCount++] = Collision {
-										(uint32_t)entity->GetIndex(),
-										0, // Collision Options
-										RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
-										{position.x, position.y, position.z, physics->boundingDistance}, 
-										{direction.x, direction.y, direction.z, 0}, 
-									};
-									if (DEBUG_OPTIONS::PHYSICS) {
-										AddOverlayLine(position, position + direction * double(physics->boundingDistance), {0, 0, 1, 1}, 1);
-									}
-								}
-							}
+					// 		// Test collision stochastically by throwing rays randomly within the collider
+					// 		for (int i = 0; i < nbStochasticRayTracedCollisions; ++i) {
+					// 			if (collisionLineCount < RAY_TRACING_MAX_COLLISION_PER_FRAME) {
+					// 				glm::dvec3 direction = glm::normalize(glm::dvec3(uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator),uniformRandomDouble(randomGenerator)));
+					// 				glm::dvec3 position = (scene->camera.viewMatrix * worldTransform)[3];
+					// 				// if (glm::dot(direction, velocityDir) < 0) direction *= -1; //TODO uncomment this when collisions are correctly applied to both rigidbodies
+					// 				collisionBuffer[collisionLineCount++] = Collision {
+					// 					(uint32_t)entity->GetIndex(),
+					// 					0, // Collision Options
+					// 					RAY_TRACED_ENTITY_DEFAULT|RAY_TRACED_ENTITY_TERRAIN,
+					// 					{position.x, position.y, position.z, physics->boundingDistance}, 
+					// 					{direction.x, direction.y, direction.z, 0}, 
+					// 				};
+					// 				if (DEBUG_OPTIONS::PHYSICS) {
+					// 					AddOverlayLine(position, position + direction * double(physics->boundingDistance), {0, 0, 1, 1}, 1);
+					// 				}
+					// 			}
+					// 		}
 							
-						}
+					// 	}
 						
-					}
+					// }
 					
 					// Update and Assign transform
 					entity->entityInstanceInfo.modelViewTransform_history = entity->entityInstanceInfo.modelViewTransform;
@@ -1410,24 +1410,24 @@ void ConfigureRasterShaders() {
 		
 	}
 	void RunPhysicsCommands(VkCommandBuffer commandBuffer) {
-		// Run Ray-Traced collisions
-		if (collisionLineCount > 0) {
-			r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_collision.GetPipeline());
-			sbt_collision.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
-			r->renderingDevice->CmdTraceRaysKHR(
-				commandBuffer, 
-				sbt_collision.GetRayGenDeviceAddressRegion(),
-				sbt_collision.GetRayMissDeviceAddressRegion(),
-				sbt_collision.GetRayHitDeviceAddressRegion(),
-				sbt_collision.GetRayCallableDeviceAddressRegion(),
-				collisionLineCount, 1, 1
-			);
-		}
+		// // Run Ray-Traced collisions
+		// if (collisionLineCount > 0) {
+		// 	r->renderingDevice->CmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, sbt_collision.GetPipeline());
+		// 	sbt_collision.GetPipelineLayout()->Bind(r->renderingDevice, commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+		// 	r->renderingDevice->CmdTraceRaysKHR(
+		// 		commandBuffer, 
+		// 		sbt_collision.GetRayGenDeviceAddressRegion(),
+		// 		sbt_collision.GetRayMissDeviceAddressRegion(),
+		// 		sbt_collision.GetRayHitDeviceAddressRegion(),
+		// 		sbt_collision.GetRayCallableDeviceAddressRegion(),
+		// 		collisionLineCount, 1, 1
+		// 	);
+		// }
 		
-		// RenderFrame_Physics
-		V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
-			if (mod->RenderFrame_Physics) mod->RenderFrame_Physics(commandBuffer);
-		}, "render");
+		// // RenderFrame_Physics
+		// V4D_Mod::ForEachSortedModule([&commandBuffer](auto* mod){
+		// 	if (mod->RenderFrame_Physics) mod->RenderFrame_Physics(commandBuffer);
+		// }, "render");
 	}
 	void RunPullCommands(VkCommandBuffer commandBuffer) {
 		// Pull collisions to catch it in the next frame

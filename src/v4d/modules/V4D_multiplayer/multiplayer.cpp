@@ -21,6 +21,25 @@ v4d::graphics::Renderer* r = nullptr;
 std::recursive_mutex serverActionQueueMutex;
 std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serverActionQueuePerClient {};
 
+inline const size_t BURST_SYNC_POSITIONS_PLUS_ROTATIONS_GROUP_SIZE = 14;
+inline const size_t BURST_SYNC_POSITIONS_GROUP_SIZE = 16; // max 28;
+inline const size_t BURST_SYNC_ROTATIONS_GROUP_SIZE = 16; // max 24;
+inline const size_t BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE = 32;
+inline const double BURST_SYNC_MAX_DISTANCE = 10'000; // 10 km
+
+struct NearbyEntity {
+	int32_t id;
+	glm::vec3 position;
+	glm::quat orientation;
+	double distance;
+	NearbyEntity(Entity::Id id, Entity::Position position, Entity::Orientation orientation, double distance)
+	: id(int32_t(id))
+	, position(position)
+	, orientation(orientation)
+	, distance(distance)
+	{}
+};
+
 float interpolationSpeed = 15.0;
 
 V4D_MODULE_CLASS(V4D_Mod) {
@@ -164,19 +183,90 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 	}
 	
-	V4D_MODULE_FUNC(void, ServerSendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client) {
-		stream->Begin();
-			*stream << SYNC_ENTITIES_TRANSFORM;
-			ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){
-				if (entity->active && entity->isDynamic) {
-					*stream << entity->GetID();
-					*stream << entity->position;
-					*stream << entity->orientation;
+	V4D_MODULE_FUNC(void, ServerSendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client, uint64_t frame) {
+		glm::dvec3 basePosition;
+		uint64_t referenceFrame;
+		if (ServerSidePlayer::Ptr player = ServerSidePlayer::Get(client->id); player) {
+			if (ServerSideEntity::Ptr playerEntity = player->GetServerSideEntity(); playerEntity) {
+				basePosition = playerEntity->position;
+				referenceFrame = playerEntity->referenceFrame;
+				goto SendBursts;
+			}
+		}
+		return;
+		
+		SendBursts:
+		
+			// Fill cache vector and sort it by distance (closest first)
+			// Also filter them by active, same reference frame as user, and less than 10 km away from user
+			std::vector<NearbyEntity> nearbyEntities {};
+			nearbyEntities.reserve(BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE);
+			ServerSideEntity::ForEach([&basePosition, &referenceFrame, &nearbyEntities](ServerSideEntity::Ptr entity){
+				if (entity->active && entity->isDynamic && entity->referenceFrame == referenceFrame) {
+					double distance = glm::length(entity->position - basePosition);
+					if (distance < BURST_SYNC_MAX_DISTANCE) {
+						nearbyEntities.emplace_back(
+							entity->GetID(),
+							entity->position - basePosition,
+							entity->orientation,
+							distance
+						);
+					}
 				}
 			});
-			*stream << (Entity::Id)-1;
-		stream->End();
-		
+			std::sort(nearbyEntities.begin(), nearbyEntities.end(), [](const auto& a, const auto& b){
+				//TODO maybe take into account the bounding radius too so that when the player is inside a very big craft it can be considered to be closer than another object which the center is closer
+				return a.distance < b.distance;
+			});
+			
+			
+			{// Sync positions in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
+				int frameDivider = 1;
+				size_t start = 0;
+				size_t end = 0;
+				while (nearbyEntities.size() > end) {
+					start = end;
+					end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_GROUP_SIZE * frameDivider);
+					
+					stream->Begin();
+						*stream << SYNC_GROUPED_ENTITIES_POSITIONS;
+						
+						*stream << glm::dvec3(basePosition);
+						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
+							*stream << nearbyEntities[n].id;
+							*stream << nearbyEntities[n].position;
+						}
+						*stream << (int32_t)-1;
+						
+					stream->End();
+					
+					frameDivider *= 2;
+				}
+			}
+			
+			{// Sync rotations in groups of base N, half as often as positions. First group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, next group of N*8 is synced every 8 frames, and so on...
+				int frameDivider = 2;
+				size_t start = 0;
+				size_t end = 0;
+				while (nearbyEntities.size() > end) {
+					start = end;
+					end = std::min(nearbyEntities.size(), start + BURST_SYNC_ROTATIONS_GROUP_SIZE * frameDivider);
+					
+					stream->Begin();
+						*stream << SYNC_GROUPED_ENTITIES_ROTATIONS;
+						
+						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
+							*stream << nearbyEntities[n].id;
+							*stream << nearbyEntities[n].orientation;
+						}
+						*stream << (int32_t)-1;
+						
+					stream->End();
+					
+					frameDivider *= 2;
+				}
+			}
+			
 		
 		// ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){
 		// 	v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_TRANSFORM_DATA_MAX_STREAM_SIZE);
@@ -276,6 +366,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				if (entity) {
 					auto* mod = V4D_Mod::GetModule(entity->moduleID.String());
 					if (mod && mod->DestroyEntity) mod->DestroyEntity(id, entity->type);
+					entity->DestroyRenderable();
 					entity->Destroy();
 				}
 			}break;
@@ -305,15 +396,42 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			// 		}
 			// 	}
 			// }break;
-			case SYNC_ENTITIES_TRANSFORM:{
+			
+			case SYNC_GROUPED_ENTITIES_POSITIONS_ROTATIONS:{
+				glm::dvec3 basePosition = stream->Read<glm::dvec3>();
 				auto entitiesLock = ClientSideEntity::GetLock();
 				for (;;) {
-					auto id = stream->Read<Entity::Id>();
+					auto id = Entity::Id(stream->Read<int32_t>());
 					if (id < 0) break;
-					auto position = stream->Read<Entity::Position>();
-					auto orientation = stream->Read<Entity::Orientation>();
+					auto position = Entity::Position(stream->Read<glm::vec3>());
+					auto orientation = Entity::Orientation(stream->Read<glm::quat>());
 					if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
-						entity->targetPosition = position;
+						entity->targetPosition = position + basePosition;
+						entity->targetOrientation = orientation;
+					}
+				}
+			}break;
+			
+			case SYNC_GROUPED_ENTITIES_POSITIONS:{
+				glm::dvec3 basePosition = stream->Read<glm::dvec3>();
+				auto entitiesLock = ClientSideEntity::GetLock();
+				for (;;) {
+					auto id = Entity::Id(stream->Read<int32_t>());
+					if (id < 0) break;
+					auto position = Entity::Position(stream->Read<glm::vec3>());
+					if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
+						entity->targetPosition = position + basePosition;
+					}
+				}
+			}break;
+			
+			case SYNC_GROUPED_ENTITIES_ROTATIONS:{
+				auto entitiesLock = ClientSideEntity::GetLock();
+				for (;;) {
+					auto id = Entity::Id(stream->Read<int32_t>());
+					if (id < 0) break;
+					auto orientation = Entity::Orientation(stream->Read<glm::quat>());
+					if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
 						entity->targetOrientation = orientation;
 					}
 				}

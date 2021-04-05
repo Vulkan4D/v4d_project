@@ -213,7 +213,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::ForEach([&playerEntity](ServerSideEntity::Ptr entity){
 							if (playerEntity->GetID() != entity->GetID()) {
-								entity->active = false;
+								entity->Deactivate();
 							}
 						});
 					}
