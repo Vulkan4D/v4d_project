@@ -76,7 +76,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
 		ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
-			if (!entity->active && entity->iteration > 0 && entity->clientIterations.size() == 0) {
+			if (!entity->IsActive() && entity->iteration > 0 && entity->clientIterations.size() == 0) {
 				entity->Destroy();
 			}
 		});
@@ -121,7 +121,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		ServerSideEntity::ForEach([&stream, &client, &tmpStream](ServerSideEntity::Ptr entity){
 			Entity::Iteration clientIteration;
-			if (entity->active) {
+			if (entity->IsActive()) {
 				try {
 					clientIteration = entity->clientIterations.at(client->id);
 				} catch (...) {
@@ -202,7 +202,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			std::vector<NearbyEntity> nearbyEntities {};
 			nearbyEntities.reserve(BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE);
 			ServerSideEntity::ForEach([&basePosition, &referenceFrame, &nearbyEntities](ServerSideEntity::Ptr entity){
-				if (entity->active && entity->isDynamic && entity->referenceFrame == referenceFrame) {
+				if (entity->IsActive() && entity->IsDynamic() && entity->referenceFrame == referenceFrame) {
 					double distance = glm::length(entity->position - basePosition);
 					if (distance < BURST_SYNC_MAX_DISTANCE) {
 						nearbyEntities.emplace_back(

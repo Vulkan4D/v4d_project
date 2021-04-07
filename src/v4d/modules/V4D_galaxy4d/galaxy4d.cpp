@@ -100,7 +100,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
 						rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
-						ball->isDynamic = true;
+						ball->SetDynamic();
 						ball->Activate();
 					}
 				}
@@ -118,7 +118,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
-						ball->isDynamic = true;
+						ball->SetDynamic();
 						ball->Activate();
 					}
 				}
@@ -138,7 +138,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				// 		auto digSphere = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::TerrainDigSphere, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 				// 		digSphere->entityData = radius;
 				// 		digSphere->SetTransform(transform);
-				// 		digSphere->isDynamic = false;
+				// 		digSphere->SetDynamic(false);
 				// 	}
 				// }
 				// }
@@ -158,7 +158,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					// 		auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 					// 		rigidbody->boundingRadius = 0.5;
 					// 		rigidbody->linearVelocity += playerVelocity;
-					// 		ball->isDynamic = true;
+					// 		ball->SetDynamic();
 					// 		ball->Activate();
 					// 	}
 					// }
@@ -177,7 +177,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
-						ball->isDynamic = true;
+						ball->SetDynamic();
 						ball->Activate();
 					}
 				}
@@ -189,7 +189,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto drone = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Drone, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						drone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						drone->isDynamic = false;
+						drone->SetDynamic(false);
 						drone->Activate();
 					}
 				}
@@ -200,14 +200,22 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto glass = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Glass, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						glass->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.01))->boundingRadius = 2;
-						glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0});
-						glass->colliders.emplace_back(glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{-2.0, 2.0, 0.0}, glm::dvec3{-2.0,-2.0, 0.0});
+						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.4))->boundingRadius = 2;
+						
+						// Box collider
+						glass->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.2});
+						
+						// // Triangle colliders
+						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{0,0,0});
+						// glass->colliders.emplace_back(glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{-2.0, 2.0, 0.0}, glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{0,0,0});
+						
+						// // Sphere colliders
 						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, 0.2);
 						// glass->colliders.emplace_back(glm::dvec3{+2.0,-2.0, 0.0}, 0.2);
 						// glass->colliders.emplace_back(glm::dvec3{+2.0,+2.0, 0.0}, 0.2);
 						// glass->colliders.emplace_back(glm::dvec3{-2.0,+2.0, 0.0}, 0.2);
-						glass->isDynamic = true;
+						
+						glass->SetDynamic();
 						glass->Activate();
 					}
 				}

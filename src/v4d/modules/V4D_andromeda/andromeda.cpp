@@ -448,10 +448,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		ServerSidePlayer::Ptr player = ServerSidePlayer::Create(client->id);
 		ServerSideEntity::Ptr entity = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Player, defaultPosition.rawValue);
 		playerEntityId = entity->GetID();
-		entity->isDynamic = true;
+		entity->SetDynamic();
 		entity->clientIterations[client->id] = 0;
 		player->parentEntityId = playerEntityId;
-		entity->Add_rigidbody(10.0)->boundingRadius = 0.4;
+		auto rb = entity->Add_rigidbody(10.0);
+		rb->boundingRadius = 0.4;
+		rb->SetOrientationLocked();
 		entity->colliders.emplace_back(0.4);
 		
 		// Set player position

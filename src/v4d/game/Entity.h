@@ -31,7 +31,28 @@ struct Rigidbody {
 	glm::dvec3 angularVelocity {0,0,0};
 	glm::dquat orientation {1,0,0,0};
 	
-	bool initialized = false;
+	bool isInitialized = false;
+	bool isKinematic = false;
+	bool isOrientationLocked = false;
+	
+	inline void SetKinematic(bool kinematic = true) {
+		isKinematic = kinematic;
+	}
+	inline bool IsKinematic() const {
+		return isKinematic;
+	}
+	inline void SetInitialized(bool initialized = true) {
+		isInitialized = initialized;
+	}
+	inline bool IsInitialized() const {
+		return isInitialized;
+	}
+	inline void SetOrientationLocked(bool locked = true) {
+		isOrientationLocked = locked;
+	}
+	inline bool IsOrientationLocked() const {
+		return isOrientationLocked;
+	}
 	
 	#pragma region Constructor
 	Rigidbody(float mass, glm::vec3 localInertiaVector = glm::vec3{1})
@@ -133,7 +154,7 @@ struct Rigidbody {
 	#pragma region Forces & Impulses
 	void ApplyForce(glm::dvec3 force, glm::dvec3 point = {0,0,0}) {
 		this->force += force;
-		if (point.x != 0 || point.y != 0 || point.z != 0) {
+		if (!isOrientationLocked && (point.x != 0 || point.y != 0 || point.z != 0)) {
 			this->torque += glm::cross(point, force);
 		}
 	}
@@ -142,7 +163,7 @@ struct Rigidbody {
 	}
 	void ApplyImpulse(glm::dvec3 impulse, glm::dvec3 point = {0,0,0}) {
 		this->linearVelocity += this->invMass * impulse;
-		if (point.x != 0 || point.y != 0 || point.z != 0) {
+		if (!isOrientationLocked && (point.x != 0 || point.y != 0 || point.z != 0)) {
 			this->angularVelocity += this->invInertiaTensorWorld * glm::cross(point, impulse);
 		}
 	}
@@ -153,9 +174,9 @@ struct Collider {
 	enum class Type : uint8_t {
 		SPHERE = 1 << 0,
 		TRIANGLE = 1 << 1,
-		CYLINDER = 1 << 2,
-		RING = 1 << 3,
-		BOX = 1 << 4,
+		BOX = 1 << 2,
+		CYLINDER = 1 << 3,
+		RING = 1 << 4,
 	} type;
 
 	glm::dvec3 position;
@@ -168,7 +189,11 @@ struct Collider {
 		struct {
 			float vertex1_y;
 			glm::vec2 vertex2;
-		} triangle; // triangle should be oriented with line 0-1 towards +Y, and 0-2 towards +X+Y. Up is +Z, triangle lays flat on Z=0.
+			glm::vec3 center;
+		} triangle; // triangle should be oriented with line 0-1 towards +Y, and 0-2 towards +X+Y. Up is +Z, triangle lays flat on Z=0. Center is the position of the center of the triangle mesh (relative to collider.position or vertex0)
+		struct {
+			glm::vec3 halfSize;
+		} box;
 		struct {
 			float length;
 			float radius;
@@ -178,9 +203,6 @@ struct Collider {
 			float innerRadius;
 			float outerRadius;
 		} ring;
-		struct {
-			glm::vec3 halfSize;
-		} box;
 	};
 	
 	// Sphere at center
@@ -202,15 +224,16 @@ struct Collider {
 	}
 	
 	// Triangle
-	Collider(glm::dvec3 position, glm::dmat3 rotation, float vertex1_y, glm::vec2 vertex2_xy)
+	Collider(glm::dvec3 position, glm::dmat3 rotation, float vertex1_y, glm::vec2 vertex2_xy, glm::vec3 center)
 	: type(Type::TRIANGLE)
 	, position(position)
 	, rotation(rotation)
 	{
 		triangle.vertex1_y = vertex1_y;
 		triangle.vertex2 = vertex2_xy;
+		triangle.center = center;
 	}
-	Collider(glm::dvec3 vertex0, glm::dvec3 vertex1, glm::dvec3 vertex2)
+	Collider(glm::dvec3 vertex0, glm::dvec3 vertex1, glm::dvec3 vertex2, glm::dvec3 center)
 	: type(Type::TRIANGLE)
 	, position(vertex0)
 	, rotation(1)
@@ -220,6 +243,16 @@ struct Collider {
 		rotation = glm::mat3_cast(glm::quatLookAt(glm::normalize(glm::cross(glm::normalize(v1), glm::normalize(v2))), glm::normalize(v1)));
 		triangle.vertex1_y = float((glm::inverse(rotation) * v1).y);
 		triangle.vertex2 = glm::inverse(rotation) * v2;
+		triangle.center = glm::inverse(rotation) * (center - vertex0);
+	}
+	
+	// Box
+	Collider(glm::dvec3 position, glm::dmat3 rotation, glm::vec3 halfSize)
+	: type(Type::BOX)
+	, position(position)
+	, rotation(rotation)
+	{
+		box.halfSize = halfSize;
 	}
 	
 	// Cylinder
@@ -241,15 +274,6 @@ struct Collider {
 		ring.length = length;
 		ring.innerRadius = innerRadius;
 		ring.outerRadius = outerRadius;
-	}
-	
-	// Box
-	Collider(glm::dvec3 position, glm::dmat3 rotation, glm::vec3 halfSize)
-	: type(Type::BOX)
-	, position(position)
-	, rotation(rotation)
-	{
-		box.halfSize = halfSize;
 	}
 	
 };
@@ -349,22 +373,32 @@ struct V4DGAME ServerSideEntity : Entity {
 	
 	bool active = false;
 	bool isDynamic = false;
+	
 	std::atomic<Iteration> iteration {0};
 	std::unordered_map<uint64_t/*clientID*/, Iteration /*iteration*/> clientIterations {};
 
 	std::vector<Collider> colliders {};
 
-	Iteration Iterate() {
+	inline Iteration Iterate() {
 		return ++iteration;
 	}
 
-	void Activate() {
+	inline void Activate() {
 		active = true;
 		Iterate();
 	}
-	void Deactivate() {
+	inline void Deactivate() {
 		active = false;
 		Iterate();
+	}
+	inline bool IsActive() const {
+		return active;
+	}
+	inline bool IsDynamic() const {
+		return isDynamic;
+	}
+	inline void SetDynamic(bool dynamic = true) {
+		isDynamic = dynamic;
 	}
 };
 

@@ -298,9 +298,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				ServerSideEntity::Ptr entity = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Build);
 				entity->position = position;
 				entity->orientation = orientation;
-				entity->isDynamic = true;
-				entity->Activate();
+				entity->SetDynamic();
 				cachedData.serverBuildBlocks[entity->GetID()].push_back(block);
+				entity->Activate();
 			}break;
 		
 			case ADD_BLOCK_TO_BUILD:{
@@ -342,7 +342,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 					if (buildBlocks.size() == 0) {
 						if (ServerSideEntity::Ptr entity = ServerSideEntity::Get(parentId); entity) {
-							entity->active = false;
+							entity->Deactivate();
 						}
 						break;
 					}

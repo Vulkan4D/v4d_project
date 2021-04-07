@@ -30,6 +30,10 @@ inline static glm::vec3 RandomInUnitSphere(uint& seed) {
 	}
 }
 
+inline static glm::vec2 RandomInUnitSquare(uint& seed) {
+	return glm::vec2(RandomFloat(seed), RandomFloat(seed)) * 2.0f - 1.0f;
+}
+
 inline static glm::vec3 RandomInUnitCube(uint& seed) {
 	return glm::vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) * 2.0f - 1.0f;
 }
