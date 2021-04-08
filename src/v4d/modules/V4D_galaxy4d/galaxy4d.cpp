@@ -365,8 +365,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				entity->renderableGeometryEntityInstance = renderableEntity;
 				renderableEntity->generator = [](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};
-					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
-					mat.visibility.texFactors[0] = 255;
+					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_bumped"];
+					mat.visibility.texFactors[0] = 127;
 					mat.visibility.roughness = 0;
 					mat.visibility.metallic = 1;
 					renderableEntity->Allocate(device, "V4D_raytracing:aabb_cube")->material = mat;
