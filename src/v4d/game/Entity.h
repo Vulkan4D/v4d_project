@@ -23,6 +23,7 @@ struct Rigidbody {
 	glm::dvec3 linearAcceleration {0,0,0};
 	glm::dvec3 linearVelocity {0,0,0};
 	glm::dvec3 position {0,0,0};
+	bool atRest = false;
 	
 	// Angular physics
 	glm::dmat3 invInertiaTensorWorld;
@@ -152,20 +153,24 @@ struct Rigidbody {
 	#pragma endregion
 	
 	#pragma region Forces & Impulses
+	//TODO add verification to ignore the force if not strong enough when atRest (static friction)
 	void ApplyForce(glm::dvec3 force, glm::dvec3 point = {0,0,0}) {
 		this->force += force;
 		if (!isOrientationLocked && (point.x != 0 || point.y != 0 || point.z != 0)) {
 			this->torque += glm::cross(point, force);
 		}
+		this->atRest = false;
 	}
 	void ApplyAcceleration(glm::dvec3 acceleration) {
 		this->linearAcceleration += acceleration;
+		this->atRest = false;
 	}
 	void ApplyImpulse(glm::dvec3 impulse, glm::dvec3 point = {0,0,0}) {
 		this->linearVelocity += this->invMass * impulse;
 		if (!isOrientationLocked && (point.x != 0 || point.y != 0 || point.z != 0)) {
 			this->angularVelocity += this->invInertiaTensorWorld * glm::cross(point, impulse);
 		}
+		this->atRest = false;
 	}
 	#pragma endregion
 };

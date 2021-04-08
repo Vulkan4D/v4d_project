@@ -104,6 +104,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->Activate();
 					}
 				}
+				else if (key == "box") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch box
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::Ptr box = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Box, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						box->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 10.0;
+						auto rigidbody = box->Add_rigidbody(Rigidbody::BoxInertia(10.0/*mass*/, 4,4,2));
+						rigidbody->boundingRadius = 3;
+						box->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1});
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						}
+						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						box->SetDynamic();
+						box->Activate();
+					}
+				}
 				else if (key == "glassBall") {
 					auto dir = stream->Read<glm::vec3>();
 					// Launch glass ball
@@ -200,10 +219,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto glass = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Glass, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						glass->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
-						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.4))->boundingRadius = 2;
+						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.2))->boundingRadius = 2;
 						
 						// Box collider
-						glass->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.2});
+						glass->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.1});
 						
 						// // Triangle colliders
 						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{0,0,0});
@@ -330,10 +349,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				entity->renderableGeometryEntityInstance = renderableEntity;
 				float radius = 0.5f;
-				// auto physics = renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
-				// physics->SetSphereCollider(radius);
-				// physics->friction = 0.6;
-				// physics->bounciness = 0.7;
 				renderableEntity->generator = [radius](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};
 					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
@@ -342,6 +357,20 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					mat.visibility.metallic = 1;
 					renderableEntity->Allocate(device, "V4D_raytracing:aabb_sphere")->material = mat;
 					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius), glm::vec3(radius)});
+					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+				};
+			}break;
+			case OBJECT_TYPE::Box:{
+				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->renderableGeometryEntityInstance = renderableEntity;
+				renderableEntity->generator = [](RenderableGeometryEntity* renderableEntity, Device* device){
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_checker"];
+					mat.visibility.texFactors[0] = 255;
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					renderableEntity->Allocate(device, "V4D_raytracing:aabb_cube")->material = mat;
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-2, -2, -1), glm::vec3(+2, +2, +1)});
 					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
 			}break;
@@ -384,6 +413,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				entity->renderableGeometryEntityInstance = renderableEntity;
 				renderableEntity->generator = cake;
+				renderableEntity->Remove_physics();
 			}break;
 			case OBJECT_TYPE::Glass:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
@@ -440,6 +470,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("ball");
+						stream << glm::vec3{playerView->viewForward};
+					ClientEnqueueAction(stream);
+				}break;
+				case GLFW_KEY_C:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("box");
 						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;

@@ -535,7 +535,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if (ServerSideEntity::Ptr entity = ServerSideEntity::Get(id); entity) {
 						entity->orientation = orientation;
 						if (auto rigidbody = entity->rigidbody.Lock(); rigidbody) {
-							rigidbody->linearAcceleration = acceleration;
+							rigidbody->ApplyImpulse(acceleration);
 							rigidbody->angularVelocity = {0,0,0};
 						}
 					}
