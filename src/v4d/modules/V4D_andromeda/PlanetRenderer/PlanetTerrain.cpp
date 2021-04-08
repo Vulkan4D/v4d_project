@@ -11,7 +11,7 @@ std::vector<std::thread> PlanetTerrain::chunkGeneratorThreads {};
 std::mutex PlanetTerrain::chunkGeneratorQueueMutex {};
 std::condition_variable PlanetTerrain::chunkGeneratorEventVar {};
 std::atomic<bool> PlanetTerrain::chunkGeneratorActive = false;
-double (*PlanetTerrain::generatorFunction)(const glm::dvec3&, double solidRadius, double heightVariation) = nullptr;
+double (*PlanetTerrain::generatorFunction)(TERRAIN_GENERATOR_LIB_HEIGHTMAP_ARGS) = nullptr;
 glm::vec3 (*PlanetTerrain::generateColor)(double heightMap) = nullptr;
 bool PlanetTerrain::generateAabbChunks = false;
 float PlanetTerrain::targetVertexSeparationInMeters = 0.50; // 0.02 - 0.50

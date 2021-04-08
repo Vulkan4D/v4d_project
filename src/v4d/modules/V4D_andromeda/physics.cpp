@@ -445,11 +445,11 @@ bool TerrainTriangleCollision(const Planet* const planet, const Collider& triang
 	return true;
 }
 
-bool TerrainBoxCollision(const Planet* const planet, const Collider& box, TerrainCollision& collision, ServerSideEntity::Ptr& entity) {
+bool TerrainBoxCollision(const Planet* const planet, const Collider& box, TerrainCollision& collision) {
 	constexpr int MIN_TEST_VERTICES = 4; // test at least the first 4 lowest vertices of the box
 	constexpr int MAX_TEST_VERTICES = 6; // test up to 6 lowest vertices of the box
 	
-	std::vector<glm::dvec3> points {
+	std::array points {
 		box.position + box.rotation * (glm::dvec3{+1,+1,+1} * glm::dvec3(box.box.halfSize)),
 		box.position + box.rotation * (glm::dvec3{+1,+1,-1} * glm::dvec3(box.box.halfSize)),
 		box.position + box.rotation * (glm::dvec3{+1,-1,-1} * glm::dvec3(box.box.halfSize)),
@@ -533,7 +533,7 @@ void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, const Planet* cons
 				}
 			break;
 			case Collider::Type::BOX:
-				if (TerrainBoxCollision(planet, collider, collision, entity)) {
+				if (TerrainBoxCollision(planet, collider, collision)) {
 					RespondToCollisionWithTerrain(entity, collision);
 				}
 			break;

@@ -6,11 +6,18 @@
 // Vulkan configuration
 #define VULKAN_VALIDATION_ABORT_ON_ERROR
 #define V4D_VULKAN_USE_VMA
-	
+
+// #define XVK_USE_QT_VULKAN_LOADER // uncomment if using Qt
+#define XVK_INCLUDE_GLFW // comment if using Qt or another window context manager
+
 // GLM Configuration
+#define XVK_INCLUDE_GLM
 #define GLM_FORCE_INTRINSICS
 #define GLM_FORCE_SIMD_AVX2
 #define GLM_FORCE_CXX17
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
 
 // Needed for ImGui and VMA
 namespace VkFunctions {}

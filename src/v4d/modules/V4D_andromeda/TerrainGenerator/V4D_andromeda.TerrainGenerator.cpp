@@ -1,15 +1,14 @@
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_ENABLE_EXPERIMENTAL
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#define GLM_FORCE_INTRINSICS
-#define GLM_FORCE_SIMD_AVX2
-#define GLM_FORCE_CXX17
+#include "v4d/v4dconfig.hh"
+
 #include <iostream>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 #include <glm/gtx/texture.hpp>
+
+#include "../PlanetRenderer/TerrainGeneratorCommon.hh"
+
 using namespace glm;
 
 #pragma region noise functions
@@ -443,7 +442,7 @@ extern "C" {
 	}*/
 	
 	
-	double GetHeightMap(const dvec3& normalizedPos, double solidRadius, double heightVariation) {
+	double GetHeightMap(TERRAIN_GENERATOR_LIB_HEIGHTMAP_ARGS) {
 		double res = 0;
 		
 		double biome = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5);

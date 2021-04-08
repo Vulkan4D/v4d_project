@@ -28,11 +28,12 @@ public:
 	virtual std::shared_ptr<PlanetTerrain> GetPlanetTerrain() const;
 	
 	inline virtual double GetTerrainHeightAtPos(const glm::dvec3& normalizedPos) const {
-		if (!PlanetTerrain::generatorFunction) return GetTerrainRadius();
-		return GetTerrainRadius() + PlanetTerrain::generatorFunction(normalizedPos, GetTerrainRadius(), GetTerrainHeightVariation());
+		double terrainRadius = GetTerrainRadius();
+		if (!PlanetTerrain::generatorFunction) return terrainRadius;
+		return terrainRadius + PlanetTerrain::generatorFunction(normalizedPos, terrainRadius, GetTerrainHeightVariation());
 	}
 	inline virtual TerrainType GetTerrainTypeAtPos(const glm::dvec3& normalizedPos) const {
 		return {}; //TODO
 	}
-
+	
 };

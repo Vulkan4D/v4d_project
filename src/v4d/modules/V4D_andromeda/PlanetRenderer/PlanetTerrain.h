@@ -11,6 +11,7 @@
 // #include "Noise.hpp"
 
 #include "v4d/modules/V4D_raytracing/camera_options.hh"
+#include "TerrainGeneratorCommon.hh"
 
 using namespace v4d::graphics;
 using namespace v4d::graphics::vulkan;
@@ -1205,10 +1206,10 @@ struct PlanetTerrain {
 	std::mutex planetMutex;
 	std::vector<Chunk*> chunks {};
 	
-	static double (*generatorFunction)(const glm::dvec3&, double solidRadius, double heightVariation);
+	static double (*generatorFunction)(TERRAIN_GENERATOR_LIB_HEIGHTMAP_ARGS);
 	static glm::vec3 (*generateColor)(double heightMap);
 	
-	double GetHeightMap(glm::dvec3 normalizedPos, double triangleSize = 1.0) {
+	double GetHeightMap(const glm::dvec3& normalizedPos, double triangleSize = 1.0) {
 		double height = solidRadius;
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*heightVariation;
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*heightVariation/10.0;
