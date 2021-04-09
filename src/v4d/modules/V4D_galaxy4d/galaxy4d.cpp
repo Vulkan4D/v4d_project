@@ -473,7 +473,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_C:{
+				case GLFW_KEY_N:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
 						stream << std::string("box");
@@ -487,13 +487,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
-				case GLFW_KEY_N:{
-					v4d::data::WriteOnlyStream stream(32);
-						stream << networking::action::TEST_OBJ;
-						stream << std::string("balls");
-						stream << glm::vec3{playerView->viewForward};
-					ClientEnqueueAction(stream);
-				}break;
+				// case GLFW_KEY_N:{
+				// 	v4d::data::WriteOnlyStream stream(32);
+				// 		stream << networking::action::TEST_OBJ;
+				// 		stream << std::string("balls");
+				// 		stream << glm::vec3{playerView->viewForward};
+				// 	ClientEnqueueAction(stream);
+				// }break;
 				case GLFW_KEY_L:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;

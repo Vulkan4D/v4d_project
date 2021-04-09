@@ -383,6 +383,8 @@ struct V4DGAME ServerSideEntity : Entity {
 	std::unordered_map<uint64_t/*clientID*/, Iteration /*iteration*/> clientIterations {};
 
 	std::vector<Collider> colliders {};
+	int colliderCacheIndex = -1;
+	static bool colliderCacheValid;
 
 	inline Iteration Iterate() {
 		return ++iteration;
@@ -391,10 +393,17 @@ struct V4DGAME ServerSideEntity : Entity {
 	inline void Activate() {
 		active = true;
 		Iterate();
+		colliderCacheValid = false;
 	}
 	inline void Deactivate() {
 		active = false;
 		Iterate();
+		colliderCacheValid = false;
+	}
+	inline void ChangeReferenceFrame(uint64_t referenceFrame, uint64_t referenceFrameExtra = 0) {
+		this->referenceFrame = referenceFrame;
+		this->referenceFrameExtra = referenceFrameExtra;
+		colliderCacheValid = false;
 	}
 	inline bool IsActive() const {
 		return active;

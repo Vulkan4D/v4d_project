@@ -643,10 +643,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, ServerPhysicsUpdate, double deltaTime) {
 		avgDeltaTime = glm::mix(avgDeltaTime, deltaTime, 0.1);
-
-		//TODO keep cache valid until an entity was added, removed or its active status changed, add colliderCacheIndex field in entity so that we can update the cached position in cachedBroadphaseColliders at the end of the physics frame
 		
-		{// Prepare data
+		if (!ServerSideEntity::colliderCacheValid) {// Prepare data
+			ServerSideEntity::colliderCacheValid = true;
+			for (auto&[referenceFrame, colliders] : cachedBroadphaseColliders) {
+				colliders.clear();
+			}
 			ServerSideEntity::rigidbodyComponents.ForEach_Entity([](ServerSideEntity::Ptr& entity, Rigidbody& rigidbody) {
 				if (entity->IsActive()) {
 					if (!rigidbody.IsInitialized()) {
@@ -660,17 +662,21 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						}
 						rigidbody.SetInitialized();
 					}
-					
 					if (rigidbody.boundingRadius > 0) {
+						entity->colliderCacheIndex = cachedBroadphaseColliders[entity->referenceFrame].size();
 						cachedBroadphaseColliders[entity->referenceFrame].emplace_back(
 							rigidbody.position,
 							rigidbody.boundingRadius,
 							entity->GetID()
 						);
+					} else {
+						entity->colliderCacheIndex = -1;
 					}
-					
+				} else {
+					entity->colliderCacheIndex = -1;
 				}
 			});
+			// LOG("Generated collider cache")
 		}
 		
 		{// Collision Detection
@@ -825,17 +831,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		
 		{// Integrate motion
-			ServerSideEntity::rigidbodyComponents.ForEach([deltaTime](Entity::Id id, Rigidbody& rigidbody){
+			ServerSideEntity::rigidbodyComponents.ForEach([](Entity::Id id, Rigidbody& rigidbody){
 				if (rigidbody.IsInitialized() && !rigidbody.IsKinematic() && !rigidbody.atRest) {
 					// Linear integration
 					rigidbody.linearAcceleration += rigidbody.invMass * rigidbody.force;
-					rigidbody.linearVelocity += rigidbody.linearAcceleration * deltaTime;
-					rigidbody.position += rigidbody.linearVelocity * deltaTime;
+					rigidbody.linearVelocity += rigidbody.linearAcceleration * avgDeltaTime;
+					rigidbody.position += rigidbody.linearVelocity * avgDeltaTime;
 					// Angular integration
 					if (!rigidbody.IsOrientationLocked()) {
 						rigidbody.angularAcceleration += rigidbody.invInertiaTensorWorld * rigidbody.torque;
-						rigidbody.angularVelocity += rigidbody.angularAcceleration * deltaTime;
-						rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * deltaTime / 2.0) * rigidbody.orientation);
+						rigidbody.angularVelocity += rigidbody.angularAcceleration * avgDeltaTime;
+						rigidbody.orientation = glm::normalize(rigidbody.orientation + glm::dquat(0.0, rigidbody.angularVelocity * avgDeltaTime / 2.0) * rigidbody.orientation);
 						rigidbody.ComputeInvInertiaTensorWorld();
 					}
 				}
@@ -852,14 +858,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					rigidbody.linearAcceleration = {0,0,0};
 					rigidbody.torque = {0,0,0};
 					rigidbody.angularAcceleration = {0,0,0};
+					if (entity->colliderCacheIndex != -1) {
+						cachedBroadphaseColliders[entity->referenceFrame][entity->colliderCacheIndex].position = rigidbody.position;
+					}
 				}
 			});
-		}
-		
-		{// Clear cached data
-			for (auto&[referenceFrame, colliders] : cachedBroadphaseColliders) {
-				colliders.clear();
-			}
 		}
 		
 	}
