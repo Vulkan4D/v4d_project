@@ -21,11 +21,15 @@ v4d::graphics::Renderer* r = nullptr;
 std::recursive_mutex serverActionQueueMutex;
 std::unordered_map<uint64_t /* clientID */, std::queue<v4d::data::Stream>> serverActionQueuePerClient {};
 
+void EnqueueServerAction(ulong clientID, v4d::data::Stream& stream) {
+	std::lock_guard lock(serverActionQueueMutex);
+	serverActionQueuePerClient[clientID].emplace(stream);
+}
+
 inline const size_t BURST_SYNC_POSITIONS_PLUS_ROTATIONS_GROUP_SIZE = 14;
 inline const size_t BURST_SYNC_POSITIONS_GROUP_SIZE = 28; // max 28;
 inline const size_t BURST_SYNC_ROTATIONS_GROUP_SIZE = 24; // max 24;
-inline const size_t BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE = 32;
-inline const double BURST_SYNC_MAX_DISTANCE = 10'000; // 10 km
+inline const double ENTITY_SUBSCRIBE_MAX_DISTANCE = 10'000; // in meters
 
 struct NearbyEntity {
 	int32_t id;
@@ -76,7 +80,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, SlowLoopUpdate, double deltaTime) {
 		ServerSideEntity::ForEach([](ServerSideEntity::Ptr entity){
-			if (!entity->IsActive() && entity->iteration > 0 && entity->clientIterations.size() == 0) {
+			if (!entity->IsActive() && entity->iteration > 0) {
 				entity->Destroy();
 			}
 		});
@@ -117,15 +121,29 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, IncomingClientPtr client) {
 		v4d::data::WriteOnlyStream tmpStream(CUSTOM_ENTITY_DATA_INITIAL_STREAM_SIZE);
 		
+		// Player info
+		ServerSidePlayer::Ptr player = ServerSidePlayer::Get(client->id);
+		if (!player) return;
+		glm::dvec3 playerPosition {0,0,0};
+		uint64_t playerReferenceFrame = 0;
+		if (ServerSideEntity::Ptr playerEntity = player->GetServerSideEntity(); playerEntity) {
+			playerPosition = playerEntity->position;
+			playerReferenceFrame = playerEntity->referenceFrame;
+		}
+		
 		auto serverSideLock = ServerSideEntity::GetLock();
 		
-		ServerSideEntity::ForEach([&stream, &client, &tmpStream](ServerSideEntity::Ptr entity){
-			Entity::Iteration clientIteration;
-			if (entity->IsActive()) {
-				try {
-					clientIteration = entity->clientIterations.at(client->id);
-				} catch (...) {
-					clientIteration = entity->clientIterations[client->id] = 0;
+		ServerSideEntity::ForEach([&stream, &client, &tmpStream, &player, &playerReferenceFrame, &playerPosition](ServerSideEntity::Ptr entity){
+			// For a player to be subscribed to an entity, it must be active, in the same reference frame, and within the maximum subscribe distance
+			if (entity->IsActive() && entity->referenceFrame == playerReferenceFrame && glm::length(entity->position - playerPosition) < ENTITY_SUBSCRIBE_MAX_DISTANCE) {
+				Entity::Iteration clientIteration = 0;
+				{
+					auto lock = player->GetSubscriptionLock();
+					try {
+						clientIteration = player->entitySubscriptions.at(entity->GetID()).iteration;
+					} catch (...) {
+						player->entitySubscriptions[entity->GetID()].entity = entity;
+					}
 				}
 				if (entity->iteration > clientIteration) {
 					stream->Begin();
@@ -159,20 +177,67 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream->WriteStream(tmpStream);
 						
 					stream->End();
-					entity->clientIterations[client->id] = entity->iteration;
+					{
+						auto lock = player->GetSubscriptionLock();
+						player->entitySubscriptions[entity->GetID()].iteration = entity->iteration;
+					}
 				}
+				
+				// Dynamic entity?
+				auto lock = player->GetSubscriptionLock();
+				if (entity->IsDynamic()) {
+					player->dynamicEntitySubscriptions[entity->GetID()] = entity;
+				} else {
+					if (player->dynamicEntitySubscriptions.count(entity->GetID())) {
+						player->dynamicEntitySubscriptions.erase(entity->GetID());
+					}
+				}
+				
 			} else {
-				try {
-					clientIteration = entity->clientIterations.at(client->id);
+				auto lock = player->GetSubscriptionLock();
+				if (player->entitySubscriptions.count(entity->GetID())) {
 					v4d::data::WriteOnlyStream removeStream(8);
 						removeStream << REMOVE_ENTITY;
 						removeStream << entity->GetID();
-					serverActionQueuePerClient[client->id].emplace(removeStream);
-					entity->clientIterations.erase(client->id);
-				} catch(std::out_of_range) {}// NO ERROR HERE, it's normal that this entity may have already been removed for this client
+					EnqueueServerAction(client->id, removeStream);
+					player->entitySubscriptions.erase(entity->GetID());
+					if (player->dynamicEntitySubscriptions.count(entity->GetID())) {
+						player->dynamicEntitySubscriptions.erase(entity->GetID());
+					}
+				}
 			}
 		});
 		
+		{// Remove subscriptions for destroyed entities
+			auto lock = player->GetSubscriptionLock();
+			for (auto it = player->entitySubscriptions.begin(); it != player->entitySubscriptions.end(); ) {
+				auto&[entityID, subscription] = *it;
+				if (subscription.entity.expired()) {
+					v4d::data::WriteOnlyStream removeStream(8);
+						removeStream << REMOVE_ENTITY;
+						removeStream << entityID;
+					EnqueueServerAction(client->id, removeStream);
+					it = player->entitySubscriptions.erase(it);
+				} else {
+					++it;
+				}
+			}
+			for (auto it = player->dynamicEntitySubscriptions.begin(); it != player->dynamicEntitySubscriptions.end(); ) {
+				auto&[entityID, weakEntity] = *it;
+				if (weakEntity.expired()) {
+					v4d::data::WriteOnlyStream removeStream(8);
+						removeStream << REMOVE_ENTITY;
+						removeStream << entityID;
+					EnqueueServerAction(client->id, removeStream);
+					it = player->dynamicEntitySubscriptions.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+		
+		// Send queued action streams
+		std::lock_guard lock(serverActionQueueMutex);
 		auto& actionQueue = serverActionQueuePerClient[client->id];
 		while (actionQueue.size()) {
 			// LOG_DEBUG("Server SendActionFromQueue for client " << client->id)
@@ -184,9 +249,10 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 	V4D_MODULE_FUNC(void, ServerSendBursts, v4d::io::SocketPtr stream, IncomingClientPtr client, uint64_t frame) {
+		ServerSidePlayer::Ptr player;
 		glm::dvec3 basePosition;
 		uint64_t referenceFrame;
-		if (ServerSidePlayer::Ptr player = ServerSidePlayer::Get(client->id); player) {
+		if (player = ServerSidePlayer::Get(client->id); player) {
 			if (ServerSideEntity::Ptr playerEntity = player->GetServerSideEntity(); playerEntity) {
 				basePosition = playerEntity->position;
 				referenceFrame = playerEntity->referenceFrame;
@@ -197,45 +263,42 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		
 		SendBursts:
 		
-			// Fill cache vector and sort it by distance (closest first)
-			// Also filter them by active, same reference frame as user, and less than 10 km away from user
+			// Fill cache vector from subscribed entities and sort it by distance (closest first)
 			std::vector<NearbyEntity> nearbyEntities {};
-			nearbyEntities.reserve(BURST_SYNC_CACHE_INITIAL_VECTOR_SIZE);
-			ServerSideEntity::ForEach([&basePosition, &referenceFrame, &nearbyEntities](ServerSideEntity::Ptr entity){
-				if (entity->IsActive() && entity->IsDynamic() && entity->referenceFrame == referenceFrame) {
-					double distance = glm::length(entity->position - basePosition);
-					if (distance < BURST_SYNC_MAX_DISTANCE) {
-						nearbyEntities.emplace_back(
-							entity->GetID(),
-							entity->position - basePosition,
-							entity->orientation,
-							distance
-						);
+			{
+				auto lock = player->GetSubscriptionLock();
+				nearbyEntities.reserve(player->dynamicEntitySubscriptions.size());
+				for (auto&[entityID, weakEntity] : player->dynamicEntitySubscriptions) {
+					if (auto entity = weakEntity.lock(); entity) {
+						if (entity->referenceFrame == referenceFrame) {
+							const double distance = glm::length(entity->position - basePosition);
+							nearbyEntities.emplace_back(
+								entityID,
+								entity->position - basePosition,
+								entity->orientation,
+								distance //TODO maybe take into account the bounding radius too so that when the player is inside a very big craft it can be considered to be closer than another object which the center is closer
+							);
+						}
 					}
 				}
-			});
-			std::sort(nearbyEntities.begin(), nearbyEntities.end(), [](const auto& a, const auto& b){
-				//TODO maybe take into account the bounding radius too so that when the player is inside a very big craft it can be considered to be closer than another object which the center is closer
-				return a.distance < b.distance;
-			});
+			}
+			std::sort(nearbyEntities.begin(), nearbyEntities.end(), [](const auto& a, const auto& b){return a.distance < b.distance;});
 			
-			
-			{// Sync positions+rotations in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
+			{// Sync positions in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
 				int frameDivider = 1;
 				size_t start = 0;
 				size_t end = 0;
 				while (nearbyEntities.size() > end) {
 					start = end;
-					end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_PLUS_ROTATIONS_GROUP_SIZE * frameDivider);
+					end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_GROUP_SIZE * frameDivider);
 					
 					stream->Begin();
-						*stream << SYNC_GROUPED_ENTITIES_POSITIONS_ROTATIONS;
+						*stream << SYNC_GROUPED_ENTITIES_POSITIONS;
 						
 						*stream << glm::dvec3(basePosition);
 						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
 							*stream << nearbyEntities[n].id;
 							*stream << nearbyEntities[n].position;
-							*stream << nearbyEntities[n].orientation;
 						}
 						*stream << (int32_t)-1;
 						
@@ -245,53 +308,28 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				}
 			}
 			
-			
-			// {// Sync positions in groups of base N. First group of N is synced every frame, next group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, and so on...
-			// 	int frameDivider = 1;
-			// 	size_t start = 0;
-			// 	size_t end = 0;
-			// 	while (nearbyEntities.size() > end) {
-			// 		start = end;
-			// 		end = std::min(nearbyEntities.size(), start + BURST_SYNC_POSITIONS_GROUP_SIZE * frameDivider);
+			{// Sync rotations in groups of base N, half as often as positions. First group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, next group of N*8 is synced every 8 frames, and so on...
+				int frameDivider = 2;
+				size_t start = 0;
+				size_t end = 0;
+				while (nearbyEntities.size() > end) {
+					start = end;
+					end = std::min(nearbyEntities.size(), start + BURST_SYNC_ROTATIONS_GROUP_SIZE * frameDivider);
 					
-			// 		stream->Begin();
-			// 			*stream << SYNC_GROUPED_ENTITIES_POSITIONS;
+					stream->Begin();
+						*stream << SYNC_GROUPED_ENTITIES_ROTATIONS;
 						
-			// 			*stream << glm::dvec3(basePosition);
-			// 			for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
-			// 				*stream << nearbyEntities[n].id;
-			// 				*stream << nearbyEntities[n].position;
-			// 			}
-			// 			*stream << (int32_t)-1;
+						for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
+							*stream << nearbyEntities[n].id;
+							*stream << nearbyEntities[n].orientation;
+						}
+						*stream << (int32_t)-1;
 						
-			// 		stream->End();
+					stream->End();
 					
-			// 		frameDivider *= 2;
-			// 	}
-			// }
-			
-			// {// Sync rotations in groups of base N, half as often as positions. First group of N*2 is synced every 2 frames, next group of N*4 is synced every 4 frames, next group of N*8 is synced every 8 frames, and so on...
-			// 	int frameDivider = 2;
-			// 	size_t start = 0;
-			// 	size_t end = 0;
-			// 	while (nearbyEntities.size() > end) {
-			// 		start = end;
-			// 		end = std::min(nearbyEntities.size(), start + BURST_SYNC_ROTATIONS_GROUP_SIZE * frameDivider);
-					
-			// 		stream->Begin();
-			// 			*stream << SYNC_GROUPED_ENTITIES_ROTATIONS;
-						
-			// 			for (size_t n = start; n < end; ++n) if (n % frameDivider == frame % frameDivider) {
-			// 				*stream << nearbyEntities[n].id;
-			// 				*stream << nearbyEntities[n].orientation;
-			// 			}
-			// 			*stream << (int32_t)-1;
-						
-			// 		stream->End();
-					
-			// 		frameDivider *= 2;
-			// 	}
-			// }
+					frameDivider *= 2;
+				}
+			}
 			
 		
 		// ServerSideEntity::ForEach([&stream, &client](ServerSideEntity::Ptr entity){

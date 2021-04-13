@@ -449,7 +449,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		ServerSideEntity::Ptr entity = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Player, defaultPosition.rawValue);
 		playerEntityId = entity->GetID();
 		entity->SetDynamic();
-		entity->clientIterations[client->id] = 0;
 		player->parentEntityId = playerEntityId;
 		auto rb = entity->Add_rigidbody(10.0);
 		rb->boundingRadius = 0.4;
