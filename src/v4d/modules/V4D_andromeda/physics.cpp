@@ -515,7 +515,7 @@ void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, const Planet* cons
 	const glm::dvec3 normalizedPos = glm::normalize(entity->position);
 	TerrainCollision collision { planet->GetID(), planet->GetTerrainTypeAtPos(normalizedPos) };
 	
-	for (Collider collider : entity->colliders) {
+	for (auto/*copy*/[_, collider] : entity->colliders) {
 		// Transform colliders position and rotation to World space
 		collider.position = entity->position + glm::mat3_cast(entity->orientation) * collider.position;
 		collider.rotation = glm::mat3_cast(entity->orientation) * collider.rotation;
@@ -697,7 +697,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 								
 								// Loop through entityA's colliders to generate a list of collision rays
 								cachedCollisionRays.clear();
-								for (auto colliderA : entityA->colliders) {
+								for (auto/*copy*/[_, colliderA] : entityA->colliders) {
 									// Transform collider info world space
 									colliderA.position = entityA->position + glm::mat3_cast(entityA->orientation) * colliderA.position;
 									colliderA.rotation = glm::mat3_cast(entityA->orientation) * colliderA.rotation;
@@ -734,7 +734,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 							Collision collision;
 							if (auto entityB = ServerSideEntity::Get(colliders[cacheIndexB].id); entityB) {
 								if (entityA->colliders.size() > 0 || entityB->colliders.size() > 0) {
-									for (auto colliderB : entityB->colliders) {
+									for (auto/*copy*/[_, colliderB] : entityB->colliders) {
 										// Transform collider to World space
 										colliderB.position = entityB->position + glm::mat3_cast(entityB->orientation) * colliderB.position;
 										colliderB.rotation = glm::mat3_cast(entityB->orientation) * colliderB.rotation;
@@ -824,10 +824,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					}
 				}
 			}
-		}
-		
-		{// Apply Constraints
-			//...
 		}
 		
 		{// Integrate motion

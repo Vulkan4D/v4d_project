@@ -111,9 +111,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			auto& build = cachedData.builds.at(entityUniqueID);
 			if (build) {
 				auto& blocks = cachedData.buildBlocks.at(entityUniqueID);
-				entity->renderableGeometryEntityInstance = build->SwapBlocksAndRebuild(blocks);
+				entity->renderableGeometryEntityInstances["blocks"] = build->SwapBlocksAndRebuild(blocks);
 				entity->posInit = false;
-				entity->renderableGeometryEntityInstance = cachedData.builds[entityUniqueID]->CreateEntity();
+				entity->renderableGeometryEntityInstances["blocks"] = cachedData.builds[entityUniqueID]->CreateEntity();
 			}
 		} catch(...){}
 	}

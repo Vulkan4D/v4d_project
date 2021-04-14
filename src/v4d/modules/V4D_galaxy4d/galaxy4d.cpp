@@ -95,7 +95,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
-						ball->colliders.emplace_back(rigidbody->boundingRadius);
+						ball->colliders.emplace("root", rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -114,7 +114,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						box->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 10.0;
 						auto rigidbody = box->Add_rigidbody(Rigidbody::BoxInertia(10.0/*mass*/, 4,4,2));
 						rigidbody->boundingRadius = 3;
-						box->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1});
+						box->colliders.emplace("root", Collider{glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1}});
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -133,7 +133,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(0.2/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
-						ball->colliders.emplace_back(rigidbody->boundingRadius);
+						ball->colliders.emplace("root", rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -192,7 +192,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(5.0/*mass*/, 2.0/*radius*/));
 						rigidbody->boundingRadius = 2.0;
-						ball->colliders.emplace_back(rigidbody->boundingRadius);
+						ball->colliders.emplace("root", rigidbody->boundingRadius);
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -222,7 +222,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.2))->boundingRadius = 2;
 						
 						// Box collider
-						glass->colliders.emplace_back(glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.1});
+						glass->colliders.emplace("root", Collider{glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.1}});
 						
 						// // Triangle colliders
 						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{0,0,0});
@@ -341,13 +341,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		switch (type) {
 			case OBJECT_TYPE::Player:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				renderableEntity->generator = cake;
 				renderableEntity->Remove_physics();
 			}break;
 			case OBJECT_TYPE::Ball:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				float radius = 0.5f;
 				renderableEntity->generator = [radius](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};
@@ -362,7 +362,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}break;
 			case OBJECT_TYPE::Box:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				renderableEntity->generator = [](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};
 					mat.visibility.textures[0] = Renderer::sbtOffsets["call:tex_bumped"];
@@ -377,7 +377,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			
 			case OBJECT_TYPE::GlassBall:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				float radius = 0.5f;
 				// auto physics = renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 1.0f);
 				// physics->SetSphereCollider(radius);
@@ -394,7 +394,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}break;
 			case OBJECT_TYPE::Light:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				float radius = 2;
 				float intensity = 100000.0f;
 				// auto physics = renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::DYNAMIC, 5.0f);
@@ -411,13 +411,13 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			}break;
 			case OBJECT_TYPE::Drone:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				renderableEntity->generator = cake;
 				renderableEntity->Remove_physics();
 			}break;
 			case OBJECT_TYPE::Glass:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-				entity->renderableGeometryEntityInstance = renderableEntity;
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
 				// renderableEntity->Add_physics(PhysicsInfo::RigidBodyType::STATIC, 1.0f)->SetBoxCollider({2.0f, 2.0f, 0.01f});
 				renderableEntity->generator = [](RenderableGeometryEntity* renderableEntity, Device* device){
 					RenderableGeometryEntity::Material mat {};

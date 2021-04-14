@@ -453,7 +453,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		auto rb = entity->Add_rigidbody(10.0);
 		rb->boundingRadius = 0.4;
 		rb->SetOrientationLocked();
-		entity->colliders.emplace_back(0.4);
+		entity->colliders.emplace("head", 0.4);
 		
 		// Set player position
 		if (defaultPosition.IsCelestial()) {
@@ -479,6 +479,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			stream << forwardVector;
 			stream << upVector;
 			stream << defaultPosition.IsCelestial();
+			stream << v4d::TextID("head").numericValue;
 		
 		ServerEnqueueAction(client->id, stream);
 	}
@@ -503,10 +504,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto forwardVector = stream->Read<glm::dvec3>();
 				auto upVector = stream->Read<glm::dvec3>();
 				bool isReferenceCelestial = stream->Read<bool>();
+				v4d::TextID partId = stream->Read<uint64_t>();
 				
 				// LOG_DEBUG("Client ReceiveAction ASSIGN_PLAYER_OBJ for entity id " << id)
 				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(id); entity) {
-					if (v4d::graphics::RenderableGeometryEntity::Ptr renderableEntity = entity->renderableGeometryEntityInstance.lock(); renderableEntity) {
+					if (v4d::graphics::RenderableGeometryEntity::Ptr renderableEntity = entity->renderableGeometryEntityInstances[partId].lock(); renderableEntity) {
 						scene->cameraParent = renderableEntity;
 						scene->timestamp = timestamp;
 					}
@@ -551,7 +553,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		using namespace networking::action;
 		if (clientSidePlayerEntityID != -1) {
 			if (ClientSideEntity::Ptr playerEntity = ClientSideEntity::Get(clientSidePlayerEntityID); playerEntity) {
-				if (auto renderableEntity = playerEntity->renderableGeometryEntityInstance.lock(); renderableEntity) {
+				if (auto renderableEntity = playerEntity->renderableGeometryEntityInstances["head"].lock(); renderableEntity) {
 					// Look Direction and Acceleration
 					stream->Begin();
 						*stream << SYNC_PLAYER_MOTION;
@@ -574,7 +576,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			case OBJECT_TYPE::Player:{
 				if (ClientSideEntity::Ptr entity = ClientSideEntity::Get(entityUniqueID); entity) {
 					auto renderableEntity = v4d::graphics::RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
-					entity->renderableGeometryEntityInstance = renderableEntity;
+					entity->renderableGeometryEntityInstances["head"] = renderableEntity;
 					renderableEntity->generator = [](auto* renderableEntity, auto* device){};
 					renderableEntity->generator = cake;
 				}

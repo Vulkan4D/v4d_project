@@ -3,6 +3,7 @@
 #include <v4d.h>
 #include <string_view>
 #include "utilities/io/Logger.h"
+#include "utilities/data/Stream.h"
 #include "utilities/graphics/vulkan/Loader.h"
 
 #include "utilities/graphics/RenderableGeometryEntity.h"
@@ -283,6 +284,36 @@ struct Collider {
 	
 };
 
+struct Transform {
+	glm::dvec3 position;
+	glm::dquat orientation;
+};
+
+struct Joint {
+	v4d::TextID parentJoint;
+	glm::vec3 position {0,0,0};
+	glm::quat orientation {1,0,0,0};
+	std::unordered_map<v4d::TextID, Transform> parts {};
+	std::vector<v4d::TextID> childJoints {};
+	
+	glm::vec3 linearValue {0,0,0};
+	glm::vec3 angularValue {0,0,0};
+	glm::vec3 linearMin {0,0,0};
+	glm::vec3 angularMin {0,0,0};
+	glm::vec3 linearMax {0,0,0};
+	glm::vec3 angularMax {0,0,0};
+	
+	virtual void Serialize(v4d::data::Stream& stream) {
+		stream << linearValue;
+		stream << angularValue;
+	}
+	virtual void Deserialize(v4d::data::Stream& stream) {
+		stream >> linearValue;
+		stream >> angularValue;
+	}
+	virtual ~Joint() = default;
+};
+
 // struct Renderable {
 // 	uint32_t id; //TODO static increment like physicsInfo
 // 	glm::dmat4 offset;
@@ -380,12 +411,13 @@ struct V4DGAME ServerSideEntity : Entity {
 	bool isDynamic = false;
 	
 	std::atomic<Iteration> iteration {0};
-	// std::unordered_map<uint64_t/*clientID*/, Iteration /*iteration*/> clientIterations {};
 
-	std::vector<Collider> colliders {};
+	std::unordered_map<uint64_t, Joint> joints {};
+
+	std::unordered_map<v4d::TextID, Collider> colliders {};
 	int colliderCacheIndex = -1;
 	static bool colliderCacheValid;
-
+	
 	inline Iteration Iterate() {
 		return ++iteration;
 	}
@@ -418,27 +450,13 @@ struct V4DGAME ServerSideEntity : Entity {
 
 struct V4DGAME ClientSideEntity : Entity {
 	V4D_ENTITY_DECLARE_CLASS_MAP(ClientSideEntity)
-	// V4D_ENTITY_DECLARE_COMPONENT_MAP(ClientSideEntity, std::string_view, Renderable, renderable)
+	// V4D_ENTITY_DECLARE_COMPONENT_MAP(ClientSideEntity, v4d::TextID, Renderable, renderable)
 	
 	Iteration iteration {0};
 
 	bool posInit = false;
 	Position targetPosition {0};
 	Orientation targetOrientation {1,0,0,0};
-	
-	// Temporary
-		v4d::graphics::RenderableGeometryEntity::WeakPtr renderableGeometryEntityInstance;
-		inline void UpdateRenderable() {
-			if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
-				renderableEntity->parentId = referenceFrame;
-				renderableEntity->SetLocalTransform(glm::translate(glm::dmat4(1), position) * glm::mat4_cast(orientation));
-			}
-		}
-		inline void DestroyRenderable() {
-			if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
-				renderableEntity->Destroy();
-			}
-		}
 	
 	inline void operator()(v4d::modular::ModuleID moduleID, Type type, ReferenceFrame referenceFrame, Position position, Orientation orientation = {1,0,0,0}) {
 		Entity::operator()(moduleID, type, referenceFrame, position, orientation);
@@ -456,6 +474,28 @@ struct V4DGAME ClientSideEntity : Entity {
 		operator()(moduleID, type, referenceFrame, referenceFrameExtra, position, orientation);
 		this->iteration = iteration;
 	}
+	
+	
+	
+	// Temporary... Replace with renderable component map in the future?
+			std::unordered_map<v4d::TextID, v4d::graphics::RenderableGeometryEntity::WeakPtr> renderableGeometryEntityInstances {};
+			inline void UpdateRenderable() {
+				for (auto&[_,renderableGeometryEntityInstance] : renderableGeometryEntityInstances) {
+					if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
+						renderableEntity->parentId = referenceFrame;
+						renderableEntity->SetLocalTransform(glm::translate(glm::dmat4(1), position) * glm::mat4_cast(orientation));
+					}
+				}
+			}
+			inline void DestroyRenderable() {
+				for (auto&[_,renderableGeometryEntityInstance] : renderableGeometryEntityInstances) {
+					if (auto renderableEntity = renderableGeometryEntityInstance.lock(); renderableEntity) {
+						renderableEntity->Destroy();
+					}
+				}
+			}
+	
+	
 };
 
 struct EntitySubscription {
