@@ -1,6 +1,7 @@
 #include <v4d.h>
 #include <V4D_Mod.h>
 #include "v4d/game/Entity.h"
+#include "v4d/game/EntityConfigFile.h"
 
 #include "utilities/io/Logger.h"
 #include "utilities/scene/GltfModelLoader.h"
@@ -20,6 +21,8 @@ using namespace v4d::graphics;
 using namespace v4d::graphics::Mesh;
 
 GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
+// GltfModelLoader avatar {V4D_MODULE_ASSET_PATH("G4D_models", "resources/avatar.glb")};
+auto avatarConfig = EntityConfigFile::Instance(V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/avatar.ini"));
 
 V4D_Mod* mainRenderModule = nullptr;
 V4D_Mod* mainMultiplayerModule = nullptr;
@@ -76,6 +79,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	V4D_MODULE_FUNC(void, LoadScene, Scene* _s) {
 		scene = _s;
+		avatarConfig->Load();
 	}
 	
 	V4D_MODULE_FUNC(void, ServerReceiveAction, v4d::io::SocketPtr stream, IncomingClientPtr client) {
@@ -210,6 +214,18 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						drone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 						drone->SetDynamic(false);
 						drone->Activate();
+					}
+				}
+				else if (key == "avatar") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch avatar
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						auto avatar = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Avatar, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						avatar->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+						avatar->SetDynamic(false);
+						avatar->Activate();
 					}
 				}
 				else if (key == "glass") {
@@ -415,6 +431,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				renderableEntity->generator = cake;
 				renderableEntity->Remove_physics();
 			}break;
+			case OBJECT_TYPE::Avatar:{
+				avatarConfig->GenerateRenderables(entity);
+			}break;
 			case OBJECT_TYPE::Glass:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
@@ -504,7 +523,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				case GLFW_KEY_INSERT:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
-						stream << std::string("drone");
+						stream << std::string("avatar");
 						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;

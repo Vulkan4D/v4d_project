@@ -47,7 +47,6 @@ Entity::Id clientSidePlayerEntityID = -1;
 
 	V4D_Mod* mainRenderModule = nullptr;
 	V4D_Mod* mainMultiplayerModule = nullptr;
-	v4d::graphics::Window* window = nullptr;
 	v4d::graphics::Renderer* r = nullptr;
 	v4d::scene::Scene* scene = nullptr;
 	std::shared_ptr<v4d::networking::ListeningServer> server = nullptr;
@@ -322,10 +321,6 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		if (galaxyFadeShader) delete galaxyFadeShader;
 	}
 	
-	V4D_MODULE_FUNC(void, InitWindow, v4d::graphics::Window* w) {
-		window = w;
-	}
-	
 	V4D_MODULE_FUNC(void, InitRenderer, v4d::graphics::Renderer* _r) {
 		r = _r;
 	}
@@ -359,58 +354,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	}
 	
 #pragma endregion
-	
-#pragma region Input
-	
-	V4D_MODULE_FUNC(std::string, InputCallbackName) {return THIS_MODULE;}
-	
-	V4D_MODULE_FUNC(void, InputKeyCallback, int key, int scancode, int action, int mods) {
-		if (action != GLFW_RELEASE
-			#ifdef _ENABLE_IMGUI
-				&& (!ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow) || key == GLFW_KEY_ESCAPE)
-			#endif
-		) {
-			// LOG(scancode) //TODO build platform-specific mapping for scancode when key == -1
-			switch (key) {
-				
-				// Quit
-				case GLFW_KEY_ESCAPE:
-					glfwSetWindowShouldClose(window->GetHandle(), 1);
-					break;
-					
-				// // Throw stuff
-				// case GLFW_KEY_B:{
-				// 	v4d::data::WriteOnlyStream stream(32);
-				// 		stream << networking::action::TEST_OBJ;
-				// 		stream << std::string("ball");
-				// 		stream << DVector3{playerView->viewForward.x, playerView->viewForward.y, playerView->viewForward.z};
-				// 	ClientEnqueueAction(stream);
-				// }break;
-			}
-		}
-	}
-	
-	V4D_MODULE_FUNC(void, MouseButtonCallback, int button, int action, int mods) {
-		if (action == GLFW_RELEASE
-			#ifdef _ENABLE_IMGUI
-				&& !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)
-			#endif
-		) {
-			switch (button) {
-				case GLFW_MOUSE_BUTTON_1:
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					break;
-				case GLFW_MOUSE_BUTTON_2:
-					glfwSetCursorPos(window->GetHandle(), 0, 0);
-					glfwSetInputMode(window->GetHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-					break;
-			}
-		}
-	}
-	
-#pragma endregion
-	
+
 #pragma region Networking
 	
 	V4D_MODULE_FUNC(void, ServerSendActions, v4d::io::SocketPtr stream, v4d::networking::IncomingClientPtr client) {

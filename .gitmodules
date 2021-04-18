@@ -35,3 +35,6 @@
 [submodule "src/tinygltf"]
 	path = src/tinygltf
 	url = git@github.com:syoyo/tinygltf.git
+[submodule "src/v4d/modules/G4D_models"]
+	path = src/v4d/modules/G4D_models
+	url = git@github.com:Vulkan4d/g4d_models.git

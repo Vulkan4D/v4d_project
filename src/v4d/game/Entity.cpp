@@ -5,6 +5,8 @@ V4D_ENTITY_DEFINE_CLASS_MAP(ServerSideEntity)
 	bool ServerSideEntity::colliderCacheValid = false;
 
 V4D_ENTITY_DEFINE_CLASS_MAP(ClientSideEntity)
-	// V4D_ENTITY_DEFINE_COMPONENT_MAP(ClientSideEntity, std::string_view, Renderable, renderable)
+	// V4D_ENTITY_DEFINE_COMPONENT_MAP(ClientSideEntity, v4d::TextID, Renderable, renderable)
 
 V4D_ENTITY_DEFINE_CLASS_MAP(ServerSidePlayer)
+
+// V4D_ENTITY_DEFINE_CLASS(RenderableGeometry)

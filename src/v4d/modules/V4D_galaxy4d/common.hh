@@ -8,4 +8,5 @@ namespace OBJECT_TYPE {
 	const uint32_t Glass = 4;
 	const uint32_t GlassBall = 5;
 	const uint32_t Box = 6;
+	const uint32_t Avatar = 7;
 }
