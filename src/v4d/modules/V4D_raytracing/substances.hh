@@ -86,14 +86,18 @@ struct Substance {
 		{"bronze",			{{{"Cu", 0.88}, {"Sn", 0.12}},								/*color*/{0.9, 0.8, 0.5, 1.0},		/*metallic*/1, /*roughness*/0.10, /*IOR*/1.18, /*base*/"tex_noisy",				/*aging*/0.0,"",						/*oxydation*/0.5,"tex_oxydation_copper",	/*wearAndTear*/0.4,"tex_scratches_metal",		/*burn*/0.0,""				}},// bronze
 		
 		// Composites
+		{"composite",		{{{"H", 0.4}, {"C", 0.3}, {"O", 0.2}, {"Si", 0.1}},			/*color*/{1.0, 1.0, 1.0, 1.0},		/*metallic*/0, /*roughness*/0.30, /*IOR*/1.45, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/1.0,"tex_scratches_plastic",		/*burn*/0.0,""				}},// composite
 		{"plastic",			{{{"H", 0.4}, {"C", 0.3}, {"O", 0.2}, {"Si", 0.1}},			/*color*/{1.0, 1.0, 1.0, 1.0},		/*metallic*/0, /*roughness*/0.50, /*IOR*/1.45, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/1.0,"tex_scratches_plastic",		/*burn*/0.0,""				}},// plastic
 		{"silicone",		{{{"Si", 0.5}, {"O", 0.5}},									/*color*/{1.0, 1.0, 1.0, 1.0},		/*metallic*/0, /*roughness*/0.70, /*IOR*/1.45, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// silicone
 		{"rubber",			{{{"H", 0.4}, {"C", 0.3}, {"O", 0.2}, {"Si", 0.1}},			/*color*/{1.0, 1.0, 1.0, 1.0},		/*metallic*/0, /*roughness*/0.50, /*IOR*/1.45, /*base*/"",						/*aging*/1.0,"tex_cracked_rubber",		/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// rubber
 		{"carbon_fiber",	{{{"C", 0.9}, {"H", 0.05}, {"O", 0.05}},					/*color*/{0.5, 0.5, 0.5, 1.0},		/*metallic*/0, /*roughness*/0.20, /*IOR*/1.45, /*base*/"tex_carbon_fiber",		/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// carbon_fiber
 		
 		// Others
-		{"ceramic",			{{{"Si", 0.8}, {"O", 0.15}, {"Al", 0.04}, {"Fe", 0.01}},	/*color*/{0.7, 0.7, 0.7, 1.0},		/*metallic*/0, /*roughness*/1.00, /*IOR*/1.45, /*base*/"tex_ceramic",			/*aging*/0.1,"tex_cracked_ceramic",		/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// ceramic
+		{"ceramic",			{{{"Si", 0.8}, {"O", 0.15}, {"Al", 0.04}, {"Fe", 0.01}},	/*color*/{0.7, 0.7, 0.7, 1.00},		/*metallic*/0, /*roughness*/1.00, /*IOR*/1.45, /*base*/"tex_ceramic",			/*aging*/0.1,"tex_cracked_ceramic",		/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// ceramic
 		{"glass",			{{{"Si", 0.7}, {"O", 0.15}, {"Na", 0.1}, {"Ca", 0.05}},		/*color*/{1.0, 1.0, 1.0, 0.01},		/*metallic*/0, /*roughness*/0.01, /*IOR*/1.50, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.1,"tex_scratches_glass",		/*burn*/0.0,""				}},// glass
+		{"helmet_glass",	{{{"Si", 0.7}, {"O", 0.15}, {"Na", 0.1}, {"Ca", 0.05}},		/*color*/{1.0, 1.0, 1.0, 1.00},		/*metallic*/1, /*roughness*/0.00, /*IOR*/1.50, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.1,"tex_scratches_glass",		/*burn*/0.0,""				}},// helmet_glass
+		{"led",				{{{"Si", 0.7}, {"O", 0.15}, {"Na", 0.1}, {"Ca", 0.05}},		/*color*/{1.0, 1.0, 1.0, 1.00},		/*metallic*/0, /*roughness*/0.00, /*IOR*/1.50, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.1,"tex_scratches_glass",		/*burn*/0.0,""				}},// led
+		{"void",			{{{"H", 0.4}, {"C", 0.3}, {"O", 0.2}, {"Si", 0.1}},			/*color*/{0.0, 0.0, 0.0, 1.00},		/*metallic*/0, /*roughness*/0.00, /*IOR*/0.00, /*base*/"",						/*aging*/0.0,"",						/*oxydation*/0.0,"",						/*wearAndTear*/0.0,"",							/*burn*/0.0,""				}},// void
 	};
 #endif
 

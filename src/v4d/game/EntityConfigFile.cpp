@@ -33,12 +33,12 @@ bool MeshFile::Load() {
 		if (node.mesh != -1) {
 			// LOG("Loading mesh node '" << node.name << "'")
 			
-			auto& mesh = gltfModel.meshes[node.mesh];
 			auto& meshData = meshes[node.name];
 			auto& geometryPrimitives = meshData.geometries;
-			geometryPrimitives.reserve(mesh.primitives.size());
 			
-			for (auto& p : mesh.primitives) {
+			geometryPrimitives.reserve(gltfModel.meshes[node.mesh].primitives.size());
+			
+			for (auto& p : gltfModel.meshes[node.mesh].primitives) {
 				ASSERT_OR_RETURN_FALSE(p.mode == TINYGLTF_MODE_TRIANGLES);
 				auto* primitiveData = &geometryPrimitives.emplace_back();
 				

@@ -22,7 +22,7 @@ using namespace v4d::graphics::Mesh;
 
 GltfModelLoader cake {V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/cake.glb")};
 // GltfModelLoader avatar {V4D_MODULE_ASSET_PATH("G4D_models", "resources/avatar.glb")};
-auto avatarConfig = EntityConfigFile::Instance(V4D_MODULE_ASSET_PATH(THIS_MODULE, "resources/avatar.ini"));
+auto avatarConfig = EntityConfigFile::Instance(V4D_MODULE_ASSET_PATH("G4D_models", "resources/avatar.ini"));
 
 V4D_Mod* mainRenderModule = nullptr;
 V4D_Mod* mainMultiplayerModule = nullptr;
@@ -116,6 +116,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::Ptr box = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Box, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						box->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 10.0;
+						box->orientation = playerEntity->orientation;
 						auto rigidbody = box->Add_rigidbody(Rigidbody::BoxInertia(10.0/*mass*/, 4,4,2));
 						rigidbody->boundingRadius = 3;
 						box->colliders.emplace("root", Collider{glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1}});
@@ -212,6 +213,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto drone = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Drone, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						drone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+						drone->orientation = playerEntity->orientation;
 						drone->SetDynamic(false);
 						drone->Activate();
 					}
@@ -223,7 +225,8 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ServerSideEntity::Ptr playerEntity;
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						auto avatar = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Avatar, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-						avatar->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
+						avatar->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+						avatar->orientation = playerEntity->orientation;
 						avatar->SetDynamic(false);
 						avatar->Activate();
 					}
@@ -296,9 +299,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	
 	#pragma region Rendering
 	
-	V4D_MODULE_FUNC(void, ConfigureShaders) {
-		mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "terrain.dig.sphere");
-	}
+	// V4D_MODULE_FUNC(void, ConfigureShaders) {
+	// 	mainRenderModule->AddRayTracingHitShader(THIS_MODULE, "terrain.dig.sphere");
+	// }
 	
 	V4D_MODULE_FUNC(void, DrawUi2) {
 		#ifdef _ENABLE_IMGUI

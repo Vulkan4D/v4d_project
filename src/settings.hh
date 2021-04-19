@@ -8,11 +8,7 @@ struct ProjectSettings : public v4d::io::ConfigFile {
 	CONFIGFILE_STRUCT(ProjectSettings)
 
 	// Application Settings
-	#ifdef _DEBUG
-		bool log_verbose = true;
-	#else
-		bool log_verbose = false;
-	#endif
+	bool log_verbose = false;
 	std::string modules_list_file = "modules.txt";
 	
 	// Graphics

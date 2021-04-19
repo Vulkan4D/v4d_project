@@ -185,7 +185,7 @@ float GetOptimalBounceStartDistance(float distance) {
 		return GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform_history * GetGeometry(entityInstanceIndex, geometryIndex).transform;
 	}
 	mat3 GetModelNormalViewMatrix(uint entityInstanceIndex, uint geometryIndex) {
-		return transpose(inverse(mat3(GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform * GetGeometry(entityInstanceIndex, geometryIndex).transform)));
+		return transpose(inverse(mat3(GetRenderableEntityInstance(entityInstanceIndex).modelViewTransform))) * inverse(mat3(GetGeometry(entityInstanceIndex, geometryIndex).transform));
 	}
 		
 	#if !(defined(SHADER_RGEN) || defined(SHADER_RCALL))
@@ -202,7 +202,7 @@ float GetOptimalBounceStartDistance(float distance) {
 			return GetRenderableEntityInstance().modelViewTransform_history * mat4(transpose(mat3x4(GetGeometry().transform)));
 		}
 		mat3 GetModelNormalViewMatrix() {
-			return transpose(inverse(mat3(GetRenderableEntityInstance().modelViewTransform * mat4(transpose(mat3x4(GetGeometry().transform))))));
+			return transpose(inverse(mat3(GetRenderableEntityInstance().modelViewTransform))) * inverse(mat3(GetGeometry().transform));
 		}
 		uint GetIndex(uint n) {
 			return GetGeometry().indices16 != 0? 
