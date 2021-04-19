@@ -56,9 +56,12 @@ V4D_MODULE_CLASS(V4D_Mod) {
 		}
 		if (auto parent = scene->cameraParent.lock(); parent) {
 			if (!player.canMovePosition) {
-				scene->camera.MakeViewMatrix((parent->GetWorldTransform() * parent->cameraOffset)[3], player.viewForward, player.viewUp);
+				glm::dvec3 position = parent->GetLocalTransform()[3];
+				parent->SetLocalTransform(glm::inverse(glm::lookAt(position, position + player.viewForward, player.viewUp)));
+				scene->camera.MakeViewMatrix((parent->GetLocalTransform() * parent->cameraOffset)[3], player.viewForward, player.viewUp);
+			} else {
+				parent->SetLocalTransform(glm::inverse(scene->camera.viewMatrix) * glm::inverse(parent->cameraOffset));
 			}
-			parent->SetWorldTransform(glm::inverse(scene->camera.viewMatrix) * glm::inverse(parent->cameraOffset));
 		}
 		
 		if (timeWarp == 0) {

@@ -1,3 +1,4 @@
+#define TINYGLTF_IMPLEMENTATION
 #include "EntityConfigFile.h"
 
 CONFIGFILE_STRUCT_CPP(EntityConfigFile)

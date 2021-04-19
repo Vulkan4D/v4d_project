@@ -4,7 +4,9 @@ add_library(game SHARED
 	${V4DGameSourceFiles}
 )
 target_link_libraries(game
-	PUBLIC pthread
+	PUBLIC
+		v4d
+		pthread
 )
 target_include_directories(game
 	PRIVATE

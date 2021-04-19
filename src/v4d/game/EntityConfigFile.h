@@ -1,10 +1,4 @@
 #pragma once
-#include <v4d.h>
-#include "utilities/io/ConfigFile.h"
-#include "utilities/graphics/Mesh.hpp"
-#include "utilities/graphics/RenderableGeometryEntity.h"
-
-#include "Entity.h"
 
 // TinyGltfLoader
 #define TINYGLTF_USE_CPP14
@@ -16,6 +10,13 @@
 #define TINYGLTF_NO_INCLUDE_JSON
 #include "../../json.hpp"
 #include "../../tinygltf/tiny_gltf.h"
+
+#include <v4d.h>
+#include "utilities/io/ConfigFile.h"
+#include "utilities/graphics/Mesh.hpp"
+#include "utilities/graphics/RenderableGeometryEntity.h"
+
+#include "Entity.h"
 
 using namespace v4d::graphics::Mesh;
 
