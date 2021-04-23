@@ -14,6 +14,8 @@ struct PlayerView {
 	glm::dvec3 viewUpTarget = viewUp;
 	glm::dvec3 viewForwardTarget = viewForward;
 	glm::dvec3 viewRightTarget = viewRight;
+	bool brakes = false;
+	bool useCameraParentOffset = true;
 	bool useFreeFlyCam = true;
 	float flyCamSmoothness = 0.0;
 	glm::dmat4 freeFlyCamRotationMatrix {1};

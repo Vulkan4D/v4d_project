@@ -535,6 +535,10 @@ int nbStochasticRayTracedCollisions = 5;
 			AddRayTracingShader(THIS_MODULE, "aabb_cube");
 			AddRayTracingShader(THIS_MODULE, "aabb_sphere");
 			AddRayTracingShader(THIS_MODULE, "aabb_sphere.light");
+			AddRayTracingShader(THIS_MODULE, "aabb_capsule");
+			AddRayTracingShader(THIS_MODULE, "aabb_cylinder");
+			AddRayTracingShader(THIS_MODULE, "aabb_cone");
+			AddRayTracingShader(THIS_MODULE, "aabb_ring");
 		}
 		
 		{// default callables

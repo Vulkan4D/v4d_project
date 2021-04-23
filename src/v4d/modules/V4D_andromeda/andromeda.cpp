@@ -476,11 +476,17 @@ V4D_MODULE_CLASS(V4D_Mod) {
 				auto id = stream->Read<Entity::Id>();
 				auto orientation = stream->Read<Entity::Orientation>();
 				auto acceleration = stream->Read<typeof(playerView->velocity)>();
+				bool brakes = stream->Read<bool>();
 				if (ServerSidePlayer::Ptr player = ServerSidePlayer::Get(client->id); player && player->parentEntityId == id) {
 					if (ServerSideEntity::Ptr entity = ServerSideEntity::Get(id); entity) {
 						entity->orientation = orientation;
 						if (auto rigidbody = entity->rigidbody.Lock(); rigidbody) {
-							rigidbody->ApplyImpulse(acceleration);
+							if (glm::dot(acceleration,acceleration) > 0) {
+								rigidbody->ApplyImpulse(acceleration);
+							} else if (brakes) {
+								rigidbody->linearVelocity *= 0.5;
+								if (glm::length(rigidbody->linearVelocity) < 0.0001) rigidbody->linearVelocity = {0,0,0};
+							}
 							rigidbody->angularVelocity = {0,0,0};
 						}
 					}
@@ -504,6 +510,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						*stream << clientSidePlayerEntityID;
 						*stream << (Entity::Orientation)glm::quat_cast(renderableEntity->GetWorldTransform());
 						*stream << playerView->velocity; // this is the acceleration in this case
+						*stream << playerView->brakes;
 					stream->End();
 				}
 			}

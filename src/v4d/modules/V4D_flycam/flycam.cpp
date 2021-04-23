@@ -58,7 +58,11 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (!player.canMovePosition) {
 				glm::dvec3 position = parent->GetLocalTransform()[3];
 				parent->SetLocalTransform(glm::inverse(glm::lookAt(position, position + player.viewForward, player.viewUp)));
-				scene->camera.MakeViewMatrix((parent->GetLocalTransform() * parent->cameraOffset)[3], player.viewForward, player.viewUp);
+				if (player.useCameraParentOffset) {
+					scene->camera.MakeViewMatrix((parent->GetLocalTransform() * parent->cameraOffset)[3], player.viewForward, player.viewUp);
+				} else {
+					scene->camera.MakeViewMatrix((parent->GetLocalTransform())[3], player.viewForward, player.viewUp);
+				}
 			} else {
 				parent->SetLocalTransform(glm::inverse(scene->camera.viewMatrix) * glm::inverse(parent->cameraOffset));
 			}
@@ -171,6 +175,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 			if (glfwGetKey(window->GetHandle(), GLFW_KEY_LEFT_CONTROL)) {
 				player.velocity += -player.viewUp * player.camSpeed * camSpeedMult;
 			}
+			player.brakes = glfwGetKey(window->GetHandle(), GLFW_KEY_Z);
 		}
 		
 		// player.worldPosition += player.velocity * deltaTime;

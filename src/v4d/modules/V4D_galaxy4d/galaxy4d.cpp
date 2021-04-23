@@ -96,7 +96,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					ServerSideEntity::Ptr playerEntity;
 					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
 						ServerSideEntity::Ptr ball = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ball, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
-						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
 						ball->colliders.emplace("root", rigidbody->boundingRadius);
@@ -108,6 +108,90 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->Activate();
 					}
 				}
+				
+				
+				else if (key == "capsule") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch capsule
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::Ptr capsule = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Capsule, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						capsule->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
+						capsule->orientation = playerEntity->orientation;
+						// auto rigidbody = capsule->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						// rigidbody->boundingRadius = 0.5;
+						// capsule->colliders.emplace("root", rigidbody->boundingRadius);
+						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						// }
+						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						// capsule->SetDynamic();
+						capsule->Activate();
+					}
+				}
+				else if (key == "cylinder") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch cylinder
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::Ptr cylinder = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Cylinder, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						cylinder->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
+						cylinder->orientation = playerEntity->orientation;
+						// auto rigidbody = cylinder->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						// rigidbody->boundingRadius = 0.5;
+						// cylinder->colliders.emplace("root", rigidbody->boundingRadius);
+						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						// }
+						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						// cylinder->SetDynamic();
+						cylinder->Activate();
+					}
+				}
+				else if (key == "cone") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch cone
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::Ptr cone = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Cone, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						cone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
+						cone->orientation = playerEntity->orientation;
+						// auto rigidbody = cone->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						// rigidbody->boundingRadius = 0.5;
+						// cone->colliders.emplace("root", rigidbody->boundingRadius);
+						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						// }
+						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						// cone->SetDynamic();
+						cone->Activate();
+					}
+				}
+				else if (key == "ring") {
+					auto dir = stream->Read<glm::vec3>();
+					// Launch ring
+					ServerSidePlayer::Ptr player;
+					ServerSideEntity::Ptr playerEntity;
+					if ((player = ServerSidePlayer::Get(client->id)) && (playerEntity = player->GetServerSideEntity())) {
+						ServerSideEntity::Ptr ring = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ring, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
+						ring->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
+						ring->orientation = playerEntity->orientation;
+						// auto rigidbody = ring->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
+						// rigidbody->boundingRadius = 0.5;
+						// ring->colliders.emplace("root", rigidbody->boundingRadius);
+						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						// }
+						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						// ring->SetDynamic();
+						ring->Activate();
+					}
+				}
+				
+				
 				else if (key == "box") {
 					auto dir = stream->Read<glm::vec3>();
 					// Launch box
@@ -347,6 +431,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 	V4D_MODULE_FUNC(void, RenderFrame_BeforeUpdate) {
 		if (auto cameraParent = scene->cameraParent.lock(); cameraParent) {
 			cameraParent->rayTracingMask = playerVisible? RAY_TRACED_ENTITY_DEFAULT : 0;
+			playerView->useCameraParentOffset = playerVisible;
 		}
 	}
 	
@@ -379,6 +464,75 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
 			}break;
+			
+			
+			case OBJECT_TYPE::Capsule:{
+				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
+				float length = 1.0f;
+				float radius = 0.2f;
+				float halfLength = length / 2.0 + radius;
+				renderableEntity->generator = [halfLength,radius](RenderableGeometryEntity* renderableEntity, Device* device){
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					renderableEntity->Allocate(device, "V4D_raytracing:aabb_capsule")->material = mat;
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -radius, -halfLength), glm::vec3(+radius, +radius, +halfLength)});
+					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+				};
+			}break;
+			case OBJECT_TYPE::Cylinder:{
+				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
+				float length = 1.0f;
+				float radius = 0.2f;
+				float halfLength = length / 2.0;
+				renderableEntity->generator = [halfLength,radius](RenderableGeometryEntity* renderableEntity, Device* device){
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					renderableEntity->Allocate(device, "V4D_raytracing:aabb_cylinder")->material = mat;
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -halfLength, -radius), glm::vec3(+radius, +halfLength, +radius)});
+					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+				};
+			}break;
+			case OBJECT_TYPE::Cone:{
+				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
+				float length = 1.0f;
+				float radius = 0.4f;
+				float radiusB = 0.1f;
+				float halfLength = length / 2.0;
+				renderableEntity->generator = [halfLength,radius,radiusB](RenderableGeometryEntity* renderableEntity, Device* device){
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					renderableEntity->Allocate(device, "V4D_raytracing:aabb_cone")->material = mat;
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -radius, -halfLength), glm::vec3(+radius, +radius, +halfLength)});
+					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+					renderableEntity->Add_meshCustomData()->AllocateBuffers(device, glm::f32{radiusB});
+				};
+			}break;
+			
+			case OBJECT_TYPE::Ring:{
+				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
+				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
+				float length = 2.4f;
+				float radius = 1.8f;
+				float radiusB = 0.8f;
+				float halfLength = length / 2.0;
+				renderableEntity->generator = [halfLength,radius,radiusB](RenderableGeometryEntity* renderableEntity, Device* device){
+					RenderableGeometryEntity::Material mat {};
+					mat.visibility.roughness = 0;
+					mat.visibility.metallic = 1;
+					renderableEntity->Allocate(device, "V4D_raytracing:aabb_ring")->material = mat;
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -radius, -halfLength), glm::vec3(+radius, +radius, +halfLength)});
+					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
+					renderableEntity->Add_meshCustomData()->AllocateBuffers(device, glm::f32{radiusB});
+				};
+			}break;
+			
+			
 			case OBJECT_TYPE::Box:{
 				auto renderableEntity = RenderableGeometryEntity::Create(THIS_MODULE, entityUniqueID);
 				entity->renderableGeometryEntityInstances["root"] = renderableEntity;
@@ -495,6 +649,42 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						stream << glm::vec3{playerView->viewForward};
 					ClientEnqueueAction(stream);
 				}break;
+				
+				
+				case GLFW_KEY_F1:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("capsule");
+						stream << glm::vec3{playerView->viewForward};
+					ClientEnqueueAction(stream);
+				}break;
+				
+				case GLFW_KEY_F2:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("cylinder");
+						stream << glm::vec3{playerView->viewForward};
+					ClientEnqueueAction(stream);
+				}break;
+				
+				case GLFW_KEY_F3:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("cone");
+						stream << glm::vec3{playerView->viewForward};
+					ClientEnqueueAction(stream);
+				}break;
+				
+				case GLFW_KEY_F4:{
+					v4d::data::WriteOnlyStream stream(32);
+						stream << networking::action::TEST_OBJ;
+						stream << std::string("ring");
+						stream << glm::vec3{playerView->viewForward};
+					ClientEnqueueAction(stream);
+				}break;
+				
+				
+				
 				case GLFW_KEY_N:{
 					v4d::data::WriteOnlyStream stream(32);
 						stream << networking::action::TEST_OBJ;
