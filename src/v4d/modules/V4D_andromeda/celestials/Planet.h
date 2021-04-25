@@ -2,11 +2,7 @@
 #include "../Celestial.h"
 #include "../PlanetRenderer/PlanetTerrain.h"
 
-struct TerrainType {
-	double restitution = 0.4;
-	double friction = 0.8;
-	//...
-};
+#include "v4d/game/physics.hh"
 
 class Planet : public Celestial {
 	using Celestial::Celestial;

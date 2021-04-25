@@ -1,4 +1,7 @@
 #include "Entity.h"
+#include "ServerSideEntity.hpp"
+#include "ClientSideEntity.hpp"
+#include "ServerSidePlayer.hpp"
 
 V4D_ENTITY_DEFINE_CLASS_MAP(ServerSideEntity)
 	V4D_ENTITY_DEFINE_COMPONENT(ServerSideEntity, Rigidbody, rigidbody)

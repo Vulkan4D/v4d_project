@@ -1,6 +1,10 @@
 #include <v4d.h>
 #include <V4D_Mod.h>
+
 #include "v4d/game/Entity.h"
+#include "v4d/game/ServerSideEntity.hpp"
+#include "v4d/game/ClientSideEntity.hpp"
+#include "v4d/game/ServerSidePlayer.hpp"
 
 #include "utilities/io/Logger.h"
 

@@ -1,7 +1,12 @@
 #include <v4d.h>
 #include <V4D_Mod.h>
+
 #include "v4d/game/Entity.h"
+#include "v4d/game/ServerSideEntity.hpp"
+#include "v4d/game/ClientSideEntity.hpp"
+#include "v4d/game/ServerSidePlayer.hpp"
 #include "v4d/game/EntityConfigFile.h"
+#include "v4d/game/Collider.hpp"
 
 #include "utilities/io/Logger.h"
 #include "utilities/scene/GltfModelLoader.h"
@@ -99,7 +104,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
-						ball->colliders.emplace("root", rigidbody->boundingRadius);
+						ball->colliders.emplace("root", std::make_unique<SphereCollider>(rigidbody->boundingRadius));
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -119,14 +124,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ServerSideEntity::Ptr capsule = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Capsule, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						capsule->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
 						capsule->orientation = playerEntity->orientation;
-						// auto rigidbody = capsule->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
-						// rigidbody->boundingRadius = 0.5;
-						// capsule->colliders.emplace("root", rigidbody->boundingRadius);
-						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
-						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
-						// }
-						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
-						// capsule->SetDynamic();
+						auto rigidbody = capsule->Add_rigidbody(Rigidbody::CylinderInertia(1.0/*mass*/, 0.2/*radiusXY*/, 1.0/*heightZ*/));
+						rigidbody->boundingRadius = 0.8;
+						capsule->colliders.emplace("root", std::make_unique<CapsuleCollider>(glm::dvec3(0), glm::dmat3(1), 1.0/*length*/, 0.2/*radius*/));
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						}
+						rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						capsule->SetDynamic();
 						capsule->Activate();
 					}
 				}
@@ -139,14 +144,14 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ServerSideEntity::Ptr cylinder = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Cylinder, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						cylinder->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
 						cylinder->orientation = playerEntity->orientation;
-						// auto rigidbody = cylinder->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
-						// rigidbody->boundingRadius = 0.5;
-						// cylinder->colliders.emplace("root", rigidbody->boundingRadius);
-						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
-						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
-						// }
-						// rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
-						// cylinder->SetDynamic();
+						auto rigidbody = cylinder->Add_rigidbody(Rigidbody::CylinderInertia(1.0/*mass*/, 0.2/*radiusXY*/, 1.0/*heightZ*/));
+						rigidbody->boundingRadius = 0.7;
+						cylinder->colliders.emplace("root", std::make_unique<CylinderCollider>(glm::dvec3(0), glm::dmat3(1), 1.0/*length*/, 0.2/*radius*/));
+						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
+							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
+						}
+						rigidbody->ApplyForce(dir*500.0f /*, {-0.1,0,0.1}*/ );
+						cylinder->SetDynamic();
 						cylinder->Activate();
 					}
 				}
@@ -159,9 +164,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ServerSideEntity::Ptr cone = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Cone, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						cone->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 2.0;
 						cone->orientation = playerEntity->orientation;
-						// auto rigidbody = cone->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
-						// rigidbody->boundingRadius = 0.5;
-						// cone->colliders.emplace("root", rigidbody->boundingRadius);
+						// auto rigidbody = cone->Add_rigidbody(Rigidbody::ConeInertia(1.0/*mass*/, 0.4/*radiusXY*/, 1.0/*heightZ*/));
+						// rigidbody->boundingRadius = 0.7;
+						// cone->colliders.emplace("root", 1.0/*length*/, 0.4/*radiusA*/, 0.1/*radiusB*/);
 						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						// }
@@ -179,9 +184,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ServerSideEntity::Ptr ring = ServerSideEntity::Create(-1, THIS_MODULE, OBJECT_TYPE::Ring, playerEntity->referenceFrame, playerEntity->referenceFrameExtra);
 						ring->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						ring->orientation = playerEntity->orientation;
-						// auto rigidbody = ring->Add_rigidbody(Rigidbody::SphereInertia(1.0/*mass*/, 0.5/*radius*/));
-						// rigidbody->boundingRadius = 0.5;
-						// ring->colliders.emplace("root", rigidbody->boundingRadius);
+						// auto rigidbody = ring->Add_rigidbody(Rigidbody::RingInertia(1.0/*mass*/, 0.7/*innerRadiusXY*/, 0.8/*outerRadiusXY*/, 2.4/*heightZ*/));
+						// rigidbody->boundingRadius = 2.0;
+						// ring->colliders.emplace("root", 2.4/*length*/, 1.8/*radiusA*/, 0.8/*radiusB*/, 0.02/*thickness*/);
 						// if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 						// 	rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						// }
@@ -203,7 +208,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						box->orientation = playerEntity->orientation;
 						auto rigidbody = box->Add_rigidbody(Rigidbody::BoxInertia(10.0/*mass*/, 4,4,2));
 						rigidbody->boundingRadius = 3;
-						box->colliders.emplace("root", Collider{glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1}});
+						box->colliders.emplace("root", std::make_unique<BoxCollider>(glm::dvec3(0), glm::dmat3(1), glm::dvec3{2.0, 2.0, 1}));
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -222,7 +227,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 4.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(0.2/*mass*/, 0.5/*radius*/));
 						rigidbody->boundingRadius = 0.5;
-						ball->colliders.emplace("root", rigidbody->boundingRadius);
+						ball->colliders.emplace("root", std::make_unique<SphereCollider>(rigidbody->boundingRadius));
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -281,7 +286,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						ball->position = playerEntity->position + glm::dvec3{dir.x, dir.y, dir.z} * 5.0;
 						auto rigidbody = ball->Add_rigidbody(Rigidbody::SphereInertia(5.0/*mass*/, 2.0/*radius*/));
 						rigidbody->boundingRadius = 2.0;
-						ball->colliders.emplace("root", rigidbody->boundingRadius);
+						ball->colliders.emplace("root", std::make_unique<SphereCollider>(rigidbody->boundingRadius));
 						if (auto playerRigidbody = playerEntity->rigidbody.Lock(); playerRigidbody) {
 							rigidbody->linearVelocity += playerRigidbody->linearVelocity;
 						}
@@ -325,7 +330,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 						glass->Add_rigidbody(Rigidbody::BoxInertia(10, 4.0, 4.0, 0.2))->boundingRadius = 2;
 						
 						// Box collider
-						glass->colliders.emplace("root", Collider{glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.1}});
+						glass->colliders.emplace("root", std::make_unique<BoxCollider>(glm::dvec3(0), glm::dmat3(1), glm::dvec3{+2.0,+2.0, 0.1}));
 						
 						// // Triangle colliders
 						// glass->colliders.emplace_back(glm::dvec3{-2.0,-2.0, 0.0}, glm::dvec3{ 2.0,-2.0, 0.0}, glm::dvec3{ 2.0, 2.0, 0.0}, glm::dvec3{0,0,0});
@@ -492,7 +497,7 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					mat.visibility.roughness = 0;
 					mat.visibility.metallic = 1;
 					renderableEntity->Allocate(device, "V4D_raytracing:aabb_cylinder")->material = mat;
-					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -halfLength, -radius), glm::vec3(+radius, +halfLength, +radius)});
+					renderableEntity->Add_proceduralVertexAABB()->AllocateBuffers(device, {glm::vec3(-radius, -radius, -halfLength), glm::vec3(+radius, +radius, +halfLength)});
 					renderableEntity->Add_meshVertexColorU8()->AllocateBuffers(device, {127,127,127,255});
 				};
 			}break;

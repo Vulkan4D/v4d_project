@@ -17,6 +17,7 @@
 #include "utilities/graphics/RenderableGeometryEntity.h"
 
 #include "Entity.h"
+#include "ClientSideEntity.hpp"
 
 using namespace v4d::graphics::Mesh;
 

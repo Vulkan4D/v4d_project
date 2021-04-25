@@ -57,7 +57,7 @@ public:
 	, flags(flags)
 	{if (forcedOrbitDistance > 0) _orbitDistance = forcedOrbitDistance;}
 	
-	~Celestial() {
+	virtual ~Celestial() {
 		RenderDelete();
 	}
 	
