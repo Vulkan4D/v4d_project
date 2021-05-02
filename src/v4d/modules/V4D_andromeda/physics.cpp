@@ -295,6 +295,9 @@ V4D_MODULE_CLASS(V4D_Mod) {
 					const auto celestial = GalaxyGenerator::GetCelestial(galacticPosition);
 					if (celestial && celestial->GetType() == CelestialType::Planet) {
 						const Planet* planet = (Planet*)celestial.get();
+						const double terrainRadius = planet->GetTerrainRadius();
+						const double terrainTopRadius = terrainRadius + planet->GetTerrainHeightVariation();
+						const double atmosphereTopRadius = planet->GetAtmosphereRadius();
 						for (auto collider : colliders) {
 							const double distanceFromPlanetCenter = glm::length(collider.position);
 							if (distanceFromPlanetCenter > 0) {
@@ -307,14 +310,25 @@ V4D_MODULE_CLASS(V4D_Mod) {
 											rb->linearAcceleration += -normalizedPos * planet->GetGravityAcceleration(distanceFromPlanetCenter);
 										}
 										// Air resistance & aerodynamics
-										if (distanceFromPlanetCenter < planet->GetAtmosphereRadius()) {
+										if (distanceFromPlanetCenter < atmosphereTopRadius) {
 											//TODO
 										}
 									}
 									// Collisions with terrain
-									if (distanceFromPlanetCenter < planet->GetTerrainRadius() + planet->GetTerrainHeightVariation()) {
+									if (distanceFromPlanetCenter < terrainTopRadius) {
 										constexpr double radiusMarginFactor = 2.0; // added margins to catch collisions on very steep slopes
-										if (distanceFromPlanetCenter - collider.radius*radiusMarginFactor - planet->GetTerrainHeightAtPos(normalizedPos) < 0) {
+										
+										const glm::dvec3 pos = glm::round(normalizedPos * terrainRadius);
+										const glm::ivec3 ipos = pos;
+										double height;
+										try{
+											height = terrainCache.at(planet->GetID()).at(pos.x).at(pos.y).at(pos.z);
+										} catch (std::out_of_range) {
+											// LOG("Generating terrain " << pos.x << ", " << pos.y << ", " << pos.z)
+											height = terrainCache[planet->GetID()][pos.x][pos.y][pos.z] = planet->GetTerrainHeightAtPos(glm::normalize(pos));
+										}
+		
+										if (distanceFromPlanetCenter - collider.radius*radiusMarginFactor - height < 0) {
 											SolveCollisionWithTerrain(entity, planet);
 										}
 									}
