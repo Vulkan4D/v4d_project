@@ -340,7 +340,6 @@ double terrain( const dvec3& p, int octaves) {
 // }
 */
 
-
 extern "C" {
 	void Init() {
 		
@@ -443,33 +442,34 @@ extern "C" {
 	
 	
 	double GetHeightMap(TERRAIN_GENERATOR_LIB_HEIGHTMAP_ARGS) {
+		const glm::dvec3 pos = normalizedPos*solidRadius;
 		double res = 0;
 		
-		double biome = FastSimplexFractal(normalizedPos*solidRadius/1000000.0, 5);
+		double biome = FastSimplexFractal(pos/1000000.0, 5);
 		double biome1 = glm::max(0.0, biome);
 		double biome2 = glm::max(0.0, -biome);
 		
-		double groundDetail = (FastSimplexFractal(normalizedPos*solidRadius*2.0, 2))*0.04;
+		double groundDetail = (FastSimplexFractal(pos*2.0, 2))*0.04;
 		
 		
 		if (biome1 > 0) {
-			double mountainsStrength = max(0.0, FastSimplexFractal(normalizedPos*solidRadius/100000.0, 2));
+			double mountainsStrength = max(0.0, FastSimplexFractal(pos/100000.0, 2));
 			double mountains = 0;
 			if (mountainsStrength > 0.0) {
-				mountains += mountainsStrength * max(0.0, FastSimplexFractal(normalizedPos*solidRadius/100000.0, 2)*heightVariation);
-				mountains += mountainsStrength * abs(FastSimplexFractal(normalizedPos*solidRadius/10000.0, 8, 2.4, 0.4)*heightVariation);
+				mountains += mountainsStrength * max(0.0, FastSimplexFractal(pos/100000.0, 2)*heightVariation);
+				mountains += mountainsStrength * abs(FastSimplexFractal(pos/10000.0, 8, 2.4, 0.4)*heightVariation);
 			}
 			res += biome1 * (mountains);
 		}
 		
 		if (biome2 > 0) {
-			double peaks = FastSimplexFractal(normalizedPos*solidRadius/70000.0, 10, 2.2, 0.4, [](double d){return 1.0-glm::abs(d);}) * 20000;
+			double peaks = FastSimplexFractal(pos/70000.0, 10, 2.2, 0.4, [](double d){return 1.0-glm::abs(d);}) * 20000;
 			res += biome2 * (peaks);
 		}
 		
 		res += groundDetail;
 		
-		res += terrain(normalizedPos*solidRadius/4000.0, 10)*200.0;
+		res += terrain(pos/4000.0, 10)*200.0;
 		
 		return res;
 	}

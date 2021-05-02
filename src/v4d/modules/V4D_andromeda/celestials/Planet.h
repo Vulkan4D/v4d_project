@@ -27,6 +27,8 @@ public:
 		double terrainRadius = GetTerrainRadius();
 		if (!PlanetTerrain::generatorFunction) return terrainRadius;
 		return terrainRadius + PlanetTerrain::generatorFunction(normalizedPos, terrainRadius, GetTerrainHeightVariation());
+		
+		// return GetPlanetTerrain()->GetHeightMap(normalizedPos);
 	}
 	inline virtual TerrainType GetTerrainTypeAtPos(const glm::dvec3& normalizedPos) const {
 		return {}; //TODO

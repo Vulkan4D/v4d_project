@@ -1209,8 +1209,10 @@ struct PlanetTerrain {
 	static double (*generatorFunction)(TERRAIN_GENERATOR_LIB_HEIGHTMAP_ARGS);
 	static glm::vec3 (*generateColor)(double heightMap);
 	
-	double GetHeightMap(const glm::dvec3& normalizedPos, double triangleSize = 1.0) {
+	
+	inline double GetHeightMap(const glm::dvec3& normalizedPos, double triangleSize = 1.0) {
 		double height = solidRadius;
+		
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/100000.0), 2)*heightVariation;
 		// height += v4d::noise::FastSimplexFractal((normalizedPos*solidRadius/20000.0), 5)*heightVariation/10.0;
 		// if (triangleSize < 1000)
@@ -1273,28 +1275,37 @@ struct PlanetTerrain {
 		, solidRadius(solidRadius)
 		, heightVariation(heightVariation)
 	{
-		AddBaseChunks();
-		
-		// Atmosphere
-		auto atmosphereEntity = RenderableGeometryEntity::Create(THIS_MODULE);
-		atmosphereEntity->generator = [this,radius,solidRadius,heightVariation,atmosphereRadius,atmosphereThickness,visibilityDistance,rayleighHeight,mieHeight](v4d::graphics::RenderableGeometryEntity* entity, v4d::graphics::vulkan::Device* renderingDevice){
-			entity->Allocate(renderingDevice, "V4D_andromeda:atmosphere");
-			entity->rayTracingMask = RAY_TRACED_ENTITY_ATMOSPHERE;
-			entity->Add_proceduralVertexAABB()->AllocateBuffers(renderingDevice, {glm::vec3(-atmosphereRadius), glm::vec3(+atmosphereRadius)});
-			entity->Add_meshVertexColorF32()->AllocateBuffers(renderingDevice, {atmosphereColor.r, atmosphereColor.g, atmosphereColor.b, atmosphereDensityFactor});
-			entity->Add_meshCustomData()->AllocateBuffersFromList(renderingDevice, {
-				/*planetSolidRadius*/float(solidRadius),
-				/*visibilityDistance*/float(visibilityDistance),
-				/*minStepSize*/float(visibilityDistance/1000.0),
-				/*innerRadius*/float(solidRadius - heightVariation),
-				/*outerRadius*/float(atmosphereRadius),
-				/*atmosphereThickness*/float(atmosphereThickness),
-				/*rayleighHeight*/float(rayleighHeight),
-				/*mieHeight*/float(mieHeight),
-			});
-			entity->SetWorldTransform(matrix);
+		generateAtmosphere = [this,radius,solidRadius,heightVariation,atmosphereRadius,atmosphereThickness,visibilityDistance,rayleighHeight,mieHeight](){
+			auto atmosphereEntity = RenderableGeometryEntity::Create(THIS_MODULE);
+			atmosphereEntity->generator = [&](v4d::graphics::RenderableGeometryEntity* entity, v4d::graphics::vulkan::Device* renderingDevice){
+				entity->Allocate(renderingDevice, "V4D_andromeda:atmosphere");
+				entity->rayTracingMask = RAY_TRACED_ENTITY_ATMOSPHERE;
+				entity->Add_proceduralVertexAABB()->AllocateBuffers(renderingDevice, {glm::vec3(-atmosphereRadius), glm::vec3(+atmosphereRadius)});
+				entity->Add_meshVertexColorF32()->AllocateBuffers(renderingDevice, {atmosphereColor.r, atmosphereColor.g, atmosphereColor.b, atmosphereDensityFactor});
+				entity->Add_meshCustomData()->AllocateBuffersFromList(renderingDevice, {
+					/*planetSolidRadius*/float(solidRadius),
+					/*visibilityDistance*/float(visibilityDistance),
+					/*minStepSize*/float(visibilityDistance/1000.0),
+					/*innerRadius*/float(solidRadius - heightVariation),
+					/*outerRadius*/float(atmosphereRadius),
+					/*atmosphereThickness*/float(atmosphereThickness),
+					/*rayleighHeight*/float(rayleighHeight),
+					/*mieHeight*/float(mieHeight),
+				});
+				entity->SetWorldTransform(matrix);
+			};
+			atmosphere = atmosphereEntity;
 		};
-		atmosphere = atmosphereEntity;
+	}
+	
+	std::function<void()> generateAtmosphere;
+	bool isRenderableInit = false;
+	void InitRenderable() {
+		if (isRenderableInit) return;
+		isRenderableInit = true;
+		
+		AddBaseChunks();
+		generateAtmosphere();
 	}
 	
 	~PlanetTerrain() {
@@ -1309,6 +1320,8 @@ struct PlanetTerrain {
 	
 	void Update() {
 		std::lock_guard lock(chunksMutex);
+		
+		InitRenderable();
 		
 		auto terrainHeightAtThisPosition = GetHeightMap(glm::normalize(cameraPos), 0.5);
 		cameraAltitudeAboveTerrain = glm::length(cameraPos) - terrainHeightAtThisPosition;

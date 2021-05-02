@@ -96,9 +96,10 @@ struct BoxCollider : Collider {
 			const glm::dvec3 tangentY = glm::normalize(posOnTerrain2 - posOnTerrain0);
 			collision.normal = glm::normalize(glm::cross(tangentX, tangentY));
 			if (glm::dot(collision.normal, glm::vec3(normalizedPos[0])) < 0) collision.normal *= -1.0;
+			return true;
 		}
 		
-		return contactPoints > 0;
+		return false;
 	}
 	
 	virtual void GenerateCollisionRays(Entity* entity, const v4d::TextID& id, std::vector<Ray>& rays, uint& randomSeed) override {

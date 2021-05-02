@@ -172,11 +172,21 @@ void RespondToCollisionWithTerrain(ServerSideEntity::Ptr& entity, TerrainCollisi
 // collision.penetration should be a positive number of the amount of penetration between the collider and the terrain, typically the depth that it's penetrating in the ground
 // collision.contactB should be set to the contact point on the collider, but in world space
 
+std::map<uint64_t, std::map<int32_t, std::map<int32_t, std::map<int32_t, double>>>> terrainCache {};
+
 void SolveCollisionWithTerrain(ServerSideEntity::Ptr& entity, const Planet* const planet) {
 	const glm::dvec3 normalizedPos = glm::normalize(entity->position);
 	TerrainCollisionInfo collision { planet->GetID(), planet->GetTerrainTypeAtPos(normalizedPos) };
-	auto terrainHeightMap = [&planet](const glm::dvec3& normalizedPos) -> double {
-		return planet->GetTerrainHeightAtPos(normalizedPos);
+	const double terrainRadius = planet->GetTerrainRadius();
+	auto terrainHeightMap = [&planet, &terrainRadius](const glm::dvec3& normalizedPos) -> double {
+		const glm::dvec3 pos = glm::round(normalizedPos * terrainRadius);
+		const glm::ivec3 ipos = pos;
+		try{
+			return terrainCache.at(planet->GetID()).at(pos.x).at(pos.y).at(pos.z);
+		} catch (std::out_of_range) {
+			// LOG("Generating terrain " << pos.x << ", " << pos.y << ", " << pos.z)
+			return terrainCache[planet->GetID()][pos.x][pos.y][pos.z] = planet->GetTerrainHeightAtPos(glm::normalize(pos));
+		}
 	};
 	for (const auto&[_, collider] : entity->colliders) {
 		if (collider->TerrainCollision(terrainHeightMap, entity.get(), collision)) {
